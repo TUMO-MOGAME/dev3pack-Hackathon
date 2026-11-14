@@ -348,3 +348,11 @@ browser full screen (F11) in a fresh profile (no other tabs, no autofill with yo
 | R8 | Optional: **one small real USD₮ transfer on mainnet** with a WDK wallet (10 s) | WDK wallet on mainnet | Living plan chapter | Tether track: real USD₮, not only test tokens |
 
 When the clips are in, the pitch cut is rebuilt to stay within 5:00 (the narration lines are regenerated to match).
+
+## 12. Guardians, monitors, succession, fallback plan and asset photos (started 14 Nov 2026)
+
+Full design: [docs/guardians-spec.md](docs/guardians-spec.md). Built on branch `feature/guardians` by four agents
+(A contract, B service layer, C guardians UI, D assets + WebP photos), merged after judging. In short: monitors watch a
+trusted person and can object (pausing that payment); each trusted person has 2 backups who take over after a verified
+death (chain never runs out); if everyone is gone, an ordered fallback (children, heir, charity) runs after a long wait;
+any asset can have WebP photos (hash on-chain).
