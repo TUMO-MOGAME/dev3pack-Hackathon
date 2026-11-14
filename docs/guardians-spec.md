@@ -172,6 +172,13 @@ provider; design tokens only; every form has the consent box; WCAG AA; works at 
   mileage, drive type, transmission, fuel, consumption, engine; Details; Condition; Performance), edited by the owner
   while the estate is Active, shown to family and buyers, stored off-chain with the photos and signed in the upload
   manifest. Code: `app/src/lib/assets/spec.ts` (schema, labels, root), `spec-form.ts`, `components/assets/spec-*.tsx`.
+  **Every kind has its own sheet** (Tumo, 15 Nov: "the buyer would love to know something about that asset"),
+  `SPEC_LAYOUTS`: Car/Motorbike as above; Furniture (material, size, pieces, condition; brand, colour, year, weight;
+  proof of purchase, known faults); Jewellery (metal, purity, weight in grams, stones; brand, colour, year; condition,
+  certificate, proof of purchase, known faults); Electronics (brand, model, year, condition; main features, colour,
+  size, comes with; warranty, proof of purchase, known faults); Other (brand, model, year, condition; material,
+  colour, size, weight, comes with; proof of purchase, known faults). The API, mock and chain service refuse a field
+  that is not on that kind's sheet.
   **Media root** (what `AssetMedia.photos_root` now holds): zero when there are no photos and no spec sheet, else
   `SHA-256(0x02 ‖ photo digests in order ‖ one label byte per photo (index, 0xff = none) ‖ SHA-256(canonical JSON of
   the spec sheet, or 32 zero bytes))`. Changing, reordering or relabelling a photo, or any spec value, changes it.

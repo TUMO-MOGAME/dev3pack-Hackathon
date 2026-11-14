@@ -2,7 +2,7 @@ import { z } from "zod";
 import { handler, HttpError, json, rateLimit } from "@/lib/api/http";
 import { sha256Hex } from "@/lib/agent/hash";
 import { isAssetKind, MAX_DESCRIPTION, MAX_MANIFEST_CHARS, MAX_REQUEST_BYTES, type PhotosListResponse } from "@/lib/media/api";
-import { cleanSpec, PHOTO_LABELS, specInputSchema, withLabel } from "@/lib/assets/spec";
+import { cleanSpec, foreignSpecKeys, PHOTO_LABELS, specInputSchema, withLabel } from "@/lib/assets/spec";
 import { isWebp, MAX_EDGE, MAX_ORIGINAL_BYTES, MAX_PHOTO_BYTES, MAX_PHOTOS, sniffImage, webpSize } from "@/lib/media/webp";
 import { convertOnServer } from "@/lib/media/server/convert";
 import { authorizeOwner, photosAvailable } from "@/lib/media/server/auth";
@@ -62,6 +62,8 @@ export const POST = handler(async (req) => {
   const m = manifestSchema.parse(raw);
   if (new Set(m.order).size !== m.order.length) throw new HttpError(400, "The same photo is in the list twice.");
   if (m.labels && m.labels.length !== m.order.length) throw new HttpError(400, "Each photo needs one label entry.");
+  const foreign = foreignSpecKeys(m.kind as MediaRow["kind"], m.spec);
+  if (foreign.length) throw new HttpError(400, `These details do not belong on this kind of asset: ${foreign.join(", ")}.`, "spec_kind");
 
   const files = form.getAll("photos").filter((f): f is File => f instanceof File);
   if (files.length > MAX_PHOTOS) throw new HttpError(400, `At most ${MAX_PHOTOS} photos per asset.`);

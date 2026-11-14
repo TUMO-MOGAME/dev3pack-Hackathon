@@ -1,21 +1,22 @@
 /**
- * An asset's spec sheet for family and buyers: a key-facts row, then Details, Condition and Performance as
- * definition lists. Only filled-in fields are shown. Values come from the owner (data); labels, units and enum
+ * An asset's spec sheet for family and buyers: a key-facts row, then Details, Condition and (vehicles) Performance
+ * as definition lists, laid out for the asset's kind (SPEC_LAYOUTS). Only filled-in fields are shown. Values come from the owner (data); labels, units and enum
  * names come from content/assets.ts.
  */
 import { ScrollText } from "@/components/ui/icons";
 import { Card } from "@/components/ui/primitives";
 import { fmt } from "@/components/shell/copy";
 import type { AssetsCopy } from "@/content/assets";
-import { cleanSpec, SPEC_LAYOUT, type AssetSpec, type SpecKey } from "@/lib/assets/spec";
+import { cleanSpec, SPEC_LAYOUTS, type AssetSpec, type SpecKey } from "@/lib/assets/spec";
+import type { AssetKind } from "@/lib/guardians/types";
 
 type SpecCopy = AssetsCopy["spec"];
 
 /** One value as text: enum names and units from the copy, numbers in South African format (124 455). */
 export function specValue(key: SpecKey, value: AssetSpec[SpecKey], copy: SpecCopy): string {
   if (value === undefined) return "";
-  if (typeof value === "boolean") return key === "spareKey" ? copy.values.spareKey[value ? "yes" : "no"] : String(value);
   const values = copy.values as Record<string, Record<string, string> | undefined>;
+  if (typeof value === "boolean") return values[key]?.[value ? "yes" : "no"] ?? String(value);
   const named = values[key]?.[String(value)];
   if (named) return named;
   if (typeof value === "number") {
@@ -27,14 +28,17 @@ export function specValue(key: SpecKey, value: AssetSpec[SpecKey], copy: SpecCop
 }
 
 const filled = (spec: AssetSpec, keys: readonly SpecKey[]) => keys.filter((k) => spec[k] !== undefined);
+/** Free text shown on its own line under the label. */
+const LONG: readonly SpecKey[] = ["roadworthyNotes", "knownFaults", "keySpecs", "includes", "stones"];
 
-export function SpecSheet({ spec: raw, copy, headingLevel = 2 }: { spec?: AssetSpec; copy: SpecCopy; headingLevel?: 2 | 3 }) {
+export function SpecSheet({ spec: raw, kind, copy, headingLevel = 2 }: { spec?: AssetSpec; kind: AssetKind; copy: SpecCopy; headingLevel?: 2 | 3 }) {
   const spec = cleanSpec(raw);
   if (!spec) return null;
   const H = headingLevel === 2 ? "h2" : "h3";
   const S = headingLevel === 2 ? "h3" : "h4";
-  const facts = filled(spec, SPEC_LAYOUT.keyFacts);
-  const sections = (["details", "condition", "performance"] as const).map((s) => ({ s, keys: filled(spec, SPEC_LAYOUT[s]) })).filter((x) => x.keys.length);
+  const layout = SPEC_LAYOUTS[kind];
+  const facts = filled(spec, layout.keyFacts ?? []);
+  const sections = (["details", "condition", "performance"] as const).map((s) => ({ s, keys: filled(spec, layout[s] ?? []) })).filter((x) => x.keys.length);
   return (
     <Card>
       <H className="flex items-center gap-2 text-h3"><ScrollText className="size-5 text-accent" aria-hidden="true" />{copy.title}</H>
@@ -58,7 +62,7 @@ export function SpecSheet({ spec: raw, copy, headingLevel = 2 }: { spec?: AssetS
             {keys.map((k) => (
               <div key={k} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-line/70 py-2 last:border-0">
                 <dt className="text-small text-ink-2">{copy.fields[k]}</dt>
-                <dd className={k === "roadworthyNotes" ? "w-full text-small" : "text-right font-medium tabular-nums"}>{specValue(k, spec[k], copy)}</dd>
+                <dd className={LONG.includes(k) ? "w-full text-small" : "text-right font-medium tabular-nums"}>{specValue(k, spec[k], copy)}</dd>
               </div>
             ))}
           </dl>

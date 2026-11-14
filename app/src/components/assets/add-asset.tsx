@@ -2,7 +2,7 @@
 /**
  * Owner, estate Active: add any asset to be sold after their death. Kind, name, description, the three prices
  * (asking ≥ minimum ≥ hardship floor, enforced on-chain), registration papers for vehicles, up to 24 labelled photos and,
- * for vehicles, an optional spec sheet.
+ * an optional spec sheet laid out for the kind (vehicle, furniture, jewellery, electronics, other).
  * Cars and motorbikes can get the AI valuation first (it fills the prices); other kinds are priced by the owner.
  */
 import { useState, type FormEvent } from "react";
@@ -87,8 +87,8 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
     const ask = num(asking), f = num(floor), h = num(hardship);
     if (!name) { setError(a.titleError); return; }
     if (!(h > 0 && f >= h && ask >= f)) { setError(r.orderError); return; }
-    // The spec sheet counts only for vehicles, and only once the owner has typed in it.
-    const sheet = vehicle && specTouched ? draftToSpec(specDraft) : { spec: undefined, invalid: [] as SpecKey[] };
+    // The spec sheet counts once the owner has typed in it, and only with this kind's fields.
+    const sheet = specTouched ? draftToSpec(specDraft, kind) : { spec: undefined, invalid: [] as SpecKey[] };
     setSpecInvalid(sheet.invalid);
     if (sheet.invalid.length) {
       setError(null);
@@ -212,15 +212,13 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
             {vehicle && <FilePicker id="car-doc" label={r.doc} hint={r.docHint} file={doc} onFile={setDoc} samples={r.docSamples} copy={common.file} />}
 
             <PhotoUploader id="asset-photos" copy={copy.photos} labels={copy.labels} title={name} items={photos} onChange={setPhotos} disabled={working} />
-            {vehicle && (
-              <details className="rounded-md border border-line-strong bg-surface p-3" onToggle={(e) => { if (e.currentTarget.open && !specTouched) setSpecDraft(draftFromVehicle({ make, model, year, mileage })); }}>
-                <summary className="min-h-11 cursor-pointer content-center font-semibold">{copy.spec.optional}</summary>
-                <p className="mt-1 text-small text-ink-2">{copy.spec.optionalBody}</p>
-                <div className="mt-3">
-                  <SpecFields id="asset-spec" copy={copy.spec} draft={specDraft} onChange={(d) => { setSpecDraft(d); setSpecTouched(true); setSpecInvalid([]); setError(null); }} invalid={specInvalid} disabled={working} />
-                </div>
-              </details>
-            )}
+            <details className="rounded-md border border-line-strong bg-surface p-3" onToggle={(e) => { if (e.currentTarget.open && !specTouched && vehicle) setSpecDraft(draftFromVehicle({ make, model, year, mileage })); }}>
+              <summary className="min-h-11 cursor-pointer content-center font-semibold">{copy.spec.optional}</summary>
+              <p className="mt-1 text-small text-ink-2">{copy.spec.optionalBody}</p>
+              <div className="mt-3">
+                <SpecFields id="asset-spec" kind={kind} copy={copy.spec} draft={specDraft} onChange={(d) => { setSpecDraft(d); setSpecTouched(true); setSpecInvalid([]); setError(null); }} invalid={specInvalid} disabled={working} />
+              </div>
+          </details>
             <p className="text-small text-ink-2">{copy.photos.onchainNote}</p>
 
             <Consent id="asset-consent" checked={consent} onChange={(v) => { setConsent(v); setError(null); }} copy={common.consent} />

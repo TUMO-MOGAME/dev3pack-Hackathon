@@ -13,6 +13,7 @@
  */
 import { z } from "zod";
 import { canonicalJson, sha256Hex } from "../agent/hash";
+import type { AssetKind } from "../guardians/types";
 
 /* ---------- photo labels ---------- */
 
@@ -27,6 +28,8 @@ export const FUELS = ["Petrol", "Diesel", "Hybrid", "Electric", "Other"] as cons
 export const SERVICE_HISTORIES = ["Full", "Partial", "None"] as const;
 export const CONDITION_CATEGORIES = ["A", "B", "C", "D"] as const;
 export const DRIVES = ["FWD", "RWD", "AWD", "4WD"] as const;
+/** Condition of anything that is not a vehicle (vehicles use the inspection rating A–D). */
+export const CONDITIONS = ["Excellent", "Good", "Fair", "NeedsRepair"] as const;
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const int = (min: number, max: number) => z.number().int().min(min).max(max);
@@ -63,19 +66,73 @@ export const specSchema = z.object({
   cylinderLayout: text(20).optional(),       // "I4", "V6"
   gears: int(1, 12).optional(),
   drive: z.enum(DRIVES).optional(),
+  // furniture, jewellery, electronics, other (15 Nov 2026: a spec sheet for every kind, each in its own form)
+  brand: text(40).optional(),
+  material: text(60).optional(),             // "Solid oak", "Leather"
+  dimensionsCm: text(40).optional(),         // "180 x 90 x 76"
+  weightKg: dec(10_000).optional(),
+  pieces: int(1, 500).optional(),            // "a table and six chairs" = 7
+  metal: text(30).optional(),                // "Yellow gold"
+  purity: text(20).optional(),               // "18 ct", "925"
+  weightG: dec(100_000).optional(),
+  stones: text(120).optional(),              // "One 0.5 ct diamond"
+  certificate: z.boolean().optional(),       // valuation or grading certificate
+  keySpecs: text(200).optional(),            // "65-inch 4K, 3 HDMI"
+  includes: text(200).optional(),            // "Remote, original box, charger"
+  warrantyUntil: text(30).optional(),        // "March 2027"
+  condition: z.enum(CONDITIONS).optional(),
+  proofOfPurchase: z.boolean().optional(),
+  knownFaults: text(400).optional(),
 }).strict();
 
 export type AssetSpec = z.infer<typeof specSchema>;
 export type SpecKey = keyof AssetSpec;
 
-/** How the spec sheet is shown: a key-facts row, then three sections. Keys appear once each. */
+export type SpecSection = "keyFacts" | "details" | "condition" | "performance";
+export const SPEC_SECTIONS: readonly SpecSection[] = ["keyFacts", "details", "condition", "performance"];
+export type SpecLayout = Partial<Record<SpecSection, readonly SpecKey[]>>;
+
+/** The vehicle sheet (cars and motorbikes): a key-facts row, then Details, Condition and Performance. */
 export const SPEC_LAYOUT = {
   keyFacts: ["mileageKm", "driveType", "transmission", "fuel", "consumptionL100", "engineCc"],
   details: ["make", "model", "variant", "year", "bodyType", "colour", "seats", "doors"],
   condition: ["serviceHistory", "conditionCategory", "spareKey", "roadworthyNotes"],
   performance: ["zeroTo100S", "topSpeedKmh", "powerKw", "fuelTankL", "cylinderLayout", "gears", "drive"],
-} as const satisfies Record<string, readonly SpecKey[]>;
-export type SpecSection = keyof typeof SPEC_LAYOUT;
+} as const satisfies SpecLayout;
+
+/** Each kind of asset has its own sheet; a field appears at most once per sheet. */
+export const SPEC_LAYOUTS: Record<AssetKind, SpecLayout> = {
+  Car: SPEC_LAYOUT,
+  Motorbike: SPEC_LAYOUT,
+  Furniture: {
+    keyFacts: ["material", "dimensionsCm", "pieces", "condition"],
+    details: ["brand", "colour", "year", "weightKg"],
+    condition: ["proofOfPurchase", "knownFaults"],
+  },
+  Jewellery: {
+    keyFacts: ["metal", "purity", "weightG", "stones"],
+    details: ["brand", "colour", "year"],
+    condition: ["condition", "certificate", "proofOfPurchase", "knownFaults"],
+  },
+  Electronics: {
+    keyFacts: ["brand", "model", "year", "condition"],
+    details: ["keySpecs", "colour", "dimensionsCm", "includes"],
+    condition: ["warrantyUntil", "proofOfPurchase", "knownFaults"],
+  },
+  Other: {
+    keyFacts: ["brand", "model", "year", "condition"],
+    details: ["material", "colour", "dimensionsCm", "weightKg", "includes"],
+    condition: ["proofOfPurchase", "knownFaults"],
+  },
+};
+
+export const specKeysFor = (kind: AssetKind): SpecKey[] => SPEC_SECTIONS.flatMap((s) => [...(SPEC_LAYOUTS[kind][s] ?? [])]);
+
+/** Fields filled in that do not belong on this kind's sheet (a motorbike has no "metal"); empty = fine. */
+export function foreignSpecKeys(kind: AssetKind, spec?: AssetSpec | null): SpecKey[] {
+  const allowed = new Set(specKeysFor(kind));
+  return (Object.keys(cleanSpec(spec) ?? {}) as SpecKey[]).filter((k) => !allowed.has(k));
+}
 
 /** Drops empty values (blank text, missing numbers); returns undefined for a sheet with nothing in it. */
 export function cleanSpec(spec: AssetSpec | Record<string, unknown> | null | undefined): AssetSpec | undefined {

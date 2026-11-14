@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { cleanSpec, EMPTY_MEDIA_ROOT, groupByLabel, hasSpec, isPhotoLabel, mediaRootHex, parseSpec, PHOTO_LABELS, SPEC_LAYOUT, specHashHex, specSchema, type AssetSpec } from "./spec";
+import { cleanSpec, EMPTY_MEDIA_ROOT, groupByLabel, hasSpec, isPhotoLabel, mediaRootHex, parseSpec, PHOTO_LABELS, foreignSpecKeys, SPEC_LAYOUTS, specHashHex, specKeysFor, specSchema, type AssetSpec } from "./spec";
 import { DEMO_ASSETS } from "../service/demo-asset-photos";
 import { MAX_PHOTOS } from "../media/webp";
 
@@ -38,10 +38,23 @@ describe("spec sheet schema", () => {
     expect(() => parseSpec({ year: "2017" })).toThrow();
   });
 
-  it("lays out every field exactly once", () => {
-    const keys = Object.values(SPEC_LAYOUT).flat();
-    expect(new Set(keys).size).toBe(keys.length);
-    expect(keys.sort()).toEqual(Object.keys(specSchema.shape).sort());
+  it("gives every kind its own sheet: no field twice on a sheet, and every field on some sheet", () => {
+    for (const kind of Object.keys(SPEC_LAYOUTS) as (keyof typeof SPEC_LAYOUTS)[]) {
+      const keys = specKeysFor(kind);
+      expect(new Set(keys).size, kind).toBe(keys.length);
+      expect(keys.length, kind).toBeGreaterThan(5);
+    }
+    const all = new Set(Object.keys(SPEC_LAYOUTS).flatMap((k) => specKeysFor(k as keyof typeof SPEC_LAYOUTS)));
+    expect([...all].sort()).toEqual(Object.keys(specSchema.shape).sort());
+    expect(SPEC_LAYOUTS.Jewellery.performance).toBeUndefined();
+  });
+
+  it("finds details that do not belong on a kind's sheet", () => {
+    expect(foreignSpecKeys("Car", DEMO_ASSETS.corolla.spec)).toEqual([]);
+    expect(foreignSpecKeys("Jewellery", { metal: "Yellow gold", purity: "18 ct", weightG: 4.2, certificate: true })).toEqual([]);
+    expect(foreignSpecKeys("Jewellery", { metal: "Gold", mileageKm: 10 })).toEqual(["mileageKm"]);
+    expect(foreignSpecKeys("Furniture", { material: "Oak", doors: 2 })).toEqual(["doors"]);
+    expect(foreignSpecKeys("Other", undefined)).toEqual([]);
   });
 });
 

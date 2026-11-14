@@ -26,7 +26,6 @@ import { PhotoEditor } from "@/components/assets/photo-editor";
 import { SpecSheet } from "@/components/assets/spec-sheet";
 import { SpecEditor } from "@/components/assets/spec-editor";
 import { hasSpec } from "@/lib/assets/spec";
-import { VALUED_KINDS } from "@/lib/media/api";
 import type { AssetMediaView } from "@/lib/media/api";
 import { clock } from "./family";
 import { PausedNotice } from "@/components/guardians/parts";
@@ -171,9 +170,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
             {canEdit && !editing && (
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="secondary" small onClick={() => setEditing("photos")}><Pencil className="size-4" aria-hidden="true" />{a.photos.manage}</Button>
-                {(VALUED_KINDS.includes(kind) || hasSpec(media?.spec)) && (
-                  <Button variant="secondary" small onClick={() => setEditing("spec")}><Pencil className="size-4" aria-hidden="true" />{hasSpec(media?.spec) ? a.spec.edit : a.spec.add}</Button>
-                )}
+                <Button variant="secondary" small onClick={() => setEditing("spec")}><Pencil className="size-4" aria-hidden="true" />{hasSpec(media?.spec) ? a.spec.edit : a.spec.add}</Button>
               </div>
             )}
           </div>
@@ -181,7 +178,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
 
         {canEdit && editing === "photos" && <PhotoEditor copy={a} asset={car} media={media} session={session} role={role} onClose={() => setEditing(null)} />}
         {canEdit && editing === "spec" && <SpecEditor copy={a} asset={car} media={media} session={session} role={role} onClose={() => setEditing(null)} />}
-        {editing !== "spec" && <SpecSheet spec={media?.spec} copy={a.spec} />}
+        {editing !== "spec" && <SpecSheet spec={media?.spec} kind={kind} copy={a.spec} />}
 
         {car.status === "Sold" && sale && (
           <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>

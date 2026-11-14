@@ -81,6 +81,15 @@ describe("asset media rules", () => {
     expect((await read()).photosRoot).not.toBe(first.photosRoot);
   });
 
+  it("every kind has its own sheet: furniture details are kept, a vehicle field on furniture is refused", async () => {
+    const { svc, estate, car } = await start("funded");
+    const read = async () => (await svc.getAssetMedia(estate)).find((m) => m.asset === car.address)!;
+    await svc.setAssetMedia(estate, car.address, { kind: "Furniture", title: "Oak table", photos: [], spec: { material: "Solid oak", pieces: 7, dimensionsCm: "180 x 90 x 76" } });
+    expect((await read()).spec).toEqual({ material: "Solid oak", pieces: 7, dimensionsCm: "180 x 90 x 76" });
+    await expect(svc.setAssetMedia(estate, car.address, { kind: "Furniture", title: "Oak table", photos: [], spec: { material: "Oak", mileageKm: 5 } })).rejects.toThrow(/^InvalidSpec/);
+    await expect(svc.setAssetMedia(estate, car.address, { kind: "Jewellery", title: "Ring", photos: [], spec: { metal: "Gold", weightG: 4.25 } })).rejects.toThrow(/^InvalidSpec/);
+  });
+
   it("only the owner (while active) can change photos or the spec sheet", async () => {
     const { svc, estate, car } = await start("funded");
     act(svc, "zanele");

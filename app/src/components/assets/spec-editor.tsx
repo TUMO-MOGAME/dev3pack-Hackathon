@@ -11,32 +11,33 @@ import type { AssetsCopy } from "@/content/assets";
 import { useEstate } from "@/lib/hooks/estate";
 import type { Asset, Role, WalletSession } from "@/lib/types";
 import type { AssetMediaView } from "@/lib/media/api";
-import { SPEC_LAYOUT, type SpecKey } from "@/lib/assets/spec";
+import { SPEC_LAYOUTS, SPEC_SECTIONS, type SpecKey } from "@/lib/assets/spec";
+import type { AssetKind } from "@/lib/guardians/types";
 import { CHOICES, DECIMAL_FIELDS, draftToSpec, INT_FIELDS, LONG_TEXT_FIELDS, specToDraft, type SpecDraft } from "@/lib/assets/spec-form";
 import { draftFromStored } from "./photo-uploader";
 import { kindOf, savePhotos } from "./media";
 
 type SpecCopy = AssetsCopy["spec"];
-const SECTIONS = ["keyFacts", "details", "condition", "performance"] as const;
 
 function optionLabel(key: SpecKey, value: string, copy: SpecCopy): string {
   const values = copy.values as Record<string, Record<string, string> | undefined>;
   return values[key]?.[value] ?? value;
 }
 
-export function SpecFields({ id, copy, draft, onChange, invalid = [], disabled = false }: {
-  id: string; copy: SpecCopy; draft: SpecDraft; onChange: (d: SpecDraft) => void; invalid?: readonly SpecKey[]; disabled?: boolean;
+export function SpecFields({ id, kind, copy, draft, onChange, invalid = [], disabled = false }: {
+  id: string; kind: AssetKind; copy: SpecCopy; draft: SpecDraft; onChange: (d: SpecDraft) => void; invalid?: readonly SpecKey[]; disabled?: boolean;
 }) {
+  const layout = SPEC_LAYOUTS[kind];
   const set = (k: SpecKey, v: string) => onChange({ ...draft, [k]: v });
   const units = copy.inputUnits as Record<string, string | undefined>;
   const hints = copy.hints as Record<string, string | undefined>;
   return (
     <div className="flex flex-col gap-4">
-      {SECTIONS.map((s) => (
+      {SPEC_SECTIONS.filter((s) => layout[s]?.length).map((s) => (
         <fieldset key={s} className="min-w-0">
           <legend className="font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{copy.sections[s]}</legend>
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
-            {SPEC_LAYOUT[s].map((k) => {
+            {(layout[s] ?? []).map((k) => {
               const fid = `${id}-${k}`;
               const bad = invalid.includes(k);
               const unit = units[k];
@@ -89,7 +90,7 @@ export function SpecEditor({ copy, asset, media, session, role, onClose }: {
 
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();
-    const { spec, invalid: bad } = draftToSpec(draft);
+    const { spec, invalid: bad } = draftToSpec(draft, kindOf(media));
     setInvalid(bad);
     if (bad.length) {
       // Each invalid field shows its own message; move focus to the first one.
@@ -112,7 +113,7 @@ export function SpecEditor({ copy, asset, media, session, role, onClose }: {
       <h2 className="text-h3">{fmt(c.editTitle, { title })}</h2>
       <p className="mt-1 text-small text-ink-2">{c.editBody}</p>
       <form onSubmit={submit} noValidate className="mt-4 flex flex-col gap-4">
-        <SpecFields id="spec-edit" copy={c} draft={draft} onChange={(d) => { setDraft(d); setError(null); }} invalid={invalid} disabled={working} />
+        <SpecFields id="spec-edit" kind={kindOf(media)} copy={c} draft={draft} onChange={(d) => { setDraft(d); setError(null); }} invalid={invalid} disabled={working} />
         <p className="text-small text-ink-2">{c.onchainNote}</p>
         <Consent id="spec-edit-consent" checked={consent} onChange={(v) => { setConsent(v); setError(null); }} copy={common.consent} />
         {error && <p role="alert" className="border-l-4 border-ink pl-2 text-small font-semibold text-ink">{error}</p>}

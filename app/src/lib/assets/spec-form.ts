@@ -3,19 +3,25 @@
  * number input: spaces or commas as thousands separators in whole numbers ("124 455"), and a decimal comma in
  * one-decimal fields ("6,4").
  */
-import { CONDITION_CATEGORIES, DRIVES, FUELS, SERVICE_HISTORIES, SPEC_LAYOUT, specInputSchema, TRANSMISSIONS, type AssetSpec, type SpecKey } from "./spec";
+import {
+  CONDITION_CATEGORIES, CONDITIONS, DRIVES, FUELS, SERVICE_HISTORIES, specInputSchema, specKeysFor, specSchema, TRANSMISSIONS,
+  type AssetSpec, type SpecKey,
+} from "./spec";
+import type { AssetKind } from "../guardians/types";
 
 export type SpecDraft = Record<SpecKey, string>;
 
-export const INT_FIELDS: readonly SpecKey[] = ["mileageKm", "engineCc", "year", "seats", "doors", "topSpeedKmh", "powerKw", "fuelTankL", "gears"];
-export const DECIMAL_FIELDS: readonly SpecKey[] = ["consumptionL100", "zeroTo100S"];
+export const INT_FIELDS: readonly SpecKey[] = ["mileageKm", "engineCc", "year", "seats", "doors", "topSpeedKmh", "powerKw", "fuelTankL", "gears", "pieces"];
+export const DECIMAL_FIELDS: readonly SpecKey[] = ["consumptionL100", "zeroTo100S", "weightKg", "weightG"];
+export const BOOLEAN_FIELDS: readonly SpecKey[] = ["spareKey", "certificate", "proofOfPurchase"];
 export const CHOICES: Partial<Record<SpecKey, readonly string[]>> = {
   transmission: TRANSMISSIONS, fuel: FUELS, serviceHistory: SERVICE_HISTORIES, conditionCategory: CONDITION_CATEGORIES, drive: DRIVES,
-  spareKey: ["yes", "no"],
+  condition: CONDITIONS, ...Object.fromEntries(BOOLEAN_FIELDS.map((k) => [k, ["yes", "no"]])),
 };
-export const LONG_TEXT_FIELDS: readonly SpecKey[] = ["roadworthyNotes"];
+export const LONG_TEXT_FIELDS: readonly SpecKey[] = ["roadworthyNotes", "knownFaults"];
 
-const ALL_KEYS = Object.values(SPEC_LAYOUT).flat() as SpecKey[];
+/** Every field, in the schema's order (used for error order). */
+const ALL_KEYS = Object.keys(specSchema.shape) as SpecKey[];
 
 export function specToDraft(spec?: AssetSpec): SpecDraft {
   const out = {} as SpecDraft;
@@ -26,11 +32,16 @@ export function specToDraft(spec?: AssetSpec): SpecDraft {
   return out;
 }
 
-/** Text → spec sheet. Returns the keys that are not valid (empty list = ok); blanks are left out. */
-export function draftToSpec(draft: Partial<SpecDraft>): { spec?: AssetSpec; invalid: SpecKey[] } {
+/**
+ * Text → spec sheet. Returns the keys that are not valid (empty list = ok); blanks are left out. With `kind`, only
+ * that kind's fields are read (a draft typed as a car and then switched to furniture keeps no mileage).
+ */
+export function draftToSpec(draft: Partial<SpecDraft>, kind?: AssetKind): { spec?: AssetSpec; invalid: SpecKey[] } {
   const raw: Record<string, unknown> = {};
   const invalid = new Set<SpecKey>();
+  const keys = kind ? new Set(specKeysFor(kind)) : null;
   for (const k of ALL_KEYS) {
+    if (keys && !keys.has(k)) continue;
     const t = (draft[k] ?? "").trim();
     if (!t) continue;
     if (INT_FIELDS.includes(k)) {
@@ -39,7 +50,7 @@ export function draftToSpec(draft: Partial<SpecDraft>): { spec?: AssetSpec; inva
     } else if (DECIMAL_FIELDS.includes(k)) {
       const n = /^\d+([.,]\d+)?$/.test(t) ? Number(t.replace(",", ".")) : Number.NaN;
       if (Number.isFinite(n)) raw[k] = n; else invalid.add(k);
-    } else if (k === "spareKey") {
+    } else if (BOOLEAN_FIELDS.includes(k)) {
       raw[k] = t === "yes";
     } else {
       raw[k] = t;

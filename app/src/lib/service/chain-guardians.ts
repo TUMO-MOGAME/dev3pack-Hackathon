@@ -19,7 +19,7 @@ import { assembleGuardians, decodeMedia, disabledGuardians, fetchGuardiansRaw, t
 import { enumOf, key, num } from "../chain/decoders";
 import { getActiveSigner } from "../wallet/signer";
 import { sha256Hex } from "../agent/hash";
-import { cleanSpec, mediaRootHex, parseSpec } from "../assets/spec";
+import { cleanSpec, foreignSpecKeys, mediaRootHex, parseSpec } from "../assets/spec";
 import { MAX_PHOTOS } from "../media/webp";
 import { photosApi } from "../media/client";
 
@@ -234,6 +234,7 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
 
     async setAssetMedia(estate, asset, input) {
       if (input.photos.length > MAX_PHOTOS) throw new Error(`Add at most ${MAX_PHOTOS} photos.`);
+      if (foreignSpecKeys(input.kind, parseSpec(input.spec)).length) throw new Error("Some details do not belong on this kind of asset.");
       const root = await mediaRootHex(input.photos, parseSpec(input.spec));
       return d.send([ix.setAssetMedia(chainCtx(), {
         authority: me(), estate: pk(estate), asset: pk(asset), kind: input.kind, photosRootHex: root, photoCount: input.photos.length,

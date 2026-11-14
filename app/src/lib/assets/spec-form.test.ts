@@ -25,4 +25,15 @@ describe("spec sheet form model", () => {
   it("starts a vehicle's sheet from the valuation fields", () => {
     expect(draftFromVehicle({ make: "Toyota", model: "Corolla", year: "2017", mileage: "124455" })).toMatchObject({ make: "Toyota", year: "2017", mileageKm: "124455", colour: "" });
   });
+
+  it("reads only the chosen kind's fields", () => {
+    const draft = { mileageKm: "124455", material: "Solid oak", pieces: "7", weightKg: "48,5", proofOfPurchase: "yes", condition: "Good" };
+    expect(draftToSpec(draft, "Furniture")).toEqual({ spec: { material: "Solid oak", pieces: 7, weightKg: 48.5, proofOfPurchase: true, condition: "Good" }, invalid: [] });
+    expect(draftToSpec(draft, "Car").spec).toEqual({ mileageKm: 124455 });
+  });
+
+  it("round-trips a jewellery sheet", () => {
+    const spec = { metal: "Yellow gold", purity: "18 ct", weightG: 4.2, stones: "One 0.5 ct diamond", certificate: false, condition: "Excellent" as const };
+    expect(draftToSpec(specToDraft(spec), "Jewellery")).toEqual({ spec, invalid: [] });
+  });
 });

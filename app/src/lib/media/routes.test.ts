@@ -205,6 +205,9 @@ describe("/api/assets/photos labels and spec sheet", () => {
     expect(await err(await upload([a], { labels: ["Front", "Rear"] }))).toMatch(/one label/);
     expect((await upload([a], { spec: { year: 1800 } as never })).status).toBe(400);
     expect((await upload([a], { spec: { colour: "Silver", owner: "Thabo" } as never })).status).toBe(400);
+    // The test asset is furniture: vehicle fields do not belong on its sheet, furniture fields do.
+    expect(await err(await upload([a], { spec: { material: "Oak", mileageKm: 10 } }))).toMatch(/do not belong.*mileageKm/);
+    expect((await upload([a], { spec: { material: "Oak", pieces: 7 } })).status).toBe(200);
   });
 
   it("converts an AVIF original to WebP on the server", async () => {

@@ -12,7 +12,7 @@ import type {
   AssetKind, AssetMediaInfo, AssetPhoto, FallbackRecipient, GuardiansSnapshot, ObjectionStatus, SeatApprovalItem, TargetKind,
 } from "../guardians/types";
 import { fail, need } from "./mock-errors";
-import { cleanSpec, isPhotoLabel, specInputSchema, type AssetSpec } from "../assets/spec";
+import { cleanSpec, foreignSpecKeys, isPhotoLabel, specInputSchema, type AssetSpec } from "../assets/spec";
 
 /** Demo timings: objection window, succession wait and fallback wait (real: 2 days, 7 days, 90 days). */
 export const GUARD_DEMO_TIMINGS = { objectionWindowSecs: 60, successionWaitSecs: 60, fallbackWaitSecs: 120 } as const;
@@ -596,6 +596,7 @@ export function createMockGuardians(d: GuardDeps) {
     const checked = input.spec === undefined ? undefined : specInputSchema.safeParse(input.spec);
     need(!checked || checked.success, "InvalidSpec", "Some details in the spec sheet are not valid.");
     const spec = cleanSpec(checked?.success ? checked.data : undefined);
+    need(foreignSpecKeys(input.kind, spec).length === 0, "InvalidSpec", "Some details do not belong on this kind of asset.");
     g().media[asset] = {
       kind: input.kind, title: input.title || a.title, ...(input.description ? { description: input.description } : {}),
       photos: input.photos.map((p) => ({ ...p })), ...(spec ? { spec } : {}), photosRoot, updatedAt: nowSecs(),
