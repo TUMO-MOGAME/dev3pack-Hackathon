@@ -19,7 +19,8 @@ import { assembleGuardians, decodeMedia, disabledGuardians, fetchGuardiansRaw, t
 import { enumOf, key, num } from "../chain/decoders";
 import { getActiveSigner } from "../wallet/signer";
 import { sha256Hex } from "../agent/hash";
-import { photosRootHex } from "../guardians/photos";
+import { cleanSpec, mediaRootHex, parseSpec } from "../assets/spec";
+import { MAX_PHOTOS } from "../media/webp";
 import { photosApi } from "../media/client";
 
 export const DISABLED_GUARDIANS: GuardiansSnapshot = disabledGuardians();
@@ -226,14 +227,14 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       return Promise.all(listed.map(async (m) => {
         const onChain = raw.media[m.asset];
         if (!onChain) return { ...m };
-        const root = await photosRootHex(m.photos.map((p) => p.sha256));
+        const root = await mediaRootHex(m.photos, cleanSpec(m.spec));
         return { ...m, onChainMatch: decodeMedia(onChain).photosRoot === root };
       }));
     },
 
     async setAssetMedia(estate, asset, input) {
-      if (input.photos.length > 8) throw new Error("Add at most 8 photos.");
-      const root = await photosRootHex(input.photos.map((p) => p.sha256));
+      if (input.photos.length > MAX_PHOTOS) throw new Error(`Add at most ${MAX_PHOTOS} photos.`);
+      const root = await mediaRootHex(input.photos, parseSpec(input.spec));
       return d.send([ix.setAssetMedia(chainCtx(), {
         authority: me(), estate: pk(estate), asset: pk(asset), kind: input.kind, photosRootHex: root, photoCount: input.photos.length,
       })]);

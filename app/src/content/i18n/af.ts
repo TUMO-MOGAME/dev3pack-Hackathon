@@ -70,7 +70,7 @@ export const af: Bundle = {
         rows: [
           { label: "Lerato · boeketoelae", detail: "Elke maand aan Van Schaik Bookstore", amount: "85 USD₮", state: "Nou" },
           { label: "Lerato · klasgeld", detail: "Betaal aan University of Cape Town", amount: "3 200 USD₮", state: "Betaal" },
-          { label: "Gesinsmotor", detail: "Bo pa se minimum verkoop, nadat hy heengegaan het", amount: "9 000 USD₮", state: "Later" },
+          { label: "Gesinsmotor", detail: "Bo pa se minimum verkoop, nadat hy heengegaan het", amount: "12 500 USD₮", state: "Later" },
         ],
         foot: "Elke betaling het 'n openbare kwitansie.",
       },
@@ -91,7 +91,7 @@ export const af: Bundle = {
       steps: [
         {
           title: "Sê wat jou gesin nodig het",
-          body: "Gesels of praat met die Heirloom-agent. \"R1 500 'n maand vir Lerato se boeke. UCT-gelde elke kwartaal. Verkoop my Corolla vir nie minder as R160 000 nie wanneer ek weg is.\" Dit skryf die plan in eenvoudige taal terug en jy kies watter reëls nou begin.",
+          body: "Gesels of praat met die Heirloom-agent. \"R1 500 'n maand vir Lerato se boeke. UCT-gelde elke kwartaal. Verkoop my Corolla vir nie minder as R225 000 nie wanneer ek weg is.\" Dit skryf die plan in eenvoudige taal terug en jy kies watter reëls nou begin.",
         },
         {
           title: "Teken en vul die kluis",

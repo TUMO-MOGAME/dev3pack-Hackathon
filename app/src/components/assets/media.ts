@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import type { EstateSnapshot, HeirloomService } from "@/lib/service";
 import type { Role, WalletSession } from "@/lib/types";
 import type { AssetKind } from "@/lib/guardians/types";
+import type { AssetSpec } from "@/lib/assets/spec";
 import type { AssetMediaView } from "@/lib/media/api";
 import { localPhotos, photosApi, type MediaSigner, type PhotoItem } from "@/lib/media/client";
 import { peekActiveSigner } from "@/lib/wallet/signer";
@@ -56,16 +57,16 @@ function signer(service: HeirloomService, estate: string, session: WalletSession
  */
 export async function savePhotos(args: {
   service: HeirloomService; estate: string; session: WalletSession; role: Role;
-  asset: string; kind: AssetKind; title: string; description: string; items: PhotoItem[];
+  asset: string; kind: AssetKind; title: string; description: string; items: PhotoItem[]; spec?: AssetSpec;
   onProgress?: (done: number, total: number) => void;
 }): Promise<{ local: boolean; info: AssetMediaView }> {
-  const { service, estate, asset, kind, title, description, items } = args;
+  const { service, estate, asset, kind, title, description, items, spec } = args;
   const local = !(await hasPhotoServer());
   const info = local
-    ? await localPhotos({ asset, kind, title, description, items })
-    : await photosApi.save(signer(service, estate, args.session, args.role), { asset, kind, title, description, items }, args.onProgress);
-  // `description` is off-chain only; passed along for services that keep it (AssetMediaInfo does not declare it yet).
-  const input = { kind, title, photos: info.photos, description };
+    ? await localPhotos({ asset, kind, title, description, items, spec })
+    : await photosApi.save(signer(service, estate, args.session, args.role), { asset, kind, title, description, items, spec }, args.onProgress);
+  // Description, labels and spec sheet are off-chain; the labels and spec sheet are part of the on-chain root.
+  const input = { kind, title, photos: info.photos, description, spec: info.spec ?? spec };
   await service.setAssetMedia(estate, asset, input);
   return { local, info };
 }

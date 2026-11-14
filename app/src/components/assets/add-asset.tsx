@@ -1,7 +1,8 @@
 "use client";
 /**
  * Owner, estate Active: add any asset to be sold after their death. Kind, name, description, the three prices
- * (asking ≥ minimum ≥ hardship floor, enforced on-chain), registration papers for vehicles, and up to 8 photos.
+ * (asking ≥ minimum ≥ hardship floor, enforced on-chain), registration papers for vehicles, up to 24 labelled photos and,
+ * for vehicles, an optional spec sheet.
  * Cars and motorbikes can get the AI valuation first (it fills the prices); other kinds are priced by the owner.
  */
 import { useState, type FormEvent } from "react";
@@ -21,6 +22,9 @@ import { formatUsdt, formatZar, toBase } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { ASSET_KINDS, MAX_DESCRIPTION, VALUED_KINDS } from "@/lib/media/api";
 import { PhotoUploader, type DraftPhoto } from "./photo-uploader";
+import { SpecFields } from "./spec-editor";
+import type { SpecKey } from "@/lib/assets/spec";
+import { draftFromVehicle, draftToSpec, specToDraft, type SpecDraft } from "@/lib/assets/spec-form";
 import { savePhotos } from "./media";
 
 const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
@@ -51,6 +55,9 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
   const [hardship, setHardship] = useState("");
   const [doc, setDoc] = useState<File | null>(null);
   const [photos, setPhotos] = useState<DraftPhoto[]>([]);
+  const [specDraft, setSpecDraft] = useState<SpecDraft>(() => specToDraft());
+  const [specTouched, setSpecTouched] = useState(false);
+  const [specInvalid, setSpecInvalid] = useState<SpecKey[]>([]);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null);
@@ -67,7 +74,7 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
       setValuation(v);
       setAsking(String(v.suggestedAskingUsdt));
       setFloor(String(v.lowUsdt));
-      setHardship(String(Math.round(v.lowUsdt * 0.83 / 50) * 50));
+      setHardship(String(Math.round(v.lowUsdt * 0.84 / 50) * 50));
     } catch (e) {
       setError(explain(e).message);
     } finally {
@@ -80,6 +87,14 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
     const ask = num(asking), f = num(floor), h = num(hardship);
     if (!name) { setError(a.titleError); return; }
     if (!(h > 0 && f >= h && ask >= f)) { setError(r.orderError); return; }
+    // The spec sheet counts only for vehicles, and only once the owner has typed in it.
+    const sheet = vehicle && specTouched ? draftToSpec(specDraft) : { spec: undefined, invalid: [] as SpecKey[] };
+    setSpecInvalid(sheet.invalid);
+    if (sheet.invalid.length) {
+      setError(null);
+      requestAnimationFrame(() => document.getElementById(`asset-spec-${sheet.invalid[0]}`)?.focus());
+      return;
+    }
     if (!consent) { setError(common.consentRequired); return; }
     setError(null);
     let photoError: string | null = null;
@@ -96,7 +111,7 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
       try {
         await savePhotos({
           service: s, estate: est, session, role, asset: added.address, kind, title: name, description: description.trim(),
-          items: photos, onProgress: (done, total) => setStage(total ? fmt(a.uploading, { done, total }) : a.saving),
+          items: photos, spec: sheet.spec, onProgress: (done, total) => setStage(total ? fmt(a.uploading, { done, total }) : a.saving),
         });
       } catch (e) {
         photoError = explain(e).message;
@@ -196,7 +211,16 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
             {(zar(floor) || zar(hardship)) && <p className="text-small text-ink-2">{r.floorHint} {r.hardshipHint}</p>}
             {vehicle && <FilePicker id="car-doc" label={r.doc} hint={r.docHint} file={doc} onFile={setDoc} samples={r.docSamples} copy={common.file} />}
 
-            <PhotoUploader id="asset-photos" copy={copy.photos} title={name} items={photos} onChange={setPhotos} disabled={working} />
+            <PhotoUploader id="asset-photos" copy={copy.photos} labels={copy.labels} title={name} items={photos} onChange={setPhotos} disabled={working} />
+            {vehicle && (
+              <details className="rounded-md border border-line-strong bg-surface p-3" onToggle={(e) => { if (e.currentTarget.open && !specTouched) setSpecDraft(draftFromVehicle({ make, model, year, mileage })); }}>
+                <summary className="min-h-11 cursor-pointer content-center font-semibold">{copy.spec.optional}</summary>
+                <p className="mt-1 text-small text-ink-2">{copy.spec.optionalBody}</p>
+                <div className="mt-3">
+                  <SpecFields id="asset-spec" copy={copy.spec} draft={specDraft} onChange={(d) => { setSpecDraft(d); setSpecTouched(true); setSpecInvalid([]); setError(null); }} invalid={specInvalid} disabled={working} />
+                </div>
+              </details>
+            )}
             <p className="text-small text-ink-2">{copy.photos.onchainNote}</p>
 
             <Consent id="asset-consent" checked={consent} onChange={(v) => { setConsent(v); setError(null); }} copy={common.consent} />

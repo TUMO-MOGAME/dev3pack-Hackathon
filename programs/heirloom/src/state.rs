@@ -19,7 +19,8 @@ pub const MAX_LABEL_LEN: usize = 32;
 pub const MAX_PAYEE_NAME_LEN: usize = 64;
 pub const VERIFIER_COUNT: usize = 3;
 pub const FALLBACK_COUNT: usize = 4;
-pub const MAX_PHOTOS: u8 = 8;
+/// Photos per asset (set_asset_media). Raised from 8 to 24 on 15 Nov 2026 for labelled vehicle galleries.
+pub const MAX_PHOTOS: u8 = 24;
 /// `Objection.seat_index` when the objection is not about one seat (Unlock, Fallback).
 pub const NO_SEAT: u8 = 255;
 

@@ -1,25 +1,27 @@
 "use client";
 /**
- * Pick or take up to 8 photos, convert each to WebP on this device (visible progress), then preview, reorder and
- * remove. The parent owns the list (`items`) and uploads it; this component never sends anything.
+ * Pick or take up to 24 photos (JPEG, PNG, HEIC, AVIF, WebP), convert each to WebP on this device (visible progress),
+ * then preview, label (Front, Engine, …), reorder, make one the cover (photo 1) and remove. The parent owns the list
+ * (`items`) and uploads it; this component never sends anything.
  */
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, FileUp, Plus, Trash2 } from "@/components/ui/icons";
+import { ArrowUpFromLine, ChevronLeft, ChevronRight, FileUp, Plus, Trash2 } from "@/components/ui/icons";
 import type { AssetsCopy } from "@/content/assets";
 import { fmt } from "@/components/shell/copy";
 import type { PhotoItem } from "@/lib/media/client";
 import { MAX_PHOTOS, preparePhoto, WebpError } from "@/lib/media/webp";
+import { isPhotoLabel, PHOTO_LABELS, withLabel } from "@/lib/assets/spec";
 
 export type DraftPhoto = PhotoItem & { key: string; preview: string };
 
 export function draftFromStored(p: Extract<PhotoItem, { kind: "stored" }>["photo"]): DraftPhoto {
-  return { kind: "stored", photo: p, key: p.sha256, preview: p.url };
+  return { kind: "stored", photo: p, key: p.sha256, preview: p.url, ...(p.label ? { label: p.label } : {}) };
 }
 
-export function PhotoUploader({ id, copy, title, items, onChange, disabled = false }: {
-  id: string; copy: AssetsCopy["photos"]; title: string; items: DraftPhoto[]; onChange: (items: DraftPhoto[]) => void; disabled?: boolean;
+export function PhotoUploader({ id, copy, labels, title, items, onChange, disabled = false }: {
+  id: string; copy: AssetsCopy["photos"]; labels: AssetsCopy["labels"]; title: string; items: DraftPhoto[]; onChange: (items: DraftPhoto[]) => void; disabled?: boolean;
 }) {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
@@ -72,6 +74,19 @@ export function PhotoUploader({ id, copy, title, items, onChange, disabled = fal
     setAnnounce(fmt(copy.moved, { n: to + 1 }));
     // Keep focus on the same control of the moved photo so keyboard users can keep moving it.
     requestAnimationFrame(() => document.getElementById(`${id}-${x.key}-${to > from ? "later" : "earlier"}`)?.focus());
+  };
+
+  const relabel = (i: number, value: string) => {
+    onChange(items.map((x, j) => (j === i ? withLabel(x, isPhotoLabel(value) ? value : null) : x)));
+  };
+
+  const makeCover = (i: number) => {
+    if (i <= 0) return;
+    const next = [...items];
+    const [x] = next.splice(i, 1);
+    onChange([x, ...next]);
+    setAnnounce(fmt(copy.coverSet, { n: i + 1 }));
+    requestAnimationFrame(() => document.getElementById(`${id}-${x.key}-label`)?.focus());
   };
 
   const remove = (i: number) => {
@@ -136,11 +151,27 @@ export function PhotoUploader({ id, copy, title, items, onChange, disabled = fal
                   <span className="absolute inset-x-1.5 bottom-1.5 rounded-sm bg-surface px-1.5 py-0.5 text-[0.7rem] font-semibold leading-tight text-ink">{copy.serverBadge}</span>
                 )}
               </div>
-              <div className="flex items-center justify-between gap-1 p-1">
+              <div className="px-1.5 pt-1.5">
+                <label htmlFor={`${id}-${it.key}-label`} className="sr-only">{fmt(copy.labelFor, { n: i + 1 })}</label>
+                <select
+                  id={`${id}-${it.key}-label`} value={it.label ?? ""} disabled={disabled || busy} onChange={(e) => relabel(i, e.target.value)}
+                  className="min-h-11 w-full rounded-md border border-line-strong bg-surface px-2 text-small text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
+                >
+                  <option value="">{copy.noLabel}</option>
+                  {PHOTO_LABELS.map((l) => <option key={l} value={l}>{labels[l]}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center justify-between gap-0.5 p-1">
                 <button type="button" id={`${id}-${it.key}-earlier`} disabled={disabled || busy || i === 0} onClick={() => move(i, i - 1)}
                   aria-label={fmt(copy.moveEarlier, { n: i + 1 })} className="grid size-11 place-items-center rounded-full hover:bg-surface-2 disabled:opacity-40">
                   <ChevronLeft className="size-5" aria-hidden="true" />
                 </button>
+                {i > 0 && (
+                  <button type="button" disabled={disabled || busy} onClick={() => makeCover(i)}
+                    aria-label={fmt(copy.makeCover, { n: i + 1 })} title={fmt(copy.makeCover, { n: i + 1 })} className="grid size-11 place-items-center rounded-full hover:bg-surface-2 disabled:opacity-40">
+                    <ArrowUpFromLine className="size-5" aria-hidden="true" />
+                  </button>
+                )}
                 <button type="button" disabled={disabled || busy} onClick={() => remove(i)}
                   aria-label={fmt(copy.remove, { n: i + 1 })} className="grid size-11 place-items-center rounded-full hover:bg-surface-2 disabled:opacity-40">
                   <Trash2 className="size-5" aria-hidden="true" />

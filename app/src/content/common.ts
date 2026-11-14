@@ -209,6 +209,7 @@ export const common = {
     InsufficientFunds: "There isn't enough USD₮ for that.",
     WrongMint: "Only USD₮ is accepted. Look-alike tokens are rejected.",
     StringTooLong: "That text is too long.",
+    InvalidSpec: "Some details in the spec sheet are not valid. Please check them and try again.",
     cancelled: "Signing was cancelled. Nothing was changed.",
   } as Record<string, string>,
 } as const;

@@ -16,7 +16,7 @@ export const landing = {
       rows: [
         { label: "Lerato · book allowance", detail: "Every month to Van Schaik Bookstore", amount: "85 USD₮", state: "Now" },
         { label: "Lerato · tuition", detail: "Paid to University of Cape Town", amount: "3 200 USD₮", state: "Paid" },
-        { label: "Family car", detail: "Sold above Dad's floor, after he's gone", amount: "9 000 USD₮", state: "Later" },
+        { label: "Family car", detail: "Sold above Dad's floor, after he's gone", amount: "12 500 USD₮", state: "Later" },
       ],
       foot: "Every payment has a public receipt.",
     },
@@ -37,7 +37,7 @@ export const landing = {
     steps: [
       {
         title: "Say what your family needs",
-        body: "Chat or talk with the Heirloom agent. \"R1 500 a month for Lerato's books. UCT fees every term. Sell my Corolla for no less than R160 000 when I'm gone.\" It writes the plan back in plain language and you choose which rules start now.",
+        body: "Chat or talk with the Heirloom agent. \"R1 500 a month for Lerato's books. UCT fees every term. Sell my Corolla for no less than R225 000 when I'm gone.\" It writes the plan back in plain language and you choose which rules start now.",
       },
       {
         title: "Sign and fund the vault",

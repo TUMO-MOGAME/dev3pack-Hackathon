@@ -9,7 +9,8 @@ import {
   AUTH_HEADER, encodeAuth, manifestText, MAX_REQUEST_BYTES, mediaAuthMessage,
   type AssetMediaView, type MediaAction, type PhotosListResponse, type PhotosProbeResponse,
 } from "./api";
-import { photosRoot, type WebpPhoto } from "./webp";
+import { type WebpPhoto } from "./webp";
+import { mediaRootHex, withLabel, type AssetSpec, type PhotoLabel } from "../assets/spec";
 
 export interface MediaSigner {
   estate: string;
@@ -24,7 +25,10 @@ export interface MediaSigner {
  * One photo in the final, ordered set: already on the server, a new WebP to upload, or a "raw" JPEG/PNG/HEIC
  * that the server converts to WebP (browsers that cannot encode WebP). A raw photo's sha256 is of the bytes sent.
  */
-export type PhotoItem = { kind: "stored"; photo: AssetPhoto } | { kind: "new" | "raw"; photo: WebpPhoto };
+export type PhotoItem = ({ kind: "stored"; photo: AssetPhoto } | { kind: "new" | "raw"; photo: WebpPhoto }) & { label?: PhotoLabel };
+
+/** What one save sends: the ordered photos (each with its label) and the spec sheet. */
+export interface MediaInput { asset: string; kind: AssetKind; title: string; description?: string; items: PhotoItem[]; spec?: AssetSpec }
 const shaOf = (p: PhotoItem) => p.photo.sha256;
 
 async function header(s: MediaSigner, action: MediaAction, bodyHash: string): Promise<Record<string, string>> {
@@ -72,7 +76,7 @@ export const photosApi = {
    * request sets the order to "everything uploaded so far", so a failure part-way leaves a valid, shorter set.
    * Returns the final set (with signed URLs) and its root, ready for `setAssetMedia`.
    */
-  async save(s: MediaSigner, input: { asset: string; kind: AssetKind; title: string; description?: string; items: PhotoItem[] }, onProgress?: (done: number, total: number) => void): Promise<AssetMediaView> {
+  async save(s: MediaSigner, input: MediaInput, onProgress?: (done: number, total: number) => void): Promise<AssetMediaView> {
     const fresh = input.items.filter((i): i is Extract<PhotoItem, { kind: "new" | "raw" }> => i.kind !== "stored").map((i) => i.photo);
     // Sent-file SHA-256 → stored WebP SHA-256 (they differ for raw photos the server converted).
     const stored = new Map<string, string>();
@@ -83,8 +87,12 @@ export const photosApi = {
     onProgress?.(0, fresh.length);
     for (const group of groups) {
       group.forEach((p) => sent.add(p.sha256));
-      const order = input.items.filter((i) => i.kind === "stored" || sent.has(shaOf(i))).map((i) => stored.get(shaOf(i)) ?? shaOf(i));
-      const manifest = { asset: input.asset, kind: input.kind, title: input.title, description: input.description ?? "", order, files: group.map((p) => p.sha256) };
+      const kept = input.items.filter((i) => i.kind === "stored" || sent.has(shaOf(i)));
+      const order = kept.map((i) => stored.get(shaOf(i)) ?? shaOf(i));
+      const manifest = {
+        asset: input.asset, kind: input.kind, title: input.title, description: input.description ?? "", order, files: group.map((p) => p.sha256),
+        labels: kept.map((i) => i.label ?? ("" as const)), spec: input.spec ?? null,
+      };
       const form = new FormData();
       form.set("manifest", manifestText(manifest));
       group.forEach((p, i) => form.append("photos", p.blob, `photo-${i + 1}`));
@@ -112,9 +120,12 @@ export const photosApi = {
  * No photo server (public mock demo): the set stays in this browser tab as object URLs. Clearly a demo path;
  * the photos are never sent anywhere.
  */
-export async function localPhotos(input: { asset: string; kind: AssetKind; title: string; description?: string; items: PhotoItem[] }): Promise<AssetMediaView> {
-  const photos: AssetPhoto[] = input.items.map((i) => i.kind === "stored" ? i.photo : {
+export async function localPhotos(input: MediaInput): Promise<AssetMediaView> {
+  const photos: AssetPhoto[] = input.items.map((i) => withLabel<AssetPhoto>(i.kind === "stored" ? i.photo : {
     sha256: i.photo.sha256, url: URL.createObjectURL(i.photo.blob), width: i.photo.width, height: i.photo.height, bytes: i.photo.bytes,
-  });
-  return { asset: input.asset, kind: input.kind, title: input.title, description: input.description, photos, photosRoot: await photosRoot(photos.map((p) => p.sha256)), updatedAt: Math.floor(Date.now() / 1000) };
+  }, i.label));
+  return {
+    asset: input.asset, kind: input.kind, title: input.title, description: input.description, photos, ...(input.spec ? { spec: input.spec } : {}),
+    photosRoot: await mediaRootHex(photos, input.spec), updatedAt: Math.floor(Date.now() / 1000),
+  };
 }

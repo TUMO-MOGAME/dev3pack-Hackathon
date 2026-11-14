@@ -12,11 +12,13 @@ import type {
   AssetKind, AssetMediaInfo, AssetPhoto, FallbackRecipient, GuardiansSnapshot, ObjectionStatus, SeatApprovalItem, TargetKind,
 } from "../guardians/types";
 import { fail, need } from "./mock-errors";
+import { cleanSpec, isPhotoLabel, specInputSchema, type AssetSpec } from "../assets/spec";
 
 /** Demo timings: objection window, succession wait and fallback wait (real: 2 days, 7 days, 90 days). */
 export const GUARD_DEMO_TIMINGS = { objectionWindowSecs: 60, successionWaitSecs: 60, fallbackWaitSecs: 120 } as const;
 export const VACANT_KEY = "11111111111111111111111111111111";
-const MAX_PHOTOS = 8;
+/** The program's MAX_PHOTOS (raised from 8 to 24 on 15 Nov 2026). */
+export const MAX_PHOTOS = 24;
 
 export interface Named { wallet: Base58; name: string }
 export type FallbackInput = { wallet: Base58; name: string; kind: FallbackRecipient["kind"] };
@@ -70,7 +72,7 @@ export interface MockGuardState {
   stamps: Record<Base58, { seatIndex: number; approver: Base58; approvedAt: number }>;
   feed: SeatApprovalItem[];
   objections: MockObjection[];
-  media: Record<Base58, { kind: AssetKind; title: string; description?: string; photos: AssetPhoto[]; photosRoot: string; updatedAt: number }>;
+  media: Record<Base58, { kind: AssetKind; title: string; description?: string; photos: AssetPhoto[]; spec?: AssetSpec; photosRoot: string; updatedAt: number }>;
 }
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -583,15 +585,20 @@ export function createMockGuardians(d: GuardDeps) {
 
   /* ----- asset photos ----- */
 
-  function setAssetMedia(asset: Base58, input: { kind: AssetKind; title: string; photos: AssetPhoto[]; description?: string }, photosRoot: string): TxResult {
+  function setAssetMedia(asset: Base58, input: { kind: AssetKind; title: string; photos: AssetPhoto[]; description?: string; spec?: AssetSpec }, photosRoot: string): TxResult {
     needCreated();
     const me = d.me();
     need(me === d.agent || (me === est().owner && est().status === "Active"), "NotOwner", "Only the owner (while the estate is active) or the agent can change photos.");
     const a = d.snap().assets.find((x) => x.address === asset) ?? fail("BadStatus", "That asset does not exist.");
     need(input.photos.length <= MAX_PHOTOS, "InvalidAmount", `Add at most ${MAX_PHOTOS} photos.`);
+    // Off-chain checks the photo API makes (the program only sees the root): known labels, a valid spec sheet.
+    need(input.photos.every((p) => p.label === undefined || isPhotoLabel(p.label)), "InvalidSpec", "Every photo label must be one of the listed ones.");
+    const checked = input.spec === undefined ? undefined : specInputSchema.safeParse(input.spec);
+    need(!checked || checked.success, "InvalidSpec", "Some details in the spec sheet are not valid.");
+    const spec = cleanSpec(checked?.success ? checked.data : undefined);
     g().media[asset] = {
       kind: input.kind, title: input.title || a.title, ...(input.description ? { description: input.description } : {}),
-      photos: input.photos.map((p) => ({ ...p })), photosRoot, updatedAt: nowSecs(),
+      photos: input.photos.map((p) => ({ ...p })), ...(spec ? { spec } : {}), photosRoot, updatedAt: nowSecs(),
     };
     const t = d.tx();
     d.log("AssetMediaSet", `${input.photos.length} photo${input.photos.length === 1 ? "" : "s"} saved for ${input.title || a.title}`, t);

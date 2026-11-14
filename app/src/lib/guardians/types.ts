@@ -5,6 +5,7 @@
  */
 import type { AgentReport, Base58 } from "../types";
 import type { TxResult } from "../service/types";
+import type { AssetSpec, PhotoLabel } from "../assets/spec";
 
 export type TargetKind = "Claim" | "Unlock" | "Sale" | "Hardship" | "Succession" | "Fallback";
 export type ObjectionStatus = "Open" | "Upheld" | "Dismissed";
@@ -97,14 +98,19 @@ export interface GuardiansSnapshot {
   fallback: FallbackPlan;
 }
 
-export interface AssetPhoto { sha256: string; url: string; width: number; height: number; bytes: number }
+/** One photo of an asset. `label` (Front, Engine, …) groups the gallery; photo 0 is the cover. */
+export interface AssetPhoto { sha256: string; url: string; width: number; height: number; bytes: number; label?: PhotoLabel }
 export interface AssetMediaInfo {
   asset: Base58; kind: AssetKind; title: string; photos: AssetPhoto[]; photosRoot: string; updatedAt: number;
   /** Off-chain description shown to buyers. Added by Agent B for Agent D. */
   description?: string;
+  /** Spec sheet (key facts, details, condition, performance), off-chain; its hash is part of photosRoot. */
+  spec?: AssetSpec;
   /** Chain mode: true when the listed photos hash to the on-chain AssetMedia.photos_root; undefined when nothing is on-chain. */
   onChainMatch?: boolean;
 }
+
+export interface AssetMediaInput { kind: AssetKind; title: string; photos: AssetPhoto[]; description?: string; spec?: AssetSpec }
 
 /** Methods the UI calls. Implemented by mock.ts and chain.ts (Agent B); HeirloomService extends this. */
 export interface GuardiansService {
@@ -133,5 +139,6 @@ export interface GuardiansService {
   executeFallback(estate: Base58): Promise<TxResult>;
   // asset photos (Agent D uploads; B records the root on-chain)
   getAssetMedia(estate: Base58): Promise<AssetMediaInfo[]>;
-  setAssetMedia(estate: Base58, asset: Base58, input: { kind: AssetKind; title: string; photos: AssetPhoto[]; description?: string }): Promise<TxResult>;
+  /** Records the media root (photos + labels + spec sheet, lib/assets/spec.ts mediaRootHex) on-chain; ≤ 24 photos. */
+  setAssetMedia(estate: Base58, asset: Base58, input: AssetMediaInput): Promise<TxResult>;
 }

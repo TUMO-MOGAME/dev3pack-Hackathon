@@ -7,7 +7,7 @@ describe("floorFromText (mock plan builder)", () => {
     expect(floorFromText(text)).toBe(9500);
   });
   it("ignores small rand amounts and falls back", () => {
-    expect(floorFromText("R1,500 a month for Lerato's books")).toBe(9000);
+    expect(floorFromText("R1,500 a month for Lerato's books")).toBe(12500);
   });
   it("converts a large rand amount", () => {
     expect(floorFromText("no less than R180 000")).toBeGreaterThan(9000);

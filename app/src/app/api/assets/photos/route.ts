@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { handler, HttpError, json, rateLimit } from "@/lib/api/http";
 import { sha256Hex } from "@/lib/agent/hash";
-import { isAssetKind, MAX_DESCRIPTION, MAX_REQUEST_BYTES, type PhotosListResponse } from "@/lib/media/api";
+import { isAssetKind, MAX_DESCRIPTION, MAX_MANIFEST_CHARS, MAX_REQUEST_BYTES, type PhotosListResponse } from "@/lib/media/api";
+import { cleanSpec, PHOTO_LABELS, specInputSchema, withLabel } from "@/lib/assets/spec";
 import { isWebp, MAX_EDGE, MAX_ORIGINAL_BYTES, MAX_PHOTO_BYTES, MAX_PHOTOS, sniffImage, webpSize } from "@/lib/media/webp";
 import { convertOnServer } from "@/lib/media/server/convert";
 import { authorizeOwner, photosAvailable } from "@/lib/media/server/auth";
@@ -18,6 +19,8 @@ const manifestSchema = z.object({
   description: z.string().trim().max(MAX_DESCRIPTION).default(""),
   order: z.array(sha).max(MAX_PHOTOS),
   files: z.array(sha).max(MAX_PHOTOS),
+  labels: z.array(z.union([z.enum(PHOTO_LABELS), z.literal("")])).max(MAX_PHOTOS).optional(),
+  spec: specInputSchema.nullable().optional(),
 });
 const deleteSchema = z.object({ asset: addr, sha256: sha });
 
@@ -39,8 +42,9 @@ export const GET = handler(async (req) => {
 
 /**
  * POST /api/assets/photos (multipart, owner only, estate Active):
- *   manifest = JSON { asset, kind, title, description, order: sha256[] (the full ordered set, ≤ 8), files: sha256[] of the photos sent }
- *   photos   = WebP files ≤ 1.5 MB, or (browsers that cannot encode WebP) JPEG/PNG/HEIC/HEIF originals ≤ 4 MB that
+ *   manifest = JSON { asset, kind, title, description, order: sha256[] (the full ordered set, ≤ 24), files: sha256[] of the
+ *              photos sent, labels: label per `order` entry ("" = none), spec: spec sheet or null }
+ *   photos   = WebP files ≤ 1.5 MB, or (browsers that cannot encode WebP) JPEG/PNG/HEIC/HEIF/AVIF originals ≤ 4 MB that
  *              are converted here with sharp; both checked by magic bytes (the content type is never trusted).
  *              Only the WebP is stored and hashed; `files` / `order` name a converted photo by its original's hash.
  * The signature covers the manifest text, and the server recomputes every file's SHA-256, so the signed set is
@@ -52,11 +56,12 @@ export const POST = handler(async (req) => {
   if (len > Math.max(MAX_REQUEST_BYTES, MAX_ORIGINAL_BYTES) + 512 * 1024) throw new HttpError(413, "Too many photos in one go. Please try again.");
   const form = await req.formData().catch(() => { throw new HttpError(400, "Expected a form upload."); });
   const text = form.get("manifest");
-  if (typeof text !== "string" || text.length > 4_000) throw new HttpError(400, "The upload is missing its list of photos.");
+  if (typeof text !== "string" || text.length > MAX_MANIFEST_CHARS) throw new HttpError(400, "The upload is missing its list of photos.");
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { throw new HttpError(400, "The upload's list of photos is not valid."); }
   const m = manifestSchema.parse(raw);
   if (new Set(m.order).size !== m.order.length) throw new HttpError(400, "The same photo is in the list twice.");
+  if (m.labels && m.labels.length !== m.order.length) throw new HttpError(400, "Each photo needs one label entry.");
 
   const files = form.getAll("photos").filter((f): f is File => f instanceof File);
   if (files.length > MAX_PHOTOS) throw new HttpError(400, `At most ${MAX_PHOTOS} photos per asset.`);
@@ -67,8 +72,8 @@ export const POST = handler(async (req) => {
     if (f.size > MAX_ORIGINAL_BYTES) throw new HttpError(413, `Photo ${i + 1} is larger than 4 MB.`);
     const bytes = new Uint8Array(await f.arrayBuffer());
     const webp = isWebp(bytes);
-    if (!webp && !sniffImage(bytes)) throw new HttpError(400, `Photo ${i + 1} is not a WebP, JPEG, PNG or HEIC image.`, "not_webp");
-    if (bytes.length > (webp ? MAX_PHOTO_BYTES : MAX_ORIGINAL_BYTES)) throw new HttpError(413, `Photo ${i + 1} is larger than ${webp ? "1.5" : "8"} MB.`);
+    if (!webp && !sniffImage(bytes)) throw new HttpError(400, `Photo ${i + 1} is not a WebP, JPEG, PNG, HEIC or AVIF image.`, "not_webp");
+    if (bytes.length > (webp ? MAX_PHOTO_BYTES : MAX_ORIGINAL_BYTES)) throw new HttpError(413, `Photo ${i + 1} is larger than ${webp ? "1.5" : "4"} MB.`);
     if (await sha256Hex(bytes) !== m.files[i]) throw new HttpError(400, `Photo ${i + 1} does not match the signed list.`);
     sent.push({ bytes, raw: !webp });
   }
@@ -100,13 +105,13 @@ export const POST = handler(async (req) => {
     known.set(f.row.sha256, f.row);
     bySent.set(f.sentSha, f.row);
   }
-  const photos = m.order.map((h) => {
+  const photos = m.order.map((h, k): PhotoRow => {
     const p = bySent.get(h) ?? known.get(h);
     if (!p) throw new HttpError(400, "A photo in the list was never uploaded.");
-    return p;
+    return withLabel(p, m.labels?.[k]);
   });
   if (new Set(photos.map((p) => p.sha256)).size !== photos.length) throw new HttpError(400, "The same photo is in the list twice.");
-  const row: MediaRow = { estate: owner.estate, asset: m.asset, kind: m.kind as MediaRow["kind"], title: m.title, description: m.description, photos, updatedAt: Math.floor(Date.now() / 1000) };
+  const row: MediaRow = { estate: owner.estate, asset: m.asset, kind: m.kind as MediaRow["kind"], title: m.title, description: m.description, photos, spec: cleanSpec(m.spec), updatedAt: Math.floor(Date.now() / 1000) };
   await saveMedia(row, prev);
   return json(await toInfo(row));
 });

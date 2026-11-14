@@ -16,7 +16,8 @@ import { createMockLegacy } from "./mock-legacy";
 import { fail } from "./mock-errors";
 import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type MockGuardState, type Named } from "./mock-guardians";
 import { sha256Hex } from "../agent/hash";
-import { photosRootHex } from "../guardians/photos";
+import { cleanSpec, mediaRootHex, specInputSchema } from "../assets/spec";
+import { DEMO_ASSETS } from "./demo-asset-photos";
 
 export interface MockActor { address: Base58; role: Role; label: string }
 /** "guardians": the estate unlocked, with a Guard set up before Thabo passed (seats, backups, Aunt Zodwa, fallback; 60/60/120 s). */
@@ -84,6 +85,9 @@ const AGENT = "AgNt1HeiRLooMwDKagentWaLLet7xQp5sZc3FdYg8uE6r";
 const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 const ESTATE = "EsTaTe9MoKoEnAfaMiLyVauLt4xQp5sZc3FdYg8uE6rAo";
 const CAR_MINT = "CaRt1tLe2016ToYoTaCoRoLLa5sZc3FdYg8uE6rAoNFT1";
+const BIKE_MINT = "BiKeT1tLe2025BiGBoYMuStAnG250sZc3FdYg8uE6rNFT";
+/** Thabo's motorbike (the second demo asset): asking / minimum / hardship floor in USD₮ (Tumo, 15 Nov 2026). */
+const BIKE_PRICES = { askingUsdt: 2000, floorUsdt: 1800, hardshipFloorUsdt: 1500 };
 const RIVALS = [
   { address: "AyEsHaKhAn4xT8rLp3cZd6FgJy4bN7eQiBuYeR5551aa", name: "Ayesha Khan" },
   { address: "JoHaNbOtHa2xT5rLm8cZp3FgHy6bJ9eUaBuYeR662bcd", name: "Johan Botha" },
@@ -142,7 +146,7 @@ function blank(): State {
     names[p.address] = p.label;
     balances[p.address] = toBase(p.usdt);
   }
-  RIVALS.forEach((r, i) => { names[r.address] = r.name; balances[r.address] = toBase(i === 0 ? 11000 : 9000); });
+  RIVALS.forEach((r, i) => { names[r.address] = r.name; balances[r.address] = toBase(i === 0 ? 15000 : 13000); });
   PAYEES.forEach((p) => { names[p.wallet] = p.name; balances[p.wallet] = 0n; });
   Object.values(DEMO_GUARDIANS).forEach((p) => { names[p.wallet] = p.name; balances[p.wallet] = 0n; });
   return {
@@ -173,8 +177,8 @@ const usd = (b: bigint) => `${fromBase(b).toLocaleString("en-ZA", { maximumFract
 
 /* ---------- the service ---------- */
 
-/** The car's minimum price from the owner's words: the latest USD₮ amount wins ("change it to 9,500 USDT"), else a large rand amount. */
-export function floorFromText(text: string, fallback = 9000): number {
+/** The car's minimum price from the owner's words: the latest USD₮ amount wins ("change it to 13,000 USDT"), else a large rand amount. */
+export function floorFromText(text: string, fallback = 12500): number {
   const num = (x: string) => Number(x.replace(/[\s,]/g, ""));
   const usdt = [...text.matchAll(/(\d[\d\s,.]*)\s*(?:usd₮|usdt)/gi)].map((m) => num(m[1])).filter((n) => n > 0);
   if (usdt.length) return usdt[usdt.length - 1];
@@ -718,8 +722,9 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
         { beneficiaryLabel: "Naledi", category: "Tuition", allowedPayeeKind: "School", maxPerClaimUsdt: 1500, lifetimeCapUsdt: 9000, validUntil: "2034-12-31", notes: "High school fees now, university later by a new rule", startsNow: false },
       ],
       assets: stage >= 3 ? [{
-        title: "2016 Toyota Corolla 1.6 Prestige",
-        floorPriceUsdt: floor, hardshipFloorUsdt: Math.round(floor * 0.83 / 50) * 50, askingPriceUsdt: Math.round(floor * 1.09 / 50) * 50,
+        title: DEMO_ASSETS.corolla.title,
+        // 12,500 minimum → 10,500 hardship floor and 13,500 asking (Tumo's prices for the 2017 Corolla).
+        floorPriceUsdt: floor, hardshipFloorUsdt: Math.round(floor * 0.84 / 50) * 50, askingPriceUsdt: Math.round(floor * 1.08 / 50) * 50,
         proceedsTo: "The family vault, to fund the children's rules",
         hardshipPolicy: "May sell below the minimum only if a child proves real hardship with a sworn affidavit and two trusted people agree. Never below the hardship floor.",
       }] : [],
@@ -785,6 +790,12 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       deposit(24000);
       const car = draft.assets[0];
       registerAsset({ nftMint: CAR_MINT, title: car.title, floorUsdt: car.floorPriceUsdt, hardshipFloorUsdt: car.hardshipFloorUsdt, askingUsdt: car.askingPriceUsdt, proceedsTo: ESTATE }, fakeHash());
+      registerAsset({ nftMint: BIKE_MINT, title: DEMO_ASSETS.mustang.title, ...BIKE_PRICES, proceedsTo: ESTATE }, fakeHash());
+      // Labelled photos and spec sheets for both (the roots were computed when the photos were converted).
+      const [carAsset, bikeAsset] = s.snap.assets;
+      for (const [a, d] of [[carAsset, DEMO_ASSETS.corolla], [bikeAsset, DEMO_ASSETS.mustang]] as const) {
+        G.setAssetMedia(a.address, { kind: d.kind, title: d.title, photos: d.photos, spec: d.spec }, d.mediaRoot);
+      }
       // Only the guardians stage has a Guard, so the stock demo (approve, then pay at once) is unchanged.
       if (stage === "guardians") G.setup(demoGuardianInput());
     });
@@ -826,7 +837,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       if (!(a.address in s.names)) {
         // A wallet the user created themselves: give it a name and demo funds.
         s.names[a.address] = a.label;
-        if (!(a.address in s.balances)) s.balances[a.address] = a.role === "owner" ? toBase(25000) : a.role === "buyer" ? toBase(12000) : 0n;
+        if (!(a.address in s.balances)) s.balances[a.address] = a.role === "owner" ? toBase(25000) : a.role === "buyer" ? toBase(16000) : 0n;
         save();
       }
     },
@@ -995,7 +1006,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     async valueCar({ make, model, year, mileageKm, condition }) {
       await wait(1700);
       const cond = /excellent/i.test(condition) ? 1.04 : /fair|poor/i.test(condition) ? 0.9 : 1;
-      const baseZar = Math.max(60000, (175000 + (year - 2016) * 9500 + (118000 - mileageKm) * 0.22) * cond);
+      // Anchored on Thabo's 2017 Corolla 1.8 Exclusive at 124,455 km: about 13,500 USD₮ asking.
+      const baseZar = Math.max(60000, (241000 + (year - 2017) * 12000 + (124455 - mileageKm) * 0.22) * cond);
       const round = (z: number) => Math.round(z / 100) * 100 - 100;
       const mid = Math.round(baseZar / DEMO_FX / 50) * 50;
       const out: CarValuation = {
@@ -1164,7 +1176,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       return G.assetMedia();
     },
     async setAssetMedia(_e, asset, input) {
-      const root = await photosRootHex(input.photos.map((p) => p.sha256));
+      const root = await mediaRootHex(input.photos, cleanSpec(specInputSchema.safeParse(input.spec).data));
       return mutate(900, () => G.setAssetMedia(asset, input, root));
     },
   };

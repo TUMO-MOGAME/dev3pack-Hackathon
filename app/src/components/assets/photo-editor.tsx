@@ -28,7 +28,7 @@ export function PhotoEditor({ copy, asset, media, session, role, onClose }: {
     setError(null);
     const res = await run("photos", (service, estate) => savePhotos({
       service, estate, session, role, asset: asset.address, kind: kindOf(media), title, description: media?.description ?? "",
-      items, onProgress: (done, total) => setProgress({ done, total }),
+      items, spec: media?.spec, onProgress: (done, total) => setProgress({ done, total }),
     }), p.saved, true);
     setProgress(null);
     if (res.ok) onClose();
@@ -39,7 +39,7 @@ export function PhotoEditor({ copy, asset, media, session, role, onClose }: {
     <Card>
       <h2 className="text-h3">{fmt(p.manageTitle, { title })}</h2>
       <form onSubmit={submit} noValidate className="mt-3 flex flex-col gap-4">
-        <PhotoUploader id="edit-photos" copy={p} title={title} items={items} onChange={setItems} disabled={busy === "photos"} />
+        <PhotoUploader id="edit-photos" copy={p} labels={copy.labels} title={title} items={items} onChange={setItems} disabled={busy === "photos"} />
         <p className="text-small text-ink-2">{p.onchainNote}</p>
         <Consent id="edit-photos-consent" checked={consent} onChange={(v) => { setConsent(v); setError(null); }} copy={common.consent} />
         {error && <p role="alert" className="border-l-4 border-ink pl-2 text-small font-semibold text-ink">{error}</p>}

@@ -1,8 +1,10 @@
 "use client";
 /**
- * Photo gallery for an asset, for buyers and family. One photo at a time with previous/next buttons, thumbnails,
- * arrow keys (Left/Right/Home/End) and swipe. Alt text = asset title + photo number. Swapping photos is instant
- * (no slide animation), so there is nothing to reduce for reduced-motion users.
+ * Photo gallery for an asset, for buyers and family. Opens on the cover (photo 1). One photo at a time with
+ * previous/next buttons, thumbnails, arrow keys (Left/Right/Home/End) and swipe. When the photos are labelled,
+ * filter buttons ("All (16)", "Engine (1)", …) show one group at a time, in label order. Alt text = asset title,
+ * label and photo number. Swapping photos is instant (no slide animation), so there is nothing to reduce for
+ * reduced-motion users.
  */
 import { useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import Image from "next/image";
@@ -11,12 +13,21 @@ import { ChevronLeft, ChevronRight } from "@/components/ui/icons";
 import type { AssetsCopy } from "@/content/assets";
 import { fmt } from "@/components/shell/copy";
 import type { AssetPhoto } from "@/lib/guardians/types";
+import { groupByLabel, type PhotoLabel } from "@/lib/assets/spec";
 
-export function Gallery({ id, photos: all, title, copy, badge }: { id: string; photos: AssetPhoto[]; title: string; copy: AssetsCopy["gallery"]; badge?: ReactNode }) {
+export function Gallery({ id, photos: all, title, copy, labels, badge }: {
+  id: string; photos: AssetPhoto[]; title: string; copy: AssetsCopy["gallery"]; labels: AssetsCopy["labels"]; badge?: ReactNode;
+}) {
   const [index, setIndex] = useState(0);
+  const [group, setGroup] = useState<PhotoLabel | null>(null);
   // Photos whose URL no longer loads (an expired link, or a demo photo from an earlier visit) are skipped.
   const [broken, setBroken] = useState<ReadonlySet<string>>(new Set());
-  const photos = all.filter((p) => !broken.has(p.sha256));
+  const working = all.map((p, k) => ({ p, k })).filter(({ p }) => !broken.has(p.sha256));
+  const groups = all.some((p) => p.label) ? groupByLabel(working.map(({ p }) => p)) : [];
+  const shown = group ? working.filter(({ p }) => (p.label ?? "Other") === group) : working;
+  const photos = shown.map(({ p }) => p);
+  const number = (j: number) => shown[j].k + 1; // position in the whole set, so alt text stays stable across filters
+  const pick = (g: PhotoLabel | null) => { setGroup(g); setIndex(0); };
   const start = useRef<{ x: number; y: number } | null>(null);
   const n = photos.length;
   const i = Math.min(index, Math.max(0, n - 1));
@@ -24,6 +35,9 @@ export function Gallery({ id, photos: all, title, copy, badge }: { id: string; p
 
   if (n === 0) return null;
   const photo = photos[i];
+  const altOf = (p: AssetPhoto, j: number) => p.label
+    ? fmt(copy.altLabelled, { title, label: labels[p.label], n: number(j) })
+    : fmt(copy.alt, { title, n: number(j) });
 
   const onKey = (e: KeyboardEvent) => {
     const to = e.key === "ArrowLeft" ? i - 1 : e.key === "ArrowRight" ? i + 1 : e.key === "Home" ? 0 : e.key === "End" ? n - 1 : null;
@@ -52,12 +66,15 @@ export function Gallery({ id, photos: all, title, copy, badge }: { id: string; p
       >
         <div role="group" aria-roledescription="slide" aria-label={fmt(copy.slide, { n: i + 1, total: n })} className="absolute inset-0">
           <Image
-            key={photo.sha256} src={photo.url} alt={fmt(copy.alt, { title, n: i + 1 })} fill draggable={false}
+            key={photo.sha256} src={photo.url} alt={altOf(photo, i)} fill draggable={false}
             sizes="(min-width: 1024px) 560px, 100vw" className="object-contain" unoptimized priority={i === 0}
             onError={() => setBroken((b) => new Set(b).add(photo.sha256))}
           />
         </div>
         {badge && <span className="absolute left-3 top-3">{badge}</span>}
+        {photo.label && (
+          <span className="absolute bottom-2 left-2 rounded-full bg-ink px-2.5 py-0.5 text-[0.75rem] font-semibold text-bg" aria-hidden="true">{labels[photo.label]}</span>
+        )}
         {n > 1 && (
           <>
             <button type="button" onClick={() => go(i - 1)} aria-label={copy.previous} className={clsx(navBtn, "left-2")}><ChevronLeft className="size-5" aria-hidden="true" /></button>
@@ -66,6 +83,18 @@ export function Gallery({ id, photos: all, title, copy, badge }: { id: string; p
           </>
         )}
       </div>
+      {groups.length > 1 && (
+        <div role="group" aria-label={copy.groups} className="flex flex-wrap gap-1.5 px-2 pt-2">
+          {[{ key: null, text: fmt(copy.all, { n: working.length }) }, ...groups.map((g) => ({ key: g.label, text: fmt(copy.group, { label: labels[g.label], n: g.items.length }) }))].map((g) => (
+            <button
+              key={g.key ?? "all"} type="button" aria-pressed={group === g.key} onClick={() => pick(g.key)}
+              className={clsx("min-h-11 rounded-full border px-3 text-small font-medium tabular-nums", group === g.key ? "border-ink bg-ink text-bg" : "border-line-strong bg-surface text-ink hover:bg-surface-2")}
+            >
+              {g.text}
+            </button>
+          ))}
+        </div>
+      )}
       {n > 1 && (
         <>
           <p id={`${id}-hint`} className="sr-only">{copy.hint}</p>
@@ -73,7 +102,7 @@ export function Gallery({ id, photos: all, title, copy, badge }: { id: string; p
             {photos.map((p, j) => (
               <li key={p.sha256} className="shrink-0">
                 <button
-                  type="button" onClick={() => go(j)} aria-label={fmt(copy.show, { n: j + 1 })} aria-current={j === i ? "true" : undefined}
+                  type="button" onClick={() => go(j)} aria-label={p.label ? `${fmt(copy.show, { n: number(j) })}: ${labels[p.label]}` : fmt(copy.show, { n: number(j) })} aria-current={j === i ? "true" : undefined}
                   className={clsx("relative block size-14 overflow-hidden rounded-md border-2 bg-surface-2", j === i ? "border-ink" : "border-transparent opacity-75 hover:opacity-100")}
                 >
                   <Image src={p.url} alt="" fill sizes="56px" className="object-cover" unoptimized />

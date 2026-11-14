@@ -12,7 +12,8 @@
 import { sha256Hex } from "../agent/hash";
 import { photosRootHex } from "../guardians/photos";
 
-export const MAX_PHOTOS = 8;
+/** Photos per asset (the program's MAX_PHOTOS; raised from 8 on 15 Nov 2026). */
+export const MAX_PHOTOS = 24;
 export const MAX_EDGE = 1600;
 export const WEBP_QUALITY = 0.82;
 /** 1.5 MB per photo after conversion (checked again on the server). */
@@ -53,13 +54,15 @@ export function webpSize(bytes: Uint8Array): { width: number; height: number } |
   return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
 }
 
-export type RawImageType = "jpeg" | "png" | "heif";
-const HEIF_BRANDS = ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1", "heif", "avif"];
+export type RawImageType = "jpeg" | "png" | "heif" | "avif";
+const HEIF_BRANDS = ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1", "heif"];
+const AVIF_BRANDS = ["avif", "avis"];
 
-/** Identifies a JPEG, PNG or HEIC/HEIF original by its magic bytes (never by the content type), or null. */
+/** Identifies a JPEG, PNG, HEIC/HEIF or AVIF original by its magic bytes (never by the content type), or null. */
 export function sniffImage(bytes: Uint8Array): RawImageType | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpeg";
   if (bytes.length >= 8 && [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((v, i) => bytes[i] === v)) return "png";
+  if (bytes.length >= 12 && ascii(bytes, 4, 4) === "ftyp" && AVIF_BRANDS.includes(ascii(bytes, 8, 4))) return "avif";
   if (bytes.length >= 12 && ascii(bytes, 4, 4) === "ftyp" && HEIF_BRANDS.includes(ascii(bytes, 8, 4))) return "heif";
   return null;
 }
@@ -111,7 +114,7 @@ const looksLikeImage = (f: Blob) => {
 };
 
 /**
- * Converts one picked image (JPEG, PNG, WebP, HEIC where the browser can decode it) to WebP, long edge ≤ 1600 px.
+ * Converts one picked image (JPEG, PNG, WebP, AVIF, HEIC where the browser can decode it) to WebP, long edge ≤ 1600 px.
  * If the result is over 1.5 MB it retries at lower quality, then at a smaller size.
  * Throws WebpError with a plain-language message the UI can show.
  */
@@ -147,7 +150,8 @@ export type PreparedPhoto = { kind: "new"; photo: WebpPhoto } | { kind: "raw"; p
 
 /**
  * convertToWebp, and when this browser cannot make WebP, the server-conversion fallback: a canvas JPEG at
- * ≤ 1600 px (drops EXIF; Safari can decode HEIC itself), else the original if it is a JPEG/PNG/HEIC ≤ 4 MB.
+ * ≤ 1600 px (drops EXIF; Safari can decode HEIC itself), else the original if it is a JPEG/PNG/HEIC/AVIF ≤ 4 MB
+ * (the server's sharp reads AVIF).
  * For "raw" photos, width/height are what was sent and sha256 is of the bytes sent (the server re-hashes the WebP).
  */
 export async function preparePhoto(file: Blob, encoder: WebpEncoder = browserEncoder): Promise<PreparedPhoto> {
@@ -168,7 +172,7 @@ export async function preparePhoto(file: Blob, encoder: WebpEncoder = browserEnc
     } finally { img.release(); }
   } catch { /* fall through to the original */ }
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!sniffImage(bytes)) throw new WebpError("unsupported", "This photo type cannot be converted. Please use a JPEG or PNG.");
+  if (!sniffImage(bytes)) throw new WebpError("unsupported", "This photo type cannot be converted. Please use a JPEG, PNG or AVIF.");
   if (bytes.length > MAX_ORIGINAL_BYTES) throw new WebpError("too_large", "This photo is over 4 MB. Please choose a smaller one.");
   return { kind: "raw", photo: { blob: file, width: 0, height: 0, bytes: bytes.length, sha256: await sha256Hex(bytes) } };
 }

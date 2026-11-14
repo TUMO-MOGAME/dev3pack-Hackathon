@@ -4,6 +4,7 @@
  * routes (`x-heirloom-auth`), but with its own message prefix so a signature can never be replayed across APIs.
  */
 import type { AssetKind, AssetMediaInfo } from "../guardians/types";
+import type { AssetSpec, PhotoLabel } from "../assets/spec";
 
 export { AUTH_HEADER, encodeAuth, type LegacyAuth as MediaAuth } from "../legacy/auth-message";
 
@@ -25,9 +26,19 @@ export function mediaAuthMessage(action: MediaAction, estate: string, wallet: st
  * WebP: the signature covers the original's SHA-256, the response returns the WebP's SHA-256 (in the same position
  * of the set), and that WebP hash is the one that goes into photosRoot and on-chain. `order` may name a new photo
  * by its sent hash; already-stored photos are named by their WebP hash.
+ * `labels[k]` is the label of `order[k]` ("" = none); `spec` is the spec sheet (null = none). Both are signed and
+ * both are part of the media root that goes on-chain (lib/assets/spec.ts).
  */
-export interface UploadManifest { asset: string; kind: AssetKind; title: string; description?: string; order: string[]; files: string[] }
-export const manifestText = (m: UploadManifest) => JSON.stringify({ asset: m.asset, kind: m.kind, title: m.title, description: m.description ?? "", order: m.order, files: m.files });
+export interface UploadManifest {
+  asset: string; kind: AssetKind; title: string; description?: string; order: string[]; files: string[];
+  labels?: (PhotoLabel | "")[]; spec?: AssetSpec | null;
+}
+export const manifestText = (m: UploadManifest) => JSON.stringify({
+  asset: m.asset, kind: m.kind, title: m.title, description: m.description ?? "", order: m.order, files: m.files,
+  labels: m.labels ?? m.order.map(() => ""), spec: m.spec ?? null,
+});
+/** The manifest text is signed and parsed before any photo is read: big enough for 24 photos and a full spec sheet. */
+export const MAX_MANIFEST_CHARS = 16_000;
 export const MAX_DESCRIPTION = 600;
 
 /** AssetMediaInfo plus the owner's description (kept off-chain only; not part of the on-chain root). */

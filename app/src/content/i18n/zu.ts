@@ -70,7 +70,7 @@ export const zu: Bundle = {
         rows: [
           { label: "Lerato · imali yezincwadi", detail: "Njalo ngenyanga ku-Van Schaik Bookstore", amount: "85 USD₮", state: "Manje" },
           { label: "Lerato · imali yokufunda", detail: "Ikhokhelwe i-University of Cape Town", amount: "3 200 USD₮", state: "Ikhokhiwe" },
-          { label: "Imoto yomndeni", detail: "Ithengiswe ngaphezu kwentengo kababa, ngemva kokuthi engasekho", amount: "9 000 USD₮", state: "Kamuva" },
+          { label: "Imoto yomndeni", detail: "Ithengiswe ngaphezu kwentengo kababa, ngemva kokuthi engasekho", amount: "12 500 USD₮", state: "Kamuva" },
         ],
         foot: "Yonke inkokhelo inerisidi esobala.",
       },
@@ -91,7 +91,7 @@ export const zu: Bundle = {
       steps: [
         {
           title: "Yisho ukuthi umndeni wakho udingani",
-          body: "Xoxa noma ukhulume ne-agent ye-Heirloom. \"R1 500 ngenyanga yezincwadi zikaLerato. Izimali ze-UCT njalo ngekota. Thengisa iCorolla yami ngengaphansi kwe-R160 000 lapho ngingasekho.\" Ikubhalela uhlelo ngolimi olulula bese ukhetha ukuthi yimiphi imithetho eqala manje.",
+          body: "Xoxa noma ukhulume ne-agent ye-Heirloom. \"R1 500 ngenyanga yezincwadi zikaLerato. Izimali ze-UCT njalo ngekota. Thengisa iCorolla yami ngengaphansi kwe-R225 000 lapho ngingasekho.\" Ikubhalela uhlelo ngolimi olulula bese ukhetha ukuthi yimiphi imithetho eqala manje.",
         },
         {
           title: "Sayina bese ufaka imali esisefweni",

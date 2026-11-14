@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { createMockService, DEMO_GUARDIANS, DEMO_PERSONAS } from "./mock";
 import { photosRootHex } from "../guardians/photos";
+import { mediaRootHex } from "../assets/spec";
 
 type Svc = ReturnType<typeof createMockService>;
 const P = (key: string) => DEMO_PERSONAS.find((p) => p.key === key)!;
@@ -396,9 +397,9 @@ describe("mock guardians: asset photos", () => {
     const asset = (await snap()).assets[0].address;
     const photo = (n: string) => ({ sha256: n.repeat(64), url: `/p/${n}.webp`, width: 1600, height: 1200, bytes: 200_000 });
     await svc.setAssetMedia(estate, asset, { kind: "Car", title: "Corolla", photos: [photo("a"), photo("b")] });
-    const [m] = await svc.getAssetMedia(estate);
+    const m = (await svc.getAssetMedia(estate)).find((x) => x.asset === asset)!;
     expect(m).toMatchObject({ asset, kind: "Car", title: "Corolla" });
-    expect(m.photosRoot).toBe(await photosRootHex(["a".repeat(64), "b".repeat(64)]));
+    expect(m.photosRoot).toBe(await mediaRootHex([photo("a"), photo("b")]));
     act(svc, "lerato");
     await expect(svc.setAssetMedia(estate, asset, { kind: "Car", title: "x", photos: [] })).rejects.toThrow(/^NotOwner/);
   });

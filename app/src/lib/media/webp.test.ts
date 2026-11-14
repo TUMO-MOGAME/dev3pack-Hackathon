@@ -110,6 +110,10 @@ describe("sniffImage (originals for server conversion)", () => {
     expect(sniffImage(png())).toBe("png");
     const heic = new Uint8Array(16); heic.set(Array.from("....ftypheic", (c) => c.charCodeAt(0)));
     expect(sniffImage(heic)).toBe("heif");
+    for (const brand of ["avif", "avis"]) {
+      const avif = new Uint8Array(16); avif.set(Array.from(`....ftyp${brand}`, (c) => c.charCodeAt(0)));
+      expect(sniffImage(avif)).toBe("avif");
+    }
     expect(sniffImage(fakeWebp())).toBeNull();
     expect(sniffImage(new TextEncoder().encode("<svg onload=alert(1)>"))).toBeNull();
   });

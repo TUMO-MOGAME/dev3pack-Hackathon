@@ -11,13 +11,13 @@ import { getSupabase } from "@/lib/supabase";
 import { sha256Hex } from "@/lib/agent/hash";
 import type { AssetKind, AssetPhoto } from "@/lib/guardians/types";
 import type { AssetMediaView } from "../api";
-import { photosRoot } from "../webp";
+import { mediaRootHex, type AssetSpec, type PhotoLabel } from "@/lib/assets/spec";
 
 export const PHOTO_BUCKET = "asset-photos";
 export const SIGNED_URL_SECS = 3600;
 
-export interface PhotoRow { sha256: string; path: string; width: number; height: number; bytes: number }
-export interface MediaRow { estate: string; asset: string; kind: AssetKind; title: string; description: string; photos: PhotoRow[]; updatedAt: number }
+export interface PhotoRow { sha256: string; path: string; width: number; height: number; bytes: number; label?: PhotoLabel }
+export interface MediaRow { estate: string; asset: string; kind: AssetKind; title: string; description: string; photos: PhotoRow[]; spec?: AssetSpec; updatedAt: number }
 
 interface Mem { media: Map<string, MediaRow>; files: Map<string, Uint8Array> }
 // On globalThis so every route module in this process shares one store.
@@ -97,7 +97,10 @@ export async function listMedia(estate: string): Promise<MediaRow[]> {
   warn("listMedia", e1); warn("listPhotos", e2);
   return (media ?? []).map((m) => ({
     estate: m.estate, asset: m.asset, kind: m.kind as AssetKind, title: m.title, description: m.description ?? "", updatedAt: Math.floor(new Date(m.updated_at).getTime() / 1000),
-    photos: (photos ?? []).filter((p) => p.asset === m.asset).map((p) => ({ sha256: p.sha256, path: p.path, width: p.width, height: p.height, bytes: p.bytes })),
+    ...(m.spec ? { spec: m.spec as AssetSpec } : {}),
+    photos: (photos ?? []).filter((p) => p.asset === m.asset).map((p) => ({
+      sha256: p.sha256, path: p.path, width: p.width, height: p.height, bytes: p.bytes, ...(p.label ? { label: p.label as PhotoLabel } : {}),
+    })),
   }));
 }
 
@@ -112,14 +115,14 @@ export async function saveMedia(row: MediaRow, previous: MediaRow | null): Promi
     return;
   }
   const { error } = await sb.from("asset_media").upsert({
-    estate: row.estate, asset: row.asset, kind: row.kind, title: row.title, description: row.description,
-    photos_root: await photosRoot(row.photos.map((p) => p.sha256)), updated_at: new Date(row.updatedAt * 1000).toISOString(),
+    estate: row.estate, asset: row.asset, kind: row.kind, title: row.title, description: row.description, spec: row.spec ?? null,
+    photos_root: await mediaRootHex(row.photos, row.spec), updated_at: new Date(row.updatedAt * 1000).toISOString(),
   });
   if (error) throw new Error(`Could not save the photos: ${error.message}`);
   warn("clearPhotos", (await sb.from("asset_photos").delete().eq("estate", row.estate).eq("asset", row.asset)).error);
   if (row.photos.length) {
     const { error: e2 } = await sb.from("asset_photos").insert(row.photos.map((p, i) => ({
-      estate: row.estate, asset: row.asset, position: i, sha256: p.sha256, path: p.path, width: p.width, height: p.height, bytes: p.bytes,
+      estate: row.estate, asset: row.asset, position: i, sha256: p.sha256, path: p.path, width: p.width, height: p.height, bytes: p.bytes, label: p.label ?? null,
     })));
     if (e2) throw new Error(`Could not save the photos: ${e2.message}`);
   }
@@ -129,8 +132,11 @@ export async function saveMedia(row: MediaRow, previous: MediaRow | null): Promi
 /* ---------- public view ---------- */
 
 export async function toInfo(row: MediaRow): Promise<AssetMediaView> {
-  const photos: AssetPhoto[] = row.photos.map((p) => ({ sha256: p.sha256, url: signedPhotoUrl(p.path), width: p.width, height: p.height, bytes: p.bytes }));
-  return { asset: row.asset, kind: row.kind, title: row.title, description: row.description, photos, photosRoot: await photosRoot(photos.map((p) => p.sha256)), updatedAt: row.updatedAt };
+  const photos: AssetPhoto[] = row.photos.map((p) => ({ sha256: p.sha256, url: signedPhotoUrl(p.path), width: p.width, height: p.height, bytes: p.bytes, ...(p.label ? { label: p.label } : {}) }));
+  return {
+    asset: row.asset, kind: row.kind, title: row.title, description: row.description, photos, ...(row.spec ? { spec: row.spec } : {}),
+    photosRoot: await mediaRootHex(photos, row.spec), updatedAt: row.updatedAt,
+  };
 }
 
 /** Tests only. */

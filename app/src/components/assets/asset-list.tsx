@@ -35,7 +35,6 @@ export function AssetList({ copy, assets, media, current, onSelect, onAdd }: {
             <li key={a.address} className="min-w-0">
               <button
                 type="button" onClick={() => onSelect(a.address)} aria-current={on ? "true" : undefined}
-                aria-label={fmt(l.open, { title: m?.title || a.title })}
                 className={clsx("flex w-full min-w-0 items-center gap-3 rounded-md border bg-surface p-2.5 text-left hover:bg-surface-2", on ? "border-2 border-ink" : "border-line-strong")}
               >
                 <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-md bg-surface-2">

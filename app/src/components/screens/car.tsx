@@ -23,6 +23,10 @@ import { AssetList } from "@/components/assets/asset-list";
 import { Gallery } from "@/components/assets/gallery";
 import { kindOf, useAssetMedia } from "@/components/assets/media";
 import { PhotoEditor } from "@/components/assets/photo-editor";
+import { SpecSheet } from "@/components/assets/spec-sheet";
+import { SpecEditor } from "@/components/assets/spec-editor";
+import { hasSpec } from "@/lib/assets/spec";
+import { VALUED_KINDS } from "@/lib/media/api";
 import type { AssetMediaView } from "@/lib/media/api";
 import { clock } from "./family";
 import { PausedNotice } from "@/components/guardians/parts";
@@ -88,7 +92,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
   const isFamily = snap.beneficiaries.some((b) => b.wallet === session.address);
   const isVerifier = e.verifiers.includes(session.address);
   const [blocked, setBlocked] = useState<{ code: string; message: string } | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<"photos" | "spec" | null>(null);
   const kind = kindOf(media);
   const title = media?.title || car.title;
   const photos = media?.photos ?? [];
@@ -136,7 +140,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
       <div className="grid gap-5 *:min-w-0">
         <Card className="overflow-hidden p-0! sm:p-0!">
           {photos.length > 0 ? (
-            <Gallery id={`gallery-${car.address}`} photos={photos} title={title} copy={a.gallery} badge={statusBadge} />
+            <Gallery id={`gallery-${car.address}`} photos={photos} title={title} copy={a.gallery} labels={a.labels} badge={statusBadge} />
           ) : kind === "Car" ? (
             <div className="relative aspect-[32/15] w-full bg-surface-2">
               <Image src={car.imageUrl ?? "/car-corolla.svg"} alt={fmt(copy.imageAlt, { title: car.title })} fill sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" unoptimized priority />
@@ -165,12 +169,19 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
               )}
             </div>
             {canEdit && !editing && (
-              <Button variant="secondary" small className="mt-3" onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden="true" />{a.photos.manage}</Button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="secondary" small onClick={() => setEditing("photos")}><Pencil className="size-4" aria-hidden="true" />{a.photos.manage}</Button>
+                {(VALUED_KINDS.includes(kind) || hasSpec(media?.spec)) && (
+                  <Button variant="secondary" small onClick={() => setEditing("spec")}><Pencil className="size-4" aria-hidden="true" />{hasSpec(media?.spec) ? a.spec.edit : a.spec.add}</Button>
+                )}
+              </div>
             )}
           </div>
         </Card>
 
-        {canEdit && editing && <PhotoEditor copy={a} asset={car} media={media} session={session} role={role} onClose={() => setEditing(false)} />}
+        {canEdit && editing === "photos" && <PhotoEditor copy={a} asset={car} media={media} session={session} role={role} onClose={() => setEditing(null)} />}
+        {canEdit && editing === "spec" && <SpecEditor copy={a} asset={car} media={media} session={session} role={role} onClose={() => setEditing(null)} />}
+        {editing !== "spec" && <SpecSheet spec={media?.spec} copy={a.spec} />}
 
         {car.status === "Sold" && sale && (
           <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>

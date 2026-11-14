@@ -165,6 +165,20 @@ provider; design tokens only; every form has the consent box; WCAG AA; works at 
   concatenated photo hashes in order. Asset page shows a photo gallery to buyers. Tests for the WebP conversion
   helper, the magic-byte check and the root hash.
 
+- **D2, richer assets (15 Nov 2026):** up to **24** photos per asset (program `MAX_PHOTOS`, app, API; Supabase
+  migration 0004), each with a **label** (Front, Rear, Side, Interior, Dashboard, Engine, Boot, Wheels, Damage, Other);
+  photo 1 is the cover ("Make cover" moves a photo to the front). AVIF is accepted: the browser decodes it and
+  re-encodes WebP; the server's sharp reads AVIF for the fallback path. A **spec sheet** per vehicle (key facts:
+  mileage, drive type, transmission, fuel, consumption, engine; Details; Condition; Performance), edited by the owner
+  while the estate is Active, shown to family and buyers, stored off-chain with the photos and signed in the upload
+  manifest. Code: `app/src/lib/assets/spec.ts` (schema, labels, root), `spec-form.ts`, `components/assets/spec-*.tsx`.
+  **Media root** (what `AssetMedia.photos_root` now holds): zero when there are no photos and no spec sheet, else
+  `SHA-256(0x02 ‖ photo digests in order ‖ one label byte per photo (index, 0xff = none) ‖ SHA-256(canonical JSON of
+  the spec sheet, or 32 zero bytes))`. Changing, reordering or relabelling a photo, or any spec value, changes it.
+  Demo: Thabo's 2017 Toyota Corolla 1.8 Exclusive CVT (16 photos; 13,500 / 12,500 / 10,500 USD₮) replaces the 2016
+  Corolla in the story, and his 2025 Big Boy Mustang 250 (9 photos; 2,000 / 1,800 / 1,500) is a second asset. Photos
+  converted by `scripts/demo-asset-photos.mjs` into `app/public/demo/assets/` (published with Tumo's permission).
+
 ## 5. Integration and release (lead)
 1. A finishes → IDL in the branch → B wires `chain.ts`. 2. Lead merges, runs tsc, eslint, vitest, contrast, the Rust
 tests. 3. Browser check of both flows in demo mode at 360 px and desktop. 4. After judging and with Tumo's OK:

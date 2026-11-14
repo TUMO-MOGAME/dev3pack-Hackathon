@@ -70,7 +70,7 @@ export const st: Bundle = {
         rows: [
           { label: "Lerato · chelete ya dibuka", detail: "Kgwedi le kgwedi ho Van Schaik Bookstore", amount: "85 USD₮", state: "Jwale" },
           { label: "Lerato · ditefello tsa thuto", detail: "E lefilwe ho University of Cape Town", amount: "3 200 USD₮", state: "E lefilwe" },
-          { label: "Koloi ya lelapa", detail: "E rekisitswe ka hodimo ho theko e tlase ya Ntate, kamora hore a hlokahale", amount: "9 000 USD₮", state: "Hamorao" },
+          { label: "Koloi ya lelapa", detail: "E rekisitswe ka hodimo ho theko e tlase ya Ntate, kamora hore a hlokahale", amount: "12 500 USD₮", state: "Hamorao" },
         ],
         foot: "Tefo e nngwe le e nngwe e na le rasiti e bulehileng.",
       },
@@ -91,7 +91,7 @@ export const st: Bundle = {
       steps: [
         {
           title: "Bolela seo lelapa la hao le se hlokang",
-          body: "Ngola kapa bua le agent ya Heirloom. \"R1 500 ka kgwedi bakeng sa dibuka tsa Lerato. Ditefello tsa UCT kotara e nngwe le e nngwe. Rekisa Corolla ya ka ka theko e sa tlase ho R160 000 ha ke se ke le siile.\" E ngola moralo hape ka puo e bonolo mme o kgetha hore na ke melao efe e qalang jwale.",
+          body: "Ngola kapa bua le agent ya Heirloom. \"R1 500 ka kgwedi bakeng sa dibuka tsa Lerato. Ditefello tsa UCT kotara e nngwe le e nngwe. Rekisa Corolla ya ka ka theko e sa tlase ho R225 000 ha ke se ke le siile.\" E ngola moralo hape ka puo e bonolo mme o kgetha hore na ke melao efe e qalang jwale.",
         },
         {
           title: "Saena mme o kenye chelete polokelong",

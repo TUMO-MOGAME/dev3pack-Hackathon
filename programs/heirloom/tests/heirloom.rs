@@ -2229,8 +2229,13 @@ fn asset_media_set_by_owner_or_agent() {
         )
     };
     let (o, a, s) = (env.kp(&env.owner), env.kp(&env.agent), env.kp(&env.stranger));
-    let i = set(&env, &o, 9);
+    // At most 24 photos (MAX_PHOTOS): 25 is refused, 24 is accepted.
+    let i = set(&env, &o, 25);
     expect_err(send(&mut env.svm, i, &[&o]), HeirloomError::InvalidAmount);
+    let i = set(&env, &o, 24);
+    send(&mut env.svm, i, &[&o]).unwrap();
+    let m: AssetMedia = fetch(&env.svm, &media_pda(&asset));
+    assert_eq!(m.photo_count, 24);
     let i = set(&env, &s, 3);
     expect_err(send(&mut env.svm, i, &[&s]), HeirloomError::NotOwner);
     let i = set(&env, &o, 3);

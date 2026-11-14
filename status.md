@@ -3,7 +3,7 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-15 (guardians feature built on branch feature/guardians; see the section below)
+**Last updated:** 2026-11-15 (guardians feature + richer assets on branch feature/guardians; see the section below)
 **Phase:** SUBMITTED (13 Nov 11:04 SAST); judging was Sat 14 Nov. Now: post-hackathon features on branch `feature/guardians`.
 
 ## GUARDIANS FEATURE (branch feature/guardians, worktree C:\Users\tumom\Hackathons\heirloom-guardians), 14–15 Nov 2026
@@ -12,8 +12,10 @@
 - App: mock + chain service (chain tested only against the IDL), monitor role (Aunt Zodwa watches Uncle Bongani), objections, succession (backups take over), fallback plan (children → heir → charity), Assets of any kind with WebP photos (browser canvas; server sharp fallback for Safari; originals ≤ 4 MB). New demo stage "Trusted people with backups and monitors"; the existing stages and the 12-step demo guide are unchanged. 363/363 vitest, tsc + eslint clean.
 - Browser-checked in demo mode: Zodwa objects → payment paused → Ndlovu + Pillay uphold → claim declined; Bongani's passing → Cousin Kagiso takes the seat; all seats empty → fallback starts → 2 min → vault paid to Lerato; a motorbike added with a photo (4000×6000 → 1067×1600 WebP).
 - Worktree note: app/node_modules is a real copy (Turbopack can't follow a junction). Dev server: `npx next dev -p 3100` in app/.
-- Open: devnet program upgrade + Guard/Seats on a fresh demo estate (needs Tumo's OK); merge to main; translations of guardians/assets copy; 360 px + axe pass; finalize_succession / start_fallback are not fee-sponsored (no signer); owner_replace_seat has no UI; the 8-photo limit (contract + app) is too low; AVIF is not accepted.
-- Next request (Tumo, 14 Nov): richer assets — many labelled photos (engine, interior…), a spec sheet (details, condition, performance), buyers bid. Seed Thabo's 2017 Toyota Corolla 1.8 Exclusive CVT (16 AVIF photos `35CC146*.avif`) and 2025 Big Boy Mustang 250 (9 AVIF photos `8DC00392*.avif`); the files are untracked in the MAIN folder's root; prices not given yet.
+- Open: devnet program upgrade + Guard/Seats on a fresh demo estate (needs Tumo's OK); merge to main; translations of guardians/assets copy; 360 px + axe pass; finalize_succession / start_fallback are not fee-sponsored (no signer); owner_replace_seat has no UI.
+- DONE 15 Nov, richer assets (docs/guardians-spec.md §4 D2): 24 labelled photos per asset (contract MAX_PHOTOS 8 → 24, test 24 ok / 25 refused; app; API; Supabase migration 0004_asset_spec_labels.sql, NOT yet applied to the live Supabase), cover photo, gallery filtered by label, AVIF accepted; spec sheet (key facts, details, condition, performance) with an owner edit form, hashed into the media root that goes on-chain. Demo stages from "funded" on: Thabo's 2017 Corolla 1.8 Exclusive CVT (13,500 / 12,500 / 10,500 USD₮, 16 photos) replaces the 2016 Corolla, plus his 2025 Big Boy Mustang 250 (2,000 / 1,800 / 1,500, 9 photos). Chat quick replies now 12,500 / 13,000; landing "R225 000" and "12 500 USD₮" (en/zu/st/af); Pieter 16,000 and rival buyers 15,000 / 13,000 USD₮. Photos: Tumo confirmed the right to publish; WebP in app/public/demo/assets (3.8 MB), generated with scripts/demo-asset-photos.mjs from the AVIFs in the MAIN folder root (the AVIFs themselves stay untracked).
+- Checks: contract 51/51; app 400/400 vitest, tsc + eslint clean; browser at 360 px and 1280 px: no sideways scroll, axe clean on the assets screen, spec editor and photo editor (fixed: asset cards' aria-label hid their visible text); spec save (bad value refused + focus), relabel, make cover, spec kept after a photo save.
+- Left as is on purpose: lib/agent/canned.ts and lib/chain/demo-estate.ts still name the devnet car (2019 Corolla 1.8 Prestige, 9,000 floor), which is what is really on devnet; change them with the devnet re-seed. The spec sheet form is offered for cars and motorbikes only (other kinds keep the description). The mock valuation is car-based even for motorbikes.
 **Hackathon:** W3Node Node Engine, **Tether track** (confirmed). **Submit on BuilderBase by Fri 13 Nov 2026, 23:59 SAST** (public repo + README + video ≤ 3 min). Judging Sat 14 Nov: 5-min pitch + 3-min Q&A. Rubric in plan.md §0.
 
 ## Done
@@ -156,6 +158,7 @@
 | Business | `docs/business.md`, `validation.md`, `pitch.md`, `demo-video-script.md`, `landing-facts.md` | Market research, pricing, GTM, user validation kit, pitch, video script |
 
 ## Next up
+0. **Guardians branch (ask Tumo first where marked):** [ask] apply Supabase migration 0004 with migration 0003; [ask] devnet program upgrade (MAX_PHOTOS 24 + guardians), seed a Guard + Seats and Thabo's two assets with their photos, spec sheets and media roots on a fresh demo estate (then update canned.ts / demo-estate.ts); [ask] merge feature/guardians into main. Then: zu/st/af translations of the guardians + assets copy (new: photo labels, spec sheet); owner_replace_seat UI; fee sponsorship for finalize_succession / start_fallback.
 1. **Tumo decides:** live site stays mock mode (honest, labelled) or switches to chain mode (needs Vercel env: agent seed, mint, keys)
 2. **Tumo:** add GEMINI / ELEVENLABS keys to Vercel if the video or judges should see real AI answers (live `/api/health` shows all false)
 3. ~~Vercel GitHub builds failing~~ fixed 2026-11-12: project Root Directory was `.`; set to `app` (+ `turbopack.root` pinned in next.config.ts)
@@ -182,6 +185,7 @@
 | 2026-11-11 | Demo-friendly settings: 60 s waiting period, 60 s recurring interval, demo panel, persona switcher | Tumo: "shouldn't be too strict" for the demo; the contract still blocks rule-breaking |
 | 2026-11-11 | Devnet deployer `FHRjTDqQrPCi7QxvdaTu25RRf6gGMpj6wAhHyybX2LL5` (keypair in WSL `~/.config/solana/id.json`), funded with 5 SOL | For the program deploy |
 | 2026-11-12 | Audit before submission; live site kept in mock mode until Tumo decides | Tumo approved fixes + deploy; product changes need his OK |
+| 2026-11-15 | Richer assets: 24 labelled photos, spec sheet in the on-chain media root (v2, leading 0x02); the 2017 Corolla (12,500 minimum) replaces the 2016 one in the story; Mustang 250 as a second asset; dealer photos published | Tumo's request and answers (15 Nov): photo rights yes, prices given, replace the story car |
 | 2026-11-11 | Toolchain: rustc 1.99.1, solana-cli 4.3.2, anchor 1.2.2 (avm); no Surfpool (LiteSVM tests instead) | Installed by Tumo + lead |
 
 ## Open questions for Tumo
