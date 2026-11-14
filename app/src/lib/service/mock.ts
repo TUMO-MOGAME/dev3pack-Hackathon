@@ -86,6 +86,8 @@ const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 const ESTATE = "EsTaTe9MoKoEnAfaMiLyVauLt4xQp5sZc3FdYg8uE6rAo";
 const CAR_MINT = "CaRt1tLe2016ToYoTaCoRoLLa5sZc3FdYg8uE6rAoNFT1";
 const BIKE_MINT = "BiKeT1tLe2025BiGBoYMuStAnG250sZc3FdYg8uE6rNFT";
+/** The demo's digital titles for Thabo's car and motorbike (exported for tests). */
+export const DEMO_MINTS = { car: CAR_MINT, bike: BIKE_MINT } as const;
 /** Thabo's motorbike (the second demo asset): asking / minimum / hardship floor in USD₮ (Tumo, 15 Nov 2026). */
 const BIKE_PRICES = { askingUsdt: 2000, floorUsdt: 1800, hardshipFloorUsdt: 1500 };
 const RIVALS = [
@@ -186,6 +188,21 @@ export function floorFromText(text: string, fallback = 12500): number {
   return zar.length ? Math.round(zar[zar.length - 1] / DEMO_FX / 50) * 50 : fallback;
 }
 
+/**
+ * A demo saved in this browser before the story car came with photos (15 Nov 2026): give Thabo's 2017 Corolla and
+ * his motorbike their photos and spec sheets if they have none. Anything the owner changed is left alone.
+ */
+export function healDemoMedia(state: State): State {
+  const guard = (state.guard ??= blankGuard());
+  for (const a of state.snap.assets) {
+    const d = a.nftMint === CAR_MINT && a.title === DEMO_ASSETS.corolla.title ? DEMO_ASSETS.corolla
+      : a.nftMint === BIKE_MINT ? DEMO_ASSETS.mustang : null;
+    if (!d || guard.media[a.address]) continue;
+    guard.media[a.address] = { kind: d.kind, title: a.title, photos: structuredClone(d.photos), spec: structuredClone(d.spec), photosRoot: d.mediaRoot, updatedAt: Math.floor(Date.now() / 1000) };
+  }
+  return state;
+}
+
 /** `instant: true` skips the simulated network latency (tests). */
 export function createMockService(opts: { instant?: boolean } = {}): MockService {
   let s: State = blank();
@@ -197,7 +214,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       const raw = window.localStorage.getItem(KEY);
       if (raw) {
         const loaded = parse(raw);
-        if (loaded.v === 5) s = loaded;
+        if (loaded.v === 5) s = healDemoMedia(loaded);
       }
     } catch { /* storage blocked: stay in memory */ }
   }
@@ -324,7 +341,27 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     s.snap.assets.push(asset);
     const t = tx();
     log("AssetRegistered", `${asset.title} added. Its digital title is now held by the estate`, t);
+    // Demo: Thabo's story Corolla comes with its 16 labelled photos and spec sheet, and his motorbike joins it,
+    // however the story reached this point (guided story, chat or a stage shortcut). The owner can change both.
+    if (mint === CAR_MINT && /corolla/i.test(asset.title)) {
+      addDemoMedia(asset, DEMO_ASSETS.corolla);
+      if (!s.snap.assets.some((a) => a.nftMint === BIKE_MINT)) {
+        const bike: Asset = {
+          address: fakeAddr(), nftMint: BIKE_MINT, title: DEMO_ASSETS.mustang.title,
+          floorPrice: toBase(BIKE_PRICES.floorUsdt), hardshipFloor: toBase(BIKE_PRICES.hardshipFloorUsdt), askingPrice: toBase(BIKE_PRICES.askingUsdt),
+          proceedsTo: input.proceedsTo || ESTATE, status: "Held", listingEnds: null, docHash: fakeHash(), hardshipBeneficiary: null,
+        };
+        s.snap.assets.push(bike);
+        log("AssetRegistered", `${bike.title} added. Its digital title is now held by the estate`, tx());
+        addDemoMedia(bike, DEMO_ASSETS.mustang);
+      }
+    }
     return t;
+  }
+
+  /** Records a demo asset's photos and spec sheet (its media root was computed when the photos were converted). */
+  function addDemoMedia(a: Asset, d: (typeof DEMO_ASSETS)[keyof typeof DEMO_ASSETS]) {
+    G.setAssetMedia(a.address, { kind: d.kind, title: a.title, photos: d.photos, spec: d.spec }, d.mediaRoot);
   }
 
   function submitDeath(certHash: string, approve: boolean): TxResult {
@@ -789,13 +826,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       createEstate(draft);
       deposit(24000);
       const car = draft.assets[0];
+      // Adds the Corolla with its photos and spec sheet, and the motorbike with its own (see registerAsset).
       registerAsset({ nftMint: CAR_MINT, title: car.title, floorUsdt: car.floorPriceUsdt, hardshipFloorUsdt: car.hardshipFloorUsdt, askingUsdt: car.askingPriceUsdt, proceedsTo: ESTATE }, fakeHash());
-      registerAsset({ nftMint: BIKE_MINT, title: DEMO_ASSETS.mustang.title, ...BIKE_PRICES, proceedsTo: ESTATE }, fakeHash());
-      // Labelled photos and spec sheets for both (the roots were computed when the photos were converted).
-      const [carAsset, bikeAsset] = s.snap.assets;
-      for (const [a, d] of [[carAsset, DEMO_ASSETS.corolla], [bikeAsset, DEMO_ASSETS.mustang]] as const) {
-        G.setAssetMedia(a.address, { kind: d.kind, title: d.title, photos: d.photos, spec: d.spec }, d.mediaRoot);
-      }
       // Only the guardians stage has a Guard, so the stock demo (approve, then pay at once) is unchanged.
       if (stage === "guardians") G.setup(demoGuardianInput());
     });
@@ -1011,7 +1043,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       const round = (z: number) => Math.round(z / 100) * 100 - 100;
       const mid = Math.round(baseZar / DEMO_FX / 50) * 50;
       const out: CarValuation = {
-        suggestedAskingUsdt: mid, lowUsdt: Math.round(mid * 0.92 / 50) * 50, highUsdt: Math.round(mid * 1.06 / 50) * 50,
+        // The low end is the minimum the plan uses with this asking price (asking = minimum x 1.08): 13,500 -> 12,500.
+        suggestedAskingUsdt: mid, lowUsdt: Math.round(mid / 1.08 / 50) * 50, highUsdt: Math.round(mid * 1.06 / 50) * 50,
         comparables: [
           { title: `${year} ${make} ${model}, ${(mileageKm + 9000).toLocaleString("en-ZA")} km, Johannesburg`, priceZar: round(baseZar * 0.97), source: "AutoTrader · demo example" },
           { title: `${year} ${make} ${model}, ${(mileageKm - 14000).toLocaleString("en-ZA")} km, Pretoria`, priceZar: round(baseZar * 1.05), source: "Cars.co.za · demo example" },

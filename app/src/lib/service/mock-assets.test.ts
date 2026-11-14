@@ -3,7 +3,7 @@
  * photos, the spec sheet in the media root, and buyers' escrowed offers on any asset.
  */
 import { describe, expect, it } from "vitest";
-import { createMockService, DEMO_PERSONAS } from "./mock";
+import { createMockService, DEMO_MINTS, DEMO_PERSONAS, healDemoMedia } from "./mock";
 import { DEMO_ASSETS } from "./demo-asset-photos";
 import { mediaRootHex } from "../assets/spec";
 import { fromBase } from "../format";
@@ -50,6 +50,37 @@ describe("seeded demo assets", () => {
     svc.resetDemo("fresh");
     act(svc, "thabo");
     expect(await svc.listEstatesFor(P("thabo").address)).toEqual([]);
+  });
+});
+
+describe("guided story from the beginning (Thabo adds the car himself)", () => {
+  async function story() {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("fresh");
+    act(svc, "thabo");
+    const history = ["a", "b", "c"].map((text) => ({ role: "user" as const, text }));
+    const { draft } = await svc.willChat(history);
+    const { estate } = await svc.createEstateFromWill(draft!);
+    return { svc, estate };
+  }
+
+  it("the Corolla arrives with its photos and spec sheet, and the motorbike with its own", async () => {
+    const { svc, estate } = await story();
+    // What the Add-asset form sends (no mint, no photos chosen).
+    await svc.registerAsset(estate, { nftMint: "", title: "2017 Toyota Corolla 1.8 Exclusive CVT", floorUsdt: 12500, hardshipFloorUsdt: 10500, askingUsdt: 13500, proceedsTo: estate });
+    const assets = (await svc.getEstate(estate)).assets;
+    expect(assets.map((a) => a.title)).toEqual(["2017 Toyota Corolla 1.8 Exclusive CVT", "2025 Big Boy Mustang 250"]);
+    const media = await svc.getAssetMedia(estate);
+    expect(media.find((m) => m.asset === assets[0].address)).toMatchObject({ kind: "Car", spec: DEMO_ASSETS.corolla.spec, photosRoot: DEMO_ASSETS.corolla.mediaRoot });
+    expect(media.find((m) => m.asset === assets[0].address)!.photos).toHaveLength(16);
+    expect(media.find((m) => m.asset === assets[1].address)!.photos).toHaveLength(9);
+  });
+
+  it("something else added first gets no demo photos", async () => {
+    const { svc, estate } = await story();
+    await svc.registerAsset(estate, { nftMint: "", title: "Oak dining table", floorUsdt: 500, hardshipFloorUsdt: 400, askingUsdt: 600, proceedsTo: estate });
+    expect((await svc.getEstate(estate)).assets).toHaveLength(1);
+    expect(await svc.getAssetMedia(estate)).toEqual([]);
   });
 });
 
@@ -134,5 +165,28 @@ describe("selling after Thabo's passing (escrowed offers, any asset)", () => {
     const after = await svc.getEstate(estate);
     expect(after.assets.find((a) => a.address === bike.address)!.status).toBe("Sold");
     expect(after.activity.some((a) => a.kind === "AssetSold" && a.text.includes("Pieter") && a.amount !== undefined && fromBase(a.amount) === 1900)).toBe(true);
+  });
+});
+
+describe("a demo saved in the browser before the car had photos", () => {
+  type Saved = Parameters<typeof healDemoMedia>[0];
+  const asset = (address: string, nftMint: string, title: string) => ({ address, nftMint, title });
+  const saved = (assets: ReturnType<typeof asset>[], media: Record<string, unknown> = {}) =>
+    ({ snap: { assets }, guard: { media } }) as unknown as Saved;
+
+  it("gets Thabo's photos and spec sheets back", () => {
+    const s = healDemoMedia(saved([asset("car1", DEMO_MINTS.car, DEMO_ASSETS.corolla.title), asset("bike1", DEMO_MINTS.bike, DEMO_ASSETS.mustang.title)]));
+    expect(s.guard!.media.car1).toMatchObject({ kind: "Car", photosRoot: DEMO_ASSETS.corolla.mediaRoot, spec: DEMO_ASSETS.corolla.spec });
+    expect(s.guard!.media.car1.photos).toHaveLength(16);
+    expect(s.guard!.media.bike1.photos).toHaveLength(9);
+  });
+
+  it("leaves the owner's own photos, an old 2016 Corolla and other assets alone", () => {
+    const own = { kind: "Car", title: "x", photos: [], photosRoot: "0".repeat(64), updatedAt: 1 };
+    const s = healDemoMedia(saved([
+      asset("car1", DEMO_MINTS.car, DEMO_ASSETS.corolla.title), asset("old", "OtherMint", "2016 Toyota Corolla 1.6 Prestige"), asset("table", "T", "Oak table"),
+    ], { car1: own }));
+    expect(s.guard!.media.car1).toBe(own);
+    expect(Object.keys(s.guard!.media)).toEqual(["car1"]);
   });
 });

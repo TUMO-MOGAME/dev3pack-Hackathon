@@ -108,6 +108,8 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
       const added = (await s.getEstate(est)).assets.find((x) => !before.has(x.address));
       if (!added) return null;
       // The asset is on the estate now; a photo failure is reported but does not undo it (photos can be added later).
+      // Nothing to record when the owner added no photos and no spec sheet (and the demo car keeps its own).
+      if (photos.length === 0 && !sheet.spec) return added.address;
       try {
         await savePhotos({
           service: s, estate: est, session, role, asset: added.address, kind, title: name, description: description.trim(),

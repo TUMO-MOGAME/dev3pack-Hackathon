@@ -60,7 +60,7 @@ function Assets({ copy, a, snap, session, role }: { copy: Copy; a: AssetsCopy; s
     return (
       <AddAsset car={copy} copy={a} snap={snap} session={session} role={role}
         onCancel={list.length ? () => setAdding(false) : undefined}
-        onAdded={(addr) => { setAdding(false); setSelected(addr); }} />
+        onAdded={(addr) => { setAdding(false); setSelected(addr); window.scrollTo({ top: 0 }); }} />
     );
   }
   const current = list.find((x) => x.address === selected) ?? list[0];
