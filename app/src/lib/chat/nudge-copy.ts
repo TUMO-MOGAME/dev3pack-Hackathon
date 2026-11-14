@@ -90,6 +90,12 @@ const en = {
       Unlocked: ["What is waiting for me?", "Should I accept the best car offer?", "How do you check a fee statement?"],
       none: ["What does a trusted person do?", "How does Heirloom work?"],
     },
+    monitor: {
+      Active: ["What did the person I watch approve?", "How do I raise an objection?", "What does a monitor do?"],
+      DeathPending: ["What did the person I watch approve?", "How do I raise an objection?", "When can the estate unlock?"],
+      Unlocked: ["What did the person I watch approve?", "How do I raise an objection?", "What happens after I object?"],
+      none: ["What does a monitor do?", "How does Heirloom work?"],
+    },
     buyer: {
       Active: ["When will the car be for sale?", "How does escrow work?"],
       DeathPending: ["When will the car be for sale?", "How does escrow work?"],

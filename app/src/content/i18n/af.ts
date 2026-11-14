@@ -141,7 +141,7 @@ export const af: Bundle = {
       estate: "Boedel",
       will: "Plan",
       vault: "Kluis",
-      car: "Motor",
+      car: "Bates",
       people: "Mense",
       family: "Tydlyn",
       claims: "Eise",
@@ -157,6 +157,7 @@ export const af: Bundle = {
       verifier: "Vertroude persoon",
       buyer: "Motorkoper",
       agent: "Heirloom-agent",
+      monitor: "Waarnemer",
     },
     persona: {
       actingAs: "Tree op as",
@@ -164,7 +165,7 @@ export const af: Bundle = {
       sheetTitle: "As wie tree jy op?",
       sheetBody: "Een blaaier kan verskeie wallets hou. Kies 'n persoon om Heirloom presies te sien soos hulle dit sou sien.",
       current: "Huidige",
-      groups: { owner: "Boedeleienaar", beneficiary: "Familie", verifier: "Vertroude persone", buyer: "Kopers", agent: "Agent" },
+      groups: { owner: "Boedeleienaar", beneficiary: "Familie", verifier: "Vertroude persone", buyer: "Kopers", agent: "Agent", monitor: "Waarnemers" },
       addWallet: "Voeg nog 'n wallet by",
       wallet: "Wallet",
       balance: "Wallet-saldo",
@@ -192,6 +193,7 @@ export const af: Bundle = {
         unlocked: "Boedel ontsluit",
         listed: "Motor gelys met aanbiedinge",
         lowOffers: "Motor gelys, net lae aanbiedinge",
+        guardians: "Vertroude persone met rugsteun en waarnemers",
       },
       shortcutsTitle: "Kortpaaie",
       shortcuts: {

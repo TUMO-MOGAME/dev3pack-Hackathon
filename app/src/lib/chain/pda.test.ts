@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
   ata, assetPda, beneficiaryPda, claimPda, estatePda, hardshipPda, offerPda, payeePda, rulePda, vaultAta,
+  guardPda, mediaPda, objectionPda, seatPda, stampPda,
   TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "./pda";
 
@@ -49,5 +50,20 @@ describe("PDA seeds (docs/program-spec.md)", () => {
     const expected = PublicKey.findProgramAddressSync([estate.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()], ASSOCIATED_TOKEN_PROGRAM_ID)[0];
     expect(vaultAta(mint, estate).equals(expected)).toBe(true);
     expect(ata(mint, estate).equals(expected)).toBe(true);
+  });
+});
+
+describe("PDA seeds (docs/guardians-spec.md)", () => {
+  const estate = estatePda(program, owner);
+  it("seat = [seat, estate, u8 index]; guard = [guard, estate]", () => {
+    expect(seatPda(program, estate, 2).equals(ref([Buffer.from("seat"), estate.toBuffer(), Buffer.from([2])]))).toBe(true);
+    expect(seatPda(program, estate, 0).equals(seatPda(program, estate, 1))).toBe(false);
+    expect(guardPda(program, estate).equals(ref([Buffer.from("guard"), estate.toBuffer()]))).toBe(true);
+    expect(() => seatPda(program, estate, 256)).toThrow(RangeError);
+  });
+  it("stamp / objection / media = [tag, target]", () => {
+    expect(stampPda(program, other).equals(ref([Buffer.from("stamp"), other.toBuffer()]))).toBe(true);
+    expect(objectionPda(program, other).equals(ref([Buffer.from("objection"), other.toBuffer()]))).toBe(true);
+    expect(mediaPda(program, other).equals(ref([Buffer.from("media"), other.toBuffer()]))).toBe(true);
   });
 });

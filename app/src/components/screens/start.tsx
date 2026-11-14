@@ -13,7 +13,7 @@ import { fmt, useCopy } from "@/components/shell/copy";
 import { usePin } from "@/components/shell/pin-gate";
 
 type Step = "choose" | "about" | "pin" | "seed";
-const ROLES: Exclude<Role, "agent">[] = ["owner", "beneficiary", "verifier", "buyer"];
+const ROLES: Exclude<Role, "agent">[] = ["owner", "beneficiary", "verifier", "monitor", "buyer"];
 
 export function StartScreen({ copy: english }: { copy: ScreensCopy["start"] }) {
   const copy = useLocalized(english, (t) => t.screens.start);

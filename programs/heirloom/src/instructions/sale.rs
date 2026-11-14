@@ -4,7 +4,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use super::{close_token_account_cpi, count_bits, now, transfer_checked_cpi};
+use super::{close_token_account_cpi, count_bits, now, objection_is_open, transfer_checked_cpi};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -345,6 +345,7 @@ pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
         .verifier_index(&verifier)
         .ok_or(HeirloomError::NotVerifier)?;
     let threshold = estate.hardship_threshold;
+    let estate_key = estate.key();
 
     let asset = &mut ctx.accounts.asset;
     let hardship = &mut ctx.accounts.hardship;
@@ -363,13 +364,22 @@ pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
         asset.hardship_beneficiary = Some(hardship.beneficiary);
     }
 
+    let ts = now()?;
     emit!(HardshipApproved {
         asset: asset.key(),
         hardship: hardship.key(),
         verifier,
         count,
         quorum_reached,
-        ts: now()?,
+        ts,
+    });
+    emit!(SeatApproval {
+        estate: estate_key,
+        seat_index: idx as u8,
+        approver: verifier,
+        kind: TargetKind::Hardship,
+        target: hardship.key(),
+        ts,
     });
     Ok(())
 }
@@ -442,11 +452,33 @@ pub struct AcceptOffer<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+
+    /// CHECK: the ["objection", asset] PDA (Sale objection); may not exist. Blocks while Open.
+    #[account(seeds = [OBJECTION_SEED, asset.key().as_ref()], bump)]
+    pub objection: UncheckedAccount<'info>,
+
+    /// CHECK: when asset.hardship_beneficiary is Some(b): the ["objection", Hardship PDA(asset, b)]
+    /// PDA (address checked in the handler; blocks while Open). Otherwise it is not read: pass
+    /// any account, e.g. the system program.
+    pub hardship_objection: UncheckedAccount<'info>,
 }
 
 pub fn accept_offer_handler(ctx: Context<AcceptOffer>) -> Result<()> {
     let asset = &ctx.accounts.asset;
     require!(asset.status == AssetStatus::Listed, HeirloomError::BadStatus);
+    require!(
+        !objection_is_open(&ctx.accounts.objection.to_account_info())?,
+        HeirloomError::ObjectionOpen
+    );
+    if let Some(b) = asset.hardship_beneficiary {
+        let asset_key = asset.key();
+        let (hardship, _) =
+            Pubkey::find_program_address(&[HARDSHIP_SEED, asset_key.as_ref(), b.as_ref()], &crate::ID);
+        let (expected, _) = Pubkey::find_program_address(&[OBJECTION_SEED, hardship.as_ref()], &crate::ID);
+        let info = ctx.accounts.hardship_objection.to_account_info();
+        require_keys_eq!(info.key(), expected, HeirloomError::BadStatus);
+        require!(!objection_is_open(&info)?, HeirloomError::ObjectionOpen);
+    }
 
     let amount = ctx.accounts.offer.amount;
     let hardship = asset.hardship_beneficiary.is_some();

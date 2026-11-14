@@ -14,6 +14,8 @@ import { Bubble, Chips, Composer, Thinking } from "@/components/agent/chat-parts
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { categoryIcon } from "./estate";
+import { FallbackPlanCard } from "@/components/guardians/fallback";
+import { GuardiansPlanLink } from "@/components/guardians/section";
 
 type Copy = ScreensCopy["will"];
 interface Msg extends WillChatMessage { id: number; fresh?: boolean }
@@ -438,6 +440,8 @@ function Locked({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
       {snap.estate.willHash && (
         <p className="mt-4 flex flex-wrap items-center gap-2 text-small text-ink-2"><Lock className="size-4" aria-hidden="true" />{l.fingerprint}: <span className="font-mono text-ink">{shortAddress(snap.estate.willHash, 10)}</span></p>
       )}
+      <GuardiansPlanLink />
+      <FallbackPlanCard snap={snap} className="mt-5" />
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <ButtonLink href="/estate">{l.estate}<ArrowRight className="size-5" aria-hidden="true" /></ButtonLink>
         <Button variant="secondary" onClick={() => openAgent("chat")}>{l.ask}</Button>

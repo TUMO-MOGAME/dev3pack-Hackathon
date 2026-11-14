@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
@@ -8,6 +8,7 @@ import { FileCheck2, HandCoins, House, Inbox, Menu, MessageCircle, PanelLeftClos
 import type { CommonCopy } from "@/content/common";
 import type { AssistantCopy } from "@/content/assistant";
 import type { PayCopy } from "@/content/pay";
+import type { GuardiansCopy } from "@/content/guardians";
 import { ConnectionBars, PaymentProvider } from "@/components/pay/payment";
 import { EstateProvider, useEstate } from "@/lib/hooks/estate";
 import { useWallet } from "@/lib/hooks/wallet-source";
@@ -27,21 +28,26 @@ import { Sidebar } from "./sidebar";
 import { applyTheme, useTheme } from "./theme";
 import { LanguageSwitcher } from "@/components/site/language-switcher";
 import { useLocalized } from "@/lib/i18n/client";
+import { useNow } from "@/lib/hooks/use-now";
+import { guardiansOf, guardianTodo } from "@/components/guardians/derive";
 
 export { Avatar } from "./avatar";
 
 const COLLAPSE_KEY = "heirloom.sidebar";
 
-export function AppShell({ common: commonEn, assistant: assistantEn, pay: payEn, siteName, children }: { common: CommonCopy; assistant: AssistantCopy; pay: PayCopy; siteName: string; children: ReactNode }) {
+export function AppShell({ common: commonEn, assistant: assistantEn, pay: payEn, guardians: guardiansEn, siteName, children }: { common: CommonCopy; assistant: AssistantCopy; pay: PayCopy; guardians: GuardiansCopy; siteName: string; children: ReactNode }) {
   // English is passed from the server; the visitor's language (if any) is laid over it in the browser.
   const common = useLocalized(commonEn, (t) => t.common);
   const assistant = useLocalized(assistantEn, (t) => t.assistant);
   const pay = useLocalized(payEn, (t) => t.pay);
+  const guardians = useLocalized(guardiansEn, (t) => t.guardians);
+  // Contract errors from the guardians feature are explained in plain words like the rest.
+  const errors = useMemo(() => ({ ...guardians.errors, ...common.errors }), [guardians.errors, common.errors]);
   return (
-    <CopyProvider value={{ common, assistant, pay, siteName }}>
+    <CopyProvider value={{ common, assistant, pay, guardians, siteName }}>
       <MotionConfig reducedMotion="user">
         <PinGate>
-          <EstateProvider errors={common.errors}>
+          <EstateProvider errors={errors}>
             <PaymentProvider><ChatProvider><Chrome>{children}</Chrome></ChatProvider></PaymentProvider>
           </EstateProvider>
         </PinGate>
@@ -82,7 +88,10 @@ function Chrome({ children }: { children: ReactNode }) {
   // always a persona, so the sidebar and demo guide are laid out from the first paint and nothing jumps.
   const framed = !onboarding && (!!session || !wallet.ready);
   const isChat = pathname === "/chat";
-  const inboxCount = role === "verifier" && snap ? pendingFor(snap, session?.address ?? "") : 0;
+  const guardNow = useNow(15000);
+  const hasInbox = role === "verifier" || role === "monitor";
+  // Trusted people: their approvals plus objections to decide and passings to confirm; watchers: approvals they can still object to.
+  const inboxCount = hasInbox && snap ? pendingFor(snap, session?.address ?? "") + guardianTodo(guardiansOf(snap), snap, session?.address, guardNow) : 0;
   const ownerCount = role === "owner" && snap ? ownerPending(snap) : 0;
 
   // Apply the saved appearance choice (system is the default and needs no attribute).
@@ -185,7 +194,7 @@ function Chrome({ children }: { children: ReactNode }) {
                   <button type="button" onClick={() => setProofOpen(true)} aria-label={common.proof.openLabel} title={common.proof.open} className={clsx(roundBtn, "hidden min-[400px]:grid")}>
                     <FileCheck2 className="size-5" aria-hidden="true" />
                   </button>
-                  {role === "verifier" && (
+                  {hasInbox && (
                     <Link href="/inbox" aria-label={inboxCount ? fmt(s.top.inboxCount, { n: inboxCount }) : s.top.inbox} title={s.top.inbox} className={roundBtn}>
                       <Inbox className="size-5" aria-hidden="true" /><CountDot n={inboxCount} />
                     </Link>

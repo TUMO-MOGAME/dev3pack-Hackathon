@@ -3,159 +3,78 @@ import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import clsx from "clsx";
 import { motion } from "motion/react";
-import { ArrowRight, CarFront, FileText, Gavel, HandHeart, Loader2, Lock, ShieldCheck, Sparkles, Store } from "@/components/ui/icons";
+import { ArrowRight, CarFront, FileText, Gavel, HandHeart, Loader2, Lock, Pencil, ShieldCheck, Store } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
+import type { AssetsCopy } from "@/content/assets";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
-import type { Asset, CarValuation, OfferRanking, Role, WalletSession } from "@/lib/types";
+import type { Asset, OfferRanking, Role, WalletSession } from "@/lib/types";
 import { formatUsdt, formatZar, fromBase, toBase } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
-import { Badge, Button, ButtonLink, Card, Consent, EmptyState, Eyebrow, ExplorerLink, Field, inputClass, Money, Notice, PageHeader, TickDisc } from "@/components/ui/primitives";
-import { FilePicker, Quorum } from "@/components/ui/client";
-import { SpecialistChip } from "@/components/agent/chat-parts";
+import { Badge, Button, ButtonLink, Card, Consent, EmptyState, Eyebrow, ExplorerLink, Field, inputClass, Money, Notice, TickDisc } from "@/components/ui/primitives";
+import { Quorum } from "@/components/ui/client";
 import { Blocked } from "@/components/shell/blocked";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { usePay } from "@/components/pay/payment";
+import { AddAsset } from "@/components/assets/add-asset";
+import { AssetList } from "@/components/assets/asset-list";
+import { Gallery } from "@/components/assets/gallery";
+import { kindOf, useAssetMedia } from "@/components/assets/media";
+import { PhotoEditor } from "@/components/assets/photo-editor";
+import type { AssetMediaView } from "@/lib/media/api";
 import { clock } from "./family";
+import { PausedNotice } from "@/components/guardians/parts";
 
 type Copy = ScreensCopy["car"];
 const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
 
-export function CarScreen({ copy: english }: { copy: Copy }) {
+/**
+ * Assets (route /car, kept so the demo guide and links still work): the estate's assets, "Add an asset" for the
+ * owner, and the chosen asset's listing with its photo gallery, offers and the price floor. With a single asset
+ * (the family car) it looks as it always did, with the photos added above the listing.
+ */
+export function CarScreen({ copy: english, assets }: { copy: Copy; assets: AssetsCopy }) {
   const copy = useLocalized(english, (t) => t.screens.car);
   return (
     <Gate>
-      {({ snap, session, role }) => {
-        const car = snap!.assets[0];
-        if (car) return <Listing copy={copy} snap={snap!} car={car} session={session} role={role} />;
-        if (role === "owner" && snap!.estate.status === "Active") return <Register copy={copy} snap={snap!} />;
-        return <EmptyState icon={<CarFront className="size-6" aria-hidden="true" />} title={copy.emptyTitle} body={copy.emptyBody} />;
-      }}
+      {({ snap, session, role }) => <Assets copy={copy} a={assets} snap={snap!} session={session} role={role} />}
     </Gate>
   );
 }
 
-/* ---------- Owner: add the car, with an AI valuation ---------- */
+function Assets({ copy, a, snap, session, role }: { copy: Copy; a: AssetsCopy; snap: EstateSnapshot; session: WalletSession; role: Role }) {
+  const { service } = useEstate();
+  const { media } = useAssetMedia(service, snap);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const canEdit = role === "owner" && snap.estate.status === "Active";
+  const list = snap.assets;
 
-function Register({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
-  const { common, assistant } = useCopy();
-  const { service, fx, run, busy, explain } = useEstate();
-  const r = copy.register;
-  const rate = fx?.usdtZar ?? null;
-  const [make, setMake] = useState<string>(r.defaults.make);
-  const [model, setModel] = useState<string>(r.defaults.model);
-  const [year, setYear] = useState<string>(r.defaults.year);
-  const [mileage, setMileage] = useState<string>(r.defaults.mileage);
-  const [condition, setCondition] = useState<string>(r.conditions[1]);
-  const [valuing, setValuing] = useState(false);
-  const [valuation, setValuation] = useState<CarValuation | null>(null);
-  const [asking, setAsking] = useState("");
-  const [floor, setFloor] = useState("");
-  const [hardship, setHardship] = useState("");
-  const [doc, setDoc] = useState<File | null>(null);
-  const [consent, setConsent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const value = async (ev?: FormEvent) => {
-    ev?.preventDefault();
-    if (!service) return;
-    setValuing(true); setError(null);
-    try {
-      const v = await service.valueCar({ make, model, year: Number(year), mileageKm: num(mileage), condition });
-      setValuation(v);
-      setAsking(String(v.suggestedAskingUsdt));
-      setFloor(String(v.lowUsdt));
-      setHardship(String(Math.round(v.lowUsdt * 0.83 / 50) * 50));
-    } catch (e) {
-      setError(explain(e).message);
-    } finally {
-      setValuing(false);
-    }
-  };
-
-  const submit = async (ev: FormEvent) => {
-    ev.preventDefault();
-    const a = num(asking), f = num(floor), h = num(hardship);
-    if (!(h > 0 && f >= h && a >= f)) { setError(r.orderError); return; }
-    if (!consent) { setError(common.consentRequired); return; }
-    setError(null);
-    await run("register", (s, est) => s.registerAsset(est, {
-      nftMint: "", title: `${year} ${make} ${model}`, floorUsdt: f, hardshipFloorUsdt: h, askingUsdt: a, proceedsTo: snap.estate.address, docFile: doc ?? undefined,
-    }), r.added);
-  };
-
-  const zar = (s: string) => (rate && num(s) > 0 ? fmt(r.zar, { zar: formatZar(toBase(num(s)), rate) }) : undefined);
-
+  if (list.length === 0 || adding) {
+    if (!canEdit) return <EmptyState icon={<CarFront className="size-6" aria-hidden="true" />} title={copy.emptyTitle} body={copy.emptyBody} />;
+    return (
+      <AddAsset car={copy} copy={a} snap={snap} session={session} role={role}
+        onCancel={list.length ? () => setAdding(false) : undefined}
+        onAdded={(addr) => { setAdding(false); setSelected(addr); }} />
+    );
+  }
+  const current = list.find((x) => x.address === selected) ?? list[0];
+  const showList = list.length > 1 || canEdit;
   return (
-    <div className="mx-auto max-w-2xl">
-      <PageHeader eyebrow={copy.eyebrow} title={r.title} body={r.body} />
-      <Card>
-        <form onSubmit={value} className="grid gap-3 sm:grid-cols-2">
-          <Field label={r.make} htmlFor="car-make"><input id="car-make" required value={make} onChange={(e) => setMake(e.target.value)} className={inputClass} /></Field>
-          <Field label={r.model} htmlFor="car-model"><input id="car-model" required value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} /></Field>
-          <Field label={r.year} htmlFor="car-year"><input id="car-year" required inputMode="numeric" pattern="\d{4}" value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))} className={inputClass} /></Field>
-          <Field label={r.mileage} htmlFor="car-km"><input id="car-km" required inputMode="numeric" value={mileage} onChange={(e) => setMileage(e.target.value.replace(/[^\d\s]/g, ""))} className={inputClass} /></Field>
-          <Field label={r.condition} htmlFor="car-cond" className="sm:col-span-2">
-            <select id="car-cond" value={condition} onChange={(e) => setCondition(e.target.value)} className={inputClass}>
-              {r.conditions.map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </Field>
-          <Button type="submit" variant={valuation ? "secondary" : "primary"} loading={valuing} className="sm:col-span-2">
-            <Sparkles className="size-5" aria-hidden="true" />{valuing ? r.valuing : valuation ? r.revalue : r.value}
-          </Button>
-        </form>
-        <p className="sr-only" role="status" aria-live="polite">{valuing ? r.valuing : valuation ? `${r.valuationTitle}: ${valuation.suggestedAskingUsdt} USD₮` : ""}</p>
-      </Card>
-
-      {valuation && !valuing && (
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-4 grid gap-4">
-          <Card className="border-ink bg-surface-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Eyebrow>{r.valuationTitle}</Eyebrow>
-              <SpecialistChip name="CarBroker" copy={assistant} />
-            </div>
-            <Money base={toBase(valuation.suggestedAskingUsdt)} rate={rate} size="xl" className="mt-1" />
-            <p className="mt-1 text-small text-ink-2">{fmt(r.range, { low: formatUsdt(toBase(valuation.lowUsdt), { decimals: 0 }), high: formatUsdt(toBase(valuation.highUsdt), { decimals: 0 }) })}</p>
-            <p className="mt-3">{valuation.rationale}</p>
-            <h3 className="mt-4 font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{r.comparables}</h3>
-            <ul className="mt-1">
-              {valuation.comparables.map((c) => (
-                <li key={c.title} className="flex items-center justify-between gap-3 border-b border-line/70 py-2 text-small last:border-0">
-                  <span className="min-w-0"><span className="block truncate font-medium">{c.title}</span><span className="text-ink-2">{c.source}</span></span>
-                  <span className="shrink-0 font-semibold tabular-nums">R {c.priceZar.toLocaleString("en-ZA")}</span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <Card>
-            <h2 className="text-h3">{r.pricesTitle}</h2>
-            <form onSubmit={submit} noValidate className="mt-3 flex flex-col gap-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Field label={r.asking} htmlFor="car-asking" hint={zar(asking)}><input id="car-asking" inputMode="numeric" value={asking} onChange={(e) => setAsking(e.target.value.replace(/[^\d\s]/g, ""))} className={`${inputClass} tabular-nums`} /></Field>
-                <Field label={r.floor} htmlFor="car-floor" hint={zar(floor) ?? r.floorHint}><input id="car-floor" inputMode="numeric" value={floor} onChange={(e) => setFloor(e.target.value.replace(/[^\d\s]/g, ""))} className={`${inputClass} tabular-nums`} /></Field>
-                <Field label={r.hardship} htmlFor="car-hard" hint={zar(hardship) ?? r.hardshipHint}><input id="car-hard" inputMode="numeric" value={hardship} onChange={(e) => setHardship(e.target.value.replace(/[^\d\s]/g, ""))} className={`${inputClass} tabular-nums`} /></Field>
-              </div>
-              <p className="text-small text-ink-2">{r.floorHint} {r.hardshipHint}</p>
-              <FilePicker id="car-doc" label={r.doc} hint={r.docHint} file={doc} onFile={setDoc} samples={r.docSamples} copy={common.file} />
-              <Consent id="car-consent" checked={consent} onChange={(v) => { setConsent(v); setError(null); }} copy={common.consent} />
-              {error && <p role="alert" className="border-l-4 border-ink pl-2 text-small font-semibold text-ink">{error}</p>}
-              <Button type="submit" loading={busy === "register"}><Lock className="size-5" aria-hidden="true" />{r.submit}</Button>
-              <p className="text-small text-ink-2">{r.titleNote}</p>
-            </form>
-          </Card>
-        </motion.div>
-      )}
-      {error && !valuation && <p role="alert" className="mt-3 border-l-4 border-ink pl-2 text-small font-semibold text-ink">{error}</p>}
-    </div>
+    <>
+      {showList && <AssetList copy={a} assets={list} media={media} current={current.address} onSelect={setSelected} onAdd={canEdit ? () => setAdding(true) : undefined} />}
+      <Listing key={current.address} copy={copy} a={a} snap={snap} car={current} media={media[current.address]} session={session} role={role} canEdit={canEdit} headingLevel={showList ? 2 : 1} />
+    </>
   );
 }
 
 /* ---------- Listing, offers, the floor rule and the sale ---------- */
 
-function Listing({ copy, snap, car, session, role }: { copy: Copy; snap: EstateSnapshot; car: Asset; session: WalletSession; role: Role }) {
+function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLevel }: {
+  copy: Copy; a: AssetsCopy; snap: EstateSnapshot; car: Asset; media?: AssetMediaView; session: WalletSession; role: Role; canEdit: boolean; headingLevel: 1 | 2;
+}) {
   const { common } = useCopy();
   const { service, fx, run, busy } = useEstate();
   const now = useNow();
@@ -169,6 +88,12 @@ function Listing({ copy, snap, car, session, role }: { copy: Copy; snap: EstateS
   const isFamily = snap.beneficiaries.some((b) => b.wallet === session.address);
   const isVerifier = e.verifiers.includes(session.address);
   const [blocked, setBlocked] = useState<{ code: string; message: string } | null>(null);
+  const [editing, setEditing] = useState(false);
+  const kind = kindOf(media);
+  const title = media?.title || car.title;
+  const photos = media?.photos ?? [];
+  const Heading = headingLevel === 1 ? "h1" : "h2";
+  const statusBadge = <Badge tone={car.status === "Sold" ? "ok" : car.status === "Listed" ? "warn" : "neutral"} >{common.status.asset[car.status]}</Badge>;
   const [ranking, setRanking] = useState<OfferRanking | null>(null);
   const offersKey = offers.map((o) => `${o.address}:${o.amount}`).join("|") + (car.hardshipBeneficiary ?? "");
 
@@ -210,13 +135,24 @@ function Listing({ copy, snap, car, session, role }: { copy: Copy; snap: EstateS
     <div className="grid gap-5 *:min-w-0 lg:grid-cols-[1.1fr_1fr] lg:items-start">
       <div className="grid gap-5 *:min-w-0">
         <Card className="overflow-hidden p-0! sm:p-0!">
-          <div className="relative aspect-[32/15] w-full bg-surface-2">
-            <Image src={car.imageUrl ?? "/car-corolla.svg"} alt={fmt(copy.imageAlt, { title: car.title })} fill sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" unoptimized priority />
-            <span className="absolute left-3 top-3"><Badge tone={car.status === "Sold" ? "ok" : car.status === "Listed" ? "warn" : "neutral"} >{common.status.asset[car.status]}</Badge></span>
-          </div>
+          {photos.length > 0 ? (
+            <Gallery id={`gallery-${car.address}`} photos={photos} title={title} copy={a.gallery} badge={statusBadge} />
+          ) : kind === "Car" ? (
+            <div className="relative aspect-[32/15] w-full bg-surface-2">
+              <Image src={car.imageUrl ?? "/car-corolla.svg"} alt={fmt(copy.imageAlt, { title: car.title })} fill sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" unoptimized priority />
+              <span className="absolute left-3 top-3">{statusBadge}</span>
+            </div>
+          ) : (
+            <div className="relative grid aspect-[32/15] w-full place-items-center bg-surface-2 text-ink-2">
+              <span className="flex flex-col items-center gap-2 text-small"><Store className="size-8" aria-hidden="true" />{a.gallery.none}</span>
+              <span className="absolute left-3 top-3">{statusBadge}</span>
+            </div>
+          )}
           <div className="p-4 sm:p-5">
-            <Eyebrow>{copy.eyebrow}</Eyebrow>
-            <h1 className="mt-1 text-h2">{car.title}</h1>
+            <Eyebrow>{kind === "Car" ? copy.eyebrow : a.kinds[kind]}</Eyebrow>
+            <Heading className="mt-1 text-h2">{title}</Heading>
+            {media?.description && <p className="mt-2 whitespace-pre-line text-ink-2"><span className="sr-only">{a.detail.description}: </span>{media.description}</p>}
+            {photos[0]?.url.startsWith("blob:") && <p className="mt-2 text-[0.75rem] text-ink-2">{a.photos.localNote}</p>}
             <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-small text-ink-2">{copy.asking}</p>
@@ -228,8 +164,13 @@ function Listing({ copy, snap, car, session, role }: { copy: Copy; snap: EstateS
                 </p>
               )}
             </div>
+            {canEdit && !editing && (
+              <Button variant="secondary" small className="mt-3" onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden="true" />{a.photos.manage}</Button>
+            )}
           </div>
         </Card>
+
+        {canEdit && editing && <PhotoEditor copy={a} asset={car} media={media} session={session} role={role} onClose={() => setEditing(false)} />}
 
         {car.status === "Sold" && sale && (
           <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
@@ -298,6 +239,7 @@ function Listing({ copy, snap, car, session, role }: { copy: Copy; snap: EstateS
               <h2 className="text-h3">{copy.offers.title}</h2>
               <span className="text-small text-ink-2 tabular-nums">{offers.length}</span>
             </div>
+            {car.status === "Listed" && <PausedNotice target={car.address} className="mt-3" />}
             {offers.length === 0 ? <p className="mt-2 text-ink-2">{copy.offers.empty}</p> : (
               <ul className="mt-2">
                 {offers.map((o) => {

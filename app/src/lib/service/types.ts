@@ -13,6 +13,7 @@ import type {
 import type { Locale } from "../i18n/locales";
 import type { LegacyBook, LegacyChatReply, LegacySpeech, LegacyStatus, LegacyVoiceInfo } from "../legacy/schema";
 import type { LegacyVoiceUpload, SpeakInput } from "../legacy/client";
+import type { GuardiansService, GuardiansSnapshot } from "../guardians/types";
 
 export interface TxResult { signature: string; explorerUrl: string }
 
@@ -26,9 +27,11 @@ export interface EstateSnapshot {
   offers: Offer[];
   hardships: Hardship[];
   activity: ActivityItem[];
+  /** Guardians (seats, monitors, objections, fallback). Absent on older snapshots; `enabled: false` when no Guard exists. */
+  guardians?: GuardiansSnapshot;
 }
 
-export interface HeirloomService {
+export interface HeirloomService extends GuardiansService {
   mode: "mock" | "chain";
 
   // Reads

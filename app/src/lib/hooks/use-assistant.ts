@@ -17,7 +17,8 @@ export function useAssistant(copy: AssistantCopy, page: string) {
   useEffect(() => { ctx.current = { snap, fx, session, role, page, isMock, locale, service }; });
 
   const name = session?.label.split(/[ (]/)[0] ?? "";
-  const greetKey = role === "agent" || !role ? "none" : role;
+  // Roles without their own greeting (agent, and monitor until content/assistant.ts has one) get the general one.
+  const greetKey = role && role !== "agent" && role in copy.greeting ? (role as keyof typeof copy.greeting) : "none";
   const greeting = copy.greeting[greetKey].replace("{name}", name);
   const person = session?.address ?? "none";
 

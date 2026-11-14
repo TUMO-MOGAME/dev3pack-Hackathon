@@ -25,7 +25,10 @@ import { fmt, useCopy } from "./copy";
 import { setTheme, useTheme } from "./theme";
 
 type GroupKey = "plan" | "family" | "trusted" | "money";
-interface Item { key: string; href: string; icon: LucideIcon; roles?: Role[] }
+/** `roles`: only these roles see the link. `hide`: everyone except these. */
+interface Item { key: string; href: string; icon: LucideIcon; roles?: Role[]; hide?: Role[] }
+// Watchers (monitors) only watch: no claims, sales, hardship or sending.
+const WATCH_ONLY: Role[] = ["monitor"];
 const GROUPS: { key: GroupKey; items: Item[] }[] = [
   { key: "plan", items: [
     { key: "will", href: "/will", icon: ScrollText, roles: ["owner"] },
@@ -33,16 +36,16 @@ const GROUPS: { key: GroupKey; items: Item[] }[] = [
   ] },
   { key: "family", items: [
     { key: "estate", href: "/estate", icon: House },
-    { key: "claims", href: "/claims", icon: HandCoins },
+    { key: "claims", href: "/claims", icon: HandCoins, hide: WATCH_ONLY },
     { key: "family", href: "/family", icon: Milestone },
-    { key: "car", href: "/car", icon: CarFront },
-    { key: "hardship", href: "/hardship", icon: LifeBuoy },
+    { key: "car", href: "/car", icon: CarFront, hide: WATCH_ONLY },
+    { key: "hardship", href: "/hardship", icon: LifeBuoy, hide: WATCH_ONLY },
   ] },
   { key: "trusted", items: [
-    { key: "inbox", href: "/inbox", icon: Inbox, roles: ["verifier"] },
+    { key: "inbox", href: "/inbox", icon: Inbox, roles: ["verifier", "monitor"] },
     { key: "people", href: "/people", icon: Users },
   ] },
-  { key: "money", items: [{ key: "send", href: "/send", icon: Send }] },
+  { key: "money", items: [{ key: "send", href: "/send", icon: Send, hide: WATCH_ONLY }] },
 ];
 
 const row = "relative flex min-h-11 w-full items-center gap-3 rounded-lg text-left text-small transition-colors";
@@ -146,7 +149,7 @@ export function Sidebar({
             </li>
           </ul>
           {GROUPS.map((g) => {
-            const items = g.items.filter((it) => !it.roles || (role && it.roles.includes(role)));
+            const items = g.items.filter((it) => (!it.roles || (role && it.roles.includes(role))) && !(role && it.hide?.includes(role)));
             if (!items.length) return null;
             return (
               <section key={g.key} aria-label={s.groups[g.key]}>

@@ -14,6 +14,11 @@ import { ReportCard } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { usePay } from "@/components/pay/payment";
+import { guardiansOf, guardianTodo, isMonitor } from "@/components/guardians/derive";
+import { PausedNotice } from "@/components/guardians/parts";
+import { GuardiansInbox } from "@/components/guardians/section";
+import { ClaimWindow } from "@/components/guardians/claim-window";
+import { useNow } from "@/lib/hooks/use-now";
 
 type Copy = ScreensCopy["inbox"];
 
@@ -27,13 +32,17 @@ interface Item {
   approvals: boolean[];
   need: number;
   mine: boolean; // this person has already approved
+  /** Claims, hardship sales and the unlock can be paused by a watcher's objection. */
+  target?: string;
+  /** Guard estates: a fully approved claim waits out the objection window, then anyone pays it. */
+  payable?: { payee: string; payeeName: string; amount: bigint; successText: string };
   approveLabel: string;
   act: () => Promise<void>;
 }
 
 export function InboxScreen({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.inbox);
-  return <Gate roles={["verifier"]}>{({ snap, session }) => <Inbox copy={copy} snap={snap!} session={session} />}</Gate>;
+  return <Gate roles={["verifier", "monitor"]}>{({ snap, session }) => <Inbox copy={copy} snap={snap!} session={session} />}</Gate>;
 }
 
 function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; session: WalletSession }) {
@@ -46,10 +55,14 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
   const me = e.verifiers.indexOf(session.address);
   const label = (wallet: string) => snap.beneficiaries.find((b) => b.wallet === wallet)?.label ?? "";
   const car = snap.assets[0];
+  const now = useNow(15000);
+  const g = guardiansOf(snap);
+  const guardianCount = guardianTodo(g, snap, session.address, now) + (isMonitor(g, session.address) ? 1 : 0);
 
+  // Watchers who are not trusted people only see the guardians part below.
   const items: Item[] = [];
   const d = e.death;
-  if (e.status === "Active" && d.certHash && d.verdict === "Approved") {
+  if (me >= 0 && e.status === "Active" && d.certHash && d.verdict === "Approved") {
     items.push({
       key: "death", kind: "death",
       title: fmt(copy.death.title, { name: e.ownerName }),
@@ -59,12 +72,12 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       act: async () => { await run("death", (s, est) => s.attestDeath(est), copy.death.done); },
     });
   }
-  for (const c of e.status === "Unlocked" ? snap.claims.filter((x) => x.status === "Open" && x.agentVerdict === "Approved") : []) {
+  for (const c of me >= 0 && e.status === "Unlocked" ? snap.claims.filter((x) => x.status === "Open" && x.agentVerdict === "Approved") : []) {
     const rule = snap.rules.find((r) => r.address === c.rule);
     const payee = snap.payees.find((p) => p.wallet === c.payee)?.name ?? "";
     const got = c.approvals.filter(Boolean).length;
     items.push({
-      key: c.address, kind: "claim",
+      key: c.address, kind: "claim", target: c.address,
       title: fmt(copy.claim.title, { amount: formatUsdt(c.amount), payee }),
       body: fmt(copy.claim.body, {
         name: label(c.beneficiary), category: rule ? common.status.category[rule.category].toLowerCase() : "",
@@ -72,9 +85,11 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       }),
       amountZar: rate ? formatZar(c.amount, rate) : undefined,
       report: c.agentReport, approvals: c.approvals, need: e.claimThreshold, mine: !!c.approvals[me], approveLabel: copy.claim.approve,
+      payable: g?.enabled && got >= e.claimThreshold ? { payee: c.payee, payeeName: payee, amount: c.amount, successText: fmt(copy.claim.done, { payee }) } : undefined,
       act: async () => {
-        // Approve, and if that completes the quorum, release the payment in the same breath.
-        if (got + 1 >= e.claimThreshold) {
+        // Approve, and if that completes the quorum, release the payment in the same breath. With watchers (a Guard),
+        // the payment waits out the objection window first, so only approve here.
+        if (got + 1 >= e.claimThreshold && !g?.enabled) {
           // "Try again" in the payment sheet re-runs execute: don't approve a second time (the program rejects that).
           let approved = !!c.approvals[me];
           await pay({
@@ -91,9 +106,9 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       },
     });
   }
-  for (const h of snap.hardships.filter((x) => x.status === "Open" && x.agentVerdict === "Approved")) {
+  for (const h of me >= 0 ? snap.hardships.filter((x) => x.status === "Open" && x.agentVerdict === "Approved") : []) {
     items.push({
-      key: h.address, kind: "hardship",
+      key: h.address, kind: "hardship", target: h.address,
       title: fmt(copy.hardship.title, { name: label(h.beneficiary) }),
       body: car ? fmt(copy.hardship.body, { floor: formatUsdt(car.hardshipFloor, { decimals: 0 }), min: formatUsdt(car.floorPrice, { decimals: 0 }), name: label(h.beneficiary).split(" ")[0] }) : "",
       report: h.agentReport, approvals: h.approvals, need: e.hardshipThreshold, mine: !!h.approvals[me], approveLabel: copy.hardship.approve,
@@ -125,9 +140,12 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
             <p className="mt-1 text-ink-2">{it.body}</p>
           </div>
         </div>
+        {it.target && <PausedNotice target={it.target} className="mt-3" />}
         {it.report && <div className="mt-4"><ReportCard report={it.report} /></div>}
         <div className="mt-4"><Quorum approvals={it.approvals} needed={it.need} names={e.verifierNames} label={fmt(copy.quorum, { got, need: it.need })} /></div>
-        {it.mine ? (
+        {it.payable && it.target ? (
+          <ClaimWindow claim={it.target} {...it.payable} />
+        ) : it.mine ? (
           <p className="mt-3 flex items-center gap-2 text-small font-medium text-ok"><Check className="size-4" aria-hidden="true" />{copy.already}</p>
         ) : isDeclined ? (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-2 p-3">
@@ -150,8 +168,9 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
     <div className="mx-auto max-w-2xl">
       <PageHeader eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />
       {todo.length === 0 && waiting.length === 0
-        ? <EmptyState icon={<InboxIcon className="size-6" aria-hidden="true" />} title={copy.empty.title} body={copy.empty.body} />
+        ? guardianCount > 0 ? null : <EmptyState icon={<InboxIcon className="size-6" aria-hidden="true" />} title={copy.empty.title} body={copy.empty.body} />
         : <ul className="grid gap-4"><AnimatePresence initial={false}>{[...todo, ...waiting].map(card)}</AnimatePresence></ul>}
+      <GuardiansInbox snap={snap} className={todo.length + waiting.length > 0 ? "mt-5" : undefined} />
 
       <section aria-labelledby="handled" className="mt-8">
         <h2 id="handled" className="mb-2 font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{copy.handled}</h2>

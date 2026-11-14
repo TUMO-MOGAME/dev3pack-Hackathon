@@ -8,11 +8,20 @@ pub const CLAIM_SEED: &[u8] = b"claim";
 pub const ASSET_SEED: &[u8] = b"asset";
 pub const OFFER_SEED: &[u8] = b"offer";
 pub const HARDSHIP_SEED: &[u8] = b"hardship";
+pub const SEAT_SEED: &[u8] = b"seat";
+pub const GUARD_SEED: &[u8] = b"guard";
+pub const STAMP_SEED: &[u8] = b"stamp";
+pub const OBJECTION_SEED: &[u8] = b"objection";
+pub const MEDIA_SEED: &[u8] = b"media";
 
 pub const MAX_WILL_URI_LEN: usize = 200;
 pub const MAX_LABEL_LEN: usize = 32;
 pub const MAX_PAYEE_NAME_LEN: usize = 64;
 pub const VERIFIER_COUNT: usize = 3;
+pub const FALLBACK_COUNT: usize = 4;
+pub const MAX_PHOTOS: u8 = 8;
+/// `Objection.seat_index` when the objection is not about one seat (Unlock, Fallback).
+pub const NO_SEAT: u8 = 255;
 
 // ---------------------------------------------------------------- enums (Borsh order matters)
 
@@ -229,5 +238,153 @@ pub struct Hardship {
     /// Bitmap: verifier i sets bit 1 << i.
     pub approvals: u8,
     pub status: HardshipStatus,
+    pub bump: u8,
+}
+
+// ================================================================ guardians (added 2026-11-14)
+// New accounts only: the layouts above are deployed on devnet and must not change.
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
+pub enum TargetKind {
+    Claim,
+    Unlock,
+    Sale,
+    Hardship,
+    Succession,
+    Fallback,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
+pub enum ObjectionStatus {
+    Open,
+    Upheld,
+    Dismissed,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
+pub enum AssetKind {
+    Car,
+    Motorbike,
+    Furniture,
+    Jewellery,
+    Electronics,
+    Other,
+}
+
+/// Seeds: ["seat", estate, &[index]] (index 0..3, mirrors estate.verifiers[index]).
+#[account]
+#[derive(InitSpace)]
+pub struct Seat {
+    pub estate: Pubkey,
+    pub index: u8,
+    /// Always == estate.verifiers[index]; Pubkey::default() when vacant.
+    pub holder: Pubkey,
+    pub backups: [Pubkey; 2],
+    /// Set by the owner only; survive succession.
+    pub monitors: [Pubkey; 2],
+    /// +1 on every succession or owner replacement.
+    pub generation: u16,
+    /// Holder proven dead and no backup left.
+    pub vacant: bool,
+    pub death_cert_hash: [u8; 32],
+    pub death_reported_by: Pubkey,
+    pub death_verdict: Verdict,
+    pub death_confirmed_by: Pubkey,
+    /// Set when the death is confirmed (the succession wait runs from here); 0 = not confirmed.
+    pub death_pending_since: i64,
+    pub bump: u8,
+}
+
+impl Seat {
+    pub fn succession_pending(&self) -> bool {
+        self.death_cert_hash != [0u8; 32]
+    }
+
+    pub fn clear_succession(&mut self) {
+        self.death_cert_hash = [0u8; 32];
+        self.death_reported_by = Pubkey::default();
+        self.death_verdict = Verdict::Pending;
+        self.death_confirmed_by = Pubkey::default();
+        self.death_pending_since = 0;
+    }
+
+    pub fn is_monitor(&self, key: &Pubkey) -> bool {
+        *key != Pubkey::default() && self.monitors.contains(key)
+    }
+}
+
+/// Seeds: ["guard", estate]. One per estate; its existence switches on windows and objections.
+#[account]
+#[derive(InitSpace)]
+pub struct Guard {
+    pub estate: Pubkey,
+    /// Claims: delay between reaching the approval threshold and execute.
+    pub objection_window_secs: i64,
+    pub succession_wait_secs: i64,
+    pub fallback_wait_secs: i64,
+    pub open_objections: u16,
+    /// Ordered fallback recipients (wallets); default = unused.
+    pub fallback: [Pubkey; 4],
+    /// Bitmap: recipient i proven dead sets bit 1 << i.
+    pub fallback_dead: u8,
+    /// 0 = not started.
+    pub fallback_started_at: i64,
+    pub fallback_done: bool,
+    pub bump: u8,
+}
+
+impl Guard {
+    /// First recipient that is set and not proven dead; Pubkey::default() if none.
+    pub fn next_fallback_recipient(&self) -> Pubkey {
+        self.fallback
+            .iter()
+            .enumerate()
+            .find(|(i, k)| **k != Pubkey::default() && self.fallback_dead & (1u8 << i) == 0)
+            .map(|(_, k)| *k)
+            .unwrap_or_default()
+    }
+}
+
+/// Seeds: ["stamp", target]. Written by approve_claim; `approved_at` is set when the threshold is reached.
+#[account]
+#[derive(InitSpace)]
+pub struct ApprovalStamp {
+    pub target: Pubkey,
+    pub seat_index: u8,
+    pub approver: Pubkey,
+    /// 0 = threshold not reached yet.
+    pub approved_at: i64,
+    pub bump: u8,
+}
+
+/// Seeds: ["objection", target]. One per target; a resolved one can be re-raised (overwritten).
+#[account]
+#[derive(InitSpace)]
+pub struct Objection {
+    pub estate: Pubkey,
+    pub target: Pubkey,
+    pub kind: TargetKind,
+    pub monitor: Pubkey,
+    /// Seat being watched (NO_SEAT = 255 for Unlock / Fallback).
+    pub seat_index: u8,
+    pub reason_hash: [u8; 32],
+    pub raised_at: i64,
+    pub status: ObjectionStatus,
+    /// Bitmaps: seat i sets 1 << i (Fallback: monitor j of seat i sets 1 << (2i + j)).
+    pub votes_uphold: u8,
+    pub votes_dismiss: u8,
+    pub bump: u8,
+}
+
+/// Seeds: ["media", asset]
+#[account]
+#[derive(InitSpace)]
+pub struct AssetMedia {
+    pub asset: Pubkey,
+    pub kind: AssetKind,
+    /// SHA-256 of the concatenated photo hashes, in display order.
+    pub photos_root: [u8; 32],
+    pub photo_count: u8,
+    pub updated_at: i64,
     pub bump: u8,
 }

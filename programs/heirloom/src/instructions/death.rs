@@ -2,7 +2,7 @@
 //! (death_threshold) -> waiting period (owner can veto) -> anyone finalises the unlock.
 use anchor_lang::prelude::*;
 
-use super::{count_bits, now};
+use super::{count_bits, now, objection_is_open};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -122,6 +122,14 @@ pub fn attest_death_handler(ctx: Context<AttestDeath>) -> Result<()> {
         pending: estate.status == EstateStatus::DeathPending,
         ts,
     });
+    emit!(SeatApproval {
+        estate: estate.key(),
+        seat_index: idx as u8,
+        approver: verifier,
+        kind: TargetKind::Unlock,
+        target: estate.key(),
+        ts,
+    });
     Ok(())
 }
 
@@ -165,9 +173,14 @@ pub fn veto_death_handler(ctx: Context<VetoDeath>) -> Result<()> {
 pub struct FinalizeUnlock<'info> {
     #[account(mut)]
     pub estate: Account<'info, Estate>,
+
+    /// CHECK: the ["objection", estate] PDA; may not exist. Blocks while Open.
+    #[account(seeds = [OBJECTION_SEED, estate.key().as_ref()], bump)]
+    pub objection: UncheckedAccount<'info>,
 }
 
 pub fn finalize_unlock_handler(ctx: Context<FinalizeUnlock>) -> Result<()> {
+    let objection_open = objection_is_open(&ctx.accounts.objection.to_account_info())?;
     let estate = &mut ctx.accounts.estate;
     require!(estate.status == EstateStatus::DeathPending, HeirloomError::BadStatus);
 
@@ -177,6 +190,7 @@ pub fn finalize_unlock_handler(ctx: Context<FinalizeUnlock>) -> Result<()> {
         .checked_add(estate.waiting_period_secs)
         .ok_or(HeirloomError::MathOverflow)?;
     require!(ts >= unlock_at, HeirloomError::WaitingPeriodNotOver);
+    require!(!objection_open, HeirloomError::ObjectionOpen);
 
     estate.status = EstateStatus::Unlocked;
 

@@ -141,7 +141,7 @@ export const zu: Bundle = {
       estate: "Ifa",
       will: "Uhlelo",
       vault: "Isisefo",
-      car: "Imoto",
+      car: "Impahla",
       people: "Abantu",
       family: "Umlando",
       claims: "Izicelo",
@@ -157,6 +157,7 @@ export const zu: Bundle = {
       verifier: "Umuntu othembekile",
       buyer: "Umthengi wemoto",
       agent: "I-agent ye-Heirloom",
+      monitor: "Umbheki",
     },
     persona: {
       actingAs: "Usebenza njengo",
@@ -164,7 +165,7 @@ export const zu: Bundle = {
       sheetTitle: "Usebenza njengobani?",
       sheetBody: "Isiphequluli esisodwa singaphatha ama-wallet amaningi. Khetha umuntu ukuze ubone i-Heirloom njengoba ayengayibona.",
       current: "Okwamanje",
-      groups: { owner: "Umnikazi wefa", beneficiary: "Umndeni", verifier: "Abantu abathembekile", buyer: "Abathengi", agent: "I-agent" },
+      groups: { owner: "Umnikazi wefa", beneficiary: "Umndeni", verifier: "Abantu abathembekile", buyer: "Abathengi", agent: "I-agent", monitor: "Ababheki" },
       addWallet: "Engeza enye i-wallet",
       wallet: "I-wallet",
       balance: "Imali ese-wallet",
@@ -192,6 +193,7 @@ export const zu: Bundle = {
         unlocked: "Ifa livuliwe",
         listed: "Imoto ifakiwe nezinikezo",
         lowOffers: "Imoto ifakiwe, izinikezo eziphansi kuphela",
+        guardians: "Abantu abathembekile abanabasekeli nababheki",
       },
       shortcutsTitle: "Izinqamuleli",
       shortcuts: {

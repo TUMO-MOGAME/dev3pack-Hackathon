@@ -1,0 +1,47 @@
+"use client";
+/**
+ * In an estate with watchers, a claim the trusted people fully approved is paid only after the objection window
+ * (contract: ObjectionWindowOpen). Instead of an error, this shows "Payable in 0:42 (watchers can object until then)",
+ * then a Pay now button that runs the usual payment review and receipt.
+ */
+import { Banknote, Hourglass } from "@/components/ui/icons";
+import { useEstate } from "@/lib/hooks/estate";
+import { useNow } from "@/lib/hooks/use-now";
+import { Button } from "@/components/ui/primitives";
+import { fmt, useCopy } from "@/components/shell/copy";
+import { usePay } from "@/components/pay/payment";
+import { clock, pausedBy, secondsLeft, waitFraction } from "./derive";
+import { CountdownRing, useGuardians } from "./parts";
+
+export function ClaimWindow({ claim, payee, payeeName, amount, successText }: { claim: string; payee: string; payeeName: string; amount: bigint; successText: string }) {
+  const { guardians: c } = useCopy();
+  const { busy } = useEstate();
+  const { pay } = usePay();
+  const g = useGuardians();
+  const now = useNow();
+  if (!g) return null;
+  if (pausedBy(g, claim)) return null; // the PausedNotice above says why
+  const deadline = g.feed.find((f) => f.target === claim)?.objectionDeadline ?? null;
+  const left = secondsLeft(deadline, now);
+  const waiting = deadline !== null && (left === null || left > 0);
+
+  if (waiting) {
+    return (
+      <div className="mt-4 flex items-center gap-3 rounded-md border-[1.5px] border-dashed border-ink p-3">
+        <CountdownRing fraction={waitFraction(deadline, g.objectionWindowSecs, now)} />
+        <p className="flex items-center gap-2 font-semibold tabular-nums" role="timer" aria-live="off">
+          <Hourglass className="size-4 shrink-0" aria-hidden="true" />{fmt(c.window.payableIn, { time: left === null ? "" : clock(left) })}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4">
+      <p className="text-small">{c.window.ready}</p>
+      <Button className="mt-2" disabled={!!busy}
+        onClick={() => void pay({ kind: "claim-payout", source: "vault", to: payee, toLabel: payeeName, amount, execute: (s, est) => s.executeClaim(est, claim), successText })}>
+        <Banknote className="size-5" aria-hidden="true" />{c.window.payNow}
+      </Button>
+    </div>
+  );
+}

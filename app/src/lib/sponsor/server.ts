@@ -15,7 +15,7 @@ import { agentAddress, agentCoSign, hasAgentWallet } from "../agent/agent-wallet
 import { chainConfig } from "../chain/config";
 import { findInstruction, getIdl } from "../chain/idl";
 import { base64ToBytes, getConnection } from "../chain/tx";
-import { DEFAULT_LIMITS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, validateSponsoredTx, type SponsorPolicy } from "./policy";
+import { DEFAULT_LIMITS, SPONSOR_RENT_PAYER_ACCOUNTS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, validateSponsoredTx, type SponsorPolicy } from "./policy";
 import { DEFAULT_SPONSOR_LIMITS, SponsorLimiter } from "./limits";
 
 const envInt = (name: string, dflt: number) => {
@@ -48,7 +48,19 @@ export async function sponsorPolicy(): Promise<SponsorPolicy> {
     ...DEFAULT_LIMITS,
     maxFeeLamports: envInt("SPONSOR_MAX_FEE_LAMPORTS", DEFAULT_LIMITS.maxFeeLamports),
     sponsorPaysRent: process.env.SPONSOR_PAYS_RENT !== "0",
+    heirloomRentPayerSlots: rentPayerSlots(),
   };
+}
+
+/** Account index of each SPONSOR_RENT_PAYER_ACCOUNTS entry in the current IDL (skipped when absent). */
+export function rentPayerSlots(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [ixName, account] of Object.entries(SPONSOR_RENT_PAYER_ACCOUNTS)) {
+    const ix = getIdl().instructions.find((i) => i.name === ixName);
+    const at = ix?.accounts.findIndex((a) => a.name === account) ?? -1;
+    if (at >= 0) out[ixName] = at;
+  }
+  return out;
 }
 
 export class SponsorUnavailable extends Error { constructor(m: string) { super(m); this.name = "SponsorUnavailable"; } }

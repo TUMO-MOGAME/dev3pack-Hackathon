@@ -303,6 +303,38 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "objection",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "asset"
+              }
+            ]
+          }
+        },
+        {
+          "name": "hardship_objection",
+          "docs": [
+            "PDA (address checked in the handler; blocks while Open). Otherwise it is not read: pass",
+            "any account, e.g. the system program."
+          ]
         }
       ],
       "args": []
@@ -655,6 +687,43 @@
         {
           "name": "claim",
           "writable": true
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Pays the ApprovalStamp rent (the verifier or a sponsor)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "approval_stamp",
+          "docs": [
+            "[\"stamp\", claim]: records when the approval threshold was reached (objection window)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  109,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "claim"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -719,6 +788,44 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "confirm_seat_death",
+      "discriminator": [
+        147,
+        233,
+        13,
+        189,
+        110,
+        174,
+        222,
+        177
+      ],
+      "accounts": [
+        {
+          "name": "confirmer",
+          "docs": [
+            "Holder of another seat; if no other seat has a living holder: backups[1] or a monitor of this seat."
+          ],
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "seat"
+          ]
+        },
+        {
+          "name": "seat",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        }
+      ]
     },
     {
       "name": "create_estate",
@@ -1157,6 +1264,296 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "guard",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "approval_stamp",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  109,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "claim"
+              }
+            ]
+          }
+        },
+        {
+          "name": "objection",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "claim"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "execute_fallback",
+      "discriminator": [
+        145,
+        125,
+        174,
+        224,
+        96,
+        60,
+        184,
+        199
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Anyone; pays the recipient's ATA rent if missing."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "writable": true,
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "seat0"
+        },
+        {
+          "name": "seat1"
+        },
+        {
+          "name": "seat2"
+        },
+        {
+          "name": "objection",
+          "docs": [
+            "(then it is marked Dismissed here, so it is writable)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guard"
+              }
+            ]
+          }
+        },
+        {
+          "name": "recipient"
+        },
+        {
+          "name": "usdt_mint"
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "estate"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdt_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "recipient_usdt",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "recipient"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdt_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -1328,6 +1725,85 @@
       "args": []
     },
     {
+      "name": "finalize_succession",
+      "discriminator": [
+        85,
+        40,
+        38,
+        167,
+        146,
+        243,
+        22,
+        39
+      ],
+      "accounts": [
+        {
+          "name": "estate",
+          "writable": true,
+          "relations": [
+            "guard",
+            "seat"
+          ]
+        },
+        {
+          "name": "guard",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "seat",
+          "writable": true
+        },
+        {
+          "name": "objection",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seat"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "finalize_unlock",
       "discriminator": [
         105,
@@ -1343,6 +1819,31 @@
         {
           "name": "estate",
           "writable": true
+        },
+        {
+          "name": "objection",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -1386,6 +1887,221 @@
               {
                 "kind": "account",
                 "path": "owner"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "init_guard",
+      "discriminator": [
+        80,
+        108,
+        68,
+        230,
+        253,
+        134,
+        39,
+        155
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "The owner, or the agent at setup (estate Active). Pays rent."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "estate"
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "objection_window_secs",
+          "type": "i64"
+        },
+        {
+          "name": "succession_wait_secs",
+          "type": "i64"
+        },
+        {
+          "name": "fallback_wait_secs",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "init_seat",
+      "discriminator": [
+        239,
+        28,
+        83,
+        94,
+        20,
+        162,
+        99,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "seat",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        },
+        {
+          "name": "backups",
+          "type": {
+            "array": [
+              "pubkey",
+              2
+            ]
+          }
+        },
+        {
+          "name": "monitors",
+          "type": {
+            "array": [
+              "pubkey",
+              2
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "lapse_objection",
+      "discriminator": [
+        197,
+        156,
+        96,
+        152,
+        119,
+        88,
+        117,
+        117
+      ],
+      "accounts": [
+        {
+          "name": "estate",
+          "relations": [
+            "guard",
+            "objection"
+          ]
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "objection",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "objection.target",
+                "account": "Objection"
               }
             ]
           }
@@ -1489,6 +2205,68 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "owner_replace_seat",
+      "discriminator": [
+        150,
+        125,
+        48,
+        71,
+        72,
+        189,
+        107,
+        137
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          },
+          "relations": [
+            "seat"
+          ]
+        },
+        {
+          "name": "seat",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        },
+        {
+          "name": "new_holder",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "place_offer",
@@ -1627,6 +2405,142 @@
         {
           "name": "amount",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "raise_objection",
+      "discriminator": [
+        205,
+        171,
+        166,
+        20,
+        240,
+        211,
+        117,
+        86
+      ],
+      "accounts": [
+        {
+          "name": "objector",
+          "docs": [
+            "A monitor (of `seat`), or for Fallback also an active beneficiary. Pays rent."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "seat",
+          "docs": [
+            "The seat the objector monitors (required unless a beneficiary objects to the fallback)."
+          ],
+          "optional": true
+        },
+        {
+          "name": "beneficiary_account",
+          "docs": [
+            "The objector's Beneficiary PDA (Fallback objections by a beneficiary only)."
+          ],
+          "optional": true
+        },
+        {
+          "name": "target_account",
+          "docs": [
+            "Pass None for Unlock (target = estate), Succession (target = seat) and Fallback (target = guard)."
+          ],
+          "optional": true
+        },
+        {
+          "name": "asset",
+          "docs": [
+            "The hardship's Asset (Hardship objections only)."
+          ],
+          "optional": true
+        },
+        {
+          "name": "objection",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "target"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "kind",
+          "type": {
+            "defined": {
+              "name": "TargetKind"
+            }
+          }
+        },
+        {
+          "name": "target",
+          "type": "pubkey"
+        },
+        {
+          "name": "seat_index",
+          "type": "u8"
+        },
+        {
+          "name": "reason_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -1808,6 +2722,114 @@
       ]
     },
     {
+      "name": "report_fallback_death",
+      "discriminator": [
+        163,
+        101,
+        46,
+        70,
+        47,
+        143,
+        43,
+        82
+      ],
+      "accounts": [
+        {
+          "name": "reporter",
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "guard",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        },
+        {
+          "name": "cert_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "report_seat_death",
+      "discriminator": [
+        164,
+        12,
+        40,
+        142,
+        98,
+        49,
+        104,
+        253
+      ],
+      "accounts": [
+        {
+          "name": "reporter",
+          "docs": [
+            "Anyone except the holder."
+          ],
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "seat"
+          ]
+        },
+        {
+          "name": "seat",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        },
+        {
+          "name": "cert_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "review_claim",
       "discriminator": [
         216,
@@ -1896,6 +2918,75 @@
       ]
     },
     {
+      "name": "review_fallback_death",
+      "discriminator": [
+        242,
+        17,
+        61,
+        113,
+        106,
+        5,
+        100,
+        119
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        },
+        {
+          "name": "approve",
+          "type": "bool"
+        },
+        {
+          "name": "report_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "review_hardship",
       "discriminator": [
         62,
@@ -1943,6 +3034,331 @@
             "array": [
               "u8",
               32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "review_seat_death",
+      "discriminator": [
+        45,
+        147,
+        118,
+        61,
+        224,
+        80,
+        210,
+        44
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "seat"
+          ]
+        },
+        {
+          "name": "seat",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        },
+        {
+          "name": "approve",
+          "type": "bool"
+        },
+        {
+          "name": "report_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_asset_media",
+      "discriminator": [
+        125,
+        44,
+        59,
+        237,
+        24,
+        107,
+        27,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "The owner (estate Active) or the agent. Pays rent the first time."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "asset"
+          ]
+        },
+        {
+          "name": "asset"
+        },
+        {
+          "name": "media",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  100,
+                  105,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "asset"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "kind",
+          "type": {
+            "defined": {
+              "name": "AssetKind"
+            }
+          }
+        },
+        {
+          "name": "photos_root",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "photo_count",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "set_fallback",
+      "discriminator": [
+        248,
+        94,
+        224,
+        38,
+        5,
+        235,
+        51,
+        131
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          },
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "recipients",
+          "type": {
+            "array": [
+              "pubkey",
+              4
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_seat_backups",
+      "discriminator": [
+        31,
+        6,
+        176,
+        46,
+        208,
+        60,
+        86,
+        93
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "The owner (estate Active) or the seat's current holder."
+          ],
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "seat"
+          ]
+        },
+        {
+          "name": "seat",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        },
+        {
+          "name": "backups",
+          "type": {
+            "array": [
+              "pubkey",
+              2
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_seat_monitors",
+      "discriminator": [
+        209,
+        130,
+        155,
+        39,
+        202,
+        190,
+        142,
+        117
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          },
+          "relations": [
+            "seat"
+          ]
+        },
+        {
+          "name": "seat",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        },
+        {
+          "name": "monitors",
+          "type": {
+            "array": [
+              "pubkey",
+              2
             ]
           }
         }
@@ -2007,6 +3423,59 @@
           "type": "string"
         }
       ]
+    },
+    {
+      "name": "start_fallback",
+      "discriminator": [
+        125,
+        214,
+        26,
+        70,
+        91,
+        59,
+        228,
+        104
+      ],
+      "accounts": [
+        {
+          "name": "estate",
+          "relations": [
+            "guard"
+          ]
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "seat0"
+        },
+        {
+          "name": "seat1"
+        },
+        {
+          "name": "seat2"
+        }
+      ],
+      "args": []
     },
     {
       "name": "submit_claim",
@@ -2338,6 +3807,153 @@
       "args": []
     },
     {
+      "name": "veto_seat_death",
+      "discriminator": [
+        127,
+        210,
+        181,
+        115,
+        133,
+        240,
+        195,
+        169
+      ],
+      "accounts": [
+        {
+          "name": "holder",
+          "docs": [
+            "The seat holder: \"I'm still here\"."
+          ],
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "seat"
+          ]
+        },
+        {
+          "name": "seat",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "vote_objection",
+      "discriminator": [
+        95,
+        210,
+        106,
+        162,
+        253,
+        176,
+        22,
+        135
+      ],
+      "accounts": [
+        {
+          "name": "voter",
+          "docs": [
+            "A seat holder other than the watched holder and the objector, or the owner while Active",
+            "(decides alone). Fallback objections: a monitor of `voter_seat` other than the objector."
+          ],
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "writable": true,
+          "relations": [
+            "guard",
+            "objection"
+          ]
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "objection",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "objection.target",
+                "account": "Objection"
+              }
+            ]
+          }
+        },
+        {
+          "name": "voter_seat",
+          "docs": [
+            "The seat the voter monitors (Fallback objections only)."
+          ],
+          "optional": true
+        },
+        {
+          "name": "target_account",
+          "docs": [
+            "None for Unlock (the estate) and Fallback (the guard)."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "asset",
+          "docs": [
+            "The hardship's Asset (Hardship objections only; its hardship floor is withdrawn if upheld)."
+          ],
+          "writable": true,
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "uphold",
+          "type": "bool"
+        }
+      ]
+    },
+    {
       "name": "withdraw",
       "discriminator": [
         183,
@@ -2588,6 +4204,19 @@
   ],
   "accounts": [
     {
+      "name": "ApprovalStamp",
+      "discriminator": [
+        223,
+        53,
+        41,
+        132,
+        211,
+        7,
+        38,
+        144
+      ]
+    },
+    {
       "name": "Asset",
       "discriminator": [
         234,
@@ -2598,6 +4227,19 @@
         224,
         160,
         8
+      ]
+    },
+    {
+      "name": "AssetMedia",
+      "discriminator": [
+        32,
+        60,
+        22,
+        217,
+        123,
+        33,
+        215,
+        231
       ]
     },
     {
@@ -2640,6 +4282,19 @@
       ]
     },
     {
+      "name": "Guard",
+      "discriminator": [
+        54,
+        187,
+        84,
+        137,
+        192,
+        15,
+        74,
+        248
+      ]
+    },
+    {
       "name": "Hardship",
       "discriminator": [
         102,
@@ -2650,6 +4305,19 @@
         132,
         55,
         26
+      ]
+    },
+    {
+      "name": "Objection",
+      "discriminator": [
+        227,
+        142,
+        9,
+        142,
+        145,
+        166,
+        42,
+        91
       ]
     },
     {
@@ -2690,6 +4358,19 @@
         143,
         130
       ]
+    },
+    {
+      "name": "Seat",
+      "discriminator": [
+        90,
+        228,
+        22,
+        90,
+        162,
+        86,
+        173,
+        26
+      ]
     }
   ],
   "events": [
@@ -2704,6 +4385,19 @@
         150,
         150,
         2
+      ]
+    },
+    {
+      "name": "AssetMediaSet",
+      "discriminator": [
+        202,
+        50,
+        171,
+        14,
+        48,
+        80,
+        228,
+        127
       ]
     },
     {
@@ -2876,6 +4570,84 @@
       ]
     },
     {
+      "name": "FallbackDeathReported",
+      "discriminator": [
+        235,
+        166,
+        108,
+        92,
+        0,
+        204,
+        98,
+        212
+      ]
+    },
+    {
+      "name": "FallbackDeathReviewed",
+      "discriminator": [
+        147,
+        153,
+        209,
+        103,
+        80,
+        97,
+        64,
+        245
+      ]
+    },
+    {
+      "name": "FallbackExecuted",
+      "discriminator": [
+        115,
+        67,
+        136,
+        113,
+        156,
+        125,
+        70,
+        217
+      ]
+    },
+    {
+      "name": "FallbackSet",
+      "discriminator": [
+        45,
+        61,
+        170,
+        197,
+        44,
+        165,
+        126,
+        187
+      ]
+    },
+    {
+      "name": "FallbackStarted",
+      "discriminator": [
+        210,
+        90,
+        10,
+        57,
+        217,
+        132,
+        164,
+        162
+      ]
+    },
+    {
+      "name": "GuardInitialized",
+      "discriminator": [
+        96,
+        193,
+        193,
+        62,
+        210,
+        16,
+        25,
+        100
+      ]
+    },
+    {
       "name": "HardshipApproved",
       "discriminator": [
         233,
@@ -2915,6 +4687,45 @@
       ]
     },
     {
+      "name": "ObjectionRaised",
+      "discriminator": [
+        104,
+        82,
+        220,
+        212,
+        17,
+        10,
+        9,
+        125
+      ]
+    },
+    {
+      "name": "ObjectionResolved",
+      "discriminator": [
+        95,
+        209,
+        218,
+        153,
+        195,
+        218,
+        62,
+        172
+      ]
+    },
+    {
+      "name": "ObjectionVoted",
+      "discriminator": [
+        54,
+        247,
+        51,
+        81,
+        107,
+        198,
+        224,
+        197
+      ]
+    },
+    {
       "name": "OfferPlaced",
       "discriminator": [
         233,
@@ -2951,6 +4762,110 @@
         214,
         33,
         98
+      ]
+    },
+    {
+      "name": "SeatApproval",
+      "discriminator": [
+        76,
+        158,
+        192,
+        28,
+        6,
+        180,
+        84,
+        53
+      ]
+    },
+    {
+      "name": "SeatConfigured",
+      "discriminator": [
+        215,
+        102,
+        245,
+        114,
+        59,
+        195,
+        35,
+        32
+      ]
+    },
+    {
+      "name": "SeatDeathConfirmed",
+      "discriminator": [
+        76,
+        117,
+        56,
+        9,
+        129,
+        227,
+        105,
+        23
+      ]
+    },
+    {
+      "name": "SeatDeathReported",
+      "discriminator": [
+        38,
+        143,
+        54,
+        245,
+        217,
+        109,
+        4,
+        146
+      ]
+    },
+    {
+      "name": "SeatDeathReviewed",
+      "discriminator": [
+        48,
+        100,
+        8,
+        70,
+        247,
+        50,
+        225,
+        162
+      ]
+    },
+    {
+      "name": "SeatDeathVetoed",
+      "discriminator": [
+        66,
+        167,
+        159,
+        149,
+        65,
+        62,
+        145,
+        248
+      ]
+    },
+    {
+      "name": "SeatVacated",
+      "discriminator": [
+        108,
+        154,
+        23,
+        221,
+        246,
+        222,
+        149,
+        137
+      ]
+    },
+    {
+      "name": "SuccessionFinalized",
+      "discriminator": [
+        114,
+        238,
+        59,
+        79,
+        157,
+        30,
+        175,
+        61
       ]
     },
     {
@@ -3097,9 +5012,123 @@
       "code": 6025,
       "name": "NotDue",
       "msg": "The scheduled payment is not due yet"
+    },
+    {
+      "code": 6026,
+      "name": "NotMonitor",
+      "msg": "Signer is not a monitor allowed to object here"
+    },
+    {
+      "code": 6027,
+      "name": "ObjectionOpen",
+      "msg": "An objection is open on this item"
+    },
+    {
+      "code": 6028,
+      "name": "ObjectionWindowOpen",
+      "msg": "The objection window is still open"
+    },
+    {
+      "code": 6029,
+      "name": "SuccessionPending",
+      "msg": "A succession is already pending for this seat"
+    },
+    {
+      "code": 6030,
+      "name": "NoSuccessionPending",
+      "msg": "There is no succession pending for this seat"
+    },
+    {
+      "code": 6031,
+      "name": "SeatVacant",
+      "msg": "This seat is vacant"
+    },
+    {
+      "code": 6032,
+      "name": "SeatsNotVacant",
+      "msg": "Not every seat is vacant"
+    },
+    {
+      "code": 6033,
+      "name": "NotConfirmer",
+      "msg": "Signer may not confirm this death, or it is not confirmed yet"
+    },
+    {
+      "code": 6034,
+      "name": "FallbackNotReady",
+      "msg": "The fallback plan is not ready to run"
+    },
+    {
+      "code": 6035,
+      "name": "FallbackDone",
+      "msg": "The fallback plan has already run"
+    },
+    {
+      "code": 6036,
+      "name": "NoFallbackRecipient",
+      "msg": "No living fallback recipient"
+    },
+    {
+      "code": 6037,
+      "name": "BadBackup",
+      "msg": "Invalid backup: must differ from the owner, every trusted person and each other"
+    },
+    {
+      "code": 6038,
+      "name": "BadMonitor",
+      "msg": "Invalid monitor: must differ from the holder they watch and from each other"
+    },
+    {
+      "code": 6039,
+      "name": "BadFallback",
+      "msg": "Invalid fallback list: recipients must be distinct and not the owner"
+    },
+    {
+      "code": 6040,
+      "name": "ObjectionLapsed",
+      "msg": "This fallback objection has lapsed: its waiting period is over"
+    },
+    {
+      "code": 6041,
+      "name": "ObjectionNotLapsed",
+      "msg": "This objection cannot lapse yet"
     }
   ],
   "types": [
+    {
+      "name": "ApprovalStamp",
+      "docs": [
+        "Seeds: [\"stamp\", target]. Written by approve_claim; `approved_at` is set when the threshold is reached."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "approver",
+            "type": "pubkey"
+          },
+          {
+            "name": "approved_at",
+            "docs": [
+              "0 = threshold not reached yet."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "Asset",
       "docs": [
@@ -3167,6 +5196,32 @@
       }
     },
     {
+      "name": "AssetKind",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Car"
+          },
+          {
+            "name": "Motorbike"
+          },
+          {
+            "name": "Furniture"
+          },
+          {
+            "name": "Jewellery"
+          },
+          {
+            "name": "Electronics"
+          },
+          {
+            "name": "Other"
+          }
+        ]
+      }
+    },
+    {
       "name": "AssetListed",
       "type": {
         "kind": "struct",
@@ -3178,6 +5233,90 @@
           {
             "name": "listing_ends",
             "type": "i64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AssetMedia",
+      "docs": [
+        "Seeds: [\"media\", asset]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "asset",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "AssetKind"
+              }
+            }
+          },
+          {
+            "name": "photos_root",
+            "docs": [
+              "SHA-256 of the concatenated photo hashes, in display order."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "photo_count",
+            "type": "u8"
+          },
+          {
+            "name": "updated_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AssetMediaSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "asset",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "AssetKind"
+              }
+            }
+          },
+          {
+            "name": "photos_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "photo_count",
+            "type": "u8"
           },
           {
             "name": "ts",
@@ -3866,6 +6005,241 @@
       }
     },
     {
+      "name": "FallbackDeathReported",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "reported_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "cert_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FallbackDeathReviewed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "name": "report_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FallbackExecuted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FallbackSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipients",
+            "type": {
+              "array": [
+                "pubkey",
+                4
+              ]
+            }
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FallbackStarted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "runs_at",
+            "type": "i64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Guard",
+      "docs": [
+        "Seeds: [\"guard\", estate]. One per estate; its existence switches on windows and objections."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "objection_window_secs",
+            "docs": [
+              "Claims: delay between reaching the approval threshold and execute."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "succession_wait_secs",
+            "type": "i64"
+          },
+          {
+            "name": "fallback_wait_secs",
+            "type": "i64"
+          },
+          {
+            "name": "open_objections",
+            "type": "u16"
+          },
+          {
+            "name": "fallback",
+            "docs": [
+              "Ordered fallback recipients (wallets); default = unused."
+            ],
+            "type": {
+              "array": [
+                "pubkey",
+                4
+              ]
+            }
+          },
+          {
+            "name": "fallback_dead",
+            "docs": [
+              "Bitmap: recipient i proven dead sets bit 1 << i."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "fallback_started_at",
+            "docs": [
+              "0 = not started."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "fallback_done",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "objection_window_secs",
+            "type": "i64"
+          },
+          {
+            "name": "succession_wait_secs",
+            "type": "i64"
+          },
+          {
+            "name": "fallback_wait_secs",
+            "type": "i64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Hardship",
       "docs": [
         "Seeds: [\"hardship\", asset, beneficiary_wallet]"
@@ -4029,6 +6403,206 @@
           {
             "name": "beneficiary",
             "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Objection",
+      "docs": [
+        "Seeds: [\"objection\", target]. One per target; a resolved one can be re-raised (overwritten)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "TargetKind"
+              }
+            }
+          },
+          {
+            "name": "monitor",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "docs": [
+              "Seat being watched (NO_SEAT = 255 for Unlock / Fallback)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "reason_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "raised_at",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "ObjectionStatus"
+              }
+            }
+          },
+          {
+            "name": "votes_uphold",
+            "docs": [
+              "Bitmaps: seat i sets 1 << i (Fallback: monitor j of seat i sets 1 << (2i + j))."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "votes_dismiss",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ObjectionRaised",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "objection",
+            "type": "pubkey"
+          },
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "TargetKind"
+              }
+            }
+          },
+          {
+            "name": "monitor",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "reason_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ObjectionResolved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "objection",
+            "type": "pubkey"
+          },
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "TargetKind"
+              }
+            }
+          },
+          {
+            "name": "upheld",
+            "type": "bool"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ObjectionStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Open"
+          },
+          {
+            "name": "Upheld"
+          },
+          {
+            "name": "Dismissed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ObjectionVoted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "objection",
+            "type": "pubkey"
+          },
+          {
+            "name": "voter",
+            "type": "pubkey"
+          },
+          {
+            "name": "uphold",
+            "type": "bool"
           },
           {
             "name": "ts",
@@ -4305,6 +6879,395 @@
           {
             "name": "ts",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Seat",
+      "docs": [
+        "Seeds: [\"seat\", estate, &[index]] (index 0..3, mirrors estate.verifiers[index])."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "holder",
+            "docs": [
+              "Always == estate.verifiers[index]; Pubkey::default() when vacant."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "backups",
+            "type": {
+              "array": [
+                "pubkey",
+                2
+              ]
+            }
+          },
+          {
+            "name": "monitors",
+            "docs": [
+              "Set by the owner only; survive succession."
+            ],
+            "type": {
+              "array": [
+                "pubkey",
+                2
+              ]
+            }
+          },
+          {
+            "name": "generation",
+            "docs": [
+              "+1 on every succession or owner replacement."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "vacant",
+            "docs": [
+              "Holder proven dead and no backup left."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "death_cert_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "death_reported_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "death_verdict",
+            "type": {
+              "defined": {
+                "name": "Verdict"
+              }
+            }
+          },
+          {
+            "name": "death_confirmed_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "death_pending_since",
+            "docs": [
+              "Set when the death is confirmed (the succession wait runs from here); 0 = not confirmed."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeatApproval",
+      "docs": [
+        "A seat holder approved something (claim, unlock attestation, hardship). Monitors are notified from this."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "approver",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "TargetKind"
+              }
+            }
+          },
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeatConfigured",
+      "docs": [
+        "Emitted by init_seat, set_seat_backups, set_seat_monitors and owner_replace_seat."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "backups",
+            "type": {
+              "array": [
+                "pubkey",
+                2
+              ]
+            }
+          },
+          {
+            "name": "monitors",
+            "type": {
+              "array": [
+                "pubkey",
+                2
+              ]
+            }
+          },
+          {
+            "name": "generation",
+            "type": "u16"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeatDeathConfirmed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "confirmed_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeatDeathReported",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "reported_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "cert_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeatDeathReviewed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "approved",
+            "type": "bool"
+          },
+          {
+            "name": "report_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeatDeathVetoed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeatVacated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "previous_holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "generation",
+            "type": "u16"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SuccessionFinalized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
+          },
+          {
+            "name": "previous_holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "generation",
+            "type": "u16"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TargetKind",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Claim"
+          },
+          {
+            "name": "Unlock"
+          },
+          {
+            "name": "Sale"
+          },
+          {
+            "name": "Hardship"
+          },
+          {
+            "name": "Succession"
+          },
+          {
+            "name": "Fallback"
           }
         ]
       }

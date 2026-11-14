@@ -12,12 +12,14 @@ import { cannedReport } from "./canned";
 import { hashJson } from "./hash";
 import { chainConfig } from "../chain/config";
 
-export type ReviewPurpose = "death" | "claim" | "hardship";
+export type ReviewPurpose = "death" | "claim" | "hardship" | "seat-death" | "fallback-death";
 
 const EXPECTED: Record<ReviewPurpose, string> = {
   death: "a South African death certificate (Department of Home Affairs)",
   claim: "a fee statement, invoice, enrolment letter or lease supporting a payout to an institution",
   hardship: "a sworn affidavit (commissioned, e.g. at SAPS) describing financial hardship, optionally with supporting statements",
+  "seat-death": "a South African death certificate (Department of Home Affairs) for the trusted person named in the context, NOT the estate owner; the name must match that person",
+  "fallback-death": "a South African death certificate (Department of Home Affairs) for the fallback recipient named in the context, NOT the estate owner; the name must match that person",
 };
 
 export async function finalizeReport(m: ModelReport): Promise<AgentReport> {

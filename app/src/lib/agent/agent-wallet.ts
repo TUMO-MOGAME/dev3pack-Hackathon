@@ -1,7 +1,8 @@
 import "server-only";
 /**
  * The AI agent's own Tether WDK wallet (server side, seed from AGENT_SEED_PHRASE). It may sign ONLY
- * review_death, review_claim, review_hardship, list_asset, accept_offer and execute_scheduled (it only pays the fee;
+ * review_death, review_claim, review_hardship, review_seat_death, review_fallback_death, list_asset, accept_offer and
+ * execute_scheduled (it only pays the fee;
  * the program sends the fixed amount to the rule's fixed payee) for the Heirloom program; every
  * transaction is checked against that allow-list before WDK signs it. The program enforces the rest.
  */
@@ -13,7 +14,11 @@ import { confirmOrThrow } from "../chain/tx";
 import { openAccount, wdkPartialSign, wdkSignAndSend, type WdkAccount } from "../wallet/wdk";
 import { explorerTx } from "../format";
 
-export const AGENT_ALLOWED = ["review_death", "review_claim", "review_hardship", "list_asset", "accept_offer", "execute_scheduled"] as const;
+export const AGENT_ALLOWED = [
+  "review_death", "review_claim", "review_hardship", "list_asset", "accept_offer", "execute_scheduled",
+  // Guardians: the agent's death-certificate reviews for a trusted person's seat and for a fallback recipient.
+  "review_seat_death", "review_fallback_death",
+] as const;
 export type AgentIx = (typeof AGENT_ALLOWED)[number];
 
 let wallet: Promise<WdkAccount> | null = null;

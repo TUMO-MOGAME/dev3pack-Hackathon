@@ -7,8 +7,9 @@ import {
   createCloseAccountInstruction, createTransferCheckedInstruction, createTransferInstruction, getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { findInstruction, getIdl } from "../chain/idl";
-import { DEFAULT_LIMITS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, TOKEN_ACCOUNT_RENT, validateSponsoredTx, type RejectCode, type SponsorPolicy } from "./policy";
+import { APPROVAL_STAMP_RENT, DEFAULT_LIMITS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, TOKEN_ACCOUNT_RENT, validateSponsoredTx, type RejectCode, type SponsorPolicy } from "./policy";
 import { SponsorLimiter } from "./limits";
+import { AGENT_ALLOWED } from "../agent/agent-wallet";
 
 const sponsor = Keypair.generate();
 const user = Keypair.generate();
@@ -185,4 +186,55 @@ describe("sponsor limiter", () => {
 describe("ATA program id sanity", () => {
   it("uses the classic ATA program", () => expect(createAta().programId.equals(ASSOCIATED_TOKEN_PROGRAM_ID)).toBe(true));
   it("uses the classic token program", () => expect(transfer().programId.equals(TOKEN_PROGRAM_ID)).toBe(true));
+});
+
+describe("guardians instructions (docs/guardians-spec.md §2.2)", () => {
+  const USER = ["init_guard", "init_seat", "set_seat_backups", "set_seat_monitors", "set_fallback", "owner_replace_seat",
+    "report_seat_death", "confirm_seat_death", "veto_seat_death", "finalize_succession", "raise_objection", "vote_objection",
+    "set_asset_media", "report_fallback_death", "start_fallback", "execute_fallback", "lapse_objection"];
+  const AGENT = ["review_seat_death", "review_fallback_death"];
+
+  it("sponsors every family / trusted-person / monitor instruction, never the agent's reviews", () => {
+    for (const n of USER) expect(SPONSORED_HEIRLOOM_IXS).toContain(n);
+    for (const n of AGENT) expect(SPONSORED_HEIRLOOM_IXS).not.toContain(n);
+  });
+
+  it("lets the agent sign only the two death-certificate reviews of the new instructions", () => {
+    for (const n of AGENT) expect(AGENT_ALLOWED).toContain(n);
+    for (const n of USER) expect(AGENT_ALLOWED).not.toContain(n);
+  });
+
+  it("accepts the new user instructions and rejects the agent reviews (once they are in the IDL)", () => {
+    for (const n of USER.filter((x) => names.includes(x))) expect(validateSponsoredTx(wire([heirloomIx(n)]), policy()).summary).toEqual([`heirloom ${n}`]);
+    for (const n of AGENT.filter((x) => names.includes(x))) rejects(wire([heirloomIx(n)]), "bad_heirloom_ix");
+  });
+});
+
+describe("sponsor as rent payer of the approval stamp (approve_claim)", () => {
+  const idx = getIdl().instructions.find((i) => i.name === "approve_claim")!.accounts.findIndex((a) => a.name === "payer");
+  const withSlot = (over: Partial<SponsorPolicy> = {}) => policy({ heirloomRentPayerSlots: { approve_claim: idx }, ...over });
+  const approve = (payer: PublicKey) => {
+    const keys = Array.from({ length: Math.max(idx + 1, 2) }, (_, i) => (i === 0 ? user.publicKey : i === idx ? payer : Keypair.generate().publicKey));
+    return new TransactionInstruction({
+      programId, keys: keys.map((k, i) => ({ pubkey: k, isSigner: i === 0 || i === idx, isWritable: i === idx })),
+      data: Buffer.from(findInstruction("approve_claim").discriminator),
+    });
+  };
+
+  it("allows the sponsor in the payer slot and counts the stamp rent", () => {
+    expect(idx).toBeGreaterThan(0);
+    const d = validateSponsoredTx(wire([approve(sponsor.publicKey)]), withSlot());
+    expect(d.rentLamports).toBe(APPROVAL_STAMP_RENT);
+  });
+  it("still refuses the sponsor in any other slot or instruction", () => {
+    rejects(wire([approve(sponsor.publicKey)]), "sponsor_in_instruction"); // no slot configured
+    rejects(wire([heirloomIx("execute_claim", [user.publicKey, sponsor.publicKey])]), "sponsor_in_instruction", withSlot());
+  });
+  it("refuses when rent sponsorship is off, and more than one sponsored stamp per tx", () => {
+    rejects(wire([approve(sponsor.publicKey)]), "rent_not_allowed", withSlot({ sponsorPaysRent: false }));
+    rejects(wire([approve(sponsor.publicKey), approve(sponsor.publicKey)]), "rent_not_allowed", withSlot());
+  });
+  it("needs no rent when the verifier pays", () => {
+    expect(validateSponsoredTx(wire([approve(user.publicKey)]), withSlot()).rentLamports).toBe(0);
+  });
 });

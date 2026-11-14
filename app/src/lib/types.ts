@@ -16,7 +16,8 @@ export type ClaimStatus = "Open" | "Paid" | "Rejected";
 export type AssetStatus = "Held" | "Listed" | "Sold";
 export type HardshipStatus = "Open" | "Approved" | "Rejected";
 
-export type Role = "owner" | "beneficiary" | "verifier" | "buyer" | "agent";
+/** "monitor": watches a trusted person's approvals and may object (docs/guardians-spec.md). */
+export type Role = "owner" | "beneficiary" | "verifier" | "buyer" | "agent" | "monitor";
 
 export interface Estate {
   address: Base58;

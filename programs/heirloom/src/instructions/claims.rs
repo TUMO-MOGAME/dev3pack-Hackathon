@@ -4,7 +4,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use super::{count_bits, now, transfer_checked_cpi};
+use super::{account_exists, count_bits, now, objection_is_open, read_account, transfer_checked_cpi};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -157,6 +157,22 @@ pub struct ApproveClaim<'info> {
 
     #[account(mut, has_one = estate)]
     pub claim: Account<'info, Claim>,
+
+    /// Pays the ApprovalStamp rent (the verifier or a sponsor).
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    /// ["stamp", claim]: records when the approval threshold was reached (objection window).
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 8 + ApprovalStamp::INIT_SPACE,
+        seeds = [STAMP_SEED, claim.key().as_ref()],
+        bump
+    )]
+    pub approval_stamp: Account<'info, ApprovalStamp>,
+
+    pub system_program: Program<'info, System>,
 }
 
 pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
@@ -175,11 +191,39 @@ pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
     require!(claim.approvals & bit == 0, HeirloomError::AlreadyApproved);
     claim.approvals |= bit;
 
+    let ts = now()?;
+    let count = count_bits(claim.approvals);
+    let claim_key = claim.key();
+    let estate_key = ctx.accounts.estate.key();
+    let threshold = ctx.accounts.estate.claim_threshold;
+
+    let stamp = &mut ctx.accounts.approval_stamp;
+    if stamp.target == Pubkey::default() {
+        stamp.target = claim_key;
+        stamp.seat_index = idx as u8;
+        stamp.approver = verifier;
+        stamp.bump = ctx.bumps.approval_stamp;
+    }
+    // Only the approval that reaches the threshold starts the objection window.
+    if stamp.approved_at == 0 && count >= threshold {
+        stamp.seat_index = idx as u8;
+        stamp.approver = verifier;
+        stamp.approved_at = ts;
+    }
+
     emit!(ClaimApproved {
-        claim: claim.key(),
+        claim: claim_key,
         verifier,
-        count: count_bits(claim.approvals),
-        ts: now()?,
+        count,
+        ts,
+    });
+    emit!(SeatApproval {
+        estate: estate_key,
+        seat_index: idx as u8,
+        approver: verifier,
+        kind: TargetKind::Claim,
+        target: claim_key,
+        ts,
     });
     Ok(())
 }
@@ -227,6 +271,18 @@ pub struct ExecuteClaim<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+
+    /// CHECK: the ["guard", estate] PDA; may not exist (then no window and no objections apply).
+    #[account(seeds = [GUARD_SEED, estate.key().as_ref()], bump)]
+    pub guard: UncheckedAccount<'info>,
+
+    /// CHECK: the ["stamp", claim] PDA; may not exist. Read only when a Guard exists.
+    #[account(seeds = [STAMP_SEED, claim.key().as_ref()], bump)]
+    pub approval_stamp: UncheckedAccount<'info>,
+
+    /// CHECK: the ["objection", claim] PDA; may not exist. Blocks while Open.
+    #[account(seeds = [OBJECTION_SEED, claim.key().as_ref()], bump)]
+    pub objection: UncheckedAccount<'info>,
 }
 
 pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
@@ -245,6 +301,26 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
         claim.owner_approved || count_bits(claim.approvals) >= estate.claim_threshold
     };
     require!(approved, HeirloomError::InsufficientApprovals);
+
+    // Guardians: a monitor's open objection pauses the payment; with a Guard, a quorum approval
+    // waits out the objection window (an owner approval while alive needs no window).
+    require!(
+        !objection_is_open(&ctx.accounts.objection.to_account_info())?,
+        HeirloomError::ObjectionOpen
+    );
+    let guard_info = ctx.accounts.guard.to_account_info();
+    if account_exists(&guard_info) && !claim.owner_approved {
+        let guard: Guard = read_account(&guard_info)?;
+        let stamp_info = ctx.accounts.approval_stamp.to_account_info();
+        require!(account_exists(&stamp_info), HeirloomError::ObjectionWindowOpen);
+        let stamp: ApprovalStamp = read_account(&stamp_info)?;
+        require!(stamp.approved_at > 0, HeirloomError::ObjectionWindowOpen);
+        let open_until = stamp
+            .approved_at
+            .checked_add(guard.objection_window_secs)
+            .ok_or(HeirloomError::MathOverflow)?;
+        require!(now()? >= open_until, HeirloomError::ObjectionWindowOpen);
+    }
 
     // Re-check: other claims on this rule may have been paid since this one was submitted.
     let amount = claim.amount;

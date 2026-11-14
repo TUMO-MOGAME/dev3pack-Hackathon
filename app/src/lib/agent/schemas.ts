@@ -6,7 +6,7 @@ import { LOCALES } from "../i18n/locales";
 
 export const CATEGORIES = ["Tuition", "Accommodation", "Books", "Medical", "General"] as const;
 export const PAYEE_KINDS = ["University", "School", "Landlord", "Other"] as const;
-export const PURPOSES = ["death", "claim", "hardship"] as const;
+export const PURPOSES = ["death", "claim", "hardship", "seat-death", "fallback-death"] as const;
 export const RECURRENCE = ["minute", "week", "month", "term", "year"] as const;
 
 /** Interval for a recurring schedule. "minute" exists for demos; NEXT_PUBLIC_DEMO_INTERVAL_SECS overrides all. */
@@ -137,6 +137,8 @@ export const reviewFields = z.object({
   context: z.string().max(2000).default(""),
   /** Claim or hardship PDA to review on-chain (death uses the estate). */
   subject: base58.optional(),
+  /** seat-death: the seat index (0..2); fallback-death: the fallback recipient index (0..3). */
+  index: z.coerce.number().int().min(0).max(3).optional(),
 });
 
 export type WillTurn = z.infer<typeof willTurnSchema>;

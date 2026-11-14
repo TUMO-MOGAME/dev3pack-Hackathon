@@ -44,9 +44,10 @@ export function cannedWillTurn(turns: number): { reply: string; draft: WillDraft
   return { reply: `${CANNED_PREFIX}Here is a draft based on what you told me. Please check each rule before you sign.`, draft: DEMO_WILL };
 }
 
-export function cannedReport(purpose: "death" | "claim" | "hardship"): ModelReport {
+export function cannedReport(purpose: "death" | "claim" | "hardship" | "seat-death" | "fallback-death"): ModelReport {
+  const certificate = { documentType: "death_certificate", extracted: [{ field: "issuer", value: "Department of Home Affairs (demo)" }] };
   const base = {
-    death: { documentType: "death_certificate", extracted: [{ field: "issuer", value: "Department of Home Affairs (demo)" }] },
+    death: certificate, "seat-death": certificate, "fallback-death": certificate,
     claim: { documentType: "fee_statement", extracted: [{ field: "institution", value: "University of Cape Town (demo)" }] },
     hardship: { documentType: "affidavit", extracted: [{ field: "commissioner", value: "SAPS (demo)" }] },
   }[purpose];

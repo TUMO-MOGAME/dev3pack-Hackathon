@@ -16,6 +16,10 @@ import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { LegacyEntry, MilestoneMoment } from "@/components/legacy/legacy-entry";
+import { PausedNotice } from "@/components/guardians/parts";
+import { guardiansOf, isMonitor, objectionFor } from "@/components/guardians/derive";
+import { RaiseObjection } from "@/components/guardians/objections";
+import { SuccessionTimeline } from "@/components/guardians/section";
 
 type Copy = ScreensCopy["family"];
 type StepState = "done" | "now" | "next";
@@ -91,6 +95,10 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
               <p className="text-small text-ink-2">{copy.unlock.hint}</p>
             </div>
           </div>
+          <PausedNotice target={e.address} className="mt-3" />
+          {isMonitor(guardiansOf(snap), session?.address) && !objectionFor(guardiansOf(snap), e.address) && (
+            <div className="mt-3"><RaiseObjection kind="Unlock" target={e.address} seatIndex={null} /></div>
+          )}
           {waitOver && (
             <Button className="mt-3" loading={busy === "unlock"} onClick={() => run("unlock", (svc, est) => svc.finalizeUnlock(est), copy.unlock.done)}>
               <LockOpen className="size-5" aria-hidden="true" />{copy.unlock.cta}
@@ -162,6 +170,7 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
           {isFamily ? <ReportForm copy={copy} /> : role !== "owner" ? <p className="text-small text-ink-2">{copy.report.onlyFamily}</p> : null}
         </div>
       )}
+      <SuccessionTimeline snap={snap} />
       <p className="sr-only" role="status" aria-live="polite">{common.status.estate[e.status]}</p>
     </div>
   );

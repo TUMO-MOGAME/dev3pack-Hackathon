@@ -16,6 +16,7 @@ export const DEMO_PERSONAS: DemoPersona[] = [
   { address: "GpufgMWp8sgFEYgaJ1XoEu42JG7pKVBD4kfaDbohp8rM", label: "Ms. Pillay (attorney)", role: "verifier", usdt: 0, sol: 0.5 },
   { address: "ALpw94XmFYogivyVbrHq1NGuvY5fqxryyqkxmbiiRtHm", label: "Uncle Bongani (family)", role: "verifier", usdt: 0, sol: 0.5 },
   { address: "BMajP1ye9ZJg18xBQ6GX9fL8cTzFJQ9roQuqQdSZMrq1", label: "Pieter (car buyer)", role: "buyer", usdt: 12_000, sol: 1 },
+  { address: "CGXzXMjCLuc3eCpNPH6LgH9KQtqpJdskeDzG9ENubbm5", label: "Aunt Zodwa (monitor)", role: "monitor", usdt: 0, sol: 0.5 },
 ];
 
 export function personaSessions(): WalletSession[] {

@@ -7,7 +7,7 @@ import { BN } from "@anchor-lang/core";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import * as ix from "./instructions";
 import { findInstruction, getCoder, getIdl } from "./idl";
-import { assetPda, claimPda, estatePda, hardshipPda, offerPda, rulePda } from "./pda";
+import { assetPda, claimPda, estatePda, guardPda, hardshipPda, objectionPda, offerPda, rulePda, seatPda, stampPda } from "./pda";
 import { decodeEstate, type Raw } from "./decoders";
 
 const k = () => Keypair.generate().publicKey;
@@ -48,6 +48,26 @@ const built: Record<string, () => ReturnType<typeof ix.buildIx>> = {
   accept_offer: () => ix.acceptOffer(ctx, { estate, agent, asset, nftMint: nft, buyer, recipient: owner }),
   owner_approve_claim: () => ix.ownerApproveClaim(ctx, owner, k(), rule0),
   execute_scheduled: () => ix.executeScheduled(ctx, { estate, payer: agent, rule: rule0, payeeWallet: payee }),
+  // guardians
+  init_guard: () => ix.initGuard(ctx, owner, estate, { objectionWindowSecs: 60, successionWaitSecs: 60, fallbackWaitSecs: 120 }),
+  init_seat: () => ix.initSeat(ctx, owner, 2, [k(), k()], [k()]),
+  set_seat_backups: () => ix.setSeatBackups(ctx, v[2], estate, 2, [k()]),
+  set_seat_monitors: () => ix.setSeatMonitors(ctx, owner, 2, [k()]),
+  set_fallback: () => ix.setFallback(ctx, owner, [ben, k(), k(), k()]),
+  owner_replace_seat: () => ix.ownerReplaceSeat(ctx, owner, 1, k()),
+  report_seat_death: () => ix.reportSeatDeath(ctx, ben, estate, 2, H),
+  review_seat_death: () => ix.reviewSeatDeath(estate, agent, 2, true, H),
+  confirm_seat_death: () => ix.confirmSeatDeath(ctx, v[0], estate, 2),
+  veto_seat_death: () => ix.vetoSeatDeath(ctx, v[2], estate, 2),
+  finalize_succession: () => ix.finalizeSuccession(ctx, estate, 2),
+  raise_objection: () => ix.raiseObjection(ctx, { objector: ben, estate, kind: "Claim", target: k(), seatIndex: 2, reasonHashHex: H, monitorSeat: 2 }),
+  vote_objection: () => ix.voteObjection(ctx, { voter: v[0], estate, kind: "Claim", target: k(), uphold: true }),
+  set_asset_media: () => ix.setAssetMedia(ctx, { authority: owner, estate, asset, kind: "Car", photosRootHex: H, photoCount: 3 }),
+  report_fallback_death: () => ix.reportFallbackDeath(ctx, ben, estate, 0, H),
+  review_fallback_death: () => ix.reviewFallbackDeath(estate, agent, 0, true, H),
+  start_fallback: () => ix.startFallback(ctx, estate),
+  lapse_objection: () => ix.lapseObjection(ctx, estate),
+  execute_fallback: () => ix.executeFallback(ctx, { payer: ben, estate, recipient: ben }),
 };
 const idlNames = new Set(getIdl().instructions.map((i) => i.name));
 const livingPlans = findInstruction("add_rule").args.length > 5;
@@ -88,6 +108,36 @@ describe("instruction builders vs IDL", () => {
     } else {
       expect(make).toThrow(/living plans/);
     }
+  });
+
+  it("guardians: PDAs land in the right account slots", () => {
+    const names = (n: string) => findInstruction(n).accounts.map((a) => a.name);
+    const at = (n: string, t: ReturnType<typeof ix.buildIx>, acc: string) => t.keys[names(n).indexOf(acc)].pubkey;
+    const claim = k();
+    const ap = ix.approveClaim(estate, v[1], claim, k());
+    expect(at("approve_claim", ap, "approval_stamp").equals(stampPda(programId, claim))).toBe(true);
+    expect(at("approve_claim", ap, "payer").equals(v[1])).toBe(true);
+    const ex = ix.executeClaim(ctx, { estate, payer: ben, rule: k(), claim, payeeWallet: payee });
+    expect(at("execute_claim", ex, "guard").equals(guardPda(programId, estate))).toBe(true);
+    expect(at("execute_claim", ex, "objection").equals(objectionPda(programId, claim))).toBe(true);
+    expect(at("finalize_unlock", ix.finalizeUnlock(estate, ben), "objection").equals(objectionPda(programId, estate))).toBe(true);
+    const seat = seatPda(programId, estate, 2);
+    expect(at("finalize_succession", ix.finalizeSuccession(ctx, estate, 2), "objection").equals(objectionPda(programId, seat))).toBe(true);
+    const guard = guardPda(programId, estate);
+    expect(at("lapse_objection", ix.lapseObjection(ctx, estate), "objection").equals(objectionPda(programId, guard))).toBe(true);
+    const exf = ix.executeFallback(ctx, { payer: ben, estate, recipient: ben });
+    expect(exf.keys[names("execute_fallback").indexOf("objection")]).toMatchObject({ isWritable: true });
+    // accept_offer: the hardship objection only when a hardship sale is approved, else the system program
+    const plain = ix.acceptOffer(ctx, { estate, agent, asset, nftMint: nft, buyer, recipient: owner });
+    expect(at("accept_offer", plain, "hardship_objection").toBase58()).toBe("11111111111111111111111111111111");
+    const hs = ix.acceptOffer(ctx, { estate, agent, asset, nftMint: nft, buyer, recipient: ben, hardshipBeneficiary: ben });
+    expect(at("accept_offer", hs, "hardship_objection").equals(objectionPda(programId, hardshipPda(programId, asset, ben)))).toBe(true);
+    // raise_objection: optional accounts not passed become the program id (Anchor's None)
+    const un = ix.raiseObjection(ctx, { objector: ben, estate, kind: "Unlock", target: estate, seatIndex: null, reasonHashHex: H, monitorSeat: 1 });
+    expect(at("raise_objection", un, "target_account").equals(programId)).toBe(true);
+    expect(at("raise_objection", un, "seat").equals(seatPda(programId, estate, 1))).toBe(true);
+    const decoded = getCoder().instruction.decode(Buffer.from(un.data)) as unknown as { data: { seat_index: number } };
+    expect(decoded.data.seat_index).toBe(255);
   });
 
   it("rejects malformed hashes", () => {

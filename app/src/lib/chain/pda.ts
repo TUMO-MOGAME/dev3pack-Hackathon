@@ -65,3 +65,30 @@ export const vaultAta = (usdtMint: Key, estate: Key) => ata(usdtMint, estate);
 export const nftEscrowAta = (nftMint: Key, estate: Key) => ata(nftMint, estate);
 /** Buyer's escrowed USD₮ = ATA(usdt_mint, Offer PDA). */
 export const offerEscrowAta = (usdtMint: Key, offer: Key) => ata(usdtMint, offer);
+
+// ---------- guardians (docs/guardians-spec.md §2.1) ----------
+
+function u8(n: number): Uint8Array {
+  if (!Number.isInteger(n) || n < 0 || n > 0xff) throw new RangeError(`seat index out of u8 range: ${n}`);
+  return new Uint8Array([n]);
+}
+
+/** ["seat", estate, &[index]]: trusted-person seat 0..2 (mirrors estate.verifiers[index]). */
+export const seatPda = (programId: Key, estate: Key, index: number) =>
+  find(programId, [enc.encode("seat"), pk(estate).toBytes(), u8(index)]);
+
+/** ["guard", estate]: one per estate (timings, fallback plan, open objections). */
+export const guardPda = (programId: Key, estate: Key) =>
+  find(programId, [enc.encode("guard"), pk(estate).toBytes()]);
+
+/** ["stamp", target]: the approval stamp of a claim that reached its threshold. */
+export const stampPda = (programId: Key, target: Key) =>
+  find(programId, [enc.encode("stamp"), pk(target).toBytes()]);
+
+/** ["objection", target]: at most one per target (claim, estate, asset, hardship, seat, guard). */
+export const objectionPda = (programId: Key, target: Key) =>
+  find(programId, [enc.encode("objection"), pk(target).toBytes()]);
+
+/** ["media", asset]: the asset's photo root. */
+export const mediaPda = (programId: Key, asset: Key) =>
+  find(programId, [enc.encode("media"), pk(asset).toBytes()]);

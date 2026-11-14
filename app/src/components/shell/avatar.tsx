@@ -8,6 +8,7 @@ const roleTint: Record<Role, string> = {
   verifier: "border border-line-strong bg-surface-2 text-ink",
   buyer: "border border-line-strong bg-surface text-ink-2",
   agent: "rounded-md! bg-ink text-bg",
+  monitor: "border-[1.5px] border-dashed border-ink bg-surface text-ink",
 };
 
 /** A person's initial in a disc. */

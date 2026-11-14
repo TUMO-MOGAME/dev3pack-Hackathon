@@ -141,7 +141,7 @@ export const st: Bundle = {
       estate: "Lefa",
       will: "Moralo",
       vault: "Polokelo",
-      car: "Koloi",
+      car: "Thepa",
       people: "Batho",
       family: "Tatellano",
       claims: "Dikopo",
@@ -157,6 +157,7 @@ export const st: Bundle = {
       verifier: "Motho ya tshepahalang",
       buyer: "Moreki wa koloi",
       agent: "Agent ya Heirloom",
+      monitor: "Mohlokomedi",
     },
     persona: {
       actingAs: "O sebetsa o le",
@@ -164,7 +165,7 @@ export const st: Bundle = {
       sheetTitle: "O sebetsa o le mang?",
       sheetBody: "Browser e le nngwe e ka tshwara di-wallet tse mmalwa. Kgetha motho ho bona Heirloom kamoo a ka e bonang kateng.",
       current: "Wa jwale",
-      groups: { owner: "Mong wa lefa", beneficiary: "Lelapa", verifier: "Batho ba tshepahalang", buyer: "Bareki", agent: "Agent" },
+      groups: { owner: "Mong wa lefa", beneficiary: "Lelapa", verifier: "Batho ba tshepahalang", buyer: "Bareki", agent: "Agent", monitor: "Bahlokomedi" },
       addWallet: "Kenya wallet e nngwe",
       wallet: "Wallet",
       balance: "Tekanyo ya wallet",
@@ -192,6 +193,7 @@ export const st: Bundle = {
         unlocked: "Lefa le bulehile",
         listed: "Koloi e beilwe thekisong le ditlhahiso",
         lowOffers: "Koloi e beilwe thekisong, ditlhahiso tse tlase feela",
+        guardians: "Batho ba tshepahalang ba nang le bathusi le bahlokomedi",
       },
       shortcutsTitle: "Ditsela tse kgutshwane",
       shortcuts: {

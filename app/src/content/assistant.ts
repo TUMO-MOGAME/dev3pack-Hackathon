@@ -74,6 +74,7 @@ export const assistant = {
     beneficiary: ["How do I claim my fees?", "What happens after I report a passing?", "Can the car sell for less?", "Who approves my claim?"],
     verifier: ["What is waiting for me?", "How do you check a death certificate?", "What am I confirming exactly?"],
     buyer: ["What is the minimum price?", "How does escrow work?", "What do I get if I win?"],
+    monitor: ["What am I watching for?", "How do I raise an objection?", "What happens after I object?"],
     none: ["How does Heirloom work?", "Is this a legal will?"],
   },
   flows: {

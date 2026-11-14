@@ -55,4 +55,37 @@ pub enum HeirloomError {
     PayeeRequired,
     #[msg("The scheduled payment is not due yet")]
     NotDue,
+    // ---- guardians (added 2026-11-14; append only, never reorder)
+    #[msg("Signer is not a monitor allowed to object here")]
+    NotMonitor,
+    #[msg("An objection is open on this item")]
+    ObjectionOpen,
+    #[msg("The objection window is still open")]
+    ObjectionWindowOpen,
+    #[msg("A succession is already pending for this seat")]
+    SuccessionPending,
+    #[msg("There is no succession pending for this seat")]
+    NoSuccessionPending,
+    #[msg("This seat is vacant")]
+    SeatVacant,
+    #[msg("Not every seat is vacant")]
+    SeatsNotVacant,
+    #[msg("Signer may not confirm this death, or it is not confirmed yet")]
+    NotConfirmer,
+    #[msg("The fallback plan is not ready to run")]
+    FallbackNotReady,
+    #[msg("The fallback plan has already run")]
+    FallbackDone,
+    #[msg("No living fallback recipient")]
+    NoFallbackRecipient,
+    #[msg("Invalid backup: must differ from the owner, every trusted person and each other")]
+    BadBackup,
+    #[msg("Invalid monitor: must differ from the holder they watch and from each other")]
+    BadMonitor,
+    #[msg("Invalid fallback list: recipients must be distinct and not the owner")]
+    BadFallback,
+    #[msg("This fallback objection has lapsed: its waiting period is over")]
+    ObjectionLapsed,
+    #[msg("This objection cannot lapse yet")]
+    ObjectionNotLapsed,
 }

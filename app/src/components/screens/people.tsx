@@ -11,6 +11,7 @@ import { Badge, Button, Card, Field, inputClass, PageHeader } from "@/components
 import { Avatar } from "@/components/shell/app-shell";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
+import { GuardiansPeople } from "@/components/guardians/section";
 
 type Copy = ScreensCopy["people"];
 const KINDS: PayeeKind[] = ["University", "School", "Landlord", "Other"];
@@ -21,7 +22,9 @@ export function PeopleScreen({ copy: english }: { copy: Copy }) {
 }
 
 function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role }) {
-  const { common } = useCopy();
+  const { common, guardians: gc } = useCopy();
+  // A seat emptied by succession (no backup left) keeps the old name in the estate meta: show it as empty.
+  const vacant = (i: number) => !!snap.guardians?.seats.find((x) => x.index === i)?.vacant || /^1{32}$/.test(e.verifiers[i]);
   const { run, busy } = useEstate();
   const e = snap.estate;
   const [adding, setAdding] = useState(false);
@@ -48,16 +51,16 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
           <h2 className="flex items-center gap-2 text-h3"><ShieldCheck className="size-5 text-accent" aria-hidden="true" />{copy.trusted.title}</h2>
           <p className="mt-1 text-ink-2">{copy.trusted.body}</p>
           <ul className="mt-4 grid gap-3 sm:grid-cols-3">
-            {e.verifierNames.map((n, i) => (
-              <li key={e.verifiers[i]} className="flex items-center gap-3 rounded-md border border-line bg-surface-2/50 p-3">
+            {e.verifierNames.map((name, i) => { const n = vacant(i) ? gc.vacant : name; return (
+              <li key={i} className="flex items-center gap-3 rounded-md border border-line bg-surface-2/50 p-3">
                 <Avatar name={n} role="verifier" className="size-11" />
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 font-semibold">{n}{you(e.verifiers[i])}</p>
                   <p className="text-small text-ink-2">{copy.trusted.slots[i]}</p>
-                  <p className="font-mono text-[0.75rem] text-ink-2">{shortAddress(e.verifiers[i])}</p>
+                  {!vacant(i) && <p className="font-mono text-[0.75rem] text-ink-2">{shortAddress(e.verifiers[i])}</p>}
                 </div>
               </li>
-            ))}
+            ); })}
           </ul>
           <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
             {copy.trusted.thresholds.map((t, i) => (
@@ -68,6 +71,8 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
             ))}
           </dl>
         </Card>
+
+        <GuardiansPeople snap={snap} />
 
         <Card>
           <h2 className="flex items-center gap-2 text-h3"><UsersRound className="size-5 text-accent" aria-hidden="true" />{copy.family.title}</h2>

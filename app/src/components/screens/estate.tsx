@@ -19,6 +19,9 @@ import { fmt, timeAgo, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { InstallBanner } from "@/components/shell/install";
 import { LegacyEntry } from "@/components/legacy/legacy-entry";
+import { FallbackStatus } from "@/components/guardians/fallback";
+import { ObjectionList } from "@/components/guardians/objections";
+import { guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
 
 type Copy = ScreensCopy["estate"];
 export const statusTone: Record<EstateStatus, Tone> = { Active: "accent", DeathPending: "warn", Unlocked: "ok", Frozen: "danger" };
@@ -69,7 +72,7 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
               {role === "owner" && e.status === "Active" && (
                 <ButtonLink href="/vault"><Plus className="size-5" aria-hidden="true" />{copy.addFunds}</ButtonLink>
               )}
-              <Link href="/send" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-ink px-5 font-medium hover:bg-surface-2"><Send className="size-5" aria-hidden="true" />{copy.send}</Link>
+              {role !== "monitor" && <Link href="/send" className="inline-flex min-h-11 items-center gap-2 rounded-full border border-ink px-5 font-medium hover:bg-surface-2"><Send className="size-5" aria-hidden="true" />{copy.send}</Link>}
               <button type="button" onClick={() => setProofOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-ink px-5 font-medium hover:bg-surface-2">
                 <FileCheck2 className="size-5" aria-hidden="true" />{copy.openProof}
               </button>
@@ -96,6 +99,10 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
       </div>
 
       <div className="grid gap-5 *:min-w-0">
+        {/* Guardians: the fallback plan once every trusted place is empty; objections the owner can decide. */}
+        <FallbackStatus snap={snap} />
+        {role === "owner" && <ObjectionList snap={snap} onlyVotable className="rounded-lg border-2 border-ink bg-surface p-4 sm:p-5" />}
+
         {/* Car */}
         <Card>
           <div className="flex items-center justify-between gap-3">
@@ -214,7 +221,7 @@ function RuleCard({ rule, snap, copy, rate, now }: { rule: Rule; snap: EstateSna
 function ForYou({ copy, snap, session, role, now, onHeartbeat, busy, walletUsdt, rate }: {
   copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role; now: number | null; onHeartbeat: () => void; busy: boolean; walletUsdt: bigint; rate: number | null;
 }) {
-  const { common } = useCopy();
+  const { common, guardians } = useCopy();
   const f = copy.forYou;
   const e = snap.estate;
   const reported = !!e.death.certHash || e.status === "DeathPending";
@@ -230,6 +237,11 @@ function ForYou({ copy, snap, session, role, now, onHeartbeat, busy, walletUsdt,
     block = n > 0
       ? { title: fmt(f.verifierWaiting.title, { count: n === 1 ? f.countOne : fmt(f.countMany, { n }) }), body: f.verifierWaiting.body, cta: f.verifierWaiting.cta, href: "/inbox" }
       : { ...f.verifierClear, href: "/inbox" };
+  } else if (role === "monitor") {
+    const g = guardiansOf(snap);
+    const watched = watchedSeats(g, session.address).map((s) => shortName(s.holderName)).join(", ");
+    const n = monitorPending(g, session.address, now);
+    block = { title: watched ? fmt(guardians.forYou.title, { name: watched }) : guardians.setup.title, body: n > 0 ? fmt(guardians.forYou.body, { count: n === 1 ? f.countOne : fmt(f.countMany, { n }) }) : guardians.forYou.clear, cta: guardians.forYou.cta, href: "/inbox" };
   } else if (role === "buyer") block = { ...f.buyer, href: "/car" };
 
   return (

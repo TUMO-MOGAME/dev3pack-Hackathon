@@ -18,6 +18,8 @@ import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { MilestoneMoment } from "@/components/legacy/legacy-entry";
 import { categoryIcon } from "./estate";
+import { PausedNotice } from "@/components/guardians/parts";
+import { ClaimWindow } from "@/components/guardians/claim-window";
 
 type Copy = ScreensCopy["claims"];
 
@@ -147,6 +149,10 @@ function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; 
         <Badge tone={tone}>{common.status.claim[claim.status]}</Badge>
       </div>
       <div className="mt-4"><ClaimTracker claim={claim} need={snap.estate.claimThreshold} copy={copy} waitingFor={snap.estate.status === "Active" && rule?.startsNow ? fmt(copy.card.waitingOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : undefined} /></div>
+      {claim.status === "Open" && <PausedNotice target={claim.address} className="mt-3" />}
+      {claim.status === "Open" && snap.guardians?.claimPayableAt?.[claim.address] !== undefined && (
+        <ClaimWindow claim={claim.address} payee={claim.payee} payeeName={payee} amount={claim.amount} successText={fmt(copy.card.paidOn, { payee })} />
+      )}
       {claim.status === "Paid" && (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-4 rounded-md border-[1.5px] border-ink bg-surface p-3">
           <p className="flex items-center gap-2 font-semibold"><TickDisc className="size-5" />{fmt(copy.card.paidOn, { payee })}</p>

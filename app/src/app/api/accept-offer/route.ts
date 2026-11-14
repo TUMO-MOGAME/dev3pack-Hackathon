@@ -32,6 +32,7 @@ export const POST = handler(async (req) => {
   const tx = await agentSignAndSend([acceptOffer(chainCtx(), {
     estate: new PublicKey(b.estate), agent, asset: new PublicKey(asset.address), nftMint: new PublicKey(asset.nftMint),
     buyer: new PublicKey(best.buyer), recipient,
+    hardshipBeneficiary: asset.hardshipBeneficiary ? new PublicKey(asset.hardshipBeneficiary) : null,
   })]);
   return json({ tx, ranking });
 });

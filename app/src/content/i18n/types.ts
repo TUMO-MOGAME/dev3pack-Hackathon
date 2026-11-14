@@ -1,5 +1,6 @@
 import type { AssistantCopy } from "../assistant";
 import type { CommonCopy } from "../common";
+import type { GuardiansCopy } from "../guardians";
 import type { LandingCopy } from "../landing";
 import type { PayCopy } from "../pay";
 import type { ScreensCopy } from "../screens";
@@ -22,6 +23,8 @@ export interface Bundle {
   site: { nav: Widen<SiteCopy["nav"]> } & DeepPartial<Omit<SiteCopy, "nav">>;
   screens: DeepPartial<ScreensCopy>;
   assistant: DeepPartial<AssistantCopy>;
+  /** Backups, watchers, objections and the fallback plan. Optional: anything left out shows in English. */
+  guardians?: DeepPartial<GuardiansCopy>;
   /** One line shown above the English-only legal pages. */
   legalNote: string;
 }

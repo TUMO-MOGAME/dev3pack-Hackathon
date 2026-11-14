@@ -149,38 +149,69 @@ function fill(key: string, signatures: string[], conn: Connection): Promise<void
   return job;
 }
 
+/** One decoded program event with its transaction. */
+export interface ChainEvent { name: string; data: Raw; ts: number; signature: string }
+
 /**
- * Recent program events that touched the estate (newest first). Waits at most `budgetMs` for transactions not yet
+ * Recent program events that touched `address` (newest first), raw. Waits at most `budgetMs` for transactions not yet
  * remembered, so a busy RPC never holds up the page; the rest keep loading and appear on the next refresh.
  */
-export async function fetchActivity(estate: Base58, limit = 40, conn = getConnection(), budgetMs = 5_000): Promise<ActivityItem[]> {
-  const sigs = await conn.getSignaturesForAddress(new PublicKey(estate), { limit }, "confirmed");
+export async function fetchEvents(address: Base58, limit = 40, conn = getConnection(), budgetMs = 5_000): Promise<ChainEvent[]> {
+  const sigs = await conn.getSignaturesForAddress(new PublicKey(address), { limit }, "confirmed");
   const ok = sigs.filter((s) => !s.err);
   if (ok.length === 0) return [];
-  await Promise.race([fill(estate, ok.map((s) => s.signature), conn), new Promise((r) => setTimeout(r, budgetMs))]);
-  const txs = ok.map((s) => txMemo.get(s.signature) ?? null);
+  await Promise.race([fill(address, ok.map((s) => s.signature), conn), new Promise((r) => setTimeout(r, budgetMs))]);
   const parser = new EventParser(programId(), getCoder());
-  const items: ActivityItem[] = [];
-  txs.forEach((tx, i) => {
+  const out: ChainEvent[] = [];
+  ok.forEach((s) => {
+    const tx = txMemo.get(s.signature);
     const logs = tx?.meta?.logMessages;
     if (!logs) return;
-    const ts = tx.blockTime ?? ok[i].blockTime ?? 0;
+    const ts = tx.blockTime ?? s.blockTime ?? 0;
     try {
-      for (const ev of parser.parseLogs(logs)) {
-        const d = describeEvent(ev.name, ev.data as Raw);
-        let reportHash: string | undefined;
-        try { reportHash = d.kind.endsWith("Reviewed") ? hex(ev.data as Raw, "report_hash") : undefined; } catch { /* no hash on this event */ }
-        items.push({ ts, kind: d.kind, text: d.text, amount: d.amount, txSignature: ok[i].signature, ...(reportHash ? { reportHash } : {}) });
-      }
+      for (const ev of parser.parseLogs(logs)) out.push({ name: ev.name, data: ev.data as Raw, ts, signature: s.signature });
     } catch {
       // A log we cannot decode (e.g. older IDL) is skipped, not fatal for the feed.
     }
   });
-  return items.sort((a, b) => b.ts - a.ts);
+  return out.sort((a, b) => b.ts - a.ts);
+}
+
+/** Plain-language activity lines from the estate's recent events (newest first). */
+export function activityFrom(events: ChainEvent[]): ActivityItem[] {
+  return events.map((ev) => {
+    const d = describeEvent(ev.name, ev.data);
+    let reportHash: string | undefined;
+    try { reportHash = d.kind.endsWith("Reviewed") ? hex(ev.data, "report_hash") : undefined; } catch { /* no hash on this event */ }
+    return { ts: ev.ts, kind: d.kind, text: d.text, amount: d.amount, txSignature: ev.signature, ...(reportHash ? { reportHash } : {}) };
+  });
+}
+
+export async function fetchActivity(estate: Base58, limit = 40, conn = getConnection(), budgetMs = 5_000): Promise<ActivityItem[]> {
+  return activityFrom(await fetchEvents(estate, limit, conn, budgetMs));
 }
 
 /** Fetch and decode a single program account (raw IDL field names). Null if it does not exist. */
 export async function fetchAccountRaw(type: string, address: Base58, conn = getConnection()): Promise<Raw | null> {
   const info = await conn.getAccountInfo(new PublicKey(address), "confirmed");
   return info ? decode(type, info.data) : null;
+}
+
+/**
+ * The newest program event `name` in the recent transactions touching `address` that passes `match` (raw IDL
+ * fields), or null. Used where the program records a value only in an event (e.g. FallbackDeathReported.cert_hash).
+ */
+export async function findRecentEvent(address: Base58, name: string, match: (data: Raw) => boolean, limit = 25, conn = getConnection()): Promise<Raw | null> {
+  const sigs = (await conn.getSignaturesForAddress(new PublicKey(address), { limit }, "confirmed")).filter((s) => !s.err);
+  await fill(`event:${address}`, sigs.map((s) => s.signature), conn);
+  const parser = new EventParser(programId(), getCoder());
+  const want = name.toLowerCase();
+  for (const s of sigs) { // newest first
+    const logs = txMemo.get(s.signature)?.meta?.logMessages;
+    if (!logs) continue;
+    try {
+      for (const ev of parser.parseLogs(logs)) if (ev.name.toLowerCase() === want && match(ev.data as Raw)) return ev.data as Raw;
+    } catch { /* undecodable log: skip */ }
+  }
+  return null;
 }

@@ -162,3 +162,130 @@ but names must be one of these. Preferred name first; aliases in brackets also w
 - Token accounts: `vault`, `owner_usdt` [`owner_token`, `owner_ata`], `owner_nft`, `nft_escrow`, `offer_escrow` [`escrow`], `buyer_usdt` [`buyer_token`], `buyer_nft`, `payee_usdt` [`payee_token`], `recipient_usdt` [`recipient_token`].
 - Programs: `system_program`, `token_program`, `associated_token_program`, `rent` (fixed addresses in the IDL are used as-is).
 - Args are passed **positionally in the order listed in the table above**, so arg names may differ.
+
+## Guardians: seats, objections, succession, fallback plan, asset photos (added 2026-11-14, branch `feature/guardians`)
+
+Design: `docs/guardians-spec.md` §2. **Not deployed yet**; the devnet program is unchanged until Tumo approves an upgrade.
+No existing account layout changed: only new accounts, instructions, events and errors (appended at the end of the enum).
+An estate **without a Guard behaves as before** (no objection window); objections can only be raised once a Guard exists.
+
+### New enums (Borsh order)
+```
+TargetKind      { Claim, Unlock, Sale, Hardship, Succession, Fallback }
+ObjectionStatus { Open, Upheld, Dismissed }
+AssetKind       { Car, Motorbike, Furniture, Jewellery, Electronics, Other }
+```
+
+### New accounts
+| Account | Seeds | Fields |
+|---|---|---|
+| `Seat` | `["seat", estate, [index u8]]` (index 0..3) | estate, index u8, holder (== estate.verifiers[index]; default when vacant), backups [Pubkey;2], monitors [Pubkey;2], generation u16, vacant bool, death_cert_hash, death_reported_by, death_verdict Verdict, death_confirmed_by, death_pending_since i64 (set at confirmation; the wait runs from here), bump |
+| `Guard` | `["guard", estate]` | estate, objection_window_secs i64, succession_wait_secs i64, fallback_wait_secs i64, open_objections u16, fallback [Pubkey;4], fallback_dead u8 (bit i = recipient i proven dead), fallback_started_at i64 (0 = not started), fallback_done bool, bump |
+| `ApprovalStamp` | `["stamp", claim]` | target, seat_index u8, approver, approved_at i64 (0 = threshold not reached yet), bump |
+| `Objection` | `["objection", target]` | estate, target, kind TargetKind, monitor (objector), seat_index u8 (255 = not seat-specific), reason_hash, raised_at i64, status ObjectionStatus, votes_uphold u8, votes_dismiss u8, bump |
+| `AssetMedia` | `["media", asset]` | asset, kind AssetKind, photos_root [u8;32] (sha256 of the concatenated photo hashes in order), photo_count u8 (≤ 8), updated_at i64, bump |
+
+Objection targets: Claim → the Claim PDA; Unlock → the Estate PDA; Sale → the Asset PDA; Hardship → the Hardship PDA;
+Succession → the Seat PDA; Fallback → the Guard PDA. Vote bitmaps: seat i sets `1 << i`; for **Fallback** objections
+(all holders are gone) monitor j of seat i sets `1 << (2i + j)`.
+
+### New instructions
+| Instruction | Args | Signer | Rules (error if broken) |
+|---|---|---|---|
+| `init_guard` | objection_window_secs, succession_wait_secs, fallback_wait_secs (i64) | owner or agent (pays) | estate Active (BadStatus); signer owner/agent (NotOwner); all ≥ 0 (InvalidThreshold) |
+| `init_seat` | index u8, backups [Pubkey;2], monitors [Pubkey;2] | owner | Active; index < 3 (InvalidAmount); holder = verifiers[index]; backups ≠ owner, ≠ any holder, distinct (BadBackup); monitors ≠ holder, distinct (BadMonitor). A lone second entry is moved to slot 0 |
+| `set_seat_backups` | index, backups | owner (Active) or the seat's holder | NotOwner otherwise; no succession pending (SuccessionPending); BadBackup as above |
+| `set_seat_monitors` | index, monitors | owner | Active; BadMonitor as above |
+| `set_fallback` | recipients [Pubkey;4] | owner | Active; not done (FallbackDone); set entries distinct and ≠ owner (BadFallback); resets fallback_dead and fallback_started_at |
+| `report_seat_death` | index, cert_hash | anyone but the holder | seat not vacant (SeatVacant); signer ≠ holder (BadStatus); cert ≠ 0 (NoDeathClaim); none pending (SuccessionPending) |
+| `review_seat_death` | index, approve, report_hash | agent | pending (NoSuccessionPending); verdict Pending (BadStatus); reject clears the report |
+| `confirm_seat_death` | index | holder of another seat; if no other seat has a holder: backups[1] or a monitor of this seat | pending; verdict Approved (AgentNotApproved); not yet confirmed (AlreadyApproved); confirmer ≠ reporter, ≠ holder, ≠ backups[0] and allowed as above (NotConfirmer); starts the wait |
+| `veto_seat_death` | index | the holder | NotVerifier if not the holder; NoSuccessionPending; clears the report |
+| `finalize_succession` | index | anyone | pending; Approved; confirmed (NotConfirmer); now ≥ confirmed_at + succession_wait (WaitingPeriodNotOver); `["objection", seat]` not Open (ObjectionOpen). Promotes the first backup that is not the owner, not a holder, not the reporter/confirmer; backups shift ([b1, –]); a monitor equal to the new holder is dropped; generation += 1; estate.verifiers[index] = new holder. No backups → vacant, holder default. Backups exist but none eligible → BadBackup (stays pending) |
+| `owner_replace_seat` | index, new_holder | owner | Active; new_holder set, ≠ owner, not already a holder (DuplicateVerifier); clears any pending succession; generation += 1 |
+| `raise_objection` | kind, target, seat_index, reason_hash | monitor of `seat` (for Fallback also an active beneficiary) | Guard required. Claim/Sale/Hardship/Succession: monitor of seat `seat_index` (NotMonitor). Unlock: any monitor (seat_index stored 255). Fallback: any monitor or beneficiary (255). Target checks (BadStatus): Claim Open **and approved by the watched holder**; Unlock: estate DeathPending or Active with a death claim; Sale: asset Listed; Hardship: Open/Approved, approved by the watched holder, asset not Sold; Succession: report pending (NoSuccessionPending); Fallback: started (FallbackNotReady), not done (FallbackDone). Existing objection Open → ObjectionOpen; a resolved one is overwritten (re-raise), except a Dismissed one on a Claim/Hardship (BadStatus). open_objections += 1 |
+| `vote_objection` | uphold bool | the owner while Active (decides alone); else a seat holder ≠ watched holder ≠ objector (NotVerifier); Fallback: a monitor of `voter_seat` ≠ objector (NotMonitor) | objection Open (BadStatus); one vote each (AlreadyApproved); 2 uphold → Upheld, 2 dismiss → Dismissed; open_objections −= 1. Upheld: Claim → Rejected; Unlock → death claim cleared, estate Active; Sale → asset back to Held (relist to sell); Hardship → Rejected and asset.hardship_beneficiary cleared; Succession → report cleared; Fallback → fallback_started_at = 0 |
+| `set_asset_media` | kind, photos_root, photo_count | owner (Active) or agent (pays first time) | NotOwner; photo_count ≤ 8 (InvalidAmount); creates/updates AssetMedia |
+| `report_fallback_death` | index u8, cert_hash | anyone | index < 4 (InvalidAmount); not done; recipient set (NoFallbackRecipient); not already dead (BadStatus); cert ≠ 0. Emits only (the agent reviews the certificate off-chain) |
+| `review_fallback_death` | index, approve, report_hash | agent | as above; approve sets the dead bit and, if the fallback already started, **restarts the countdown** |
+| `start_fallback` | – | anyone | not done; not started (or the owner showed life since: last_heartbeat ≥ started_at) (BadStatus); all 3 Seats vacant (SeatsNotVacant); estate Unlocked or death_verdict Approved (FallbackNotReady); a living recipient (NoFallbackRecipient) |
+| `execute_fallback` | – | anyone (pays the recipient ATA) | not done; started and last_heartbeat < started_at and owner's death still established (FallbackNotReady); all seats vacant; now ≥ started + fallback_wait (WaitingPeriodNotOver); `["objection", guard]` not Open (ObjectionOpen); `recipient` = first set recipient whose dead bit is 0 (NoFallbackRecipient). Moves the **whole vault** to the recipient's ATA (init_if_needed), fallback_done = true, estate status Unlocked |
+
+### Changes to existing instructions (accounts appended at the end; no layout change)
+| Instruction | New accounts | New behaviour |
+|---|---|---|
+| `approve_claim` | payer(w,s) (verifier or sponsor), approval_stamp(w) `["stamp", claim]` (init_if_needed), system_program | stamp created on the first approval; `approved_at` set by the approval that reaches claim_threshold. Emits `SeatApproval` (kind Claim) |
+| `execute_claim` | guard `["guard", estate]`, approval_stamp `["stamp", claim]`, objection `["objection", claim]` (all unchecked PDAs, may not exist) | `["objection", claim]` Open → ObjectionOpen. If the Guard exists and the claim is not owner-approved: stamp must exist with approved_at > 0 and now ≥ approved_at + objection_window_secs (ObjectionWindowOpen) |
+| `finalize_unlock` | objection `["objection", estate]` | Open → ObjectionOpen |
+| `accept_offer` | objection `["objection", asset]`, hardship_objection | Sale objection Open → ObjectionOpen. If hardship_beneficiary = Some(b): hardship_objection must be `["objection", Hardship PDA(asset, b)]` (else BadStatus) and not Open; otherwise it is not read (pass the system program) |
+| `attest_death`, `approve_hardship` | – | also emit `SeatApproval` (kind Unlock with target = estate / kind Hardship with target = hardship) |
+
+### Accounts per new instruction (order = IDL order; o = optional, pass the program id for None)
+| Instruction | Accounts |
+|---|---|
+| init_guard | authority(w,s), estate, guard(w), system_program |
+| init_seat | owner(w,s), estate, seat(w), system_program |
+| set_seat_backups | authority(s), estate, seat(w) |
+| set_seat_monitors | owner(s), estate, seat(w) |
+| set_fallback | owner(s), estate, guard(w) |
+| report_seat_death | reporter(s), estate, seat(w) |
+| review_seat_death | agent(s), estate, seat(w) |
+| confirm_seat_death | confirmer(s), estate, seat(w) |
+| veto_seat_death | holder(s), estate, seat(w) |
+| finalize_succession | estate(w), guard, seat(w), objection (`["objection", seat]`) |
+| owner_replace_seat | owner(s), estate(w), seat(w) |
+| raise_objection | objector(w,s), estate, guard(w), seat(o), beneficiary_account(o), target_account(o: Claim/Asset/Hardship PDA for those kinds; None for Unlock/Succession/Fallback), asset(o: Hardship only), objection(w) `["objection", target]`, system_program |
+| vote_objection | voter(s), estate(w), guard(w), objection(w), voter_seat(o: Fallback only), target_account(w,o: Claim/Asset/Hardship/Seat for those kinds; None for Unlock/Fallback), asset(w,o: Hardship only) |
+| set_asset_media | authority(w,s), estate, asset, media(w), system_program |
+| report_fallback_death | reporter(s), estate, guard |
+| review_fallback_death | agent(s), estate, guard(w) |
+| start_fallback | estate, guard(w), seat0, seat1, seat2 |
+| lapse_objection | estate, guard(w), objection(w) (`["objection", guard]`) |
+| execute_fallback | payer(w,s), estate(w), guard(w), seat0, seat1, seat2, objection(w) (`["objection", guard]`), recipient, usdt_mint, vault(w), recipient_usdt(w), token_program, associated_token_program, system_program |
+
+### New events
+`SeatApproval {estate, seat_index, approver, kind, target, ts}`, `GuardInitialized {estate, objection_window_secs, succession_wait_secs, fallback_wait_secs, ts}`,
+`SeatConfigured {estate, seat_index, holder, backups, monitors, generation, ts}` (init_seat, set_seat_backups, set_seat_monitors, owner_replace_seat),
+`SeatDeathReported {estate, seat_index, holder, reported_by, cert_hash, ts}`, `SeatDeathReviewed {estate, seat_index, approved, report_hash, ts}`,
+`SeatDeathConfirmed {estate, seat_index, confirmed_by, ts}`, `SeatDeathVetoed {estate, seat_index, holder, ts}`,
+`SuccessionFinalized {estate, seat_index, previous_holder, new_holder, generation, ts}`, `SeatVacated {estate, seat_index, previous_holder, generation, ts}`,
+`ObjectionRaised {estate, objection, target, kind, monitor, seat_index, reason_hash, ts}`, `ObjectionVoted {objection, voter, uphold, ts}`,
+`ObjectionResolved {estate, objection, target, kind, upheld, ts}`, `FallbackSet {estate, recipients, ts}`,
+`FallbackDeathReported {estate, index, recipient, reported_by, cert_hash, ts}`, `FallbackDeathReviewed {estate, index, approved, report_hash, ts}`,
+`FallbackStarted {estate, runs_at, ts}`, `FallbackExecuted {estate, recipient, amount, ts}`, `AssetMediaSet {asset, kind, photos_root, photo_count, ts}`.
+
+### New errors (appended; codes 6026…6039)
+`NotMonitor 6026, ObjectionOpen 6027, ObjectionWindowOpen 6028, SuccessionPending 6029, NoSuccessionPending 6030, SeatVacant 6031,
+SeatsNotVacant 6032, NotConfirmer 6033, FallbackNotReady 6034, FallbackDone 6035, NoFallbackRecipient 6036, BadBackup 6037, BadMonitor 6038, BadFallback 6039`.
+
+### Decisions where guardians-spec.md left a gap (contract author, 2026-11-14)
+- **Objections need real, current targets:** a Claim/Hardship objection needs the watched holder's approval bit on it (monitors
+  watch approvals; they can't freeze arbitrary items). An objection may be raised any time the target is still open, not only inside the window.
+- **One Objection PDA per target, re-usable:** with seeds `["objection", target]`, seats, assets, the estate and the guard could only
+  ever get one objection. A resolved objection is therefore overwritten by a new one (the events keep the history); a Dismissed
+  objection on a one-off Claim/Hardship can't be re-raised.
+- **Upheld Sale** sets the asset back to Held (the "blocked until relisted" rule). **Upheld Hardship** also withdraws the hardship floor.
+- **Fallback objections:** every holder is gone and the owner is dead, so **monitors** vote (bitmap `1 << (2·seat + slot)`); 2 decide.
+- **Fallback objections lapse (funds are never locked forever; product owner, 2026-11-14):** an Open Fallback objection
+  not Upheld by `raised_at + fallback_wait_secs` lapses and counts as Dismissed. After that, votes on it fail (`ObjectionLapsed`).
+  Anyone may call `lapse_objection` (Fallback kind only; BadStatus otherwise or if not Open; `ObjectionNotLapsed` if too early)
+  to mark it Dismissed, which decrements open_objections and emits ObjectionResolved (upheld = false). `execute_fallback`
+  does the same itself when it finds a lapsed objection, so its `objection` account is now **writable**. A lapse does not restart
+  the countdown. A dismissed or lapsed Fallback objection can't be re-raised in the same countdown (raised_at ≥ fallback_started_at
+  → BadStatus); a restart (upheld objection, or a new recipient after a proven death) allows a new one. Upheld still resets the fallback.
+  Instruction `lapse_objection` (no args, anyone): accounts estate, guard(w) `["guard", estate]`, objection(w) `["objection", guard]`.
+  New errors: `ObjectionLapsed 6040`, `ObjectionNotLapsed 6041`.
+- **Owner signs of life void a started fallback:** `execute_fallback` requires `estate.last_heartbeat < fallback_started_at`
+  (heartbeat / veto_death update it), and `start_fallback` may restart a voided countdown. `set_fallback` also resets it.
+- **Fallback deaths:** the Guard has no field for a pending report, so `report_fallback_death` only emits an event; the agent's approval
+  sets the bit and restarts a running countdown, so family get the full wait to object to the new recipient.
+- **Succession:** the wait runs from the confirmation. A backup who reported or confirmed the death is never promoted; a backup
+  who has become another seat's holder is skipped (no duplicate verifiers). A monitor who becomes the holder is dropped as monitor.
+- **ApprovalStamp** is created (init_if_needed) on every claim's first approval, Guard or not (about 0.0012 SOL rent, paid by `payer`),
+  so a Guard added later still finds stamps. Claims approved before this upgrade have no stamp: with a Guard they need one more
+  verifier approval (which writes the stamp) before they can execute.
+- **Owner-approved claims** (living plans, owner alive) skip the objection window but still stop on an Open objection.
+- `start_fallback` / `execute_fallback` need all three Seat accounts, so the owner must create all three seats.
+- `execute_fallback` sets the estate status to Unlocked (it may still be Active with an agent-approved death claim).
+- Errors beyond the spec list: `BadFallback` (appended last). Events beyond the spec list: `GuardInitialized`, `SeatConfigured`,
+  `SeatDeathVetoed`, `ObjectionVoted`, `FallbackDeathReported`, `FallbackDeathReviewed`.

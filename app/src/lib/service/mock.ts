@@ -13,9 +13,14 @@ import type {
 import type { EstateSnapshot, HeirloomService, TxResult } from "./types";
 import { DEMO_PERSONAS as WALLET_PERSONAS } from "../wallet/personas";
 import { createMockLegacy } from "./mock-legacy";
+import { fail } from "./mock-errors";
+import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type MockGuardState, type Named } from "./mock-guardians";
+import { sha256Hex } from "../agent/hash";
+import { photosRootHex } from "../guardians/photos";
 
 export interface MockActor { address: Base58; role: Role; label: string }
-export type DemoStage = "fresh" | "funded" | "unlocked" | "listed" | "lowOffers";
+/** "guardians": the estate unlocked, with a Guard set up before Thabo passed (seats, backups, Aunt Zodwa, fallback; 60/60/120 s). */
+export type DemoStage = "fresh" | "funded" | "unlocked" | "listed" | "lowOffers" | "guardians";
 
 export interface MockService extends HeirloomService {
   mode: "mock";
@@ -26,6 +31,22 @@ export interface MockService extends HeirloomService {
   simulatePassing(): void;
   skipWait(): void;
   makeDue(): void;
+  /**
+   * Guardians demo shortcuts (mock only). Each plays steps the real people would do, or moves the demo clock;
+   * they never skip a check that the contract makes.
+   */
+  /** Thabo sets up the demo guardians (backups, Aunt Zodwa as monitor, fallback order). Estate must be active. */
+  setupDemoGuardians(): void;
+  /** Uncle Bongani (or whoever holds the seat) approves a claim, so his monitors see it in their inbox. */
+  simulateSeatApproval(index?: number): void;
+  /** "Simulate Uncle Bongani's passing": Aunt Zodwa reports it, the agent clears the certificate, another trusted person confirms. */
+  simulateSeatPassing(index?: number): void;
+  /** Move the demo clock past the objection window (approvals), the succession wait or the fallback wait. */
+  endObjectionWindow(): void;
+  endSuccessionWait(): void;
+  endFallbackWait(): void;
+  /** "All trusted people are gone": every holder and backup recorded as passed, and Thabo's passing reported and cleared. */
+  simulateAllSeatsVacant(): void;
 }
 
 export function isMockService(s: HeirloomService | null | undefined): s is MockService {
@@ -34,7 +55,7 @@ export function isMockService(s: HeirloomService | null | undefined): s is MockS
 
 /* ---------- demo cast ---------- */
 
-type PersonaKey = "thabo" | "lerato" | "sipho" | "naledi" | "nomsa" | "david" | "busi" | "zanele";
+type PersonaKey = "thabo" | "lerato" | "sipho" | "naledi" | "nomsa" | "david" | "busi" | "zanele" | "zodwa";
 
 const CAST: { key: PersonaKey; name: string; relation: string }[] = [
   { key: "thabo", name: "Thabo Mokoena", relation: "Dad" },
@@ -45,7 +66,15 @@ const CAST: { key: PersonaKey; name: string; relation: string }[] = [
   { key: "david", name: "Ms. Anita Pillay", relation: "Family attorney" },
   { key: "busi", name: "Uncle Bongani Mokoena", relation: "Thabo's brother" },
   { key: "zanele", name: "Pieter van Wyk", relation: "Car buyer" },
+  { key: "zodwa", name: "Aunt Zodwa Mokoena", relation: "Thabo's sister, watches Bongani" },
 ];
+
+/** Guardians demo cast that are not personas: Uncle Bongani's backups and the charity at the end of the fallback order. */
+export const DEMO_GUARDIANS = {
+  kagiso: { wallet: "8QDekGfekh5Bg85sbkoW5EQpxQmoqbL1SY3m3ieyW9BH", name: "Cousin Kagiso Mokoena" },
+  priya: { wallet: "34biue8WinN94cpC41bcp6YkG5EUWicexxjd3zyjcnQ1", name: "Adv. Priya Naidoo" },
+  charity: { wallet: "6gUaiCvYvtSfEY2y4ygyVSwTjnV4oNP5ENoCdweqPVsN", name: "Ithemba Children's Charity" },
+} as const;
 
 /** Same wallets, in the same order, as the wallet layer's mock personas (lib/wallet/personas.ts). */
 export const DEMO_PERSONAS: { key: PersonaKey; label: string; role: Role; relation: string; address: Base58; usdt: number }[] =
@@ -83,6 +112,8 @@ interface State {
   names: Record<Base58, string>;
   /** P2P sends: receipt plus what is needed to settle it once "the network" confirms. */
   sends: Record<string, { receipt: PaymentReceipt; from: Base58; to: Base58; toLabel: string; amount: bigint; confirmAt: number }>;
+  /** Guardians (added after v5 shipped; created on first use when a saved state has none). */
+  guard?: MockGuardState;
 }
 
 const KEY = "heirloom.mock.v5";
@@ -95,10 +126,11 @@ const fakeAddr = () => rand(44, B58);
 const fakeHash = () => rand(64, "0123456789abcdef");
 
 function serialise(s: State): string {
-  return JSON.stringify(s, (_k, v) => (typeof v === "bigint" ? { $n: v.toString() } : v));
+  // blob: URLs (photos previewed in this tab) die with the page, so they are never saved.
+  return JSON.stringify(s, (k, v) => (typeof v === "bigint" ? { $n: v.toString() } : k === "url" && typeof v === "string" && v.startsWith("blob:") ? "" : v));
 }
 function parse(raw: string): State {
-  return JSON.parse(raw, (_k, v) => (v && typeof v === "object" && typeof v.$n === "string" ? BigInt(v.$n) : v));
+  return JSON.parse(raw, (k, v) => (v && typeof v === "object" && typeof v.$n === "string" ? BigInt(v.$n) : k === "url" && typeof v === "string" && v.startsWith("blob:") ? "" : v));
 }
 
 function blank(): State {
@@ -112,8 +144,10 @@ function blank(): State {
   }
   RIVALS.forEach((r, i) => { names[r.address] = r.name; balances[r.address] = toBase(i === 0 ? 11000 : 9000); });
   PAYEES.forEach((p) => { names[p.wallet] = p.name; balances[p.wallet] = 0n; });
+  Object.values(DEMO_GUARDIANS).forEach((p) => { names[p.wallet] = p.name; balances[p.wallet] = 0n; });
   return {
     v: 5,
+    guard: blankGuard(),
     sends: {},
     created: false,
     bind,
@@ -134,15 +168,6 @@ function blank(): State {
   };
 }
 
-class ProgramError extends Error {
-  code: string;
-  constructor(code: string, detail: string) {
-    super(`${code}: ${detail}`);
-    this.code = code;
-    this.name = "ProgramError";
-  }
-}
-const fail = (code: string, detail: string): never => { throw new ProgramError(code, detail); };
 
 const usd = (b: bigint) => `${fromBase(b).toLocaleString("en-ZA", { maximumFractionDigits: 2 })} USD₮`;
 
@@ -157,9 +182,11 @@ export function floorFromText(text: string, fallback = 9000): number {
   return zar.length ? Math.round(zar[zar.length - 1] / DEMO_FX / 50) * 50 : fallback;
 }
 
-export function createMockService(): MockService {
+/** `instant: true` skips the simulated network latency (tests). */
+export function createMockService(opts: { instant?: boolean } = {}): MockService {
   let s: State = blank();
   let actor: MockActor | null = null;
+  const wait = (ms: number) => (opts.instant ? Promise.resolve() : sleep(ms));
 
   if (typeof window !== "undefined") {
     try {
@@ -194,6 +221,12 @@ export function createMockService(): MockService {
   const needBeneficiary = () => need(s.snap.beneficiaries.some((b) => b.wallet === me() && b.active), "NotBeneficiary", "Only a named family member can do this.");
   const count = (a: boolean[]) => a.filter(Boolean).length;
   const credit = (a: Base58, amt: bigint) => { s.balances[a] = (s.balances[a] ?? 0n) + amt; };
+
+  const G = createMockGuardians({
+    guard: () => (s.guard ??= blankGuard()),
+    snap: () => s.snap, names: () => s.names, created: () => s.created, me, agent: AGENT,
+    tx, log, credit, usd,
+  });
 
   /* ----- synchronous "instructions" (shared by the async API and the stage seeder) ----- */
 
@@ -274,11 +307,13 @@ export function createMockService(): MockService {
   function registerAsset(input: { nftMint: Base58; title: string; floorUsdt: number; hardshipFloorUsdt: number; askingUsdt: number; proceedsTo: Base58 }, docHash: string): TxResult {
     needCreated(); needOwner();
     need(est().status === "Active", "BadStatus", "Assets can only be added while the estate is active.");
-    need(s.snap.assets.length === 0, "BadStatus", "This prototype holds one asset per estate.");
+    // Any number of assets (car, furniture, ...), one per digital title; a missing mint gets a demo one.
+    const mint = input.nftMint || (s.snap.assets.length ? fakeAddr() : CAR_MINT);
+    need(!s.snap.assets.some((a) => a.nftMint === mint), "BadStatus", "This asset is already registered.");
     need(input.hardshipFloorUsdt > 0 && input.floorUsdt >= input.hardshipFloorUsdt, "InvalidAmount", "The hardship floor must be above zero and no higher than the minimum price.");
     need(input.askingUsdt >= input.floorUsdt, "InvalidAmount", "The asking price cannot be below the minimum price.");
     const asset: Asset = {
-      address: fakeAddr(), nftMint: input.nftMint || CAR_MINT, title: input.title, imageUrl: "/car-corolla.svg",
+      address: fakeAddr(), nftMint: mint, title: input.title, imageUrl: s.snap.assets.length === 0 ? "/car-corolla.svg" : undefined,
       floorPrice: toBase(input.floorUsdt), hardshipFloor: toBase(input.hardshipFloorUsdt), askingPrice: toBase(input.askingUsdt),
       proceedsTo: input.proceedsTo || ESTATE, status: "Held", listingEnds: null, docHash, hardshipBeneficiary: null,
     };
@@ -319,6 +354,10 @@ export function createMockService(): MockService {
       est().status = "DeathPending";
       d.pendingSince = nowSecs();
     }
+    G.recordApproval({
+      kind: "Unlock", seatIndex: i, target: est().address, t, summary: `Confirmed ${first(est().owner)}'s passing`,
+      deadline: d.pendingSince !== null ? d.pendingSince + est().waitingPeriodSecs : null,
+    });
     return t;
   }
 
@@ -339,6 +378,7 @@ export function createMockService(): MockService {
     const e = est();
     need(e.status === "DeathPending", "BadStatus", "The estate is not waiting to unlock.");
     need(force || nowSecs() >= (e.death.pendingSince ?? 0) + e.waitingPeriodSecs, "WaitingPeriodNotOver", "The waiting period has not ended yet.");
+    G.checkNotObjected(e.address);
     e.status = "Unlocked";
     for (const r of s.snap.rules) if (r.recurringAmount > 0n && r.nextDue === null) r.nextDue = nowSecs();
     const t = tx();
@@ -381,6 +421,8 @@ export function createMockService(): MockService {
     c.approvals[i] = true;
     const t = tx();
     log("ClaimApproved", `${name(me())} approved ${first(c.beneficiary)}'s claim`, t);
+    const deadline = count(c.approvals) >= est().claimThreshold ? G.stamp(c.address, i) : null;
+    G.recordApproval({ kind: "Claim", seatIndex: i, target: c.address, t, deadline, summary: `Approved ${usd(c.amount)} to ${name(c.payee)} for ${first(c.beneficiary)}` });
     return t;
   }
 
@@ -428,6 +470,7 @@ export function createMockService(): MockService {
     // As on-chain: while the owner is alive only his approval counts; after unlock his approval or the quorum.
     const approvedToPay = est().status === "Active" ? c.ownerApproved : c.ownerApproved || count(c.approvals) >= est().claimThreshold;
     need(approvedToPay, "InsufficientApprovals", est().status === "Active" ? "The owner still needs to approve this." : "A trusted person still needs to approve this.");
+    G.checkClaimExecutable(c.address, !c.ownerApproved);
     need(rule.spentTotal + c.amount <= rule.lifetimeCap, "ExceedsLifetimeCap", "This would go over the rule's total limit.");
     need(nowSecs() <= rule.validUntil, "RuleExpired", "This rule has ended.");
     need(est().vaultBalance >= c.amount, "InsufficientFunds", "The vault does not hold enough for this payment.");
@@ -512,6 +555,8 @@ export function createMockService(): MockService {
     needCreated();
     const { a, ranking, hardship } = rank(assetAddr);
     need(a.status === "Listed", "BadStatus", "This car is not listed for sale.");
+    G.checkNotObjected(a.address);
+    if (hardship) for (const h of s.snap.hardships.filter((x) => x.asset === a.address && x.status === "Approved")) G.checkNotObjected(h.address);
     need(ranking.eligible.length + ranking.ineligible.length > 0, "InvalidAmount", "There are no offers yet.");
     if (!ranking.bestOffer) {
       if (hardship) fail("BelowHardshipFloor", `No offer reaches the hardship floor of ${usd(a.hardshipFloor)}.`);
@@ -555,6 +600,7 @@ export function createMockService(): MockService {
     h.approvals[i] = true;
     const t = tx();
     log("HardshipApproved", `${name(me())} approved ${first(h.beneficiary)}'s hardship request (${count(h.approvals)} of ${est().hardshipThreshold})`, t);
+    G.recordApproval({ kind: "Hardship", seatIndex: i, target: h.address, t, deadline: null, summary: `Approved ${first(h.beneficiary)}'s request to sell below the minimum price` });
     if (count(h.approvals) >= est().hardshipThreshold) {
       h.status = "Approved";
       const a = s.snap.assets.find((x) => x.address === h.asset);
@@ -592,9 +638,24 @@ export function createMockService(): MockService {
   const zar = (usdt: number) => `R ${(usdt * DEMO_FX).toLocaleString("en-ZA", { maximumFractionDigits: 0 })}`;
   const today = () => new Date().toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
 
-  function report(purpose: "death" | "claim" | "hardship", file: File, ctx: { amountUsdt?: number; payee?: string; who?: string }): AgentReport {
+  function report(purpose: "death" | "claim" | "hardship" | "seat-death" | "fallback-death", file: File, ctx: { amountUsdt?: number; payee?: string; who?: string; person?: string }): AgentReport {
     const bad = suspicious(file);
     const who = ctx.who ?? (actor ? actor.label : "Applicant");
+    if (purpose === "seat-death" || purpose === "fallback-death") {
+      const person = ctx.person ?? "the person named";
+      return {
+        verdict: bad ? "reject" : "approve", documentType: "death_certificate",
+        extracted: { "Full name": person, "Date of death": today(), "Issued by": "Department of Home Affairs", "Form": "DHA-5 (abridged death certificate)", "Serial number": "C 5528 1307", "Reported by": who },
+        redFlags: bad ? ["The typeface in the name field differs from the rest of the form", "No official stamp is visible"] : [],
+        confidence: bad ? 0.3 : 0.93,
+        summary: bad
+          ? `This does not look like a genuine Home Affairs death certificate for ${person}. Nothing has changed.`
+          : purpose === "seat-death"
+            ? `This is an abridged death certificate for ${person}, issued by Home Affairs. The name matches the trusted person, and I found nothing unusual. Another trusted person must still confirm.`
+            : `This is an abridged death certificate for ${person}, issued by Home Affairs. The name matches the fallback recipient, so the plan will skip to the next one.`,
+        reportHash: fakeHash(),
+      };
+    }
     if (purpose === "death") {
       return {
         verdict: bad ? "reject" : "approve", documentType: "death_certificate",
@@ -679,6 +740,41 @@ export function createMockService(): MockService {
     try { return fn(); } finally { actor = prev; }
   }
 
+  function asAddr<T>(address: Base58, role: Role, label: string, fn: () => T): T {
+    const prev = actor;
+    actor = { address, role, label };
+    try { return fn(); } finally { actor = prev; }
+  }
+
+  /** Thabo's guardians: Bongani's backups are Kagiso then Adv. Naidoo; Aunt Zodwa watches Bongani; fallback to the children, then a charity. */
+  function demoGuardianInput(): { seats: { index: number; backups: Named[]; monitors: Named[] }[]; fallback: FallbackInput[] } {
+    const b = s.bind;
+    return {
+      seats: [
+        { index: 0, backups: [], monitors: [] },
+        { index: 1, backups: [], monitors: [] },
+        { index: 2, backups: [{ ...DEMO_GUARDIANS.kagiso }, { ...DEMO_GUARDIANS.priya }], monitors: [{ wallet: b.zodwa, name: "Aunt Zodwa Mokoena" }] },
+      ],
+      fallback: [
+        { wallet: b.lerato, name: "Lerato (daughter)", kind: "family" },
+        { wallet: b.sipho, name: "Sipho (son)", kind: "family" },
+        { wallet: b.naledi, name: "Naledi (daughter)", kind: "family" },
+        { ...DEMO_GUARDIANS.charity, kind: "charity" },
+      ],
+    };
+  }
+
+  const certificate = () => new File(["demo"], "death-certificate.pdf");
+
+  /** Thabo's passing reported by Lerato and cleared by the agent (no confirmations yet). */
+  function reportOwnerPassing() {
+    if (est().death.certHash) return;
+    as("lerato", () => {
+      est().death.agentReport = report("death", certificate(), { who: "Lerato Mokoena" });
+      submitDeath(fakeHash(), true);
+    });
+  }
+
   function seed(stage: DemoStage) {
     s = blank();
     if (stage === "fresh") return;
@@ -689,28 +785,26 @@ export function createMockService(): MockService {
       deposit(24000);
       const car = draft.assets[0];
       registerAsset({ nftMint: CAR_MINT, title: car.title, floorUsdt: car.floorPriceUsdt, hardshipFloorUsdt: car.hardshipFloorUsdt, askingUsdt: car.askingPriceUsdt, proceedsTo: ESTATE }, fakeHash());
+      // Only the guardians stage has a Guard, so the stock demo (approve, then pay at once) is unchanged.
+      if (stage === "guardians") G.setup(demoGuardianInput());
     });
     as("thabo", () => {
       const allowance = s.snap.rules.find((r) => r.startsNow && r.recurringAmount > 0n);
       if (allowance) executeScheduled(allowance.address, true);
     });
     if (stage === "funded") return;
-    as("lerato", () => {
-      const f = new File(["demo"], "death-certificate.pdf");
-      est().death.agentReport = report("death", f, { who: "Lerato Mokoena" });
-      submitDeath(fakeHash(), true);
-    });
+    reportOwnerPassing();
     as("nomsa", attestDeath);
     as("david", attestDeath);
     finalizeUnlock(true);
-    if (stage === "unlocked") return;
+    if (stage === "unlocked" || stage === "guardians") return;
     as("nomsa", () => listAsset(s.snap.assets[0].address, 7 * 86400, stage === "lowOffers" ? "low" : "both"));
   }
 
   /* ----- public API ----- */
 
   const mutate = async <T>(ms: number, fn: () => T): Promise<T> => {
-    await sleep(ms);
+    await wait(ms);
     const out = fn();
     save();
     return out;
@@ -739,7 +833,7 @@ export function createMockService(): MockService {
     resetDemo(stage) { seed(stage); save(); resetLegacy(); },
 
     async reviewSend({ to, toLabel, amountUsdt }) {
-      await sleep(500);
+      await wait(500);
       const from = me();
       const dest = to.trim();
       need(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(dest), "InvalidAddress", "That is not a valid Solana address.");
@@ -765,7 +859,7 @@ export function createMockService(): MockService {
     async confirmSend(review) {
       const existing = s.sends[review.id];
       if (existing) return { ...existing.receipt }; // idempotent: a retry never pays twice
-      await sleep(1200); // signing with the WDK wallet
+      await wait(1200); // signing with the WDK wallet
       need(me() === review.from, "NotOwner", "This payment was prepared by a different wallet.");
       need((s.balances[review.from] ?? 0n) >= review.amount, "InsufficientFunds", "Your wallet does not hold that much USD₮.");
       s.balances[review.from] -= review.amount;
@@ -776,15 +870,15 @@ export function createMockService(): MockService {
       return { ...receipt };
     },
     async getReceipt(id) {
-      await sleep(350);
+      await wait(350);
       return settle(id);
     },
     async listPendingReceipts() {
-      await sleep(200);
+      await wait(200);
       return Object.keys(s.sends).map((id) => settle(id)!).filter((r) => r.status === "pending" || r.status === "submitted");
     },
     async savedRecipients() {
-      await sleep(150);
+      await wait(150);
       const self = actor?.address;
       const out: SavedRecipient[] = s.created
         ? [
@@ -798,13 +892,7 @@ export function createMockService(): MockService {
     simulatePassing() {
       needCreated();
       need(est().status === "Active", "BadStatus", "A passing is already being confirmed.");
-      if (!est().death.certHash) {
-        as("lerato", () => {
-          const f = new File(["demo"], "death-certificate.pdf");
-          est().death.agentReport = report("death", f, { who: "Lerato Mokoena" });
-          submitDeath(fakeHash(), true);
-        });
-      }
+      reportOwnerPassing();
       for (const key of ["nomsa", "david"] as const) {
         if (est().status === "Active" && !est().death.attestations[est().verifiers.indexOf(s.bind[key])]) as(key, attestDeath);
       }
@@ -818,25 +906,79 @@ export function createMockService(): MockService {
     },
     balanceOf(address) { return s.balances[address] ?? null; },
 
-    async getEstate() {
-      await sleep(120);
+    setupDemoGuardians() {
       needCreated();
-      return structuredClone(s.snap);
+      as("thabo", () => G.setup(demoGuardianInput()));
+      save();
+    },
+    simulateSeatApproval(index = 2) {
+      needCreated();
+      const holder = est().verifiers[index];
+      need(!!holder && holder !== VACANT_KEY, "SeatVacant", "This seat is empty.");
+      const unlocked = est().status === "Unlocked";
+      // Lerato's university fees: after unlock the legacy rule, before it the living-plan rule.
+      const rule = s.snap.rules.find((r) => r.category === "Tuition" && r.beneficiary === s.bind.lerato && (unlocked || r.startsNow))
+        ?? fail("BadStatus", "There is no claim Lerato could make yet.");
+      const payee = s.snap.payees.find((p) => p.kind === rule.allowedPayeeKind) ?? fail("BadStatus", "There is no approved institution.");
+      let claim = s.snap.claims.find((c) => c.rule === rule.address && c.status === "Open" && !c.approvals[index]);
+      if (!claim) {
+        const amountUsdt = Math.min(3500, fromBase(rule.maxPerClaim));
+        const r = report("claim", new File(["demo"], "fee-statement.pdf"), { amountUsdt, payee: payee.name, who: "Lerato Mokoena" });
+        claim = as("lerato", () => submitClaim({ rule: rule.address, payee: payee.wallet, amountUsdt }, fakeHash(), r)).claim;
+      }
+      const target = claim.address;
+      asAddr(holder, "verifier", name(holder), () => approveClaim(target));
+      save();
+    },
+    simulateSeatPassing(index = 2) {
+      needCreated();
+      const st = G.seat(index);
+      const holder = st.holder ?? fail("SeatVacant", "This seat is empty.");
+      if (!st.succession) {
+        // Reported by a monitor of the seat (Aunt Zodwa for Bongani), else by Lerato.
+        const reporter = st.monitors[0] ?? s.bind.lerato;
+        asAddr(reporter, "monitor", name(reporter), () =>
+          G.reportSeatDeath(index, fakeHash(), report("seat-death", certificate(), { person: name(holder), who: name(reporter) })));
+      }
+      const sc = G.seat(index).succession;
+      if (sc && !sc.confirmedBy) {
+        const others = G.otherLivingHolders(index);
+        const pool = others.length ? others : [st.backups[1], ...st.monitors].filter((w): w is Base58 => !!w);
+        const confirmer = pool.find((w) => w !== sc.reportedBy && w !== st.backups[0]) ?? fail("NotConfirmer", "Nobody is left who can confirm this.");
+        asAddr(confirmer, "verifier", name(confirmer), () => G.confirmSeatDeath(index));
+      }
+      save();
+    },
+    endObjectionWindow() { G.endObjectionWindow(); save(); },
+    endSuccessionWait() { G.endSuccessionWait(); save(); },
+    endFallbackWait() { G.endFallbackWait(); save(); },
+    simulateAllSeatsVacant() {
+      needCreated();
+      G.vacateAllSeats();
+      if (est().status === "Active") reportOwnerPassing();
+      save();
+    },
+
+    async getEstate() {
+      await wait(120);
+      needCreated();
+      return { ...structuredClone(s.snap), guardians: G.snapshot() };
     },
     async listEstatesFor(wallet) {
-      await sleep(80);
+      await wait(80);
       if (!s.created) return [];
       const e = est();
-      const role = wallet === e.owner ? "owner" : e.verifiers.includes(wallet) ? "verifier" : s.snap.beneficiaries.some((b) => b.wallet === wallet) ? "beneficiary" : "buyer";
+      const monitor = !!s.guard?.enabled && s.guard.seats.some((x) => x.monitors.includes(wallet));
+      const role = wallet === e.owner ? "owner" : e.verifiers.includes(wallet) ? "verifier" : s.snap.beneficiaries.some((b) => b.wallet === wallet) ? "beneficiary" : monitor ? "monitor" : "buyer";
       return [{ estate: e.address, role, ownerName: e.ownerName }];
     },
     async getFx() {
-      await sleep(60);
+      await wait(60);
       return { usdtZar: DEMO_FX, source: "VALR (demo rate)", fetchedAt: nowSecs() };
     },
 
     async willChat(history) {
-      await sleep(1100);
+      await wait(1100);
       const { stage, draft } = draftFor(history);
       const firstName = draft.ownerName.split(" ")[0];
       const reply = stage <= 1
@@ -847,11 +989,11 @@ export function createMockService(): MockService {
       return { reply, draft };
     },
     async reviewDocument({ file, purpose, context }) {
-      await sleep(1600);
+      await wait(1600);
       return report(purpose, file, { payee: context });
     },
     async valueCar({ make, model, year, mileageKm, condition }) {
-      await sleep(1700);
+      await wait(1700);
       const cond = /excellent/i.test(condition) ? 1.04 : /fair|poor/i.test(condition) ? 0.9 : 1;
       const baseZar = Math.max(60000, (175000 + (year - 2016) * 9500 + (118000 - mileageKm) * 0.22) * cond);
       const round = (z: number) => Math.round(z / 100) * 100 - 100;
@@ -868,7 +1010,7 @@ export function createMockService(): MockService {
       return out;
     },
     async rankOffers(asset) {
-      await sleep(300);
+      await wait(300);
       needCreated();
       return rank(asset).ranking;
     },
@@ -926,7 +1068,7 @@ export function createMockService(): MockService {
       needCreated(); needBeneficiary();
       need(est().status === "Active", "BadStatus", "A passing has already been reported for this estate.");
       const hash = await hashFile(certificate);
-      await sleep(1900);
+      await wait(1900);
       const r = report("death", certificate, {});
       const t = submitDeath(hash, r.verdict === "approve");
       if (r.verdict === "approve") est().death.agentReport = r;
@@ -935,7 +1077,7 @@ export function createMockService(): MockService {
     },
     async submitClaim(_e, input) {
       const hash = await hashFile(input.evidence);
-      await sleep(1900);
+      await wait(1900);
       const payee = s.snap.payees.find((p) => p.wallet === input.payee);
       const r = report("claim", input.evidence, { amountUsdt: input.amountUsdt, payee: payee?.name });
       const { t, claim } = submitClaim(input, hash, r);
@@ -944,7 +1086,7 @@ export function createMockService(): MockService {
     },
     async submitHardship(_e, input) {
       const hash = await hashFile(input.evidence);
-      await sleep(1900);
+      await wait(1900);
       const r = report("hardship", input.evidence, {});
       const t = submitHardship(input.asset, hash, r);
       save();
@@ -963,6 +1105,67 @@ export function createMockService(): MockService {
     async acceptBestOffer(_e, asset) {
       const { t, ranking } = await mutate(1600, () => acceptBest(asset));
       return { tx: t, ranking };
+    },
+
+    /* ----- guardians (docs/guardians-spec.md; rules in mock-guardians.ts) ----- */
+    async getGuardians() {
+      await wait(100);
+      needCreated();
+      return G.snapshot();
+    },
+    setupGuardians: (_e, input) => mutate(1400, () => G.setup(input)),
+    setSeatBackups: (_e, index, backups) => mutate(800, () => {
+      for (const b of backups) if (!(b.wallet in s.names)) s.names[b.wallet] = b.name;
+      return G.setBackups(index, backups.map((b) => b.wallet));
+    }),
+    setSeatMonitors: (_e, index, monitors) => mutate(800, () => {
+      for (const m of monitors) if (!(m.wallet in s.names)) s.names[m.wallet] = m.name;
+      return G.setMonitors(index, monitors.map((m) => m.wallet));
+    }),
+    setFallback: (_e, recipients) => mutate(800, () => G.setFallback(recipients)),
+
+    async reportSeatDeath(_e, index, certificate) {
+      needCreated();
+      const holder = G.seat(index).holder ?? fail("SeatVacant", "This seat is already empty.");
+      const hash = await hashFile(certificate);
+      await wait(1900);
+      const r = report("seat-death", certificate, { person: name(holder) });
+      const t = G.reportSeatDeath(index, hash, r);
+      save();
+      return { tx: t, report: r };
+    },
+    confirmSeatDeath: (_e, index) => mutate(900, () => G.confirmSeatDeath(index)),
+    vetoSeatDeath: (_e, index) => mutate(800, () => G.vetoSeatDeath(index)),
+    finalizeSuccession: (_e, index) => mutate(900, () => G.finalizeSuccession(index)),
+
+    async raiseObjection(_e, input) {
+      const reasonHash = await sha256Hex(input.reason.trim());
+      return mutate(900, () => G.raiseObjection(input, reasonHash));
+    },
+    voteObjection: (_e, objection, uphold) => mutate(900, () => G.voteObjection(objection, uphold)),
+
+    async reportFallbackDeath(_e, i, certificate) {
+      needCreated();
+      const person = s.guard?.fallback[i]?.name ?? fail("NoFallbackRecipient", "That fallback recipient does not exist.");
+      const hash = await hashFile(certificate);
+      await wait(1900);
+      const r = report("fallback-death", certificate, { person });
+      const t = G.reportFallbackDeath(i, hash, r);
+      save();
+      return { tx: t, report: r };
+    },
+    startFallback: () => mutate(900, () => G.startFallback()),
+    lapseObjection: () => mutate(800, () => G.lapseObjection()),
+    executeFallback: () => mutate(1200, () => G.executeFallback()),
+
+    async getAssetMedia() {
+      await wait(100);
+      needCreated();
+      return G.assetMedia();
+    },
+    async setAssetMedia(_e, asset, input) {
+      const root = await photosRootHex(input.photos.map((p) => p.sha256));
+      return mutate(900, () => G.setAssetMedia(asset, input, root));
     },
   };
 }

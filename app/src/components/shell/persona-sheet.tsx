@@ -5,6 +5,8 @@ import { Check, Download, Plus, RotateCcw } from "@/components/ui/icons";
 import type { Role } from "@/lib/types";
 import { isMockService, type DemoStage } from "@/lib/service/mock";
 import type { DemoShortcut } from "@/lib/hooks/estate";
+import type { EstateSnapshot } from "@/lib/service";
+import { allVacant, guardiansOf } from "@/components/guardians/derive";
 import { formatUsdt, shortAddress } from "@/lib/format";
 import { useWallet } from "@/lib/hooks/wallet-source";
 import { useEstate } from "@/lib/hooks/estate";
@@ -16,16 +18,33 @@ import { useInstall } from "./install";
 import { setTheme, useTheme } from "./theme";
 import { LanguageSwitcher } from "@/components/site/language-switcher";
 
-const ORDER: Role[] = ["owner", "beneficiary", "verifier", "buyer", "agent"];
-const STAGES: DemoStage[] = ["fresh", "funded", "unlocked", "listed", "lowOffers"];
+const ORDER: Role[] = ["owner", "beneficiary", "verifier", "monitor", "buyer", "agent"];
+const STAGES: DemoStage[] = ["fresh", "funded", "unlocked", "listed", "lowOffers", "guardians"];
+type GuardShortcut = "setupDemoGuardians" | "simulateSeatApproval" | "simulateSeatPassing" | "endObjectionWindow" | "endSuccessionWait" | "endFallbackWait" | "simulateAllSeatsVacant";
+
+/** Which guardians shortcuts make sense right now (mock only). */
+function guardShortcuts(snap: EstateSnapshot): GuardShortcut[] {
+  const g = guardiansOf(snap);
+  const active = snap.estate.status === "Active";
+  if (!g?.enabled) return active ? ["setupDemoGuardians"] : [];
+  const bongani = g.seats[2];
+  const out: GuardShortcut[] = [];
+  if (bongani && !bongani.vacant) out.push("simulateSeatApproval");
+  if (bongani && !bongani.vacant && !bongani.succession) out.push("simulateSeatPassing");
+  if (g.feed.some((f) => f.objectionDeadline !== null)) out.push("endObjectionWindow");
+  if (g.seats.some((s) => s.succession?.confirmedBy)) out.push("endSuccessionWait");
+  if (g.fallback.startedAt !== null && !g.fallback.done) out.push("endFallbackWait");
+  if (!allVacant(g)) out.push("simulateAllSeatsVacant");
+  return out;
+}
 const SHORTCUTS: DemoShortcut[] = ["simulatePassing", "skipWait", "makeDue"];
 
 /** The persona switcher: pick who you are acting as, plus demo controls and appearance. */
 export function PersonaSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { common } = useCopy();
+  const { common, guardians: gc } = useCopy();
   const c = common.persona;
   const wallet = useWallet();
-  const { isMock, resetDemo, demoShortcut, notify, session, snap, service } = useEstate();
+  const { isMock, resetDemo, demoShortcut, notify, session, snap, service, refresh, explain } = useEstate();
   const mock = isMockService(service) ? service : null;
   const install = useInstall();
   const { theme } = useTheme();
@@ -91,6 +110,25 @@ export function PersonaSheet({ open, onClose }: { open: boolean; onClose: () => 
                       className="min-h-11 rounded-full bg-ink px-3.5 text-small font-semibold text-bg"
                     >
                       {common.demo.shortcuts[k]}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {snap && mock && guardShortcuts(snap).length > 0 && (
+              <>
+                <h4 className="mt-3 text-small font-semibold">{gc.demo.title}</h4>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {guardShortcuts(snap).map((k) => (
+                    <button
+                      key={k} type="button"
+                      onClick={async () => {
+                        try { mock[k](); await refresh(); notify("info", common.demo.shortcutDone); onClose(); }
+                        catch (e) { notify("error", explain(e).message); }
+                      }}
+                      className="min-h-11 rounded-full bg-ink px-3.5 text-small font-semibold text-bg"
+                    >
+                      {gc.demo[k]}
                     </button>
                   ))}
                 </div>

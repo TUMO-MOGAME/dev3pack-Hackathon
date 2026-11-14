@@ -3,8 +3,9 @@ import { createContext, useContext, type ReactNode } from "react";
 import type { CommonCopy } from "@/content/common";
 import type { AssistantCopy } from "@/content/assistant";
 import type { PayCopy } from "@/content/pay";
+import type { GuardiansCopy } from "@/content/guardians";
 
-interface ShellCopy { common: CommonCopy; assistant: AssistantCopy; pay: PayCopy; siteName: string }
+interface ShellCopy { common: CommonCopy; assistant: AssistantCopy; pay: PayCopy; guardians: GuardiansCopy; siteName: string }
 const Ctx = createContext<ShellCopy | null>(null);
 
 /** Shell copy is passed once from the server layout and shared with in-app client components. */

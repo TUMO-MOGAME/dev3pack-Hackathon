@@ -1,15 +1,20 @@
 pub mod claims;
 pub mod death;
+pub mod guardians;
 pub mod sale;
 pub mod setup;
 
 pub use claims::*;
 pub use death::*;
+pub use guardians::*;
 pub use sale::*;
 pub use setup::*;
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, CloseAccount, TransferChecked};
+
+use crate::errors::HeirloomError;
+use crate::state::{Objection, ObjectionStatus};
 
 pub(crate) fn now() -> Result<i64> {
     Ok(Clock::get()?.unix_timestamp)
@@ -58,4 +63,35 @@ pub(crate) fn close_token_account_cpi<'info>(
         authority,
     };
     token::close_account(CpiContext::new_with_signer(token_program, accounts, signer_seeds))
+}
+
+/// True if `info` holds an initialised account of this program (used for PDAs passed unchecked,
+/// e.g. the Guard, ApprovalStamp and Objection, which may not exist).
+pub(crate) fn account_exists(info: &AccountInfo) -> bool {
+    info.owner == &crate::ID && info.data_len() > 0 && info.lamports() > 0
+}
+
+/// Reads a program account passed as an UncheckedAccount (owner + discriminator checked).
+pub(crate) fn read_account<T: AccountDeserialize>(info: &AccountInfo) -> Result<T> {
+    require!(account_exists(info), HeirloomError::BadStatus);
+    let data = info.try_borrow_data()?;
+    T::try_deserialize(&mut &data[..])
+}
+
+/// Writes back a program account read with `read_account`.
+pub(crate) fn write_account<T: AccountSerialize>(info: &AccountInfo, value: &T) -> Result<()> {
+    require!(info.owner == &crate::ID && info.is_writable, HeirloomError::BadStatus);
+    let mut data = info.try_borrow_mut_data()?;
+    let mut writer: &mut [u8] = &mut data[..];
+    value.try_serialize(&mut writer)
+}
+
+/// The `["objection", target]` PDA (address already checked by a seeds constraint) is Open.
+/// An account that doesn't exist yet counts as "no objection".
+pub(crate) fn objection_is_open(info: &AccountInfo) -> Result<bool> {
+    if !account_exists(info) {
+        return Ok(false);
+    }
+    let o: Objection = read_account(info)?;
+    Ok(o.status == ObjectionStatus::Open)
 }

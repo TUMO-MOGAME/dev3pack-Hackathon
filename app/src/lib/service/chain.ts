@@ -17,9 +17,9 @@ import * as ix from "../chain/instructions";
 import { ata, claimPda, estatePda, offerPda, hardshipPda } from "../chain/pda";
 import { demoEstateFirst } from "../chain/demo-estate";
 import { base64ToBytes, bytesToBase64, ChainTxError, getConnection } from "../chain/tx";
-import { fetchAccountRaw, fetchActivity, fetchEstateRaw, findEstateOf, invalidateProgramAccounts, scanAccounts } from "../chain/reads";
+import { activityFrom, fetchAccountRaw, fetchEstateRaw, fetchEvents, findEstateOf, invalidateProgramAccounts, scanAccounts } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
-import { key, num, type Raw } from "../chain/decoders";
+import { hex, key, num, type Raw } from "../chain/decoders";
 import { getActiveSigner } from "../wallet/signer";
 import {
   defaultReceiptStore, feeForReview, newPaymentId, openReceipts, recheck, resumeOnReconnect, runPayment, signSponsoredOrSelf, SponsorError, waitForFinal,
@@ -32,6 +32,13 @@ import { hashJson, sha256Hex } from "../agent/hash";
 import { intervalSecs, willDraftSchema } from "../agent/schemas";
 import type { EstateMeta } from "../db";
 import { legacyApi, type LegacySigner } from "../legacy/client";
+import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-guardians";
+import { disabledGuardians } from "../chain/guardians";
+import { SystemProgram } from "@solana/web3.js";
+import {
+  AuthorityType, MINT_SIZE, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction as createAtaIx,
+  createInitializeMint2Instruction, createMintToInstruction, createSetAuthorityInstruction,
+} from "@solana/spl-token";
 
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
 function legacySigner(estate: Base58): LegacySigner {
@@ -99,8 +106,11 @@ async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to"
   }), meta);
 }
 
-/** Every user-initiated program tx goes through the same pay-once pipeline and waits for confirmation. */
-async function send(ixs: TransactionInstruction[], meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount"> = { kind: "program" }): Promise<TxResult> {
+/**
+ * Every user-initiated program tx goes through the same pay-once pipeline and waits for confirmation. `ixs` may depend
+ * on the fee payer (e.g. approve_claim lets the sponsor pay the approval stamp's rent when it is the fee payer).
+ */
+async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount"> = { kind: "program" }): Promise<TxResult> {
   const id = newPaymentId();
   const first = await pay(id, ixs, meta);
   const r = first.status === "failed" ? first : await waitForFinal(receipts, chainOps(), id, 60_000, 800);
@@ -127,13 +137,14 @@ function reviveRanking(r: { bestOffer: Base58 | null; eligible: { offer: Base58;
   return { bestOffer: r.bestOffer, eligible: r.eligible.map(f), ineligible: r.ineligible.map(f) };
 }
 
-async function review(file: File, purpose: "death" | "claim" | "hardship", estate: Base58, context: string, subject?: Base58, preview = false) {
+async function review(file: File, purpose: "death" | "claim" | "hardship" | "seat-death" | "fallback-death", estate: Base58, context: string, subject?: Base58, preview = false, index?: number) {
   const form = new FormData();
   form.set("file", file);
   form.set("purpose", purpose);
   form.set("estate", estate);
   form.set("context", context);
   if (subject) form.set("subject", subject);
+  if (index !== undefined) form.set("index", String(index));
   if (preview) form.set("preview", "1");
   return api<{ report: AgentReport; tx: TxResult | null; onChain: string }>("/api/review", { method: "POST", body: form });
 }
@@ -203,21 +214,51 @@ async function listEstatesUncached(wallet: Base58) {
 // ---------- the service ----------
 let resumed = false;
 
+/**
+ * A fresh SPL title mint for a new asset (0 decimals, supply 1 in the owner's account, mint authority removed), at an
+ * address derived from the owner + a random seed so only the owner signs. The asset PDA is then seeded by this mint.
+ */
+async function newTitleMint(owner: PublicKey): Promise<{ mint: PublicKey; ixs: TransactionInstruction[] }> {
+  const seed = `heirloom-asset-${crypto.getRandomValues(new Uint32Array(2)).join("").slice(0, 16)}`;
+  const mint = await PublicKey.createWithSeed(owner, seed, TOKEN_PROGRAM_ID);
+  const lamports = await getConnection().getMinimumBalanceForRentExemption(MINT_SIZE);
+  const ownerAta = ata(mint, owner);
+  return {
+    mint,
+    ixs: [
+      SystemProgram.createAccountWithSeed({ fromPubkey: owner, basePubkey: owner, seed, newAccountPubkey: mint, lamports, space: MINT_SIZE, programId: TOKEN_PROGRAM_ID }),
+      createInitializeMint2Instruction(mint, 0, owner, null),
+      createAtaIx(owner, ownerAta, owner, mint),
+      createMintToInstruction(mint, ownerAta, owner, 1),
+      createSetAuthorityInstruction(mint, owner, AuthorityType.MintTokens, null),
+    ],
+  };
+}
+
 export function createChainService(): HeirloomService {
   // Once per page: re-check payments left pending by an earlier visit, now and whenever the browser reconnects.
   if (!resumed && typeof window !== "undefined") { resumed = true; resumeOnReconnect(receipts, chainOps()); }
-  return {
+  const service: HeirloomService = {
     mode: "chain",
+    ...createChainGuardians({
+      send: (ixs) => send(ixs),
+      review: (file, purpose, estate, context, index) => review(file, purpose, estate, context, undefined, false, index),
+      getMeta,
+      saveMeta: async (meta) => { await post("/api/estate-meta", meta); forget(`meta:${meta.estate}`); },
+      requireOwnerOf,
+      getEstate: (estate) => service.getEstate(estate),
+    }),
 
     async getEstate(estate): Promise<EstateSnapshot> {
       const meta = await getMeta(estate);
       // Names are off-chain. Without Supabase the server keeps them in memory only, so after a restart fall back to
       // the owner's wallet label when that wallet is on this device.
       const localOwner = meta ? undefined : loadWallets().find((w) => estatePda(chainCtx().programId, w.address).toBase58() === estate)?.label;
-      const [raw, activity] = await Promise.all([
+      const [raw, events] = await Promise.all([
         fetchEstateRaw(estate, meta ?? (localOwner ? { ownerName: localOwner } : {})),
-        cached(`activity:${estate}`, 20_000, () => fetchActivity(estate)).catch(() => []),
+        cached(`activity:${estate}`, 20_000, () => fetchEvents(estate)).catch(() => []),
       ]);
+      const activity = activityFrom(events);
       // The death review's report hash lives in the latest DeathReviewed event (the Estate account keeps only the cert hash).
       const deathHash = raw.estate.death.certHash ? activity.find((a) => a.kind === "DeathReviewed")?.reportHash : undefined;
       const hashes = [...new Set([...Object.values(raw.reportHashes), ...(deathHash ? [deathHash] : [])])];
@@ -226,7 +267,21 @@ export function createChainService(): HeirloomService {
         : {};
       const snap = assembleSnapshot(raw, activity, reports);
       const deathReport = deathHash ? reports[deathHash] : undefined;
-      return deathReport ? { ...snap, estate: { ...snap.estate, death: { ...snap.estate.death, agentReport: deathReport } } } : snap;
+      const out = deathReport ? { ...snap, estate: { ...snap.estate, death: { ...snap.estate.death, agentReport: deathReport } } } : snap;
+      // Guardians: seat death reviews carry report hashes too (SeatDeathReviewed events).
+      const seatHashes = events.filter((e) => e.name.toLowerCase() === "seatdeathreviewed").map((e) => { try { return hex(e.data, "report_hash"); } catch { return ""; } })
+        .filter((h) => h && !(h in reports));
+      const seatReports = seatHashes.length
+        ? await api<Record<string, AgentReport>>(`/api/reports?hashes=${[...new Set(seatHashes)].join(",")}`).catch(() => ({} as Record<string, AgentReport>))
+        : {};
+      const extras = guardianExtras(meta, { ...reports, ...seatReports });
+      const guardians = await loadGuardians(estate, { estate: out.estate, claims: out.claims, events }, extras).catch(() => disabledGuardians());
+      // A successor's display name (the estate meta still holds the original three names).
+      const verifierNames = out.estate.verifierNames.map((n, i) => {
+        const seat = guardians.seats.find((x) => x.index === i);
+        return seat?.holder && seat.generation > 0 ? (extras.names[seat.holder] ?? n) : n;
+      }) as [string, string, string];
+      return { ...out, estate: { ...out.estate, verifierNames }, guardians };
     },
 
     listEstatesFor(wallet) {
@@ -322,13 +377,23 @@ export function createChainService(): HeirloomService {
 
     async registerAsset(estate, input) {
       const o = requireOwnerOf(estate);
-      const docHash = input.docFile ? await fileHash(input.docFile) : await sha256Hex(`heirloom:asset:${input.nftMint}:${input.title}`);
+      // Any new asset without a title token gets a fresh one (its own tx: the sponsor does not pay for mints).
+      let nftMint = input.nftMint;
+      if (!nftMint) {
+        const fresh = await newTitleMint(o);
+        await send(fresh.ixs);
+        nftMint = fresh.mint.toBase58();
+      }
+      const docHash = input.docFile ? await fileHash(input.docFile) : await sha256Hex(`heirloom:asset:${nftMint}:${input.title}`);
       const tx = await send([ix.registerAsset(chainCtx(), o, {
-        nftMint: pk(input.nftMint), floorPrice: toBase(input.floorUsdt), hardshipFloor: toBase(input.hardshipFloorUsdt),
+        nftMint: pk(nftMint), floorPrice: toBase(input.floorUsdt), hardshipFloor: toBase(input.hardshipFloorUsdt),
         askingPrice: toBase(input.askingUsdt), proceedsTo: pk(input.proceedsTo), docHashHex: docHash,
       })]);
       const meta = await getMeta(estate);
-      if (meta) await post("/api/estate-meta", { ...meta, assetTitles: { ...meta.assetTitles, [input.nftMint]: input.title } }).catch(() => undefined);
+      if (meta) {
+        await post("/api/estate-meta", { ...meta, assetTitles: { ...meta.assetTitles, [nftMint]: input.title } }).catch(() => undefined);
+        forget(`meta:${estate}`);
+      }
       return tx;
     },
 
@@ -404,7 +469,14 @@ export function createChainService(): HeirloomService {
 
     async approveClaim(estate, claim) {
       const raw = await mustFetch("Claim", claim);
-      return send([ix.approveClaim(pk(estate), pk(getActiveSigner().address), pk(claim), pk(key(raw, "rule")))]);
+      const verifier = pk(getActiveSigner().address);
+      // The fee payer (Heirloom's sponsor when available) also pays the approval stamp's rent.
+      return send((feePayer) => {
+        const t = ix.approveClaim(pk(estate), verifier, pk(claim), pk(key(raw, "rule")));
+        const at = t.keys.findIndex((k, i) => i > 0 && k.pubkey.equals(verifier) && k.isWritable);
+        if (at > 0 && !feePayer.equals(verifier)) t.keys[at] = { ...t.keys[at], pubkey: feePayer };
+        return [t];
+      });
     },
 
     async approveHardship(estate, hardship) {
@@ -544,4 +616,5 @@ export function createChainService(): HeirloomService {
       catch (e) { if ((e as { status?: number }).status === 503) return null; throw e; }
     },
   };
+  return service;
 }

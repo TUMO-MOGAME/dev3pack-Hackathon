@@ -188,4 +188,108 @@ pub mod heirloom {
     pub fn accept_offer(ctx: Context<AcceptOffer>) -> Result<()> {
         instructions::sale::accept_offer_handler(ctx)
     }
+
+    // ------------------------------------------------------------------ guardians (2026-11-14)
+
+    pub fn init_guard(
+        ctx: Context<InitGuard>,
+        objection_window_secs: i64,
+        succession_wait_secs: i64,
+        fallback_wait_secs: i64,
+    ) -> Result<()> {
+        instructions::guardians::init_guard_handler(ctx, objection_window_secs, succession_wait_secs, fallback_wait_secs)
+    }
+
+    pub fn init_seat(ctx: Context<InitSeat>, index: u8, backups: [Pubkey; 2], monitors: [Pubkey; 2]) -> Result<()> {
+        instructions::guardians::init_seat_handler(ctx, index, backups, monitors)
+    }
+
+    pub fn set_seat_backups(ctx: Context<SetSeatBackups>, index: u8, backups: [Pubkey; 2]) -> Result<()> {
+        instructions::guardians::set_seat_backups_handler(ctx, index, backups)
+    }
+
+    pub fn set_seat_monitors(ctx: Context<SetSeatMonitors>, index: u8, monitors: [Pubkey; 2]) -> Result<()> {
+        instructions::guardians::set_seat_monitors_handler(ctx, index, monitors)
+    }
+
+    pub fn set_fallback(ctx: Context<SetFallback>, recipients: [Pubkey; 4]) -> Result<()> {
+        instructions::guardians::set_fallback_handler(ctx, recipients)
+    }
+
+    pub fn report_seat_death(ctx: Context<ReportSeatDeath>, index: u8, cert_hash: [u8; 32]) -> Result<()> {
+        instructions::guardians::report_seat_death_handler(ctx, index, cert_hash)
+    }
+
+    pub fn review_seat_death(
+        ctx: Context<ReviewSeatDeath>,
+        index: u8,
+        approve: bool,
+        report_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::guardians::review_seat_death_handler(ctx, index, approve, report_hash)
+    }
+
+    pub fn confirm_seat_death(ctx: Context<ConfirmSeatDeath>, index: u8) -> Result<()> {
+        instructions::guardians::confirm_seat_death_handler(ctx, index)
+    }
+
+    pub fn veto_seat_death(ctx: Context<VetoSeatDeath>, index: u8) -> Result<()> {
+        instructions::guardians::veto_seat_death_handler(ctx, index)
+    }
+
+    pub fn finalize_succession(ctx: Context<FinalizeSuccession>, index: u8) -> Result<()> {
+        instructions::guardians::finalize_succession_handler(ctx, index)
+    }
+
+    pub fn owner_replace_seat(ctx: Context<OwnerReplaceSeat>, index: u8, new_holder: Pubkey) -> Result<()> {
+        instructions::guardians::owner_replace_seat_handler(ctx, index, new_holder)
+    }
+
+    pub fn raise_objection(
+        ctx: Context<RaiseObjection>,
+        kind: TargetKind,
+        target: Pubkey,
+        seat_index: u8,
+        reason_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::guardians::raise_objection_handler(ctx, kind, target, seat_index, reason_hash)
+    }
+
+    pub fn vote_objection(ctx: Context<VoteObjection>, uphold: bool) -> Result<()> {
+        instructions::guardians::vote_objection_handler(ctx, uphold)
+    }
+
+    pub fn set_asset_media(
+        ctx: Context<SetAssetMedia>,
+        kind: AssetKind,
+        photos_root: [u8; 32],
+        photo_count: u8,
+    ) -> Result<()> {
+        instructions::guardians::set_asset_media_handler(ctx, kind, photos_root, photo_count)
+    }
+
+    pub fn report_fallback_death(ctx: Context<ReportFallbackDeath>, index: u8, cert_hash: [u8; 32]) -> Result<()> {
+        instructions::guardians::report_fallback_death_handler(ctx, index, cert_hash)
+    }
+
+    pub fn review_fallback_death(
+        ctx: Context<ReviewFallbackDeath>,
+        index: u8,
+        approve: bool,
+        report_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::guardians::review_fallback_death_handler(ctx, index, approve, report_hash)
+    }
+
+    pub fn start_fallback(ctx: Context<StartFallback>) -> Result<()> {
+        instructions::guardians::start_fallback_handler(ctx)
+    }
+
+    pub fn execute_fallback(ctx: Context<ExecuteFallback>) -> Result<()> {
+        instructions::guardians::execute_fallback_handler(ctx)
+    }
+
+    pub fn lapse_objection(ctx: Context<LapseObjection>) -> Result<()> {
+        instructions::guardians::lapse_objection_handler(ctx)
+    }
 }

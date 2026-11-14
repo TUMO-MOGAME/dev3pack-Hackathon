@@ -5,7 +5,7 @@ export const common = {
     estate: "Estate",
     will: "Plan",
     vault: "Vault",
-    car: "Car",
+    car: "Assets",
     people: "People",
     family: "Timeline",
     claims: "Claims",
@@ -21,6 +21,7 @@ export const common = {
     verifier: "Trusted person",
     buyer: "Car buyer",
     agent: "Heirloom agent",
+    monitor: "Monitor",
   },
   persona: {
     actingAs: "Acting as",
@@ -29,7 +30,7 @@ export const common = {
     sheetTitle: "Who are you acting as?",
     sheetBody: "One browser can hold several wallets. Pick a person to see Heirloom exactly as they would.",
     current: "Current",
-    groups: { owner: "Estate owner", beneficiary: "Family", verifier: "Trusted people", buyer: "Buyers", agent: "Agent" },
+    groups: { owner: "Estate owner", beneficiary: "Family", verifier: "Trusted people", buyer: "Buyers", agent: "Agent", monitor: "Monitors" },
     addWallet: "Add another wallet",
     wallet: "Wallet",
     balance: "Wallet balance",
@@ -57,6 +58,7 @@ export const common = {
       unlocked: "Estate unlocked",
       listed: "Car listed with offers",
       lowOffers: "Car listed, only low offers",
+      guardians: "Trusted people with backups and monitors",
     },
     shortcutsTitle: "Shortcuts",
     shortcuts: {

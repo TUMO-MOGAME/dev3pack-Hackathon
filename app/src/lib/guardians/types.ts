@@ -28,8 +28,8 @@ export interface SeatSuccession {
   verdict: "Pending" | "Approved" | "Rejected";
   report?: AgentReport;
   confirmedBy: Base58 | null;
-  pendingSince: number;             // unix seconds
-  readyAt: number;                  // pendingSince + successionWaitSecs
+  pendingSince: number;             // unix seconds the wait started (at confirmation); 0 until confirmed
+  readyAt: number;                  // pendingSince + successionWaitSecs; 0 until confirmed
   nextHolder: { wallet: Base58; name: string } | null;  // backups[0] (or [1]); null = seat becomes vacant
 }
 
@@ -59,6 +59,8 @@ export interface Objection {
   status: ObjectionStatus;
   votesUphold: number;              // count of votes
   votesDismiss: number;
+  /** Fallback objections only, while Open: when it lapses (counts as dismissed) unless upheld; else null. Added by Agent B. */
+  lapsesAt?: number | null;
 }
 
 export interface FallbackRecipient {
@@ -79,17 +81,30 @@ export interface FallbackPlan {
 
 export interface GuardiansSnapshot {
   enabled: boolean;                 // a Guard account exists (older estates: false, everything below empty)
+  /** The Guard account: the target of a Fallback objection (an Unlock objection targets the estate). Added by Agent B. */
+  address?: Base58;
   objectionWindowSecs: number;
   successionWaitSecs: number;
   fallbackWaitSecs: number;
   seats: Seat[];
   feed: SeatApprovalItem[];         // newest first
+  /**
+   * Claim address -> unix seconds when its objection window ends and it can be paid (from its ApprovalStamp).
+   * Only claims approved by trusted people while a Guard exists; absent = no window applies. Added by Agent B.
+   */
+  claimPayableAt?: Record<Base58, number>;
   objections: Objection[];
   fallback: FallbackPlan;
 }
 
 export interface AssetPhoto { sha256: string; url: string; width: number; height: number; bytes: number }
-export interface AssetMediaInfo { asset: Base58; kind: AssetKind; title: string; photos: AssetPhoto[]; photosRoot: string; updatedAt: number }
+export interface AssetMediaInfo {
+  asset: Base58; kind: AssetKind; title: string; photos: AssetPhoto[]; photosRoot: string; updatedAt: number;
+  /** Off-chain description shown to buyers. Added by Agent B for Agent D. */
+  description?: string;
+  /** Chain mode: true when the listed photos hash to the on-chain AssetMedia.photos_root; undefined when nothing is on-chain. */
+  onChainMatch?: boolean;
+}
 
 /** Methods the UI calls. Implemented by mock.ts and chain.ts (Agent B); HeirloomService extends this. */
 export interface GuardiansService {
@@ -113,8 +128,10 @@ export interface GuardiansService {
   // fallback
   reportFallbackDeath(estate: Base58, recipientIndex: number, certificate: File): Promise<{ tx: TxResult; report: AgentReport }>;
   startFallback(estate: Base58): Promise<TxResult>;
+  /** Anyone: marks an Open Fallback objection that was not upheld in time as lapsed (dismissed). Added by Agent B. */
+  lapseObjection(estate: Base58): Promise<TxResult>;
   executeFallback(estate: Base58): Promise<TxResult>;
   // asset photos (Agent D uploads; B records the root on-chain)
   getAssetMedia(estate: Base58): Promise<AssetMediaInfo[]>;
-  setAssetMedia(estate: Base58, asset: Base58, input: { kind: AssetKind; title: string; photos: AssetPhoto[] }): Promise<TxResult>;
+  setAssetMedia(estate: Base58, asset: Base58, input: { kind: AssetKind; title: string; photos: AssetPhoto[]; description?: string }): Promise<TxResult>;
 }

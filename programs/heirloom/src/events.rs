@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 
+use crate::state::{AssetKind, TargetKind};
+
 // Field lists are mirrored in docs/program-spec.md ("Events") and the IDL.
 
 #[event]
@@ -181,5 +183,173 @@ pub struct AssetSold {
     pub recipient: Pubkey,
     pub amount: u64,
     pub hardship: bool,
+    pub ts: i64,
+}
+
+// ---------------------------------------------------------------- guardians (added 2026-11-14)
+
+/// A seat holder approved something (claim, unlock attestation, hardship). Monitors are notified from this.
+#[event]
+pub struct SeatApproval {
+    pub estate: Pubkey,
+    pub seat_index: u8,
+    pub approver: Pubkey,
+    pub kind: TargetKind,
+    pub target: Pubkey,
+    pub ts: i64,
+}
+
+#[event]
+pub struct GuardInitialized {
+    pub estate: Pubkey,
+    pub objection_window_secs: i64,
+    pub succession_wait_secs: i64,
+    pub fallback_wait_secs: i64,
+    pub ts: i64,
+}
+
+/// Emitted by init_seat, set_seat_backups, set_seat_monitors and owner_replace_seat.
+#[event]
+pub struct SeatConfigured {
+    pub estate: Pubkey,
+    pub seat_index: u8,
+    pub holder: Pubkey,
+    pub backups: [Pubkey; 2],
+    pub monitors: [Pubkey; 2],
+    pub generation: u16,
+    pub ts: i64,
+}
+
+#[event]
+pub struct SeatDeathReported {
+    pub estate: Pubkey,
+    pub seat_index: u8,
+    pub holder: Pubkey,
+    pub reported_by: Pubkey,
+    pub cert_hash: [u8; 32],
+    pub ts: i64,
+}
+
+#[event]
+pub struct SeatDeathReviewed {
+    pub estate: Pubkey,
+    pub seat_index: u8,
+    pub approved: bool,
+    pub report_hash: [u8; 32],
+    pub ts: i64,
+}
+
+#[event]
+pub struct SeatDeathConfirmed {
+    pub estate: Pubkey,
+    pub seat_index: u8,
+    pub confirmed_by: Pubkey,
+    pub ts: i64,
+}
+
+#[event]
+pub struct SeatDeathVetoed {
+    pub estate: Pubkey,
+    pub seat_index: u8,
+    pub holder: Pubkey,
+    pub ts: i64,
+}
+
+#[event]
+pub struct SuccessionFinalized {
+    pub estate: Pubkey,
+    pub seat_index: u8,
+    pub previous_holder: Pubkey,
+    pub new_holder: Pubkey,
+    pub generation: u16,
+    pub ts: i64,
+}
+
+#[event]
+pub struct SeatVacated {
+    pub estate: Pubkey,
+    pub seat_index: u8,
+    pub previous_holder: Pubkey,
+    pub generation: u16,
+    pub ts: i64,
+}
+
+#[event]
+pub struct ObjectionRaised {
+    pub estate: Pubkey,
+    pub objection: Pubkey,
+    pub target: Pubkey,
+    pub kind: TargetKind,
+    pub monitor: Pubkey,
+    pub seat_index: u8,
+    pub reason_hash: [u8; 32],
+    pub ts: i64,
+}
+
+#[event]
+pub struct ObjectionVoted {
+    pub objection: Pubkey,
+    pub voter: Pubkey,
+    pub uphold: bool,
+    pub ts: i64,
+}
+
+#[event]
+pub struct ObjectionResolved {
+    pub estate: Pubkey,
+    pub objection: Pubkey,
+    pub target: Pubkey,
+    pub kind: TargetKind,
+    pub upheld: bool,
+    pub ts: i64,
+}
+
+#[event]
+pub struct FallbackSet {
+    pub estate: Pubkey,
+    pub recipients: [Pubkey; 4],
+    pub ts: i64,
+}
+
+#[event]
+pub struct FallbackDeathReported {
+    pub estate: Pubkey,
+    pub index: u8,
+    pub recipient: Pubkey,
+    pub reported_by: Pubkey,
+    pub cert_hash: [u8; 32],
+    pub ts: i64,
+}
+
+#[event]
+pub struct FallbackDeathReviewed {
+    pub estate: Pubkey,
+    pub index: u8,
+    pub approved: bool,
+    pub report_hash: [u8; 32],
+    pub ts: i64,
+}
+
+#[event]
+pub struct FallbackStarted {
+    pub estate: Pubkey,
+    pub runs_at: i64,
+    pub ts: i64,
+}
+
+#[event]
+pub struct FallbackExecuted {
+    pub estate: Pubkey,
+    pub recipient: Pubkey,
+    pub amount: u64,
+    pub ts: i64,
+}
+
+#[event]
+pub struct AssetMediaSet {
+    pub asset: Pubkey,
+    pub kind: AssetKind,
+    pub photos_root: [u8; 32],
+    pub photo_count: u8,
     pub ts: i64,
 }

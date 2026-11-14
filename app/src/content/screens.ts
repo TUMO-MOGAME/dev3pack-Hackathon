@@ -20,7 +20,7 @@ export const screens = {
       nameHint: "Shown to your family and trusted people.",
       nameError: "Please enter your name.",
       role: "I am",
-      roles: { owner: "Planning for my family", beneficiary: "A family member", verifier: "A trusted person", buyer: "Buying a car from an estate" },
+      roles: { owner: "Planning for my family", beneficiary: "A family member", verifier: "A trusted person", buyer: "Buying a car from an estate", monitor: "Watching a trusted person's approvals" },
       importToggle: "I already have a recovery phrase",
       importLabel: "Recovery phrase",
       importHint: "12 or 24 words, separated by spaces. It stays on this device.",
