@@ -3,8 +3,17 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-13 (00:30: full devnet demo run by Claude with screenshots and Explorer proofs)
-**Phase:** SUBMITTED (13 Nov 11:04 SAST). Now: pitch prep for judging on Sat 14 Nov.
+**Last updated:** 2026-11-15 (guardians feature built on branch feature/guardians; see the section below)
+**Phase:** SUBMITTED (13 Nov 11:04 SAST); judging was Sat 14 Nov. Now: post-hackathon features on branch `feature/guardians`.
+
+## GUARDIANS FEATURE (branch feature/guardians, worktree C:\Users\tumom\Hackathons\heirloom-guardians), 14–15 Nov 2026
+- Spec: docs/guardians-spec.md (+ docs/program-spec.md "Guardians"). Built by 4 agents (contract, service, guardians UI, assets/photos), integrated by the lead; commit 8fa5646 pushed to origin/feature/guardians. NOT merged to main, NOT deployed to devnet.
+- Contract: 46 instructions (+19), new accounts Seat / Guard / ApprovalStamp / Objection / AssetMedia; no existing account layout changed; 51/51 LiteSVM tests. Fallback objections lapse after the wait, so funds can never lock forever.
+- App: mock + chain service (chain tested only against the IDL), monitor role (Aunt Zodwa watches Uncle Bongani), objections, succession (backups take over), fallback plan (children → heir → charity), Assets of any kind with WebP photos (browser canvas; server sharp fallback for Safari; originals ≤ 4 MB). New demo stage "Trusted people with backups and monitors"; the existing stages and the 12-step demo guide are unchanged. 363/363 vitest, tsc + eslint clean.
+- Browser-checked in demo mode: Zodwa objects → payment paused → Ndlovu + Pillay uphold → claim declined; Bongani's passing → Cousin Kagiso takes the seat; all seats empty → fallback starts → 2 min → vault paid to Lerato; a motorbike added with a photo (4000×6000 → 1067×1600 WebP).
+- Worktree note: app/node_modules is a real copy (Turbopack can't follow a junction). Dev server: `npx next dev -p 3100` in app/.
+- Open: devnet program upgrade + Guard/Seats on a fresh demo estate (needs Tumo's OK); merge to main; translations of guardians/assets copy; 360 px + axe pass; finalize_succession / start_fallback are not fee-sponsored (no signer); owner_replace_seat has no UI; the 8-photo limit (contract + app) is too low; AVIF is not accepted.
+- Next request (Tumo, 14 Nov): richer assets — many labelled photos (engine, interior…), a spec sheet (details, condition, performance), buyers bid. Seed Thabo's 2017 Toyota Corolla 1.8 Exclusive CVT (16 AVIF photos `35CC146*.avif`) and 2025 Big Boy Mustang 250 (9 AVIF photos `8DC00392*.avif`); the files are untracked in the MAIN folder's root; prices not given yet.
 **Hackathon:** W3Node Node Engine, **Tether track** (confirmed). **Submit on BuilderBase by Fri 13 Nov 2026, 23:59 SAST** (public repo + README + video ≤ 3 min). Judging Sat 14 Nov: 5-min pitch + 3-min Q&A. Rubric in plan.md §0.
 
 ## Done
