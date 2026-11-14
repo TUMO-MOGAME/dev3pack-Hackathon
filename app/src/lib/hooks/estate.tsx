@@ -6,7 +6,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getService, type EstateSnapshot, type HeirloomService } from "../service";
-import { isMockService, type DemoStage } from "../service/mock";
+import { DEMO_STAGES, isMockService, type DemoStage } from "../service/mock";
 import type { FxRate, Role, WalletSession } from "../types";
 import { useWallet } from "./wallet-source";
 
@@ -187,6 +187,20 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
     service.resetDemo(stage);
     await load(false);
   }, [service, load]);
+
+  // Demo links: "?demo=funded" (or any stage) resets the simulated estate to that point once, then drops the
+  // parameter, so a shared link always opens the same story whatever this browser saved before. Mock mode only.
+  const linked = useRef(false);
+  useEffect(() => {
+    if (linked.current || !isMockService(service)) return;
+    linked.current = true;
+    const url = new URL(window.location.href);
+    const stage = url.searchParams.get("demo");
+    if (!stage || !(DEMO_STAGES as readonly string[]).includes(stage)) return;
+    url.searchParams.delete("demo");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    void Promise.resolve().then(() => resetDemo(stage as DemoStage));
+  }, [service, resetDemo]);
 
   const demoShortcut = useCallback(async (kind: DemoShortcut) => {
     if (!isMockService(service)) return false;

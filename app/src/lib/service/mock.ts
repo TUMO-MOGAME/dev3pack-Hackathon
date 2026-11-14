@@ -21,7 +21,8 @@ import { DEMO_ASSETS } from "./demo-asset-photos";
 
 export interface MockActor { address: Base58; role: Role; label: string }
 /** "guardians": the estate unlocked, with a Guard set up before Thabo passed (seats, backups, Aunt Zodwa, fallback; 60/60/120 s). */
-export type DemoStage = "fresh" | "funded" | "unlocked" | "listed" | "lowOffers" | "guardians";
+export const DEMO_STAGES = ["fresh", "funded", "unlocked", "listed", "lowOffers", "guardians"] as const;
+export type DemoStage = (typeof DEMO_STAGES)[number];
 
 export interface MockService extends HeirloomService {
   mode: "mock";
