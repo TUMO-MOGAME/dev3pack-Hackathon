@@ -53,17 +53,24 @@ export type NudgeKind =
   | "offer-received"    // car listing has offers / agent can settle
   | "legacy-message"    // a child has a new message from their parent for a milestone
   | "heartbeat"         // owner hasn't checked in for a while
-  | "fund-vault";       // vault balance below upcoming payments
+  | "fund-vault"        // vault balance below upcoming payments
+  | "ask-update";       // a family member's own request: waiting, paid, declined or not accepted (lib/ask)
 
 export interface Nudge {
   id: string;           // stable per underlying item, so dismissals stick
   kind: NudgeKind;
   title: string;        // "A payment is due today"
   body: string;         // "Lerato's book allowance (85 USD₮ · R1 420) is due. Want me to pay it now?"
-  primary: { label: string; action: AgentAction | { type: "run"; op: "executeScheduled" | "finalizeUnlock"; target: string } };
-  secondary?: { label: string; dismiss: true };
+  primary: { label: string; action: AgentAction | NudgeRun };
+  /** "Not now" (dismiss), or a second action such as declining a request. */
+  secondary?: { label: string; dismiss: true } | { label: string; action: NudgeRun };
   urgency: "now" | "soon" | "info";
+  /** Tie-break within the same urgency and kind (lower first), e.g. newest request first. */
+  order?: number;
 }
+
+/** Card actions handled on the chat home. approveAsk / declineAsk target a claim; openAsk opens the ask sheet. */
+export interface NudgeRun { type: "run"; op: "executeScheduled" | "finalizeUnlock" | "approveAsk" | "declineAsk" | "openAsk"; target: string }
 
 export interface NudgesApi {
   nudges: Nudge[];      // not dismissed, most urgent first

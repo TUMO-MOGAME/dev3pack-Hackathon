@@ -15,6 +15,7 @@ import { ActionButtons, Chips, SpecialistChip, Thinking } from "@/components/age
 import { useChat } from "./chat-context";
 import { ChatComposer } from "./chat-composer";
 import { NudgeStack } from "./nudge-stack";
+import { AskLauncher } from "@/components/ask/launcher";
 
 export function ChatScreen() {
   // The frame is the chat itself (heading, composer) without the person's cards and suggestions, so the first
@@ -64,6 +65,7 @@ function Chat({ pending = false }: { pending?: boolean }) {
 
       <div className="sticky bottom-0 z-20 bg-bg pb-[calc(var(--safe-b)+0.5rem)] pt-2">
         <ChatComposer onSend={send} disabled={chat.busy} />
+        {!pending && <AskLauncher />}
         <p className="mt-1.5 flex items-center justify-center gap-1 text-center text-[0.75rem] text-ink-2">
           <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />{copy.chat.disclaimer}
         </p>

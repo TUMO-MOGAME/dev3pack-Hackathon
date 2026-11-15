@@ -34,6 +34,7 @@ import type { EstateMeta } from "../db";
 import { legacyApi, type LegacySigner } from "../legacy/client";
 import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-guardians";
 import { createChainDisputes, loadDisputes } from "./chain-disputes";
+import { createChainAsk } from "./chain-ask";
 import { disabledGuardians, SEAT_MONITOR_OFFSETS } from "../chain/guardians";
 import { SystemProgram } from "@solana/web3.js";
 import type { ActivityItem } from "../types";
@@ -273,8 +274,17 @@ async function newTitleMint(owner: PublicKey): Promise<{ mint: PublicKey; ixs: T
 export function createChainService(): HeirloomService {
   // Once per page: re-check payments left pending by an earlier visit, now and whenever the browser reconnects.
   if (!resumed && typeof window !== "undefined") { resumed = true; resumeOnReconnect(receipts, chainOps()); }
+  // "Ask for money": a living claim plus its off-chain note (chain-ask.ts).
+  const asks = createChainAsk({
+    send: (ixs) => send(ixs),
+    review: (file, estate, context, claim) => review(file, "claim", estate, context, claim),
+    fetchRaw: (type, address) => fetchAccountRaw(type, address),
+    requireOwnerOf,
+  });
   const service: HeirloomService = {
     mode: "chain",
+    askForMoney: (estate, input) => asks.askForMoney(estate, input).finally(() => forget(`asks:${estate}`)),
+    declineAsk: (estate, claim) => asks.declineAsk(estate, claim).finally(() => forget(`asks:${estate}`)),
     ...createChainGuardians({
       send: (ixs) => send(ixs),
       review: (file, purpose, estate, context, index) => review(file, purpose, estate, context, undefined, false, index),
@@ -318,13 +328,16 @@ export function createChainService(): HeirloomService {
         return seat?.holder && seat.generation > 0 ? (extras.names[seat.holder] ?? n) : n;
       }) as [string, string, string];
       // Disputes (U9) and each rule's yearly cap: new accounts, read from the same program scan.
-      const extra = await loadDisputes(estate, { estate: out.estate, rules: out.rules }, extras.names).catch(() => ({ disputes: [], rules: out.rules }));
+      const [extra, askNotes] = await Promise.all([
+        loadDisputes(estate, { estate: out.estate, rules: out.rules }, extras.names).catch(() => ({ disputes: [], rules: out.rules })),
+        cached(`asks:${estate}`, 15_000, () => asks.loadAsks(estate)).catch(() => ({})),
+      ]);
       // Names the meta and this device know, for the activity feed (lib/people.ts) and the sale line's buyer.
       const names = extras.names;
       const withBuyers = out.activity.map((a) => (a.sale && !a.sale.buyerName && names[a.sale.buyer] ? { ...a, sale: { ...a.sale, buyerName: names[a.sale.buyer] } } : a));
       const bills = billActivity(estate, out.estate.ownerName);
       const withBills = bills.length ? [...withBuyers, ...bills].sort((a, b) => b.ts - a.ts) : withBuyers;
-      return { ...out, activity: withBills, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names };
+      return { ...out, activity: withBills, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names, asks: askNotes };
     },
 
     listEstatesFor(wallet) {

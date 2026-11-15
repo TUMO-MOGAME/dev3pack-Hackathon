@@ -95,6 +95,8 @@ export const common = {
       fund: { title: "Thabo funds the vault", body: "Deposit USD₮ so the rules have money behind them." },
       schedule: { title: "Pay the first scheduled allowance", body: "Lerato's book allowance is due. One tap pays the bookstore." },
       car: { title: "Thabo adds the family car", body: "Get an AI valuation and set the minimum price." },
+      ask: { title: "Lerato asks for money", body: "From the chat, she asks for a school trip. Try asking for more than the rule allows too." },
+      answer: { title: "Thabo answers Lerato's request", body: "Approve and pay, or decline, right on the chat home." },
       report: { title: "Lerato reports her father's passing", body: "Upload the death certificate. The agent reads it first." },
       attest: { title: "Trusted people confirm ({got} of {need})", body: "Each one sees the agent's report and confirms." },
       wait: { title: "The waiting period runs", body: "Thabo could still cancel with \"I'm still here\". When it ends, unlock the estate." },

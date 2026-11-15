@@ -11,7 +11,7 @@ import type { CommonCopy } from "@/content/common";
 import { fmt, useCopy } from "./copy";
 
 type StepKey = keyof CommonCopy["demo"]["steps"];
-const ORDER: StepKey[] = ["will", "fund", "schedule", "car", "report", "attest", "wait", "claim", "approve", "list", "offer", "settle", "done"];
+const ORDER: StepKey[] = ["will", "fund", "schedule", "car", "ask", "answer", "report", "attest", "wait", "claim", "approve", "list", "offer", "settle", "done"];
 
 interface Step { key: StepKey; actor: WalletSession | null; href: string; vars?: Record<string, number> }
 
@@ -29,6 +29,14 @@ function nextStep(snap: EstateSnapshot | null, sessions: WalletSession[]): Step 
     if (e.vaultBalance === BigInt(0)) return { key: "fund", actor: ownerS, href: "/vault" };
     if (!e.death.certHash && snap.rules.some((r) => r.startsNow && r.recurringAmount > BigInt(0) && r.spentTotal === BigInt(0))) return { key: "schedule", actor: ownerS, href: "/estate" };
     if (!car) return { key: "car", actor: ownerS, href: "/car" };
+    // Everyday money: a child asks under a "starts now" claim rule, then Thabo answers on his chat home.
+    if (!e.death.certHash) {
+      const everyday = snap.rules.find((r) => r.startsNow && r.category === "General" && r.recurringAmount === BigInt(0));
+      const asks = everyday ? snap.claims.filter((c) => c.rule === everyday.address) : [];
+      const waiting = asks.find((c) => c.status === "Open" && c.agentVerdict === "Approved" && !c.ownerApproved && !snap.asks?.[c.address]?.declinedAt);
+      if (waiting) return { key: "answer", actor: ownerS, href: "/chat" };
+      if (everyday && asks.length === 0) return { key: "ask", actor: sessions.find((s) => s.address === everyday.beneficiary) ?? kid, href: "/chat" };
+    }
     if (!e.death.certHash) return { key: "report", actor: kid, href: "/family" };
     const i = e.death.attestations.findIndex((a) => !a);
     return { key: "attest", actor: verifier(Math.max(0, i)), href: "/inbox", vars: { got: e.death.attestations.filter(Boolean).length, need: e.deathThreshold } };

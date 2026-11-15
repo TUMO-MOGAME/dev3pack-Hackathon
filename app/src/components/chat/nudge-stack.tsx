@@ -7,13 +7,14 @@ import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { m as motion, useReducedMotion } from "motion/react";
 import { BellRing, ChevronLeft, ChevronRight, Clock, Info, Pause, Play, X } from "@/components/ui/icons";
-import type { Nudge } from "@/lib/chat/types";
+import type { Nudge, NudgeRun } from "@/lib/chat/types";
 import { useEstate } from "@/lib/hooks/estate";
 import { usePay } from "@/components/pay/payment";
 import { usePerformAction } from "@/components/agent/chat-parts";
 import { Button } from "@/components/ui/primitives";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { useAttention } from "./chat-context";
+import { useAskActions } from "@/components/ask/use-ask-actions";
 
 const ROTATE_MS = 8000;
 const iconBtn = "grid size-11 shrink-0 place-items-center rounded-full text-ink hover:bg-surface-2";
@@ -22,7 +23,8 @@ export function NudgeStack({ className }: { className?: string }) {
   const { assistant } = useCopy();
   const c = assistant.home.nudges;
   const { nudges, dismiss } = useAttention();
-  const { snap, run, busy } = useEstate();
+  const { snap, run, busy, setIntent } = useEstate();
+  const asks = useAskActions();
   const { pay } = usePay();
   const perform = usePerformAction();
   const reduced = useReducedMotion();
@@ -42,9 +44,11 @@ export function NudgeStack({ className }: { className?: string }) {
   const at = ((index % total) + total) % total;
   const n = nudges[at];
 
-  const primary = (x: Nudge) => {
-    const a = x.primary.action;
-    if (a.type !== "run") { perform(a); return; }
+  const act = (x: Nudge, a: NudgeRun) => {
+    // "Ask for money": approve (payment review, then paid), decline (off-chain no), or ask again.
+    if (a.op === "approveAsk") { asks.approve(a.target); return; }
+    if (a.op === "declineAsk") { void asks.decline(a.target).then((ok) => { if (ok) dismiss(x.id); }); return; }
+    if (a.op === "openAsk") { setIntent({ kind: "ask", rule: a.target }); return; }
     if (a.op === "finalizeUnlock") { void run("unlock", (svc, est) => svc.finalizeUnlock(est), c.unlocked); return; }
     // Money moves: always through the payment review, never straight from the card.
     const rule = snap?.rules.find((r) => r.address === a.target);
@@ -54,6 +58,17 @@ export function NudgeStack({ className }: { className?: string }) {
       kind: "scheduled", source: "vault", to: rule.fixedPayee ?? "", toLabel: payee, amount: rule.recurringAmount,
       execute: (svc, est) => svc.executeScheduled(est, rule.address), successText: fmt(c.paid, { payee }),
     });
+  };
+
+  const primary = (x: Nudge) => {
+    const a = x.primary.action;
+    if (a.type !== "run") { perform(a); return; }
+    act(x, a);
+  };
+  const secondary = (x: Nudge) => {
+    const s = x.secondary;
+    if (!s || "dismiss" in s) { dismiss(x.id); return; }
+    act(x, s.action);
   };
 
   const Icon = n.urgency === "now" ? BellRing : n.urgency === "soon" ? Clock : Info;
@@ -85,7 +100,7 @@ export function NudgeStack({ className }: { className?: string }) {
         <p className="mt-2 text-small text-ink-2 sm:pl-[3.25rem]">{n.body}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2 sm:pl-[3.25rem]">
           <Button small disabled={!!busy} onClick={() => primary(n)}>{n.primary.label}</Button>
-          {n.secondary && <Button small variant="secondary" onClick={() => dismiss(n.id)}>{n.secondary.label}</Button>}
+          {n.secondary && <Button small variant="secondary" disabled={!("dismiss" in n.secondary) && !!busy} onClick={() => secondary(n)}>{n.secondary.label}</Button>}
         </div>
       </motion.div>
 

@@ -1,3 +1,4 @@
+import type { AskCopy } from "../ask";
 import type { AssetsCopy } from "../assets";
 import type { AssistantCopy } from "../assistant";
 import type { CommonCopy } from "../common";
@@ -19,6 +20,8 @@ import type { DeepPartial, Widen } from "@/lib/i18n/merge";
  * legal pages, and the suggested chat replies (the on-device demo agent matches them in English).
  */
 export interface Bundle {
+  /** Ask for money (content/i18n/ask.ts). */
+  ask: Widen<AskCopy>;
   landing: Widen<LandingCopy>;
   common: Widen<CommonCopy>;
   pay: Widen<PayCopy>;

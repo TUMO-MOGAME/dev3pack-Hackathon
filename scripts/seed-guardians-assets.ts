@@ -45,9 +45,9 @@ async function main() {
   const { willDraftChecked, intervalSecs } = await import("../app/src/lib/agent/schemas");
   const ix = await import("../app/src/lib/chain/instructions");
   const { chainCtx } = await import("../app/src/lib/chain/client");
-  const { estatePda, beneficiaryPda, payeePda, assetPda, mediaPda, guardPda, seatPda, yearCapPda, vaultAta } = await import("../app/src/lib/chain/pda");
+  const { estatePda, beneficiaryPda, payeePda, rulePda, assetPda, mediaPda, guardPda, seatPda, yearCapPda, vaultAta } = await import("../app/src/lib/chain/pda");
   const { fetchAccountRaw, fetchEstateRaw } = await import("../app/src/lib/chain/reads");
-  const { num, hex } = await import("../app/src/lib/chain/decoders");
+  const { num, hex, key, enumOf } = await import("../app/src/lib/chain/decoders");
   const { decodeMedia } = await import("../app/src/lib/chain/guardians");
   const { toBase } = await import("../app/src/lib/format");
   const { DEMO_ASSETS } = await import("../app/src/lib/service/demo-asset-photos");
@@ -167,6 +167,28 @@ async function main() {
     });
     for (let i = 0; i < ruleIxs.length; i += 2) log(`Rules ${i}-${Math.min(i + 1, ruleIxs.length - 1)} ${explorer(await send(me, ruleIxs.slice(i, i + 2)))}`);
   } else log(`Rules already present (${ruleId})`);
+
+  // 4b. Everyday money (plan.md §13.1, "Ask for money"): Lerato's own wallet as an approved "Other" payee and an
+  //     "Everyday needs" rule (General, starts now, up to 60 USD₮ a time, 720 in total), like the demo site. Added to an
+  //     existing estate with add_payee + add_rule (Active), so no new estate or program upgrade is needed.
+  const EVERYDAY = { maxPerClaimUsdt: 60, lifetimeCapUsdt: 720, validUntil: "2030-12-31" };
+  if (!(await exists("Payee", payeePda(ctx.programId, estate, A("lerato"))))) {
+    log(`Payee: Lerato's own wallet ${explorer(await send(me, [ix.addPayee(ctx, owner, A("lerato"), "Other", "Lerato's own wallet")]))}`);
+  } else log("Lerato's own wallet is already a payee");
+  const ruleCount = num((await fetchAccountRaw("Estate", estate.toBase58()))!, "rule_count");
+  let hasEveryday = false;
+  for (let i = 0; i < ruleCount && !hasEveryday; i++) {
+    const r = await fetchAccountRaw("Rule", rulePda(ctx.programId, estate, i).toBase58());
+    hasEveryday = !!r && key(r, "beneficiary") === w.addresses.lerato
+      && enumOf(r, "category", ["Tuition", "Accommodation", "Books", "Medical", "General"] as const) === "General";
+  }
+  if (!hasEveryday) {
+    log(`Rule ${ruleCount}: Lerato's everyday needs ${explorer(await send(me, [ix.addRule(ctx, owner, {
+      ruleId: ruleCount, beneficiaryWallet: A("lerato"), category: "General", allowedPayeeKind: "Other",
+      maxPerClaim: toBase(EVERYDAY.maxPerClaimUsdt), lifetimeCap: toBase(EVERYDAY.lifetimeCapUsdt),
+      validUntil: Math.floor(Date.parse(EVERYDAY.validUntil) / 1000), startsNow: true,
+    })]))}`);
+  } else log("Lerato's everyday-needs rule already exists");
 
   // 5. Deposit
   if (vaultBal === 0n) log(`Deposit 20,000 USD₮ ${explorer(await send(me, [ix.deposit(ctx, owner, toBase(20_000))]))}`);

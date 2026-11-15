@@ -15,7 +15,9 @@ export type RunResult<T> = { ok: true; value: T } | { ok: false; code: string; m
 export type Intent =
   | { kind: "claim"; rule?: string; payee?: string; amount?: number }
   | { kind: "rule"; rule: string }
-  | { kind: "upload"; purpose: "death" | "claim" | "hardship" };
+  | { kind: "upload"; purpose: "death" | "claim" | "hardship" }
+  /** Opens "Ask for money" (components/ask), optionally on one rule. */
+  | { kind: "ask"; rule?: string };
 export interface Toast { id: number; tone: "ok" | "error" | "info"; text: string }
 export type AgentMode = "chat" | "call";
 export type DemoShortcut = "simulatePassing" | "skipWait" | "makeDue";

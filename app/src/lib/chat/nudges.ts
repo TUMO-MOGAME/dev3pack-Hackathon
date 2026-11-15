@@ -6,7 +6,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
-import { useLocale } from "@/lib/i18n/client";
+import { useLocale, useLocalized } from "@/lib/i18n/client";
+import { ask as askEnglish } from "@/content/ask";
 import { deriveNudges, loadDismissed, saveDismissed, visibleNudges, type LegacyHint } from "./derive-nudges";
 import type { Nudge, NudgesApi } from "./types";
 
@@ -17,6 +18,7 @@ const storage = (): Storage | null => {
 export function useNudges(): NudgesApi {
   const { snap, role, session, fx, service } = useEstate();
   const locale = useLocale();
+  const askCards = useLocalized(askEnglish, (t) => t.ask).nudges;
   // Demo mode re-checks every 3 s so a "make payments due" demo step shows its card at once; live mode every 30 s.
   const now = useNow(process.env.NEXT_PUBLIC_DATA_MODE === "chain" ? 30_000 : 3_000);
   const address = session?.address ?? null;
@@ -61,9 +63,9 @@ export function useNudges(): NudgesApi {
     if (now === null || dismissed.persona !== persona) return [];
     // Until the Legacy Book has loaded (or if it can't be), no legacy nudge is shown.
     const hint = legacy && legacy.key === legacyKey ? legacy.hint : null;
-    const all = deriveNudges(snap, role, now, { address, usdtZar: fx?.usdtZar ?? null, locale, legacy: hint });
+    const all = deriveNudges(snap, role, now, { address, usdtZar: fx?.usdtZar ?? null, locale, legacy: hint, ask: askCards });
     return visibleNudges(all, dismissed.ids);
-  }, [now, dismissed, persona, legacy, legacyKey, snap, role, address, fx, locale]);
+  }, [now, dismissed, persona, legacy, legacyKey, snap, role, address, fx, locale, askCards]);
   const key = useMemo(() => JSON.stringify(nudges), [nudges]);
   const stable = useMemo<Nudge[]>(() => JSON.parse(key), [key]);
 

@@ -97,7 +97,9 @@ describe("deriveNudges", () => {
     const snap = snapshot({ rules: [rule({ startsNow: true })], claims: [claim()] });
     const n = deriveNudges(snap, "owner", NOW).find((x) => x.kind === "claim-to-approve")!;
     expect(n.id).toBe("claim:Claim1");
-    expect(n.primary.action).toEqual({ type: "navigate", to: "/claims" });
+    // Approve and decline right on the card ("Ask for money", lib/ask).
+    expect(n.primary.action).toEqual({ type: "run", op: "approveAsk", target: "Claim1" });
+    expect(n.secondary).toMatchObject({ action: { type: "run", op: "declineAsk", target: "Claim1" } });
     // Not a living-plan rule, or already approved: nothing for the owner.
     expect(kinds(deriveNudges(snapshot({ claims: [claim()] }), "owner", NOW))).not.toContain("claim-to-approve");
     expect(kinds(deriveNudges(snapshot({ rules: [rule({ startsNow: true })], claims: [claim({ ownerApproved: true })] }), "owner", NOW))).not.toContain("claim-to-approve");
