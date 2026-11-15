@@ -52,6 +52,7 @@ export function SignOut({ onDone }: { onDone: () => void }) {
     if (!others.length) {
       // A full reload, not a client navigation: nothing from the removed wallet (keys, a recovery phrase still on
       // screen in an unfinished set-up) may stay in memory.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a full reload is the point here
       window.location.assign("/start");
       return;
     }
