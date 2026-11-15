@@ -35,6 +35,24 @@ will hash, 3 beneficiaries, 3 payees, 4 rules, a 20,000 USD₮ deposit and the c
 asking 10,500; sale proceeds go back into the estate vault). With `SUPABASE_*` set it also stores display names.
 Idempotent: existing accounts are skipped.
 
+## 3b. `seed-guardians-assets.ts`: the guardians demo estate (15 Nov 2026)
+The first demo estate (owner `dad`) is Unlocked with its car sold, and an Unlocked estate can't register assets, add a
+Guard or seats or set a yearly cap. This script seeds a second estate for a new owner persona `thabo`, the same story
+as the demo site: the will above (same children, trusted people, payees, rules, 20,000 USD₮), the **2017 Toyota Corolla
+1.8 Exclusive CVT** (13,500 / 12,500 / 10,500) and the **2025 Big Boy Mustang 250** (2,000 / 1,800 / 1,500), each with
+a fresh title NFT and the media root of its bundled photos + spec sheet (`DEMO_ASSETS`; the chain service shows the
+bundled set when the on-chain root matches, devnet only), a Guard and three seats (Uncle Bongani: backups Kagiso and
+Priya, monitor Zodwa), the fallback plan (Lerato, Sipho, Naledi, Ithemba Children's Charity) and a 3,000 USD₮ yearly cap
+on Naledi's school fees. It also adds the personas `thabo`, `zodwa`, `kagiso`, `priya`, `charity`, gives the helpers a
+little SOL and tops up the buyers' test USD₮. Idempotent; signed by WDK; prints Explorer links, never seeds.
+The owner needs ~0.3 devnet SOL first (it stops and prints the address if not).
+
+```bash
+cd app; set -a; . ../scripts/.env.devnet; set +a
+npx tsx --tsconfig ../scripts/tsconfig.json ../scripts/seed-guardians-assets.ts [--dry]
+npx tsx --tsconfig ../scripts/tsconfig.json ../scripts/demo-history.ts --owner thabo   # real history
+```
+
 ## 4. Use the personas in the app
 Set `NEXT_PUBLIC_DATA_MODE=chain`, start the app, and import each persona's seed from `scripts/.demo-wallets.json`
 (Wallet → Import). Each seed is encrypted on the device with a PIN; nothing is sent to the server.
@@ -42,7 +60,7 @@ Set `NEXT_PUBLIC_DATA_MODE=chain`, start the app, and import each persona's seed
 ## 4b. Laptop demo on devnet, history and rehearsal
 - `demo-devnet.ps1`: starts the app in chain mode on devnet (loads `.env.local` + `scripts/.env.devnet` into the
   process; writes nothing). Full test path: [docs/devnet-test-guide.md](../docs/devnet-test-guide.md).
-- `demo-history.ts [--dry]`: adds real history to the demo estate while the dad is alive (due scheduled payments, a
+- `demo-history.ts [--dry] [--owner thabo]`: adds real history to the demo estate (`dad`'s by default) while the dad is alive (due scheduled payments, a
   reviewed and owner-approved school-fee claim, a vault top-up, pocket money to Lerato).
 - `rehearse-devnet.ts`: the whole passing → unlock → claim → car-sale story on a THROWAWAY estate with tiny amounts,
   so the after-death flows are proven without touching the demo estate.

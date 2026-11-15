@@ -8,7 +8,7 @@
  * unlock → claims → car sale story can still be shown live.
  *
  * Run from app/ with the devnet env loaded (scripts/.env.devnet):
- *   npx tsx --tsconfig ../scripts/tsconfig.json ../scripts/demo-history.ts [--dry]
+ *   npx tsx --tsconfig ../scripts/tsconfig.json ../scripts/demo-history.ts [--dry] [--owner thabo]
  */
 import { PublicKey } from "@solana/web3.js";
 import { createTransferCheckedInstruction, createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
@@ -16,6 +16,9 @@ import { loadEnv, loadOrCreateWallets, wdk, send, explorer, log, disposeAll, typ
 
 loadEnv();
 const DRY = process.argv.includes("--dry");
+// The estate owner: `dad` (the first demo estate, now Unlocked) by default, `--owner thabo` for the guardians demo estate.
+const ownerArg = process.argv.indexOf("--owner");
+const OWNER = (ownerArg > 0 ? process.argv[ownerArg + 1] : "dad") as PersonaId;
 
 async function main() {
   const w = await loadOrCreateWallets();
@@ -31,7 +34,7 @@ async function main() {
   const ctx = chainCtx();
   const A = (id: PersonaId) => new PublicKey(w.addresses[id]);
   const who = (addr: string) => (Object.entries(w.addresses).find(([, a]) => a === addr)?.[0] ?? addr.slice(0, 6)) as PersonaId;
-  const estate = estatePda(ctx.programId, A("dad"));
+  const estate = estatePda(ctx.programId, A(OWNER));
   const snap = async () => fetchEstateRaw(estate.toBase58());
   let s = await snap();
   const now = Math.floor(Date.now() / 1000);
@@ -46,7 +49,7 @@ async function main() {
   if (s.estate.status !== "Active") throw new Error("This script only adds history while the dad is alive (estate Active).");
 
   const agent = await wdk(w, "agent");
-  const dad = await wdk(w, "dad");
+  const dad = await wdk(w, OWNER);
 
   // 1. Scheduled payments that are due.
   for (const r of s.rules.filter((r) => r.startsNow && r.recurringAmount > 0n && r.fixedPayee && r.nextDue !== null && r.nextDue <= now)) {
@@ -80,7 +83,7 @@ async function main() {
       const report = await sha256Hex(`heirloom-demo:agent-report:${claim.toBase58()}:invoice matches the school, amount within the cap`);
       log(`Agent reviewed the invoice: approved ${explorer(await send(agent, [ix.reviewClaim(estate, A("agent"), claim, ruleKey, true, report)]))}`);
     }
-    if (!open?.ownerApproved) log(`Claim approved by the dad ${explorer(await send(dad, [ix.ownerApproveClaim(ctx, A("dad"), claim, ruleKey)]))}`);
+    if (!open?.ownerApproved) log(`Claim approved by the dad ${explorer(await send(dad, [ix.ownerApproveClaim(ctx, A(OWNER), claim, ruleKey)]))}`);
     open = undefined;
     log(`Claim paid to ${payee.name} ${explorer(await send(agent, [ix.executeClaim(ctx, {
       estate, payer: A("agent"), rule: new PublicKey(claimRule.address), claim, payeeWallet: new PublicKey(payee.wallet),
@@ -88,14 +91,14 @@ async function main() {
   } else log(claimRule ? "A paid claim already exists" : "No starts-now claim rule found");
 
   // 3. Vault top-up.
-  log(`Vault top-up 500 USD₮ ${explorer(await send(dad, [ix.deposit(ctx, A("dad"), toBase(500))]))}`);
+  log(`Vault top-up 500 USD₮ ${explorer(await send(dad, [ix.deposit(ctx, A(OWNER), toBase(500))]))}`);
 
   // 4. Pocket money: dad → Lerato, a plain USD₮ transfer signed by the dad's WDK wallet.
   const mint = new PublicKey(w.usdtMint);
-  const from = getAssociatedTokenAddressSync(mint, A("dad")), to = getAssociatedTokenAddressSync(mint, A("lerato"));
+  const from = getAssociatedTokenAddressSync(mint, A(OWNER)), to = getAssociatedTokenAddressSync(mint, A("lerato"));
   log(`Dad sent 50 USD₮ to Lerato ${explorer(await send(dad, [
-    createAssociatedTokenAccountIdempotentInstruction(A("dad"), to, A("lerato"), mint),
-    createTransferCheckedInstruction(from, mint, to, A("dad"), toBase(50), 6),
+    createAssociatedTokenAccountIdempotentInstruction(A(OWNER), to, A("lerato"), mint),
+    createTransferCheckedInstruction(from, mint, to, A(OWNER), toBase(50), 6),
   ]))}`);
 
   s = await snap();

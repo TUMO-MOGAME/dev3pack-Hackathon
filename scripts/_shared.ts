@@ -37,6 +37,12 @@ export const PERSONAS = [
   { id: "uct", label: "University of Cape Town (payee)", role: "payee" },
   { id: "residence", label: "Tugwell Residence (payee)", role: "payee" },
   { id: "school", label: "Westerford High School (payee)", role: "payee" },
+  // Added 15 Nov 2026 for the guardians demo estate (scripts/seed-guardians-assets.ts); dad's estate is Unlocked.
+  { id: "thabo", label: "Thabo Mokoena (owner of the guardians demo estate)", role: "owner" },
+  { id: "zodwa", label: "Aunt Zodwa Mokoena (monitor of Uncle Bongani)", role: "monitor" },
+  { id: "kagiso", label: "Cousin Kagiso Mokoena (Uncle Bongani's first backup)", role: "backup" },
+  { id: "priya", label: "Adv. Priya Naidoo (Uncle Bongani's second backup)", role: "backup" },
+  { id: "charity", label: "Ithemba Children's Charity (last fallback recipient)", role: "payee" },
 ] as const;
 export type PersonaId = (typeof PERSONAS)[number]["id"];
 
@@ -46,6 +52,9 @@ export interface WalletsFile {
   addresses: Record<PersonaId, string>;
   usdtMint?: string;
   carMint?: string;
+  /** Title NFTs of the guardians demo estate (owner `thabo`): the 2017 Corolla and the motorbike. */
+  corollaMint?: string;
+  bikeMint?: string;
 }
 
 export async function loadOrCreateWallets(): Promise<WalletsFile> {
