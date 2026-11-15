@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { motion } from "motion/react";
-import { ArrowRight, BookOpen, CalendarClock, CarFront, CircleDot, FileCheck2, GraduationCap, HeartPulse, Hourglass, House, Landmark, Milestone, Plus, Send, Stethoscope, UsersRound, Zap, type LucideIcon } from "@/components/ui/icons";
+import { ArrowRight, BookOpen, CalendarClock, CarFront, CircleDot, FileCheck2, GraduationCap, Hourglass, House, Landmark, Milestone, Plus, Send, Stethoscope, UsersRound, Zap, type LucideIcon } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
@@ -19,6 +19,7 @@ import { fmt, timeAgo, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { InstallBanner } from "@/components/shell/install";
 import { LegacyEntry } from "@/components/legacy/legacy-entry";
+import { CheckInCard, CheckInWatch } from "./check-in";
 import { FallbackStatus } from "@/components/guardians/fallback";
 import { ObjectionList } from "@/components/guardians/objections";
 import { guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
@@ -34,7 +35,7 @@ export function EstateScreen({ copy: english }: { copy: Copy }) {
 
 function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role }) {
   const { common } = useCopy();
-  const { fx, setProofOpen, run, busy, walletUsdt } = useEstate();
+  const { fx, setProofOpen, walletUsdt } = useEstate();
   const now = useNow(10000);
   const e = snap.estate;
   const rate = fx?.usdtZar ?? null;
@@ -80,7 +81,9 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
           </div>
         </section>
 
-        <ForYou copy={copy} snap={snap} session={session} role={role} now={now} onHeartbeat={() => run("heartbeat", (s, est) => s.heartbeat(est), copy.forYou.owner.done)} busy={busy === "heartbeat"} walletUsdt={walletUsdt} rate={rate} />
+        {role === "owner" ? <CheckInCard copy={copy.checkIn} snap={snap} now={now} /> : <CheckInWatch copy={copy.checkIn} snap={snap} now={now} />}
+
+        <ForYou copy={copy} snap={snap} session={session} role={role} now={now} walletUsdt={walletUsdt} rate={rate} />
 
         <Scheduled copy={copy} snap={snap} rate={rate} />
 
@@ -218,8 +221,8 @@ function RuleCard({ rule, snap, copy, rate, now }: { rule: Rule; snap: EstateSna
   );
 }
 
-function ForYou({ copy, snap, session, role, now, onHeartbeat, busy, walletUsdt, rate }: {
-  copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role; now: number | null; onHeartbeat: () => void; busy: boolean; walletUsdt: bigint; rate: number | null;
+function ForYou({ copy, snap, session, role, now, walletUsdt, rate }: {
+  copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role; now: number | null; walletUsdt: bigint; rate: number | null;
 }) {
   const { common, guardians } = useCopy();
   const f = copy.forYou;
@@ -258,13 +261,9 @@ function ForYou({ copy, snap, session, role, now, onHeartbeat, busy, walletUsdt,
       ) : e.status === "Unlocked" ? (
         <p className="mt-1.5 text-ink-2">{common.status.estateHint.Unlocked}</p>
       ) : (
-        <div className="mt-1.5 flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-0 max-w-md">
-            <h2 className="text-h3">{f.owner.heartbeat}</h2>
-            <p className="mt-1 text-ink-2">{f.owner.body}</p>
-            <p className="mt-1 min-h-5 text-small text-ink-2">{now !== null ? fmt(f.owner.last, { when: timeAgo(e.lastHeartbeat, now, common.time) }) : ""}</p>
-          </div>
-          <Button onClick={onHeartbeat} loading={busy}><HeartPulse className="size-5" aria-hidden="true" />{f.owner.heartbeat}</Button>
+        <div className="mt-1.5 min-w-0 max-w-md">
+          <h2 className="text-h3">{f.ownerClear.title}</h2>
+          <p className="mt-1 text-ink-2">{f.ownerClear.body}</p>
         </div>
       )}
       <p className="mt-3 border-t border-line/70 pt-1">

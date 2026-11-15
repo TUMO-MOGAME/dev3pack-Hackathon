@@ -198,6 +198,17 @@ export interface ActivityItem {
   txSignature?: string;
   /** For *Reviewed events: the agent report hash, to join the off-chain report. */
   reportHash?: HexHash;
+  /** For AssetSold: which asset, who bought it and where the money went (from the event; no personal data). */
+  sale?: SaleRecord;
+}
+
+export interface SaleRecord {
+  asset: Base58;
+  buyer: Base58;
+  /** Display name, when the app knows it (demo, or an off-chain profile). */
+  buyerName?: string;
+  recipient: Base58;
+  hardship: boolean;
 }
 
 export interface FxRate {

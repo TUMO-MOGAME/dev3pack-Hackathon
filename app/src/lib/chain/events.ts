@@ -75,3 +75,18 @@ export function describeEvent(name: string, data: Raw): { kind: string; text: st
   const fn = TEXT[key];
   return { kind: key, text: fn ? fn(data, amount) : key, amount };
 }
+
+function key(d: Raw, ...names: string[]): string | null {
+  const v = pick(d, ...names);
+  return v && typeof (v as { toBase58?: () => string }).toBase58 === "function" ? (v as { toBase58: () => string }).toBase58() : typeof v === "string" ? v : null;
+}
+
+/** The AssetSold event's asset, buyer and recipient (spec §Events), or null if a field is missing. */
+export function saleFromEvent(name: string, data: Raw): { asset: string; buyer: string; recipient: string; hardship: boolean } | null {
+  if (name.toLowerCase() !== "assetsold") return null;
+  const asset = key(data, "asset");
+  const buyer = key(data, "buyer");
+  const recipient = key(data, "recipient");
+  if (!asset || !buyer || !recipient) return null;
+  return { asset, buyer, recipient, hardship: !!pick(data, "hardship") };
+}

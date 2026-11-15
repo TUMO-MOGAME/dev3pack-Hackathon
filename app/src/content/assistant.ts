@@ -174,6 +174,8 @@ export const assistant = {
     offline: "Read on this device by the fallback parser (no connection to the QVAC route).",
     error: "I couldn't prepare that payment.",
   },
+  /** Proof drawer: the link to the estate's public, read-only record (/audit/<estate>). */
+  publicRecord: { link: "Open the public record", hint: "A read-only page for family or the executor. No wallet needed." },
   /** Chat-first shell: the sidebar, the top bar and the mobile drawer. */
   shell: {
     subtitle: "Family estate assistant",

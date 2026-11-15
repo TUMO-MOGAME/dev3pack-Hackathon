@@ -13,7 +13,7 @@ import {
 } from "./decoders";
 import { estatePda, vaultAta } from "./pda";
 import { getConnection } from "./tx";
-import { describeEvent } from "./events";
+import { describeEvent, saleFromEvent } from "./events";
 
 export interface RawSnapshot {
   estate: ReturnType<typeof decodeEstate>;
@@ -183,7 +183,8 @@ export function activityFrom(events: ChainEvent[]): ActivityItem[] {
     const d = describeEvent(ev.name, ev.data);
     let reportHash: string | undefined;
     try { reportHash = d.kind.endsWith("Reviewed") ? hex(ev.data, "report_hash") : undefined; } catch { /* no hash on this event */ }
-    return { ts: ev.ts, kind: d.kind, text: d.text, amount: d.amount, txSignature: ev.signature, ...(reportHash ? { reportHash } : {}) };
+    const sale = saleFromEvent(ev.name, ev.data);
+    return { ts: ev.ts, kind: d.kind, text: d.text, amount: d.amount, txSignature: ev.signature, ...(reportHash ? { reportHash } : {}), ...(sale ? { sale } : {}) };
   });
 }
 

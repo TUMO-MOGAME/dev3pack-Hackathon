@@ -20,6 +20,7 @@ import { cleanSpec, mediaRootHex, specInputSchema } from "../assets/spec";
 import { DEMO_ASSETS } from "./demo-asset-photos";
 import { shortName } from "../names";
 import { DEMO_FX, estimateValuation } from "./mock-valuation";
+import { checkInPlan, heartbeatFor } from "../checkin";
 
 export interface MockActor { address: Base58; role: Role; label: string }
 /** "guardians": the estate unlocked, with a Guard set up before Thabo passed (seats, backups, Aunt Zodwa, fallback; 60/60/120 s). */
@@ -51,6 +52,8 @@ export interface MockService extends HeirloomService {
   endFallbackWait(): void;
   /** "All trusted people are gone": every holder and backup recorded as passed, and Thabo's passing reported and cleared. */
   simulateAllSeatsVacant(): void;
+  /** Check-in demo: move Thabo's last check-in back so `daysLeft` plan days remain (negative = overdue). Moves the clock only. */
+  setCheckInDaysLeft(daysLeft: number): void;
 }
 
 export function isMockService(s: HeirloomService | null | undefined): s is MockService {
@@ -613,6 +616,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     a.status = "Sold";
     const t = tx();
     log("AssetSold", `${a.title} sold to ${o.buyerName ?? name(o.buyer)} for ${usd(o.amount)}. ${to === ESTATE ? "The money went into the vault" : `The money went to ${first(to)}`} and the digital title moved to the buyer in the same transaction`, t, o.amount);
+    s.snap.activity[0].sale = { asset: a.address, buyer: o.buyer, buyerName: o.buyerName ?? name(o.buyer), recipient: to, hardship };
     return { t, ranking };
   }
 
@@ -945,6 +949,12 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       save();
     },
     skipWait() { finalizeUnlock(true); save(); },
+    setCheckInDaysLeft(daysLeft) {
+      needCreated();
+      need(est().status === "Active", "BadStatus", "Check-ins only count while the estate is active.");
+      est().lastHeartbeat = heartbeatFor(daysLeft, nowSecs(), checkInPlan("mock"));
+      save();
+    },
     makeDue() {
       needCreated();
       for (const r of s.snap.rules) if (r.recurringAmount > 0n && r.nextDue !== null) r.nextDue = nowSecs();
