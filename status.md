@@ -43,6 +43,11 @@
   prompt, signing a sponsored transaction in a real wallet app (wallets that add a priority fee will be refused when sponsored),
   the hardware back button, real safe-area insets.
 
+## PHONE SPEED + PHONE WALLET + DEVNET (15–16 Nov 2026, all on main and live on the demo site)
+- agent/perf2 merged: server-rendered page frames (Gate `frame`; /chat composer in server HTML), self-hosted fonts via scripts/build-fonts.mjs (no latin-ext download for the USD₮ glyph; regenerate with `node scripts/build-fonts.mjs`), LazyMotion (`m as motion` everywhere, domMax async), demo photos through next/image (quality 80).
+- LIVE Lighthouse (heirloom-one-iota, measured by the lead with nothing else running, median of 3, mobile slow-4G / desktop): `/` 96 / 100, `/chat` 95 / 100, `/will` 87 / 99, `/estate` 87 / 100, `/car` 85 / 99. Mobile 90+ still missing on /will, /estate, /car (no page frame there: /will's layout changes after signing; /estate and /car have no static heading). Next lever: frames for those three, or less JS on every page (demo service without zod).
+- agent/mobile merged (phone wallet via MWA beside WDK; manifest screenshots + maskable icons; safe areas; Android back closes sheets). Real-phone test of MWA still to do.
+
 ## ROUND 2 (15 Nov 2026, 5 agents in ../heirloom-agents/*, merged to main and LIVE on the demo site at 16f1fb0)
 - Merged: agent/i18n (af/st/zu for guardians, assets, disputes, check-in, audit, handover; names consistent via lib/names.ts; motorbike valuation lib/service/mock-valuation.ts; gallery counter top right), agent/seats (owner replaces a trusted person, mock + chain; the lead added warnings for an open succession objection and a backup on another place), agent/features, agent/contract (sections below). agent/perf still running.
 - Checks: tsc + eslint clean, 485/485 vitest, next build OK, contract 65/65 LiteSVM. Live (heirloom-one-iota) at 360 + 1280 px: check-in states, audit page (also anonymous), handover pack + print view, replace-seat flow, yearly cap line ("0 of 3 000 USD₮ used this year"), Assets 19 photos, the "See Thabo's demo estate" button; axe clean, no sideways scroll. Disputes were browser-checked by the agent locally (mock), not yet on the live site.
