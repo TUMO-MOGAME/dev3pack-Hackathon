@@ -15,6 +15,8 @@ import type { LegacyBook, LegacyChatReply, LegacySpeech, LegacyStatus, LegacyVoi
 import type { LegacyVoiceUpload, SpeakInput } from "../legacy/client";
 import type { AssetKind, GuardiansService, GuardiansSnapshot } from "../guardians/types";
 import type { Dispute, DisputesService } from "../disputes/types";
+import type { BillDetails, BillPayee, BillPayeeInput, PaidBill } from "../bills/types";
+import type { InvoiceRead } from "../bills/invoice";
 
 export interface TxResult { signature: string; explorerUrl: string }
 
@@ -86,13 +88,22 @@ export interface HeirloomService extends GuardiansService, DisputesService {
 
   // Tether track payment flow (review → approve → WDK sign → pending → confirmed)
   /** Validates address/network/token, reads balances, quotes the fee. Nothing is signed. */
-  reviewSend(input: { to: Base58; toLabel: string; amountUsdt: number }): Promise<PaymentReview>;
+  reviewSend(input: { to: Base58; toLabel: string; amountUsdt: number; bill?: BillDetails }): Promise<PaymentReview>;
   /** Signs + submits with WDK after the user approved `review`. Idempotent on review.id. */
   confirmSend(review: PaymentReview): Promise<PaymentReceipt>;
   /** Re-checks a payment by id (after reconnect / reload). Never re-sends if a signature exists. */
   getReceipt(id: string): Promise<PaymentReceipt | null>;
   listPendingReceipts(): Promise<PaymentReceipt[]>;
   savedRecipients(): Promise<SavedRecipient[]>;
+
+  // Pay a bill once (lib/bills, plan.md §13.2): from the signed-in wallet through reviewSend/confirmSend with `bill`.
+  // Never from the vault. Payees are an off-chain address book for this wallet.
+  billPayees(): Promise<BillPayee[]>;
+  saveBillPayee(input: BillPayeeInput): Promise<BillPayee>;
+  /** The AI reads an invoice photo or PDF (amount, payee, reference). The file is not stored; only its SHA-256 is returned. */
+  readInvoice(file: File): Promise<InvoiceRead>;
+  /** Bills this wallet paid (or is paying), newest first. */
+  paidBills(): Promise<PaidBill[]>;
 
   // Car sale
   listAsset(estate: Base58, asset: Base58, durationSecs: number): Promise<TxResult>;

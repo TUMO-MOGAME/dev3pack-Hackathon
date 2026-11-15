@@ -28,6 +28,7 @@ export const pay = {
     simulated: "Simulated network",
     kinds: {
       p2p: "Send to family",
+      bill: "Pay a bill",
       "vault-deposit": "Vault deposit",
       offer: "Escrowed offer",
       "claim-payout": "Payment to institution",
@@ -35,6 +36,12 @@ export const pay = {
       program: "Estate transaction",
     },
     viaContract: "Paid from the vault by the estate's contract",
+    reference: "Reference",
+    billFor: "For",
+    invoice: "Invoice",
+    invoiceMatch: "Matches what you typed",
+    invoiceMismatch: "Differs from what you typed",
+    invoiceUnread: "Not compared",
   },
   signing: { title: "Signing with your Tether wallet (WDK)", body: "Your key never leaves this device. Keep this screen open." },
   pending: {

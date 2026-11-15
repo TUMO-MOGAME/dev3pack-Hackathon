@@ -33,3 +33,17 @@ Hardship cannot: on devnet pick either the unsigned or the good affidavit for ea
 
 Good demo moment: upload `rejected/4-…` and show that the agent catches the hidden instruction, and that even an
 "approve" from the agent could never move money on its own: the contract still needs the trusted people and the caps.
+
+## bills/ (pay a bill once, from Thabo's own wallet)
+
+Signed in as Thabo, open **Pay a bill** (`/bill`), choose Ndlovu Attorneys, type **R2 500**, then add the invoice.
+The AI reads the amount, the payee and the reference and compares them with what was typed. The file is not stored;
+only its SHA-256 goes with the payment.
+
+| File | What the check shows |
+|---|---|
+| `6-invoice-ndlovu-attorneys.pdf` | Matches: R2 500 to Ndlovu Attorneys Inc.; suggests the reference NA-2026-114 |
+| `7-invoice-ndlovu-attorneys-vat.pdf` | "Check before you pay": the invoice total is R2 875 (VAT added), you typed R2 500. Thabo decides |
+| `rejected/3-fake-invoice-grocery-slip.pdf` | Not compared: a till slip, not an invoice |
+
+Demo mode scripts the reading by file name (labelled "Demo: a scripted reading"); devnet's AI reads the file itself.

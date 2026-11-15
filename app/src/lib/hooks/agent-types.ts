@@ -1,4 +1,5 @@
 import type { SpecialistName } from "../voice/types";
+import type { BillDetails } from "../bills/types";
 
 /** UI actions the orchestrator may attach to a reply. Rendered as buttons under the message. */
 export type AgentAction =
@@ -7,7 +8,7 @@ export type AgentAction =
   | { type: "showRule"; rule: string }
   | { type: "startUpload"; purpose: "death" | "claim" | "hardship" }
   /** From the wallet assistant (Tether QVAC): opens the payment review. Never sends by itself. */
-  | { type: "reviewSend"; to: string; toLabel: string; amountUsdt: number };
+  | { type: "reviewSend"; to: string; toLabel: string; amountUsdt: number; bill?: BillDetails };
 
 export interface OrchestratorReply { specialist: SpecialistName; reply: string; actions: AgentAction[] }
 

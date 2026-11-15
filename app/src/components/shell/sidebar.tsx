@@ -10,7 +10,7 @@ import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
 import {
   CarFront, Check, ChevronDown, ChevronsUpDown, Ellipsis, FileCheck2, FileText, FlaskConical, HandCoins, House, Inbox, Landmark, LifeBuoy,
-  MessageCircle, MessageSquare, Mic, Milestone, Moon, Pencil, Phone, Plus, ScrollText, Send, Trash2, Users, X, type LucideIcon,
+  MessageCircle, MessageSquare, Mic, Milestone, Moon, Pencil, Phone, Plus, ScrollText, Send, Banknote, Trash2, Users, X, type LucideIcon,
 } from "@/components/ui/icons";
 import type { Role } from "@/lib/types";
 import type { ChatThread } from "@/lib/chat/types";
@@ -47,6 +47,7 @@ const GROUPS: { key: GroupKey; items: Item[] }[] = [
   ] },
   { key: "money", items: [
     { key: "send", href: "/send", icon: Send, hide: WATCH_ONLY },
+    { key: "bill", href: "/bill", icon: Banknote, hide: WATCH_ONLY },
     { key: "statement", href: "/statement", icon: FileText, hide: ["buyer"] },
   ] },
 ];
@@ -86,7 +87,7 @@ export function Sidebar({
   const personaLabel = session ? fmt(common.persona.switchLabel, { name: session.label.replace(/\s*\(.*\)$/, ""), role: common.roles[session.role] }) : "";
 
   const label = (key: string): string =>
-    key === "hardship" ? s.nav.hardship : key === "legacy" ? s.nav.legacy : key === "send" ? s.nav.send : key === "statement" ? s.nav.statement : common.nav[key as "estate" | "will" | "vault" | "car" | "people" | "family" | "claims" | "inbox"];
+    key === "hardship" ? s.nav.hardship : key === "legacy" ? s.nav.legacy : key === "send" ? s.nav.send : key === "statement" ? s.nav.statement : key === "bill" ? s.nav.bill : common.nav[key as "estate" | "will" | "vault" | "car" | "people" | "family" | "claims" | "inbox"];
 
   const text = (t: string) => <span className={rail ? "sr-only" : "min-w-0 flex-1 truncate"}>{t}</span>;
   const badge = (n: number) => n > 0 && (

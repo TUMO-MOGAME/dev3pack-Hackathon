@@ -32,6 +32,8 @@ export function publicSnapshot(snap: EstateSnapshot): EstateSnapshot {
   void _g; void _n;
   return {
     ...rest,
+    // Bills the owner paid from their own wallet are theirs, not the estate's (lib/bills): not on the public record.
+    activity: snap.activity.filter((a) => a.kind !== "BillPaid"),
     estate: { ...snap.estate, death },
     claims: snap.claims.map(({ agentReport: _r, ...c }) => { void _r; return c; }),
     hardships: snap.hardships.map(({ agentReport: _r, ...h }) => { void _r; return h; }),

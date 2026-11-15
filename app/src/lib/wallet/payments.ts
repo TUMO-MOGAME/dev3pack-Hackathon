@@ -17,6 +17,9 @@ export interface StoredPayment extends PaymentReceipt {
   to?: string;
   toLabel?: string;
   amount?: string; // base units as string (JSON-safe)
+  /** kind "bill": the paying wallet and the bill's details (payee, reference, invoice hash), for the receipts list. */
+  from?: string;
+  bill?: PaymentReview["bill"];
   wireBase64?: string;
   lastValidBlockHeight?: number;
   /** Fee payer of the signed tx; `sponsored` = Heirloom's sponsor wallet paid the network fee. */
@@ -127,7 +130,7 @@ export async function recheck(store: ReceiptStore, ops: ChainOps, id: string): P
  */
 export async function runPayment(
   store: ReceiptStore, ops: ChainOps, id: string, sign: () => Promise<SignedTx>,
-  meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount"> = {},
+  meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill"> = {},
 ): Promise<PaymentReceipt> {
   const existing = store.get(id);
   if (existing?.signature) return (await recheck(store, ops, id))!;

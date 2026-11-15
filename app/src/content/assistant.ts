@@ -44,6 +44,7 @@ export const assistant = {
     startUploadClaim: "Upload a fee statement",
     startUploadHardship: "Start a hardship request",
     reviewSend: "Review payment to {name}",
+    reviewBill: "Review the bill to {name}",
     pages: {
       "/estate": "the estate",
       "/will": "the will writer",
@@ -57,6 +58,7 @@ export const assistant = {
       "/privacy": "the privacy policy",
       "/start": "the start",
       "/send": "send to family",
+      "/bill": "pay a bill",
       "/chat": "the chat",
       "/legacy": "legacy voice",
     } as Record<string, string>,
@@ -161,6 +163,7 @@ export const assistant = {
     engineFallback: "Fallback parser",
     understood: "I read this as {amount} to {name}{memo}. Check the review, then approve or cancel.",
     understoodZar: "{zar} ({usdt} at R{rate} per USD₮)",
+    understoodBill: "I read this as a bill: {amount} to {name}{memo}, paid from your own wallet, not the vault. Check the review, then approve or cancel.",
     memo: ", for {memo}",
     labelMemo: "{name} · for {memo}",
     reasons: {
@@ -187,6 +190,7 @@ export const assistant = {
       legacy: "Legacy voice",
       send: "Send to family",
       statement: "Monthly statement",
+      bill: "Pay a bill",
       call: "Talk to Heirloom",
       demo: "Demo mode",
       darkMode: "Dark mode",
