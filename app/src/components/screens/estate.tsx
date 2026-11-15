@@ -18,7 +18,7 @@ import { clock } from "./family";
 import { fmt, timeAgo, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { InstallBanner } from "@/components/shell/install";
-import { LegacyEntry } from "@/components/legacy/legacy-entry";
+import { LegacyEntry } from "@/components/legacy/lazy";
 import { FallbackStatus } from "@/components/guardians/fallback";
 import { ObjectionList } from "@/components/guardians/objections";
 import { guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";

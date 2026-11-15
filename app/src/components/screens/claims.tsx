@@ -16,7 +16,7 @@ import { Blocked } from "@/components/shell/blocked";
 import { usePay } from "@/components/pay/payment";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
-import { MilestoneMoment } from "@/components/legacy/legacy-entry";
+import { MilestoneMoment } from "@/components/legacy/lazy";
 import { categoryIcon } from "./estate";
 import { PausedNotice } from "@/components/guardians/parts";
 import { ClaimWindow } from "@/components/guardians/claim-window";
