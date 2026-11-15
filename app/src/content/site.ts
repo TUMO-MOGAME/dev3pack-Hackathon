@@ -20,6 +20,8 @@ export const site = {
     home: "Heirloom home",
     skip: "Skip to content",
     menu: "Main menu",
+    /** The day / night switch in the header (a switch: on = dark). */
+    darkMode: "Dark mode",
   },
   footer: {
     blurb:

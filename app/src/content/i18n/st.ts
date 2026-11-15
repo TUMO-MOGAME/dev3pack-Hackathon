@@ -21,6 +21,7 @@ export const st: Bundle = {
       home: "Leqephe la lapeng la Heirloom",
       skip: "Tlolela dikahare",
       menu: "Lenane le leholo",
+      darkMode: "Mokgwa o lefifi",
     },
     footer: {
       blurb: "Heirloom e sebetsa hammoho le lengolo la hao la thato le saennweng pela dipaki. Ha e le nkele sebaka. Ke prototype ya hackathon ho Solana devnet; konteraka ha e so hlahlojwe.",

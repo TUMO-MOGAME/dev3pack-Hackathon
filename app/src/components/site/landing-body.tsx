@@ -5,6 +5,7 @@ import {
   ArrowRight, Banknote, Check, FileLock2, HeartPulse, KeyRound, Lock, PenLine, ShieldCheck, Smartphone, UsersRound, Zap,
 } from "@/components/ui/icons";
 import { receiptTxs, type LandingCopy } from "@/content/landing";
+import { Marked } from "@/components/ui/marked";
 import { useLocalized } from "@/lib/i18n/client";
 
 const stripIcons = [Banknote, Smartphone, Zap, UsersRound];
@@ -28,11 +29,6 @@ const explorerTx = (sig: string) => `https://explorer.solana.com/tx/${sig}?clust
 const shortSig = (sig: string) => `${sig.slice(0, 4)}â€¦${sig.slice(-4)}`;
 const delay = (s: number) => ({ "--d": `${s}s` }) as CSSProperties;
 
-/** Copy with *marked* words: each marked phrase gets the hand-drawn underline. */
-function Marked({ text }: { text: string }) {
-  return text.split("*").map((part, i) => (i % 2 ? <span key={i} className="mark">{part}</span> : <Fragment key={i}>{part}</Fragment>));
-}
-
 /**
  * A pre-optimised landing photo (public/landing/<name>-800.webp and -1600.webp, WebP q72 from the Unsplash
  * originals). A plain img: next/image would re-encode files that are already sized and compressed.
@@ -52,7 +48,7 @@ function Photo({ name, w, h, alt, sizes, large = 1600, widths, priority = false,
 }
 
 function Eyebrow({ children }: { children: ReactNode }) {
-  return <p className="lp-eyebrow" data-reveal>{children}</p>;
+  return <p className="eyebrow" data-reveal>{children}</p>;
 }
 
 /**
@@ -82,9 +78,11 @@ function useReveal(root: RefObject<HTMLElement | null>) {
       }
     }, { rootMargin: "0px 0px -8% 0px", threshold: 0.12 });
     const start = () => { for (const node of el.querySelectorAll("[data-reveal]")) io.observe(node); };
-    const idle = "requestIdleCallback" in window ? window.requestIdleCallback(start, { timeout: 2000 }) : window.setTimeout(start, 200);
+    // Safari has no requestIdleCallback.
+    const ric = window.requestIdleCallback as typeof window.requestIdleCallback | undefined;
+    const idle = ric ? ric(start, { timeout: 2000 }) : setTimeout(start, 200);
     return () => {
-      if ("cancelIdleCallback" in window) window.cancelIdleCallback(idle); else window.clearTimeout(idle);
+      if (ric) window.cancelIdleCallback(idle as number); else clearTimeout(idle);
       io.disconnect();
       for (const node of el.querySelectorAll<HTMLElement>("[data-pending]")) delete node.dataset.pending;
     };
@@ -106,7 +104,7 @@ export function LandingBody({ copy: english }: Readonly<{ copy: LandingCopy }>) 
       <section className="lp-hero" aria-labelledby="hero-title">
         <div className="lp-wrap">
           <div className="lp-copy">
-            <p className="lp-eyebrow">{hero.eyebrow}</p>
+            <p className="eyebrow">{hero.eyebrow}</p>
             <h1 id="hero-title" className="font-display"><Marked text={hero.title} /></h1>
             <p className="lp-lede">{hero.body}</p>
             <div className="lp-actions">

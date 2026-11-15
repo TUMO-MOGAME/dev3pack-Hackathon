@@ -21,6 +21,7 @@ export const zu: Bundle = {
       home: "Ikhasi lasekhaya le-Heirloom",
       skip: "Yeqa uye kokuqukethwe",
       menu: "Imenyu eyinhloko",
+      darkMode: "Imodi emnyama",
     },
     footer: {
       blurb: "I-Heirloom isebenza eceleni kwencwadi yakho yefa esayiniwe phambi kofakazi. Ayithathi indawo yayo. Isibonelo se-hackathon ku-Solana devnet; inkontileka ayikahlolwa.",

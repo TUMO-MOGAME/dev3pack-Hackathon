@@ -16,11 +16,12 @@ export const af: Bundle = {
       how: "Hoe dit werk",
       safety: "Veiligheid",
       proof: "Bewys",
-      open: "Maak die app oop",
+      open: "Open die app",
       demo: "Probeer die demo",
       home: "Heirloom tuisblad",
       skip: "Gaan na die inhoud",
       menu: "Hoofkieslys",
+      darkMode: "Donker modus",
     },
     footer: {
       blurb: "Heirloom werk saam met jou getekende testament wat voor getuies onderteken is. Dit vervang dit nie. Hackathon-prototipe op Solana devnet; die kontrak is nog nie geoudit nie.",

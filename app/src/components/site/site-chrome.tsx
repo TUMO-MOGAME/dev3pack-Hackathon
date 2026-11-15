@@ -2,6 +2,8 @@
 import Link from "next/link";
 import type { SiteCopy } from "@/content/site";
 import { ButtonLink, Logo } from "@/components/ui/primitives";
+import { Moon, Sun } from "@/components/ui/icons";
+import { setTheme, useTheme } from "@/components/shell/theme";
 import { useLocalized } from "@/lib/i18n/client";
 import { LanguageSwitcher } from "./language-switcher";
 
@@ -12,7 +14,7 @@ export function SiteHeader({ site: english, minimal = false }: { site: SiteCopy;
   return (
     <header className="pt-safe sticky top-0 z-40 border-b border-line bg-bg">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-ink focus:px-4 focus:py-2.5 focus:text-bg">{site.nav.skip}</a>
-      <div className="mx-auto flex h-[var(--header-h)] w-full max-w-6xl items-center gap-2 px-4 min-[400px]:gap-3">
+      <div className="mx-auto flex h-[var(--header-h)] w-full max-w-6xl items-center gap-1.5 px-3 min-[400px]:gap-3 min-[400px]:px-4">
         {/* Below 400px the wordmark gives way to the language switcher; the link keeps its accessible name. */}
         <Link href="/" aria-label={site.nav.home} className="shrink-0 rounded-full"><Logo name={site.name} className="max-[400px]:[&>span:last-child]:hidden" /></Link>
         {!minimal && (
@@ -23,9 +25,24 @@ export function SiteHeader({ site: english, minimal = false }: { site: SiteCopy;
           </nav>
         )}
         <LanguageSwitcher className="ml-auto" />
+        <ThemeSwitch label={site.nav.darkMode} />
         <ButtonLink href="/start" small className="shrink-0">{site.nav.open}</ButtonLink>
       </div>
     </header>
+  );
+}
+
+/** Day / night, as on the sidebar: a switch that is on when the page is dark (the default). */
+function ThemeSwitch({ label }: { label: string }) {
+  const { dark } = useTheme();
+  return (
+    <button
+      type="button" role="switch" aria-checked={dark} aria-label={label} title={label}
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      className="grid size-10 shrink-0 place-items-center min-[400px]:size-11 rounded-full border border-line text-ink hover:bg-surface-2"
+    >
+      {dark ? <Moon className="size-[18px]" /> : <Sun className="size-[18px]" />}
+    </button>
   );
 }
 
