@@ -1,6 +1,7 @@
 import type { AssistantCopy } from "../assistant";
 import type { CommonCopy } from "../common";
 import type { GuardiansCopy } from "../guardians";
+import type { DisputesCopy } from "../disputes";
 import type { LandingCopy } from "../landing";
 import type { PayCopy } from "../pay";
 import type { ScreensCopy } from "../screens";
@@ -25,6 +26,8 @@ export interface Bundle {
   assistant: DeepPartial<AssistantCopy>;
   /** Backups, watchers, objections and the fallback plan. Optional: anything left out shows in English. */
   guardians?: DeepPartial<GuardiansCopy>;
+  /** Disputes and yearly limits (15 Nov 2026). Optional: anything left out shows in English. */
+  disputes?: DeepPartial<DisputesCopy>;
   /** One line shown above the English-only legal pages. */
   legalNote: string;
 }

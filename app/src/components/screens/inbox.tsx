@@ -18,6 +18,8 @@ import { guardiansOf, guardianTodo, isMonitor } from "@/components/guardians/der
 import { PausedNotice } from "@/components/guardians/parts";
 import { GuardiansInbox } from "@/components/guardians/section";
 import { ClaimWindow } from "@/components/guardians/claim-window";
+import { DisputeList, DisputePanel } from "@/components/disputes/disputes";
+import { openDisputeOn } from "@/lib/disputes/types";
 import { useNow } from "@/lib/hooks/use-now";
 
 type Copy = ScreensCopy["inbox"];
@@ -89,7 +91,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       act: async () => {
         // Approve, and if that completes the quorum, release the payment in the same breath. With watchers (a Guard),
         // the payment waits out the objection window first, so only approve here.
-        if (got + 1 >= e.claimThreshold && !g?.enabled) {
+        if (got + 1 >= e.claimThreshold && !g?.enabled && !openDisputeOn(snap.disputes, c.address, now ?? 0)) {
           // "Try again" in the payment sheet re-runs execute: don't approve a second time (the program rejects that).
           let approved = !!c.approvals[me];
           await pay({
@@ -141,6 +143,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
           </div>
         </div>
         {it.target && <PausedNotice target={it.target} className="mt-3" />}
+        {it.target && it.kind === "claim" && <DisputePanel kind="Claim" target={it.target} className="mt-3" />}
         {it.report && <div className="mt-4"><ReportCard report={it.report} /></div>}
         <div className="mt-4"><Quorum approvals={it.approvals} needed={it.need} names={e.verifierNames} label={fmt(copy.quorum, { got, need: it.need })} /></div>
         {it.payable && it.target ? (
@@ -170,6 +173,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       {todo.length === 0 && waiting.length === 0
         ? guardianCount > 0 ? null : <EmptyState icon={<InboxIcon className="size-6" aria-hidden="true" />} title={copy.empty.title} body={copy.empty.body} />
         : <ul className="grid gap-4"><AnimatePresence initial={false}>{[...todo, ...waiting].map(card)}</AnimatePresence></ul>}
+      <DisputeList snap={snap} className="mt-5" />
       <GuardiansInbox snap={snap} className={todo.length + waiting.length > 0 ? "mt-5" : undefined} />
 
       <section aria-labelledby="handled" className="mt-8">

@@ -160,7 +160,7 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
     },
     confirmSeatDeath: (estate, index) => d.send([ix.confirmSeatDeath(chainCtx(), me(), pk(estate), index)]),
     vetoSeatDeath: (estate, index) => d.send([ix.vetoSeatDeath(chainCtx(), me(), pk(estate), index)]),
-    finalizeSuccession: (estate, index) => d.send([ix.finalizeSuccession(chainCtx(), pk(estate), index)]),
+    finalizeSuccession: (estate, index) => d.send([ix.finalizeSuccession(chainCtx(), pk(estate), index, me())]),
 
     async raiseObjection(estate, input) {
       const objector = me();
@@ -210,8 +210,8 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       return { tx, report: r.report };
     },
 
-    startFallback: (estate) => d.send([ix.startFallback(chainCtx(), pk(estate))]),
-    lapseObjection: (estate) => d.send([ix.lapseObjection(chainCtx(), pk(estate))]),
+    startFallback: (estate) => d.send([ix.startFallback(chainCtx(), pk(estate), me())]),
+    lapseObjection: (estate) => d.send([ix.lapseObjection(chainCtx(), pk(estate), me())]),
 
     async executeFallback(estate) {
       const g = await guardRaw(estate);

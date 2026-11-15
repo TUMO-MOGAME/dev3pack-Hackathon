@@ -15,6 +15,7 @@ import { DEMO_PERSONAS as WALLET_PERSONAS } from "../wallet/personas";
 import { createMockLegacy } from "./mock-legacy";
 import { fail } from "./mock-errors";
 import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type MockGuardState, type Named } from "./mock-guardians";
+import { createMockDisputes } from "./mock-disputes";
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, mediaRootHex, specInputSchema } from "../assets/spec";
 import { DEMO_ASSETS } from "./demo-asset-photos";
@@ -249,6 +250,12 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     snap: () => s.snap, names: () => s.names, created: () => s.created, me, agent: AGENT,
     tx, log, credit, usd,
   });
+  // Disputes (U9) and yearly caps: rules in mock-disputes.ts, hooked into the instructions below.
+  const D = createMockDisputes({
+    snap: () => s.snap, names: () => s.names, created: () => s.created, me, now: nowSecs, tx, log, usd,
+    objections: () => s.guard?.objections ?? [],
+    objectionOpen: (target) => (s.guard?.objections ?? []).some((o) => o.target === target && o.status === "Open"),
+  });
 
   /* ----- synchronous "instructions" (shared by the async API and the stage seeder) ----- */
 
@@ -421,6 +428,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(e.status === "DeathPending", "BadStatus", "The estate is not waiting to unlock.");
     need(force || nowSecs() >= (e.death.pendingSince ?? 0) + e.waitingPeriodSecs, "WaitingPeriodNotOver", "The waiting period has not ended yet.");
     G.checkNotObjected(e.address);
+    D.checkNotDisputed(e.address);
     e.status = "Unlocked";
     for (const r of s.snap.rules) if (r.recurringAmount > 0n && r.nextDue === null) r.nextDue = nowSecs();
     const t = tx();
@@ -440,6 +448,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(amt <= rule.maxPerClaim, "ExceedsPerClaimCap", `The most this rule pays per claim is ${usd(rule.maxPerClaim)}.`);
     need(rule.spentTotal + amt <= rule.lifetimeCap, "ExceedsLifetimeCap", `Only ${usd(rule.lifetimeCap - rule.spentTotal)} is left under this rule.`);
     need(nowSecs() <= rule.validUntil, "RuleExpired", "This rule has ended.");
+    D.checkYearly(rule, amt, false);
     const approved = report.verdict === "approve";
     const claim: Claim = {
       address: fakeAddr(), rule: rule.address, id: s.snap.claims.length, beneficiary: me(), payee: payee.wallet, amount: amt,
@@ -493,6 +502,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(nowSecs() <= r.validUntil, "RuleExpired", "This rule has ended.");
     need(r.spentTotal + r.recurringAmount <= r.lifetimeCap, "ExceedsLifetimeCap", `Only ${usd(r.lifetimeCap - r.spentTotal)} is left under this rule.`);
     need(est().vaultBalance >= r.recurringAmount, "InsufficientFunds", "The vault does not hold enough for this payment.");
+    D.checkYearly(r, r.recurringAmount, true);
     est().vaultBalance -= r.recurringAmount;
     r.spentTotal += r.recurringAmount;
     credit(r.fixedPayee!, r.recurringAmount);
@@ -513,9 +523,11 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     const approvedToPay = est().status === "Active" ? c.ownerApproved : c.ownerApproved || count(c.approvals) >= est().claimThreshold;
     need(approvedToPay, "InsufficientApprovals", est().status === "Active" ? "The owner still needs to approve this." : "A trusted person still needs to approve this.");
     G.checkClaimExecutable(c.address, !c.ownerApproved);
+    D.checkNotDisputed(c.address);
     need(rule.spentTotal + c.amount <= rule.lifetimeCap, "ExceedsLifetimeCap", "This would go over the rule's total limit.");
     need(nowSecs() <= rule.validUntil, "RuleExpired", "This rule has ended.");
     need(est().vaultBalance >= c.amount, "InsufficientFunds", "The vault does not hold enough for this payment.");
+    D.checkYearly(rule, c.amount, true);
     est().vaultBalance -= c.amount;
     rule.spentTotal += c.amount;
     credit(c.payee, c.amount);
@@ -826,6 +838,9 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     as("thabo", () => {
       createEstate(draft);
       deposit(24000);
+      // Naledi's school fees: at most 3,000 USD₮ a year (yearly cap), on top of 1,500 per claim and 9,000 in total.
+      const school = s.snap.rules.find((r) => r.category === "Tuition" && r.allowedPayeeKind === "School");
+      if (school) D.setYearlyCap(school.address, toBase(3000));
       const car = draft.assets[0];
       // Adds the Corolla with its photos and spec sheet, and the motorbike with its own (see registerAsset).
       registerAsset({ nftMint: CAR_MINT, title: car.title, floorUsdt: car.floorPriceUsdt, hardshipFloorUsdt: car.hardshipFloorUsdt, askingUsdt: car.askingPriceUsdt, proceedsTo: ESTATE }, fakeHash());
@@ -1186,8 +1201,17 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
 
     async raiseObjection(_e, input) {
       const reasonHash = await sha256Hex(input.reason.trim());
-      return mutate(900, () => G.raiseObjection(input, reasonHash));
+      return mutate(900, () => { D.checkObjectionAllowed(input.kind, input.target); return G.raiseObjection(input, reasonHash); });
     },
+
+    /* ----- disputes and yearly caps (docs/program-spec.md; rules in mock-disputes.ts) ----- */
+    async raiseDispute(_e, input) {
+      const reason = input.reason.trim();
+      const reasonHash = await sha256Hex(reason);
+      return mutate(900, () => D.raiseDispute(input.kind, input.target, reason, reasonHash));
+    },
+    resolveDispute: (_e, dispute, uphold) => mutate(900, () => D.resolveDispute(dispute, uphold)),
+    setYearlyCap: (_e, rule, input) => mutate(700, () => D.setYearlyCap(rule, toBase(input.capUsdt), input.periodStart)),
     voteObjection: (_e, objection, uphold) => mutate(900, () => G.voteObjection(objection, uphold)),
 
     async reportFallbackDeath(_e, i, certificate) {

@@ -32,7 +32,7 @@ limits** and **people the parent trusts** must approve anything unusual.
 | U6 | Sell the car at the best price | Sale price must be ≥ the owner's **floor price**; USDT and the title swap in one transaction | Agent picks the best offer |
 | U7 | Sell the car below the floor (hardship) | Allowed only with an approved hardship request, and never below a **hardship floor** | Agent review + 2-of-3 verifiers |
 | U8 | Dead man's switch (P1) | No owner check-in for N months starts the U3 death process | Same as U3 |
-| U9 | Dispute (P1) | Any beneficiary or verifier can freeze a pending action during its waiting period | Resolved by 2-of-3 verifiers |
+| U9 | Dispute (P1) | Any beneficiary or verifier can freeze a pending action during its waiting period (claims and the unlock; built 15 Nov 2026; lapses after the waiting period) | Resolved by 2-of-3 verifiers |
 
 **Verifiers** are 3 people the owner names when writing the will, for example the executor named in
 the legal will, a lawyer and a trusted family member. Making the executor verifier #1 ties the app to

@@ -15,7 +15,7 @@ import { enumValue, findInstruction, getCoder, getIdl, norm } from "./idl";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID,
   assetPda, ata, beneficiaryPda, claimPda, estatePda, hardshipPda, nftEscrowAta, offerEscrowAta, offerPda,
-  payeePda, rulePda, vaultAta, guardPda, mediaPda, objectionPda, seatPda, stampPda,
+  payeePda, rulePda, vaultAta, guardPda, mediaPda, objectionPda, seatPda, stampPda, yearCapPda,
 } from "./pda";
 import type { AssetKind, TargetKind } from "../guardians/types";
 
@@ -243,6 +243,7 @@ export function submitClaim(ctx: Ctx, p: {
     ...beneficiarySigner(ctx, p.estate, p.signer), rule,
     payee: payeePda(ctx.programId, p.estate, p.payeeWallet), payee_wallet: p.payeeWallet,
     claim: claimPda(ctx.programId, rule, p.claimId),
+    year_cap: yearCapPda(ctx.programId, rule), // may not exist (no yearly cap)
   });
 }
 
@@ -271,6 +272,7 @@ export function executeClaim(ctx: Ctx, p: { estate: PublicKey; payer: PublicKey;
     usdt_mint: ctx.usdtMint, mint: ctx.usdtMint, vault, estate_vault: vault, vault_ata: vault,
     // Guardians (may not exist; the program checks): objection window and objections.
     guard: guardPda(ctx.programId, p.estate), approval_stamp: stampPda(ctx.programId, p.claim), objection: objectionPda(ctx.programId, p.claim),
+    year_cap: yearCapPda(ctx.programId, p.rule), // may not exist (no yearly cap)
   });
 }
 
@@ -289,6 +291,7 @@ export function executeScheduled(ctx: Ctx, p: { estate: PublicKey; payer: Public
     estate: p.estate, rule: p.rule, payee, payee_account: payee, fixed_payee: p.payeeWallet, payee_wallet: p.payeeWallet,
     payee_token: payeeToken, payee_ata: payeeToken, payee_usdt: payeeToken, payee_token_account: payeeToken,
     usdt_mint: ctx.usdtMint, mint: ctx.usdtMint, vault, estate_vault: vault, vault_ata: vault,
+    year_cap: yearCapPda(ctx.programId, p.rule), // may not exist (no yearly cap)
   });
 }
 
@@ -431,10 +434,10 @@ export function vetoSeatDeath(ctx: Ctx, holder: PublicKey, estate: PublicKey, in
   return buildIx("veto_seat_death", [index], { holder, estate, seat: seatPda(ctx.programId, estate, index) });
 }
 
-/** Anyone (the signer only pays the fee; the instruction itself names no signer). */
-export function finalizeSuccession(ctx: Ctx, estate: PublicKey, index: number) {
+/** Anyone: `caller` is any wallet that signs (so the sponsor can pay the fee; it gains no rights). */
+export function finalizeSuccession(ctx: Ctx, estate: PublicKey, index: number, caller: PublicKey) {
   const seat = seatPda(ctx.programId, estate, index);
-  return buildIx("finalize_succession", [index], { estate, guard: guardPda(ctx.programId, estate), seat, objection: objectionPda(ctx.programId, seat) });
+  return buildIx("finalize_succession", [index], { estate, guard: guardPda(ctx.programId, estate), seat, objection: objectionPda(ctx.programId, seat), caller });
 }
 
 /**
@@ -492,14 +495,14 @@ export function reviewFallbackDeath(estate: PublicKey, agent: PublicKey, index: 
 }
 
 /** Anyone: an Open Fallback objection not upheld within the fallback wait is marked dismissed (lapsed). */
-export function lapseObjection(ctx: Ctx, estate: PublicKey) {
+export function lapseObjection(ctx: Ctx, estate: PublicKey, caller: PublicKey) {
   const guard = guardPda(ctx.programId, estate);
-  return buildIx("lapse_objection", [], { estate, guard, objection: objectionPda(ctx.programId, guard) });
+  return buildIx("lapse_objection", [], { estate, guard, objection: objectionPda(ctx.programId, guard), caller });
 }
 
-/** Anyone: every seat vacant and the owner's death proven. */
-export function startFallback(ctx: Ctx, estate: PublicKey) {
-  return buildIx("start_fallback", [], { estate, guard: guardPda(ctx.programId, estate), ...seatAccounts(ctx, estate) });
+/** Anyone (`caller` signs, so the fee can be sponsored): every seat vacant and the owner's death proven. */
+export function startFallback(ctx: Ctx, estate: PublicKey, caller: PublicKey) {
+  return buildIx("start_fallback", [], { estate, guard: guardPda(ctx.programId, estate), ...seatAccounts(ctx, estate), caller });
 }
 
 /** Anyone: after the wait, the whole vault goes to `recipient` (the first fallback recipient not proven dead). */
@@ -509,5 +512,35 @@ export function executeFallback(ctx: Ctx, p: { payer: PublicKey; estate: PublicK
   return buildIx("execute_fallback", [], {
     payer: p.payer, estate: p.estate, guard, ...seatAccounts(ctx, p.estate), objection: objectionPda(ctx.programId, guard),
     recipient: p.recipient, usdt_mint: ctx.usdtMint, vault, recipient_usdt: ata(ctx.usdtMint, p.recipient),
+  });
+}
+
+// ---------- disputes and yearly caps (docs/program-spec.md, added 15 Nov 2026) ----------
+
+/**
+ * A beneficiary (`beneficiary: true`, passes their Beneficiary PDA) or a verifier disputes a pending claim
+ * (`target` = Claim PDA) or the pending unlock (`target` = the estate). Writes the ["objection", target] PDA.
+ */
+export function raiseDispute(ctx: Ctx, p: { disputer: PublicKey; estate: PublicKey; kind: "Claim" | "Unlock"; target: PublicKey; reasonHashHex: string; beneficiary: boolean }) {
+  return buildIx("raise_dispute", [targetKind(p.kind), p.target, hash32(p.reasonHashHex)], {
+    disputer: p.disputer, estate: p.estate,
+    ...(p.beneficiary ? { beneficiary_account: beneficiaryPda(ctx.programId, p.estate, p.disputer) } : {}),
+    ...(p.kind === "Claim" ? { target_account: p.target } : {}),
+    objection: objectionPda(ctx.programId, p.target),
+  });
+}
+
+/** A verifier (not the one who raised it) votes; 2 uphold cancel the action, 2 dismiss let it continue. */
+export function resolveDispute(ctx: Ctx, p: { verifier: PublicKey; estate: PublicKey; kind: "Claim" | "Unlock"; target: PublicKey; uphold: boolean }) {
+  return buildIx("resolve_dispute", [p.uphold], {
+    verifier: p.verifier, estate: p.estate, objection: objectionPda(ctx.programId, p.target),
+    ...(p.kind === "Claim" ? { target_account: p.target } : {}),
+  });
+}
+
+/** Owner (estate Active): set or change a rule's cap per 365-day period. `periodStart` 0 = now / keep the current period. */
+export function setYearlyCap(ctx: Ctx, p: { owner: PublicKey; rule: PublicKey; cap: bigint; periodStart: number }) {
+  return buildIx("set_yearly_cap", [u64(p.cap), i64(p.periodStart)], {
+    owner: p.owner, ...estateAccounts(ctx, p.owner), rule: p.rule, year_cap: yearCapPda(ctx.programId, p.rule),
   });
 }

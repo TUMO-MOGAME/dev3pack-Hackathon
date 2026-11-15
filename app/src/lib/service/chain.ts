@@ -33,6 +33,7 @@ import { intervalSecs, willDraftSchema } from "../agent/schemas";
 import type { EstateMeta } from "../db";
 import { legacyApi, type LegacySigner } from "../legacy/client";
 import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-guardians";
+import { createChainDisputes, loadDisputes } from "./chain-disputes";
 import { disabledGuardians } from "../chain/guardians";
 import { SystemProgram } from "@solana/web3.js";
 import {
@@ -248,6 +249,7 @@ export function createChainService(): HeirloomService {
       requireOwnerOf,
       getEstate: (estate) => service.getEstate(estate),
     }),
+    ...createChainDisputes({ send: (ixs) => send(ixs), requireOwnerOf }),
 
     async getEstate(estate): Promise<EstateSnapshot> {
       const meta = await getMeta(estate);
@@ -281,7 +283,9 @@ export function createChainService(): HeirloomService {
         const seat = guardians.seats.find((x) => x.index === i);
         return seat?.holder && seat.generation > 0 ? (extras.names[seat.holder] ?? n) : n;
       }) as [string, string, string];
-      return { ...out, estate: { ...out.estate, verifierNames }, guardians };
+      // Disputes (U9) and each rule's yearly cap: new accounts, read from the same program scan.
+      const extra = await loadDisputes(estate, { estate: out.estate, rules: out.rules }, extras.names).catch(() => ({ disputes: [], rules: out.rules }));
+      return { ...out, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians };
     },
 
     listEstatesFor(wallet) {

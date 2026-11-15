@@ -289,3 +289,51 @@ SeatsNotVacant 6032, NotConfirmer 6033, FallbackNotReady 6034, FallbackDone 6035
 - `execute_fallback` sets the estate status to Unlocked (it may still be Active with an agent-approved death claim).
 - Errors beyond the spec list: `BadFallback` (appended last). Events beyond the spec list: `GuardInitialized`, `SeatConfigured`,
   `SeatDeathVetoed`, `ObjectionVoted`, `FallbackDeathReported`, `FallbackDeathReviewed`.
+
+## Disputes, yearly caps and sponsorable permissionless calls (added 2026-11-15, branch `agent/contract`)
+
+**Not deployed yet.** No existing account layout changed: one new account (`YearCap`), three new instructions,
+accounts appended to existing instructions, new events, and errors appended at the end of the enum.
+Program size: 913,376 bytes (was 851,152 with guardians).
+
+### Disputes (U9)
+Reuses the guardians' objection pattern instead of duplicating it: a **dispute is an `Objection` account in the same
+`["objection", target]` PDA with `seat_index = DISPUTE_SEAT = 254`** (`monitor` = the disputer). Every check that
+already pauses on an open objection (`execute_claim`, `finalize_unlock`; also `accept_offer`, `finalize_succession`)
+therefore pauses on an open dispute too, and a target has a monitor's objection or a dispute, never both.
+Differences from a monitor's objection: no Guard is needed (works on every estate), it can be raised by an active
+beneficiary or a verifier, it is resolved only by 2 of 3 verifiers (`resolve_dispute`; never by `vote_objection`, never by
+the owner alone), and it **lapses** at `raised_at + max(estate.waiting_period_secs, 60)`: an Open dispute past that time
+counts as Dismissed everywhere (`objection_is_open` and `raise_objection` are lapse-aware), and votes on it fail with
+`DisputeLapsed`. Funds can therefore never be locked by a dispute.
+
+| Instruction | Args | Signer | Rules |
+|---|---|---|---|
+| `raise_dispute` | kind TargetKind, target Pubkey, reason_hash [u8;32] | `disputer`: a verifier, or an active beneficiary (passes `beneficiary_account`) (NotDisputer) | reason_hash ≠ 0 (InvalidAmount). Claim: `target_account` = the Claim, same estate, status Open. Unlock: target = estate, status DeathPending. Other kinds → BadStatus (monitors cover sales, hardship, successions, the fallback). An effectively open objection/dispute on the target → ObjectionOpen. **One challenge per claim**: any earlier record on a claim → BadStatus. **One per waiting period**: an earlier non-upheld record on the estate raised at or after `death_pending_since` → BadStatus. Emits `DisputeRaised` |
+| `resolve_dispute` | uphold bool | `verifier`, not the disputer (NotVerifier) | is a dispute and Open (BadStatus); not lapsed (DisputeLapsed); one vote each (AlreadyApproved); 2 uphold → Upheld: Claim → Rejected; Unlock → death claim cleared, estate Active (same code as an upheld objection). 2 dismiss → Dismissed. Emits `DisputeVoted`, `DisputeResolved` |
+
+Accounts: raise_dispute: disputer(w,s), estate, beneficiary_account(o), target_account(o; Claim only), objection(w), system_program.
+resolve_dispute: verifier(s), estate(w), objection(w), target_account(w,o; Claim only).
+
+### Yearly caps
+`YearCap` `["yearcap", rule]`: rule, cap u64, period_start i64, period_spent u64, bump. The period is 365 days and
+rolls forward by whole periods (spend restarts at 0). A rule without a YearCap has no yearly cap.
+
+| Instruction | Args | Signer | Rules |
+|---|---|---|---|
+| `set_yearly_cap` | cap u64, period_start i64 | owner, estate Active (BadStatus) | 0 < cap ≤ lifetime_cap and cap ≥ recurring_amount; 0 ≤ period_start ≤ now (InvalidAmount). period_start 0 = now for a new cap / keep the period for an existing one. Spend already recorded is kept. Emits `YearlyCapSet`. Accounts: owner(w,s), estate, rule, year_cap(w), system_program |
+
+Enforced (new account `year_cap` = `["yearcap", rule]` appended, may not exist): `submit_claim` (checks), `execute_claim`
+(re-checks and records, writable), `execute_scheduled` (checks and records, writable; an instalment over the cap fails
+with `ExceedsYearlyCap` and stays due until the next period).
+
+### Sponsorable permissionless calls
+`finalize_unlock`, `finalize_succession`, `start_fallback` and `lapse_objection` now end with `caller: Signer` (any wallet;
+it gains no rights). The fee sponsor can pay as fee payer while the user signs as caller, so the sponsor policy's
+checks (≥ 1 user signature, sponsor never inside an instruction, allow-listed discriminator, rate limit per signer) all
+still apply. `raise_dispute`, `resolve_dispute`, `set_yearly_cap` are on the sponsor allow-list; the agent signs none of them.
+
+### New events and errors
+Events: `DisputeRaised {estate, objection, target, kind, disputer, reason_hash, lapses_at, ts}`, `DisputeVoted {objection, verifier, uphold, ts}`,
+`DisputeResolved {estate, objection, target, kind, upheld, ts}`, `YearlyCapSet {estate, rule, cap, period_start, ts}`.
+Errors (appended): `NotDisputer 6042`, `DisputeLapsed 6043`, `ExceedsYearlyCap 6044`.

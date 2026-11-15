@@ -26,6 +26,12 @@ function who(d: Raw, ...names: string[]): string {
     : "someone";
 }
 
+/** A dispute's kind: Anchor decodes enums as { unlock: {} } / { claim: {} }. */
+const isUnlock = (d: Raw) => Object.keys((pick(d, "kind") as object | undefined) ?? {}).some((k) => k.toLowerCase() === "unlock");
+function capOf(d: Raw): string {
+  try { return formatUsdt(BigInt(String(pick(d, "cap")))); } catch { return "a limit in USD₮"; }
+}
+
 const TEXT: Record<string, (d: Raw, amt?: bigint) => string> = {
   EstateCreated: () => "Estate created and USD₮ vault opened",
   WillSet: () => "Will rules signed (hash recorded on-chain)",
@@ -66,6 +72,11 @@ const TEXT: Record<string, (d: Raw, amt?: bigint) => string> = {
   FallbackStarted: () => "All trusted people are gone: the fallback plan's waiting period has started",
   FallbackExecuted: (d, a) => `Fallback plan: the whole vault (${a !== undefined ? formatUsdt(a) : "USD₮"}) went to ${who(d, "recipient")}`,
   AssetMediaSet: () => "Asset photos updated (their hash is recorded on-chain)",
+  // disputes and yearly caps (15 Nov 2026)
+  DisputeRaised: (d) => `${who(d, "disputer")} disputed a pending ${isUnlock(d) ? "unlock" : "payment"}; it is paused until two trusted people decide`,
+  DisputeVoted: (d) => `${who(d, "verifier")} voted to ${pick(d, "uphold") ? "uphold" : "dismiss"} a dispute`,
+  DisputeResolved: (d) => (pick(d, "upheld") ? "A dispute was upheld: the paused step was cancelled" : "A dispute was dismissed: the paused step can go ahead"),
+  YearlyCapSet: (d) => `Yearly limit set on a rule: ${capOf(d)} a year`,
   AssetSold: (d, a) => `Car sold for ${a !== undefined ? formatUsdt(a) : "USD₮"} to ${who(d, "buyer")}: USD₮ and title swapped atomically`,
 };
 

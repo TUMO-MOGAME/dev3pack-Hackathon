@@ -7,7 +7,7 @@ import { BN } from "@anchor-lang/core";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import * as ix from "./instructions";
 import { findInstruction, getCoder, getIdl } from "./idl";
-import { assetPda, claimPda, estatePda, guardPda, hardshipPda, objectionPda, offerPda, rulePda, seatPda, stampPda } from "./pda";
+import { assetPda, claimPda, estatePda, guardPda, hardshipPda, objectionPda, offerPda, rulePda, seatPda, stampPda, yearCapPda } from "./pda";
 import { decodeEstate, type Raw } from "./decoders";
 
 const k = () => Keypair.generate().publicKey;
@@ -59,15 +59,19 @@ const built: Record<string, () => ReturnType<typeof ix.buildIx>> = {
   review_seat_death: () => ix.reviewSeatDeath(estate, agent, 2, true, H),
   confirm_seat_death: () => ix.confirmSeatDeath(ctx, v[0], estate, 2),
   veto_seat_death: () => ix.vetoSeatDeath(ctx, v[2], estate, 2),
-  finalize_succession: () => ix.finalizeSuccession(ctx, estate, 2),
+  finalize_succession: () => ix.finalizeSuccession(ctx, estate, 2, ben),
   raise_objection: () => ix.raiseObjection(ctx, { objector: ben, estate, kind: "Claim", target: k(), seatIndex: 2, reasonHashHex: H, monitorSeat: 2 }),
   vote_objection: () => ix.voteObjection(ctx, { voter: v[0], estate, kind: "Claim", target: k(), uphold: true }),
   set_asset_media: () => ix.setAssetMedia(ctx, { authority: owner, estate, asset, kind: "Car", photosRootHex: H, photoCount: 3 }),
   report_fallback_death: () => ix.reportFallbackDeath(ctx, ben, estate, 0, H),
   review_fallback_death: () => ix.reviewFallbackDeath(estate, agent, 0, true, H),
-  start_fallback: () => ix.startFallback(ctx, estate),
-  lapse_objection: () => ix.lapseObjection(ctx, estate),
+  start_fallback: () => ix.startFallback(ctx, estate, ben),
+  lapse_objection: () => ix.lapseObjection(ctx, estate, ben),
   execute_fallback: () => ix.executeFallback(ctx, { payer: ben, estate, recipient: ben }),
+  // disputes and yearly caps
+  raise_dispute: () => ix.raiseDispute(ctx, { disputer: ben, estate, kind: "Claim", target: k(), reasonHashHex: H, beneficiary: true }),
+  resolve_dispute: () => ix.resolveDispute(ctx, { verifier: v[0], estate, kind: "Unlock", target: estate, uphold: true }),
+  set_yearly_cap: () => ix.setYearlyCap(ctx, { owner, rule: rule0, cap: 3_000_000_000n, periodStart: 0 }),
 };
 const idlNames = new Set(getIdl().instructions.map((i) => i.name));
 const livingPlans = findInstruction("add_rule").args.length > 5;
@@ -122,9 +126,9 @@ describe("instruction builders vs IDL", () => {
     expect(at("execute_claim", ex, "objection").equals(objectionPda(programId, claim))).toBe(true);
     expect(at("finalize_unlock", ix.finalizeUnlock(estate, ben), "objection").equals(objectionPda(programId, estate))).toBe(true);
     const seat = seatPda(programId, estate, 2);
-    expect(at("finalize_succession", ix.finalizeSuccession(ctx, estate, 2), "objection").equals(objectionPda(programId, seat))).toBe(true);
+    expect(at("finalize_succession", ix.finalizeSuccession(ctx, estate, 2, ben), "objection").equals(objectionPda(programId, seat))).toBe(true);
     const guard = guardPda(programId, estate);
-    expect(at("lapse_objection", ix.lapseObjection(ctx, estate), "objection").equals(objectionPda(programId, guard))).toBe(true);
+    expect(at("lapse_objection", ix.lapseObjection(ctx, estate, ben), "objection").equals(objectionPda(programId, guard))).toBe(true);
     const exf = ix.executeFallback(ctx, { payer: ben, estate, recipient: ben });
     expect(exf.keys[names("execute_fallback").indexOf("objection")]).toMatchObject({ isWritable: true });
     // accept_offer: the hardship objection only when a hardship sale is approved, else the system program
@@ -138,6 +142,38 @@ describe("instruction builders vs IDL", () => {
     expect(at("raise_objection", un, "seat").equals(seatPda(programId, estate, 1))).toBe(true);
     const decoded = getCoder().instruction.decode(Buffer.from(un.data)) as unknown as { data: { seat_index: number } };
     expect(decoded.data.seat_index).toBe(255);
+  });
+
+  it("disputes, yearly caps and sponsorable callers: PDAs and signers land in the right slots", () => {
+    const names = (n: string) => findInstruction(n).accounts.map((a) => a.name);
+    const slot = (n: string, t: ReturnType<typeof ix.buildIx>, acc: string) => t.keys[names(n).indexOf(acc)];
+    const claim = k();
+    const rd = ix.raiseDispute(ctx, { disputer: ben, estate, kind: "Claim", target: claim, reasonHashHex: H, beneficiary: true });
+    expect(slot("raise_dispute", rd, "objection").pubkey.equals(objectionPda(programId, claim))).toBe(true);
+    expect(slot("raise_dispute", rd, "target_account").pubkey.equals(claim)).toBe(true);
+    expect(slot("raise_dispute", rd, "disputer")).toMatchObject({ isSigner: true });
+    const decoded = getCoder().instruction.decode(Buffer.from(rd.data)) as unknown as { data: { kind: Record<string, unknown> } };
+    expect(Object.keys(decoded.data.kind)[0].toLowerCase()).toBe("claim");
+    // A verifier passes no Beneficiary PDA; an Unlock dispute no target account (both Anchor None = the program id).
+    const vu = ix.raiseDispute(ctx, { disputer: v[1], estate, kind: "Unlock", target: estate, reasonHashHex: H, beneficiary: false });
+    expect(slot("raise_dispute", vu, "beneficiary_account").pubkey.equals(programId)).toBe(true);
+    expect(slot("raise_dispute", vu, "target_account").pubkey.equals(programId)).toBe(true);
+    const rs = ix.resolveDispute(ctx, { verifier: v[0], estate, kind: "Claim", target: claim, uphold: false });
+    expect(slot("resolve_dispute", rs, "target_account")).toMatchObject({ isWritable: true });
+    expect(slot("resolve_dispute", rs, "target_account").pubkey.equals(claim)).toBe(true);
+    // year_cap: the rule's ["yearcap", rule] PDA, writable where payments record their spend.
+    const rule = k();
+    const yc = yearCapPda(programId, rule);
+    expect(slot("set_yearly_cap", ix.setYearlyCap(ctx, { owner, rule, cap: 1n, periodStart: 0 }), "year_cap").pubkey.equals(yc)).toBe(true);
+    expect(slot("execute_claim", ix.executeClaim(ctx, { estate, payer: ben, rule, claim, payeeWallet: payee }), "year_cap")).toMatchObject({ pubkey: yc, isWritable: true });
+    expect(slot("execute_scheduled", ix.executeScheduled(ctx, { estate, payer: ben, rule, payeeWallet: payee }), "year_cap")).toMatchObject({ pubkey: yc, isWritable: true });
+    const sc = ix.submitClaim(ctx, { estate, signer: ben, ruleId: 0, claimId: 0, payeeWallet: payee, amount: 1n, evidenceHashHex: H });
+    expect(slot("submit_claim", sc, "year_cap").pubkey.equals(yearCapPda(programId, rule0))).toBe(true);
+    // The permissionless calls take any wallet as a signing caller, so the sponsor can pay their fee.
+    for (const [n, t] of [["finalize_unlock", ix.finalizeUnlock(estate, ben)], ["finalize_succession", ix.finalizeSuccession(ctx, estate, 2, ben)],
+      ["start_fallback", ix.startFallback(ctx, estate, ben)], ["lapse_objection", ix.lapseObjection(ctx, estate, ben)]] as const) {
+      expect(slot(n, t, "caller")).toMatchObject({ pubkey: ben, isSigner: true, isWritable: false });
+    }
   });
 
   it("rejects malformed hashes", () => {

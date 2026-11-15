@@ -21,6 +21,7 @@ import { InstallBanner } from "@/components/shell/install";
 import { LegacyEntry } from "@/components/legacy/legacy-entry";
 import { FallbackStatus } from "@/components/guardians/fallback";
 import { ObjectionList } from "@/components/guardians/objections";
+import { YearlyCapEditor, YearlyUsage } from "@/components/disputes/yearly";
 import { guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
 
 type Copy = ScreensCopy["estate"];
@@ -213,7 +214,9 @@ function RuleCard({ rule, snap, copy, rate, now }: { rule: Rule; snap: EstateSna
           <span className="text-ink-2 tabular-nums">{rate ? `≈ ${fmt(copy.rules.left, { amount: formatZar(rule.lifetimeCap - rule.spentTotal, rate) })}` : ""}</span>
         </div>
       </div>
+      <YearlyUsage rule={rule} now={now} category={common.status.category[rule.category]} />
       <p className="mt-2 text-[0.75rem] text-ink-2">{fmt(ended ? copy.rules.ended : copy.rules.until, { date })}</p>
+      <YearlyCapEditor rule={rule} category={common.status.category[rule.category]} />
     </li>
   );
 }

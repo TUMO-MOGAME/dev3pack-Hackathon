@@ -20,6 +20,8 @@ import { MilestoneMoment } from "@/components/legacy/legacy-entry";
 import { categoryIcon } from "./estate";
 import { PausedNotice } from "@/components/guardians/parts";
 import { ClaimWindow } from "@/components/guardians/claim-window";
+import { DisputePanel } from "@/components/disputes/disputes";
+import { YearlyLeft } from "@/components/disputes/yearly";
 
 type Copy = ScreensCopy["claims"];
 
@@ -38,6 +40,8 @@ function Claims({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
   const forOwner = role === "owner" && e.status === "Active" ? snap.claims.filter((c) => c.status === "Open" && c.agentVerdict === "Approved" && snap.rules.find((r) => r.address === c.rule)?.startsNow) : [];
   const [wizard, setWizard] = useState<{ rule?: string; payee?: string; amount?: number } | null>(null);
   const claims = role === "beneficiary" ? snap.claims.filter((c) => c.beneficiary === session.address) : snap.claims;
+  // Family members can see (and dispute) each other's pending payments.
+  const family = role === "beneficiary" ? snap.claims.filter((c) => c.beneficiary !== session.address && c.status === "Open" && c.agentVerdict === "Approved") : [];
 
   useEffect(() => {
     if (!intent || !canClaim) return;
@@ -86,6 +90,7 @@ function Claims({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
             {claims.length === 0
               ? <EmptyState icon={<Banknote className="size-6" aria-hidden="true" />} title={copy.empty} action={canClaim ? <Button onClick={() => setWizard({})}>{copy.newCta}</Button> : undefined} />
               : <ul className="grid gap-3">{claims.map((c) => <ClaimCard key={c.address} claim={c} snap={snap} copy={copy} />)}</ul>}
+            {family.length > 0 && <FamilyPending claims={family} snap={snap} copy={copy} />}
           </motion.section>
         )}
       </AnimatePresence>
@@ -150,6 +155,7 @@ function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; 
       </div>
       <div className="mt-4"><ClaimTracker claim={claim} need={snap.estate.claimThreshold} copy={copy} waitingFor={snap.estate.status === "Active" && rule?.startsNow ? fmt(copy.card.waitingOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : undefined} /></div>
       {claim.status === "Open" && <PausedNotice target={claim.address} className="mt-3" />}
+      <DisputePanel kind="Claim" target={claim.address} className="mt-3" />
       {claim.status === "Open" && snap.guardians?.claimPayableAt?.[claim.address] !== undefined && (
         <ClaimWindow claim={claim.address} payee={claim.payee} payeeName={payee} amount={claim.amount} successText={fmt(copy.card.paidOn, { payee })} />
       )}
@@ -168,6 +174,18 @@ function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; 
         </details>
       )}
     </motion.li>
+  );
+}
+
+/** Other family members' pending payments: shown so a family member can dispute one (U9). */
+function FamilyPending({ claims, snap, copy }: { claims: Claim[]; snap: EstateSnapshot; copy: Copy }) {
+  const { disputes } = useCopy();
+  return (
+    <section aria-labelledby="family-pending" className="mt-6">
+      <h2 id="family-pending" className="text-h3">{disputes.family.title}</h2>
+      <p className="mb-3 text-small text-ink-2">{disputes.family.body}</p>
+      <ul className="grid gap-3">{claims.map((c) => <ClaimCard key={c.address} claim={c} snap={snap} copy={copy} />)}</ul>
+    </section>
   );
 }
 
@@ -267,6 +285,7 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
                       <span className="flex flex-wrap items-center gap-2 font-semibold">{common.status.category[r.category]}<Badge tone={r.startsNow ? "gold" : "neutral"}>{r.startsNow ? w.rule.now : w.rule.later}</Badge></span>
                       {!usable(r) && <span className="block text-small font-medium text-brass">{fmt(w.rule.notYet, { owner: snap.estate.ownerName.split(" ")[0] })}</span>}
                       <span className="block text-small text-ink-2">{fmt(w.rule.left, { amount: formatUsdt(r.lifetimeCap - r.spentTotal, { decimals: 0 }) })} · {fmt(w.rule.perClaim, { amount: formatUsdt(r.maxPerClaim, { decimals: 0 }) })}</span>
+                      <YearlyLeft rule={r} className="block text-small text-ink-2" />
                     </span>
                     {ruleAddr === r.address && <Check className="size-5 shrink-0 text-accent" aria-hidden="true" />}
                   </label>
