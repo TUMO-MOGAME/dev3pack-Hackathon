@@ -61,6 +61,11 @@ const nextConfig: NextConfig = {
   images: { qualities: [75, 80] },
   // WDK's server-side agent wallet loads the sodium-native addon; keep these out of the server bundle.
   serverExternalPackages: ["@tetherto/wdk-wallet-solana", "@tetherto/wdk-wallet", "sodium-universal", "sodium-native"],
+  // sodium-native loads its compiled addon at runtime (require-addon), so file tracing can't see it: copy the Linux
+  // prebuild into every server function, or the agent's WDK wallet fails on Vercel ("Cannot find addon").
+  outputFileTracingIncludes: {
+    "/**": ["./node_modules/sodium-native/prebuilds/linux-x64/**", "./node_modules/sodium-native/package.json"],
+  },
   turbopack: {
     // Pin the project root to app/ so the resolveAlias paths below resolve the same in every build
     // (Vercel's Git builds otherwise picked the repo root and the browser shims for fs / sodium were not found).
