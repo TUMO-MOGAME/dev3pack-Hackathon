@@ -62,6 +62,16 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null);
 
+  // Switching between car and motorbike swaps the starting make, model, year and mileage, unless the owner changed them.
+  const pickKind = (k: AssetKind) => {
+    const from = kind === "Motorbike" ? a.motorbikeDefaults : r.defaults;
+    const to = k === "Motorbike" ? a.motorbikeDefaults : r.defaults;
+    if (from !== to && make === from.make && model === from.model && year === from.year && mileage === from.mileage) {
+      setMake(to.make); setModel(to.model); setYear(to.year); setMileage(to.mileage);
+    }
+    setKind(k); setValuation(null); setError(null);
+  };
+
   // Vehicles: the name follows make/model/year until the owner types their own.
   const name = vehicle && !titleTouched ? `${year} ${make} ${model}`.trim() : title.trim();
 
@@ -70,7 +80,7 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
     if (!service) return;
     setValuing(true); setError(null);
     try {
-      const v = await service.valueCar({ make, model, year: Number(year), mileageKm: num(mileage), condition });
+      const v = await service.valueCar({ make, model, year: Number(year), mileageKm: num(mileage), condition, kind });
       setValuation(v);
       setAsking(String(v.suggestedAskingUsdt));
       setFloor(String(v.lowUsdt));
@@ -142,7 +152,7 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
                   "flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-small font-medium focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus)]",
                   kind === k ? "border-2 border-ink bg-surface-2" : "border-line-strong bg-surface hover:bg-surface-2",
                 )}>
-                  <input type="radio" name="asset-kind" value={k} checked={kind === k} onChange={() => { setKind(k); setValuation(null); setError(null); }} className="size-4 accent-[var(--ink)]" />
+                  <input type="radio" name="asset-kind" value={k} checked={kind === k} onChange={() => pickKind(k)} className="size-4 accent-[var(--ink)]" />
                   {copy.kinds[k]}
                 </label>
               ))}
