@@ -1,6 +1,6 @@
 "use client";
 import { useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, m as motion } from "motion/react";
 import { Banknote, Check, FileHeart, HandHeart, Inbox as InboxIcon, Undo2 } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
@@ -12,7 +12,7 @@ import { Badge, Button, EmptyState, PageHeader } from "@/components/ui/primitive
 import { Quorum } from "@/components/ui/client";
 import { ReportCard } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
-import { Gate } from "@/components/shell/gate";
+import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { usePay } from "@/components/pay/payment";
 import { guardiansOf, guardianTodo, isMonitor } from "@/components/guardians/derive";
 import { PausedNotice } from "@/components/guardians/parts";
@@ -44,7 +44,7 @@ interface Item {
 
 export function InboxScreen({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.inbox);
-  return <Gate roles={["verifier", "monitor"]}>{({ snap, session }) => <Inbox copy={copy} snap={snap!} session={session} />}</Gate>;
+  return <Gate roles={["verifier", "monitor"]} frame={<HeaderFrame width="max-w-2xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, session }) => <Inbox copy={copy} snap={snap!} session={session} />}</Gate>;
 }
 
 function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; session: WalletSession }) {

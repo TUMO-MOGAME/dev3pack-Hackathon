@@ -13,7 +13,7 @@ import { Badge, Button, ButtonLink, Card, Field, inputClass, Notice, PageHeader,
 import { usePay } from "@/components/pay/payment";
 import { Avatar } from "@/components/shell/app-shell";
 import { fmt, useCopy } from "@/components/shell/copy";
-import { Gate } from "@/components/shell/gate";
+import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { shortName } from "@/lib/names";
 
 type Copy = ScreensCopy["send"];
@@ -21,7 +21,7 @@ const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "del"] as c
 
 export function SendScreen({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.send);
-  return <Gate allowEmpty>{() => <Send copy={copy} />}</Gate>;
+  return <Gate allowEmpty frame={<HeaderFrame width="max-w-md" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{() => <Send copy={copy} />}</Gate>;
 }
 
 function Send({ copy }: { copy: Copy }) {

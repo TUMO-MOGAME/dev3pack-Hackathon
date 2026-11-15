@@ -10,7 +10,7 @@ import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, Card, Field, inputClass, PageHeader } from "@/components/ui/primitives";
 import { Avatar } from "@/components/shell/app-shell";
 import { fmt, useCopy } from "@/components/shell/copy";
-import { Gate } from "@/components/shell/gate";
+import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { GuardiansPeople } from "@/components/guardians/section";
 
 type Copy = ScreensCopy["people"];
@@ -18,7 +18,7 @@ const KINDS: PayeeKind[] = ["University", "School", "Landlord", "Other"];
 
 export function PeopleScreen({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.people);
-  return <Gate>{({ snap, session, role }) => <People copy={copy} snap={snap!} session={session} role={role} />}</Gate>;
+  return <Gate frame={<HeaderFrame width="max-w-4xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, session, role }) => <People copy={copy} snap={snap!} session={session} role={role} />}</Gate>;
 }
 
 function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role }) {

@@ -4,7 +4,7 @@
  * suggested questions. With messages: the conversation scrolls and the composer stays pinned below it.
  */
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
+import { m as motion } from "motion/react";
 import { FileText, ShieldCheck } from "@/components/ui/icons";
 import type { ChatThreadMessage } from "@/lib/chat/types";
 import { Gate } from "@/components/shell/gate";
@@ -17,12 +17,14 @@ import { ChatComposer } from "./chat-composer";
 import { NudgeStack } from "./nudge-stack";
 
 export function ChatScreen() {
-  return <Gate allowEmpty>{() => <Chat />}</Gate>;
+  // The frame is the chat itself (heading, composer) without the person's cards and suggestions, so the first
+  // screen is drawn by the server and simply comes alive when the wallet has loaded.
+  return <Gate allowEmpty frame={<Chat pending />}>{() => <Chat />}</Gate>;
 }
 
 const toEnd = () => window.scrollTo({ top: document.documentElement.scrollHeight });
 
-function Chat() {
+function Chat({ pending = false }: { pending?: boolean }) {
   const { assistant: copy, siteName } = useCopy();
   const h = copy.home;
   const chat = useChat();
@@ -32,18 +34,19 @@ function Chat() {
 
   // Keep the newest message in view (the page scrolls; the composer is pinned over its bottom edge).
   useEffect(() => { if (!empty) toEnd(); }, [empty, messages.length, chat.busy, chat.activeId]);
-  const send = (text: string, opts?: Parameters<typeof chat.send>[1]) => { void chat.send(text, opts); };
+  const send = (text: string, opts?: Parameters<typeof chat.send>[1]) => { if (!pending) void chat.send(text, opts); };
 
   return (
     <div className="mx-auto flex w-full max-w-[56.25rem] flex-1 flex-col px-4">
       {empty ? (
         <div className="flex flex-1 flex-col">
-          <NudgeStack className="mx-auto w-full max-w-xl pt-3" />
+          {!pending && <NudgeStack className="mx-auto w-full max-w-xl pt-3" />}
           <div className="flex flex-1 flex-col items-center justify-center gap-4 py-6 text-center sm:gap-5 sm:py-8">
             <h1 className="rise rounded-xl border border-ink px-7 py-4 text-display leading-none sm:px-10">{siteName}</h1>
             <p className="rise max-w-xl text-lead text-ink-2" style={{ "--i": 1 } as React.CSSProperties}>{h.subtitle}</p>
             <div className="rise flex max-w-2xl justify-center [&>div]:justify-center max-sm:[&_button:nth-child(n+4)]:hidden" style={{ "--i": 2 } as React.CSSProperties}>
-              <Chips items={chat.suggestions} onPick={send} label={copy.chat.suggestionsLabel} disabled={chat.busy} />
+              {/* Suggestions depend on who is acting; until the wallet loads their row is kept empty. */}
+              {pending ? <div className="min-h-11" /> : <Chips items={chat.suggestions} onPick={send} label={copy.chat.suggestionsLabel} disabled={chat.busy} />}
             </div>
           </div>
         </div>

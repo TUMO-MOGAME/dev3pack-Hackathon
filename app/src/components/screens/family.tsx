@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import clsx from "clsx";
-import { motion } from "motion/react";
+import { m as motion } from "motion/react";
 import { ArrowRight, Check, FileHeart, HeartPulse, LockOpen, TriangleAlert } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
@@ -14,7 +14,7 @@ import { Button, ButtonLink, Card, Consent, Notice, PageHeader } from "@/compone
 import { FilePicker, Quorum } from "@/components/ui/client";
 import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
-import { Gate } from "@/components/shell/gate";
+import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { LegacyEntry, MilestoneMoment } from "@/components/legacy/lazy";
 import { PausedNotice } from "@/components/guardians/parts";
 import { guardiansOf, isMonitor, objectionFor } from "@/components/guardians/derive";
@@ -34,7 +34,7 @@ export function clock(secs: number): string {
 
 export function FamilyScreen({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.family);
-  return <Gate>{({ snap, role }) => <Timeline copy={copy} snap={snap!} role={role} />}</Gate>;
+  return <Gate frame={<HeaderFrame width="max-w-2xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, role }) => <Timeline copy={copy} snap={snap!} role={role} />}</Gate>;
 }
 
 function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role: Role }) {

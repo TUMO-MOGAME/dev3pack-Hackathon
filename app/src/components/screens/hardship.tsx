@@ -11,14 +11,14 @@ import { FilePicker, Quorum } from "@/components/ui/client";
 import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { Blocked } from "@/components/shell/blocked";
 import { fmt, useCopy } from "@/components/shell/copy";
-import { Gate } from "@/components/shell/gate";
+import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { formatUsdt } from "@/lib/format";
 
 type Copy = ScreensCopy["hardship"];
 
 export function HardshipScreen({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.hardship);
-  return <Gate>{({ snap, session, role }) => <HardshipView copy={copy} snap={snap!} session={session} role={role} />}</Gate>;
+  return <Gate frame={<HeaderFrame width="max-w-2xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, session, role }) => <HardshipView copy={copy} snap={snap!} session={session} role={role} />}</Gate>;
 }
 
 function HardshipView({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role }) {
