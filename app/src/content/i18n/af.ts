@@ -234,6 +234,8 @@ export const af: Bundle = {
       noEstateOwner: "Jou plan begin met wat jou gesin nodig het. Bou dit saam met die agent en dit word reëls wat jy kan lees en teken.",
       noEstateOther: "{name} word nog nie in 'n plan genoem nie. In die demo begin die storie met Thabo wat sy gesinsplan bou.",
       noEstateCta: "Bou my plan",
+      noEstateDemo: "Sien Thabo se demo-boedel",
+      noEstateDemoHint: "Of spring vorentoe: maak Thabo se getekende plan oop, met sy motor en motorfiets, foto's en al.",
       wrongRoleTitle: "Hierdie bladsy is vir {roles}",
       wrongRoleBody: "Jy tree op as {name} ({role}). Ruil persoon om voort te gaan, of gaan terug na die boedel.",
       switchPerson: "Ruil persoon",

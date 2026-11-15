@@ -21,7 +21,7 @@ export function Gate({ roles, allowEmpty = false, children }: GateProps) {
   const { common } = useCopy();
   const g = common.gate;
   const wallet = useWallet();
-  const { phase, snap, session, refresh, loadError } = useEstate();
+  const { phase, snap, session, refresh, loadError, isMock, resetDemo } = useEstate();
 
   if (!wallet.ready) return <LoadingCards label={g.walletLoading} />;
   if (!session) {
@@ -57,8 +57,14 @@ export function Gate({ roles, allowEmpty = false, children }: GateProps) {
     return (
       <EmptyState level={1}
         icon={<ScrollText className="size-6" aria-hidden="true" />} title={g.noEstateTitle}
-        body={owner ? g.noEstateOwner : fmt(g.noEstateOther, { name: session.label.replace(/\s*\(.*\)$/, "") })}
-        action={owner ? <ButtonLink href="/will">{g.noEstateCta}</ButtonLink> : undefined}
+        body={`${owner ? g.noEstateOwner : fmt(g.noEstateOther, { name: session.label.replace(/\s*\(.*\)$/, "") })}${isMock ? ` ${g.noEstateDemoHint}` : ""}`}
+        action={(owner || isMock) ? (
+          <>
+            {owner && <ButtonLink href="/will">{g.noEstateCta}</ButtonLink>}
+            {/* Demo only: jump to the "funded" stage, where Thabo's Corolla and motorbike are on the estate. */}
+            {isMock && <Button variant={owner ? "secondary" : "primary"} onClick={() => void resetDemo("funded")}>{g.noEstateDemo}</Button>}
+          </>
+        ) : undefined}
       />
     );
   }

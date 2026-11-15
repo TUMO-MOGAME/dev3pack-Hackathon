@@ -234,6 +234,8 @@ export const zu: Bundle = {
       noEstateOwner: "Uhlelo lwakho luqala ngalokho umndeni wakho okudingayo. Lwakhe ne-agent futhi luzoba imithetho ongayifunda futhi uyisayine.",
       noEstateOther: "U-{name} akakabhalwa kunoma yiluphi uhlelo. Ku-demo, indaba iqala ngoThabo akha uhlelo lomndeni wakhe.",
       noEstateCta: "Yakha uhlelo lwami",
+      noEstateDemo: "Bona ifa likaThabo lesibonelo",
+      noEstateDemoHint: "Noma weqe: vula uhlelo olusayiniwe lukaThabo, nemoto yakhe nesithuthuthu, kanye nezithombe.",
       wrongRoleTitle: "Leli khasi elika-{roles}",
       wrongRoleBody: "Usebenza njengo-{name} ({role}). Shintsha umuntu ukuze uqhubeke, noma ubuyele efeni.",
       switchPerson: "Shintsha umuntu",

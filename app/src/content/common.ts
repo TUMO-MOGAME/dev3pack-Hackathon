@@ -99,6 +99,8 @@ export const common = {
     noEstateOwner: "Your plan begins with what your family needs. Build it with the agent and it becomes rules you can read and sign.",
     noEstateOther: "{name} isn't named on a plan yet. In the demo, the story starts with Thabo building his family plan.",
     noEstateCta: "Build my plan",
+    noEstateDemo: "See Thabo's demo estate",
+    noEstateDemoHint: "Or skip ahead: open Thabo's signed plan with his car and motorbike, photos and all.",
     wrongRoleTitle: "This page is for {roles}",
     wrongRoleBody: "You're acting as {name} ({role}). Switch person to continue, or go back to the estate.",
     switchPerson: "Switch person",

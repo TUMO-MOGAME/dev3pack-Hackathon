@@ -234,6 +234,8 @@ export const st: Bundle = {
       noEstateOwner: "Moralo wa hao o qala ka seo lelapa la hao le se hlokang. O hahe le agent mme o tla fetoha melao eo o ka e balang le ho e saena.",
       noEstateOther: "{name} ha a so bolelwe moralong. Demong, pale e qala ka Thabo a haha moralo wa lelapa la hae.",
       noEstateCta: "Haha moralo wa ka",
+      noEstateDemo: "Bona lefa la mohlala la Thabo",
+      noEstateDemoHint: "Kapa o tlōle: bula moralo o saennweng wa Thabo, le koloi ya hae le sethuthuthu, hammoho le ditshwantsho.",
       wrongRoleTitle: "Leqephe lena ke la {roles}",
       wrongRoleBody: "O sebetsa o le {name} ({role}). Fetola motho ho tswela pele, kapa o kgutlele lefeng.",
       switchPerson: "Fetola motho",
