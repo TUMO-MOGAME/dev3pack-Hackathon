@@ -43,6 +43,13 @@
   prompt, signing a sponsored transaction in a real wallet app (wallets that add a priority fee will be refused when sponsored),
   the hardware back button, real safe-area insets.
 
+## TWO LIVE SITES (16 Nov 2026): every push to main deploys BOTH
+- Demo (mock): https://heirloom-one-iota.vercel.app (Vercel project `heirloom`).
+- Devnet (chain): https://heirloom-devnet.vercel.app (Vercel project `heirloom-devnet`, Git-connected to main, root app). Env set by Tumo with scripts/devnet-site-env.ps1 (fixed: values passed with --value, since PS 5.1 pipes add CR LF). /api/health: chain, devnet, program deployed, agent wallet 261pQ…sjNg loaded, sponsor available, gemini + elevenlabs on, supabase off. ELEVENLABS_TOOL_SECRET is not set there (not in the local env files), so the voice agent's server tool won't authenticate on devnet until it is added.
+- Fix needed for chain mode on Vercel: next.config outputFileTracingIncludes ships sodium-native's linux-x64 prebuild (the WDK wallet failed with "Cannot find addon" before).
+- Program upgraded 15 Nov (974,816-byte account, tx xGhx9QFm…MDh); demo estate 2LXvcYbq…ymP7 seeded (see the devnet section). Deployer ~8.1 SOL left.
+- Visitors act as the Mokoena family on the devnet site only after importing the demo wallets (docs/devnet-test-guide.md); anyone can open /audit/2LXvcYbqbtZND3qrfKPex9N7Red3kvPAGDReXWdxymP7.
+
 ## PHONE SPEED + PHONE WALLET + DEVNET (15–16 Nov 2026, all on main and live on the demo site)
 - agent/perf2 merged: server-rendered page frames (Gate `frame`; /chat composer in server HTML), self-hosted fonts via scripts/build-fonts.mjs (no latin-ext download for the USD₮ glyph; regenerate with `node scripts/build-fonts.mjs`), LazyMotion (`m as motion` everywhere, domMax async), demo photos through next/image (quality 80).
 - LIVE Lighthouse (heirloom-one-iota, measured by the lead with nothing else running, median of 3, mobile slow-4G / desktop): `/` 96 / 100, `/chat` 95 / 100, `/will` 87 / 99, `/estate` 87 / 100, `/car` 85 / 99. Mobile 90+ still missing on /will, /estate, /car (no page frame there: /will's layout changes after signing; /estate and /car have no static heading). Next lever: frames for those three, or less JS on every page (demo service without zod).
