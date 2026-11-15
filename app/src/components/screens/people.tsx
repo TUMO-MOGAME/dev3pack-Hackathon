@@ -105,7 +105,7 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
                     <p className="font-semibold">{p.name}</p>
                     <p className="font-mono text-[0.75rem] text-ink-2">{shortAddress(p.wallet)}</p>
                   </div>
-                  <Badge>{common.status.payeeKind[p.kind]}</Badge>
+                  <Badge className="shrink whitespace-normal! py-1 text-right">{common.status.payeeKind[p.kind]}</Badge>
                 </li>
               ))}
             </ul>

@@ -45,13 +45,13 @@ export const af: Bundle = {
     },
     notFound: {
       eyebrow: "Bladsy nie gevind nie",
-      title: "Hierdie bladsy is nie deel van die boedel nie.",
+      title: "Hierdie bladsy is nie deel van die *boedel* nie.",
       body: "Die skakel is dalk oud, of die bladsy het geskuif. Niks is verlore nie. Jou kluis en reëls is presies waar jy hulle gelos het.",
       home: "Terug na die begin",
       app: "Maak my boedel oop",
     },
     offline: {
-      title: "Jy is vanlyn",
+      title: "Jy is *vanlyn*",
       body: "Heirloom het 'n verbinding nodig om die kluis te lees en opdragte te stuur. Jou wallet en reëls is veilig. Koppel weer en probeer weer.",
       retry: "Probeer weer",
     },
@@ -524,7 +524,7 @@ export const af: Bundle = {
   screens: {
     start: {
       eyebrow: "Welkom",
-      title: "Kom ons stel Heirloom op",
+      title: "Kom ons stel *Heirloom* op",
       body: "Sien 'n hele gesin se storie met die demo, of skep jou eie wallet op hierdie toestel.",
       demo: {
         title: "Probeer die demo",
@@ -603,7 +603,7 @@ export const af: Bundle = {
       },
     },
     estate: {
-      title: "{name} se boedel",
+      title: "{name} se *boedel*",
       eyebrow: "Boedel",
       vault: "Veilige kluis",
       vaultHolds: "In USD₮ gehou deur die boedel se kontrak op Solana",
@@ -681,7 +681,7 @@ export const af: Bundle = {
     },
     will: {
       eyebrow: "Planbouer",
-      title: "Bou jou gesinsplan",
+      title: "Bou jou *gesinsplan*",
       body: "Skryf soos jy praat. Die agent maak reëls daarvan. Jy kies watter nou begin en watter wag tot jy weg is, en jy keur elkeen goed voordat iets gesluit word.",
       talk: "Praat eerder",
       consentLead: "Voordat ons begin",
@@ -699,7 +699,7 @@ export const af: Bundle = {
     },
     vault: {
       eyebrow: "Kluis",
-      title: "Vul die kluis",
+      title: "Vul die *kluis*",
       body: "Die kluis hou USD₮ vir jou gesin. Reëls gemerk \"Nou\" betaal op skedule daaruit. Terwyl jy leef, is dit joune: voeg by of onttrek wanneer jy wil.",
       balance: "In die kluis",
       wallet: "In jou wallet",
@@ -727,7 +727,7 @@ export const af: Bundle = {
     },
     people: {
       eyebrow: "Mense",
-      title: "Wie deel is van hierdie boedel",
+      title: "Wie deel is van hierdie *boedel*",
       body: "Die mense en instansies wat die eienaar gekies het. Niemand anders kan iets ontvang of goedkeur nie.",
       trusted: { title: "Vertroude persone" },
       family: { title: "Familie" },
@@ -735,7 +735,7 @@ export const af: Bundle = {
     },
     family: {
       eyebrow: "Tydlyn",
-      title: "Die boedel se reis",
+      title: "Die boedel se *reis*",
       body: "Elke stap van die getekende testament tot die ontsluite boedel, en wie moet saamstem.",
       report: { title: "Meld 'n afsterwe aan", submit: "Dien in vir nagaan" },
       veto: { title: "Is dit 'n fout?", body: "'n Afsterwe is vir jou boedel aangemeld. As jy dit lees, kanselleer dit. Die kluis bly gesluit en niks word betaal nie.", cta: "Ek is nog hier" },
@@ -744,7 +744,7 @@ export const af: Bundle = {
     },
     claims: {
       eyebrow: "Eise",
-      title: "Gelde en huur, aan die instansie betaal",
+      title: "Gelde en huur, aan die *instansie* betaal",
       body: "Kies 'n reël, laai die staat op en Heirloom betaal die instansie direk. Niks word in kontant aan jou betaal nie.",
       owner: { title: "Wag vir jou goedkeuring", approve: "Keur goed en betaal" },
       newCta: "Begin 'n nuwe eis",
@@ -756,14 +756,14 @@ export const af: Bundle = {
     },
     hardship: {
       eyebrow: "Swaarkry",
-      title: "Vra vir 'n swaarkry-uitsondering",
+      title: "Vra vir 'n *swaarkry*-uitsondering",
       body: "As jy regtig in nood is, kan die motor onder die minimum prys verkoop word, maar nooit onder die swaarkryminimum nie. Die geld gaan dan na jou.",
       submit: "Dien versoek in",
       viewCar: "Kyk na die motor",
     },
     send: {
       eyebrow: "Stuur",
-      title: "Stuur aan familie",
+      title: "Stuur aan *familie*",
       body: "'n Direkte USD₮-oordrag van jou Tether-wallet aan iemand wat jy vertrou. Jy gaan alles na voordat dit geteken word.",
       recipients: "Vir wie is dit?",
       amount: "Bedrag in USD₮",
@@ -774,7 +774,7 @@ export const af: Bundle = {
     },
     inbox: {
       eyebrow: "Inkassie",
-      title: "Wag vir jou",
+      title: "*Wag* vir jou",
       body: "Lees die agent se verslag en bevestig dan net wat jy weet waar is. Sonder genoeg goedkeurings beweeg niks nie.",
       empty: { title: "Jy is op hoogte", body: "Nuwe versoeke van die familie sal hier verskyn met die agent se verslag." },
       decline: "Keur af",
@@ -784,7 +784,7 @@ export const af: Bundle = {
       metaTitle: "Openbare boedelrekord",
       metaDescription: "'n Leesalleen-rekord van 'n Heirloom-boedel: sy status, sy reëls en elke betaling en besluit, elk met sy kwitansie.",
       eyebrow: "Openbare rekord",
-      title: "{name} se boedel",
+      title: "{name} se *boedel*",
       body: "'n Leesalleen-bladsy wat enigiemand met die skakel kan oopmaak, sonder 'n wallet. Dit wys wat die boedel se kontrak aanteken: sy status, sy reëls, en elke betaling en besluit met sy kwitansie. Dokumente verskyn net as vingerafdrukke (SHA-256-hashes).",
       loading: "Laai die boedelrekord",
       notFound: { title: "Geen boedel by hierdie adres nie", body: "Gaan die skakel na. 'n Rekord verskyn sodra die eienaar 'n plan onderteken het." },
@@ -1312,7 +1312,7 @@ export const af: Bundle = {
     meta: { title: "Bates" },
     eyebrow: "Bates",
     list: {
-      title: "Dinge om te verkoop",
+      title: "Dinge om te *verkoop*",
       body: "Alles wat die boedel vir die gesin sal verkoop, nooit onder die prys wat gestel is nie.",
       add: "Voeg 'n bate by",
       current: "Wys tans",
@@ -1325,7 +1325,7 @@ export const af: Bundle = {
       Car: "Motor", Motorbike: "Motorfiets", Furniture: "Meubels", Jewellery: "Juweliersware", Electronics: "Elektronika", Other: "Ander",
     },
     add: {
-      title: "Voeg 'n bate by",
+      title: "Voeg 'n *bate* by",
       body: "Voeg iets by wat jy ná jou dood verkoop wil hê. Die boedel hou die digitale titel daarvan en verkoop dit vir jou gesin.",
       kindLegend: "Wat is dit?",
       titleLabel: "Naam",
