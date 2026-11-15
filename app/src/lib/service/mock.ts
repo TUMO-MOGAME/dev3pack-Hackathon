@@ -1169,6 +1169,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       return G.setMonitors(index, monitors.map((m) => m.wallet));
     }),
     setFallback: (_e, recipients) => mutate(800, () => G.setFallback(recipients)),
+    ownerReplaceSeat: (_e, index, newHolder) => mutate(900, () => G.replaceSeat(index, newHolder)),
 
     async reportSeatDeath(_e, index, certificate) {
       needCreated();

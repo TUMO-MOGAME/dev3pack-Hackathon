@@ -409,3 +409,86 @@ describe("mock guardians: asset photos", () => {
     expect(await photosRootHex(["a".repeat(64), "b".repeat(64)])).not.toBe(await photosRootHex(["b".repeat(64), "a".repeat(64)]));
   });
 });
+
+describe("mock guardians: the owner replaces a trusted person (owner_replace_seat)", () => {
+  const NEW = { wallet: "NewTrustedPerson1111111111111111111111111111", name: "Mr. Sizwe Dlamini" };
+
+  it("swaps the holder at once: backups and monitors stay, the holder count goes up, the new person can approve", async () => {
+    const { svc, estate, guardians, snap } = await start("funded");
+    await svc.ownerReplaceSeat(estate, 2, NEW);
+    const seat = (await guardians()).seats[2];
+    expect(seat).toMatchObject({ holder: NEW.wallet, holderName: NEW.name, generation: 1, vacant: false, succession: null });
+    expect(seat.backups.map((b) => b.wallet)).toEqual([DEMO_GUARDIANS.kagiso.wallet, DEMO_GUARDIANS.priya.wallet]);
+    expect(seat.monitors.map((m) => m.wallet)).toEqual([P("zodwa").address]);
+    const e = (await snap()).estate;
+    expect(e.verifiers[2]).toBe(NEW.wallet);
+    expect(e.verifierNames[2]).toBe(NEW.name);
+    expect((await svc.listEstatesFor(P("busi").address)).some((x) => x.role === "verifier")).toBe(false);
+    svc.simulateSeatApproval(2);
+    expect((await guardians()).feed[0].approver).toBe(NEW.wallet);
+  });
+
+  it("a backup or monitor who takes the place is taken off this place's lists", async () => {
+    const { svc, estate, guardians } = await start("funded");
+    await svc.ownerReplaceSeat(estate, 2, DEMO_GUARDIANS.kagiso);
+    let seat = (await guardians()).seats[2];
+    expect(seat.backups.map((b) => b.wallet)).toEqual([DEMO_GUARDIANS.priya.wallet]);
+    expect(seat.holderName).toBe("Cousin Kagiso Mokoena"); // a known person keeps their name
+    await svc.ownerReplaceSeat(estate, 2, { wallet: P("zodwa").address, name: "Aunt Zodwa" });
+    seat = (await guardians()).seats[2];
+    expect(seat.monitors).toEqual([]);
+    expect(seat.generation).toBe(2);
+  });
+
+  it("cancels a reported passing on that place", async () => {
+    const { svc, estate, guardians } = await start("funded");
+    svc.simulateSeatPassing(2);
+    act(svc, "thabo");
+    expect((await guardians()).seats[2].succession).not.toBeNull();
+    await svc.ownerReplaceSeat(estate, 2, NEW);
+    expect((await guardians()).seats[2].succession).toBeNull();
+    await expect(svc.finalizeSuccession(estate, 2)).rejects.toThrow(/^NoSuccessionPending/);
+  });
+
+  it("fills an empty place", async () => {
+    const { svc, estate, guardians, snap } = await start("funded");
+    svc.simulateSeatPassing(0);
+    svc.endSuccessionWait();
+    await svc.finalizeSuccession(estate, 0);
+    expect((await guardians()).seats[0].vacant).toBe(true);
+    act(svc, "thabo");
+    await svc.ownerReplaceSeat(estate, 0, NEW);
+    expect((await guardians()).seats[0]).toMatchObject({ holder: NEW.wallet, vacant: false, generation: 2 });
+    expect((await snap()).estate.verifiers[0]).toBe(NEW.wallet);
+  });
+
+  it("refuses the owner, anyone who already holds a place, and an empty wallet (DuplicateVerifier)", async () => {
+    const { svc, estate, guardians } = await start("funded");
+    await expect(svc.ownerReplaceSeat(estate, 2, { wallet: P("thabo").address, name: "Thabo" })).rejects.toThrow(/^DuplicateVerifier/);
+    await expect(svc.ownerReplaceSeat(estate, 2, { wallet: P("nomsa").address, name: "Ndlovu" })).rejects.toThrow(/^DuplicateVerifier/);
+    await expect(svc.ownerReplaceSeat(estate, 2, { wallet: P("busi").address, name: "Bongani" })).rejects.toThrow(/^DuplicateVerifier/);
+    await expect(svc.ownerReplaceSeat(estate, 2, { wallet: "  ", name: "Nobody" })).rejects.toThrow(/^DuplicateVerifier/);
+    await expect(svc.ownerReplaceSeat(estate, 2, { wallet: "11111111111111111111111111111111", name: "Nobody" })).rejects.toThrow(/^DuplicateVerifier/);
+    expect((await guardians()).seats[2]).toMatchObject({ holder: P("busi").address, generation: 0 });
+  });
+
+  it("only the owner may do it, only while the estate is active, and only on a seat that exists", async () => {
+    const { svc, estate } = await start("funded");
+    for (const who of ["busi", "zodwa", "nomsa", "lerato"]) {
+      act(svc, who);
+      await expect(svc.ownerReplaceSeat(estate, 2, NEW)).rejects.toThrow(/^NotOwner/);
+    }
+    act(svc, "thabo");
+    await expect(svc.ownerReplaceSeat(estate, 5, NEW)).rejects.toThrow(/^BadStatus/);
+    const after = await start("guardians"); // Thabo has passed: the estate is unlocked
+    await expect(after.svc.ownerReplaceSeat(after.estate, 2, NEW)).rejects.toThrow(/^BadStatus/);
+  });
+
+  it("needs guardians set up (no Seat accounts before)", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("funded");
+    act(svc, "thabo");
+    const [{ estate }] = await svc.listEstatesFor(P("thabo").address);
+    await expect(svc.ownerReplaceSeat(estate, 2, NEW)).rejects.toThrow(/^BadStatus/);
+  });
+});

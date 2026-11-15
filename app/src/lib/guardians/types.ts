@@ -122,6 +122,12 @@ export interface GuardiansService {
   }): Promise<TxResult[]>;
   setSeatBackups(estate: Base58, index: number, backups: { wallet: Base58; name: string }[]): Promise<TxResult>;
   setSeatMonitors(estate: Base58, index: number, monitors: { wallet: Base58; name: string }[]): Promise<TxResult>;
+  /**
+   * owner_replace_seat: the owner (estate Active) puts someone new in seat `index` (also fills an empty seat). The new
+   * holder must be set, not the owner and not hold any seat (DuplicateVerifier). The seat keeps its backups and
+   * monitors, minus the new holder if they were one; any reported passing on it is cleared; generation += 1.
+   */
+  ownerReplaceSeat(estate: Base58, index: number, newHolder: { wallet: Base58; name: string }): Promise<TxResult>;
   setFallback(estate: Base58, recipients: { wallet: Base58; name: string; kind: FallbackRecipient["kind"] }[]): Promise<TxResult>;
   // succession
   reportSeatDeath(estate: Base58, index: number, certificate: File): Promise<{ tx: TxResult; report: AgentReport }>;

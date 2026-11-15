@@ -227,6 +227,34 @@ export function createMockGuardians(d: GuardDeps) {
     return t;
   }
 
+  /**
+   * owner_replace_seat: the living owner swaps the person in a seat (or fills an empty one). Same checks as the
+   * program: the owner, estate Active (BadStatus), the new holder set, not the owner and not holding any seat
+   * (DuplicateVerifier). Backups and monitors stay, minus the new holder; a reported passing is cleared.
+   */
+  function replaceSeat(index: number, newHolder: Named): TxResult {
+    needGuard(); needOwnerActive();
+    const s = seat(index);
+    const e = est();
+    const w = newHolder.wallet.trim();
+    need(!!w && w !== VACANT_KEY, "DuplicateVerifier", "The new trusted person needs a wallet address.");
+    need(w !== e.owner, "DuplicateVerifier", "The owner cannot be their own trusted person.");
+    need(!e.verifiers.includes(w), "DuplicateVerifier", "This person already holds a trusted place.");
+    remember([{ wallet: w, name: newHolder.name.trim() }]);
+    const previous = s.holder;
+    s.holder = w;
+    s.backups = s.backups.filter((b) => b !== w);
+    s.monitors = s.monitors.filter((m) => m !== w);
+    s.vacant = false;
+    s.generation += 1;
+    s.succession = null;
+    e.verifiers[index] = w;
+    e.verifierNames[index] = name(w);
+    const t = d.tx();
+    d.log("SeatConfigured", previous ? `${name(w)} replaces ${name(previous)} as a trusted person` : `${name(w)} fills an empty trusted place`, t);
+    return t;
+  }
+
   /* ----- approvals, stamps and the objection window (hooks for mock.ts) ----- */
 
   /** SeatApproval event: called by attest_death / approve_claim / approve_hardship. */
@@ -684,7 +712,7 @@ export function createMockGuardians(d: GuardDeps) {
   }
 
   return {
-    setup, setBackups, setMonitors, setFallback,
+    setup, setBackups, setMonitors, setFallback, replaceSeat,
     recordApproval, stamp, checkClaimExecutable, checkNotObjected,
     reportSeatDeath, confirmSeatDeath, vetoSeatDeath, finalizeSuccession,
     raiseObjection, voteObjection,

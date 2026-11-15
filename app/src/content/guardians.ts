@@ -22,6 +22,7 @@ export const guardians = {
     BadFallback: "Each person on the fallback list must be different, and the owner can't be on it.",
     ObjectionLapsed: "This objection has lapsed: it wasn't upheld in time, so the fallback plan can go ahead.",
     ObjectionNotLapsed: "This objection is still open. It lapses only when its waiting period is over.",
+    DuplicateVerifier: "That person can't take this place: they already hold a trusted place, or they are the owner.",
   } as Record<string, string>,
 
   seats: ["Executor named in the will", "Second trusted person", "Third trusted person"],
@@ -73,6 +74,38 @@ export const guardians = {
     historyLater: "{name} took over this place. This is holder number {n}.",
     historyVacant: "Everyone named for this place has died, so it is empty.",
     watching: "You watch this person",
+  },
+
+  /** The owner, while alive, puts someone new in a trusted place (owner_replace_seat). */
+  replace: {
+    cta: "Replace",
+    ctaSr: "Replace {name} with someone new",
+    fillCta: "Fill this place",
+    fillSr: "Fill this place: {place}",
+    title: "Replace {name}",
+    fillTitle: "Fill this empty place",
+    body: "Choose who takes this trusted place instead of {name}. The change is made on Solana at once; there is no waiting period, because you are making it yourself.",
+    fillBody: "Everyone named for this place has died. Choose who takes it now.",
+    newName: "New trusted person's name",
+    newWallet: "Their USD₮ wallet address",
+    effectsTitle: "What happens to this place",
+    effectHolder: "{name} stops being a trusted person straight away and can't approve anything for this estate any more. Approvals they already gave stay on record.",
+    effectBackups: "The backups stay as they are ({list}). If the new person dies, they take over in that order.",
+    effectNoBackups: "This place has no backups. You, or the new person, can name up to two afterwards.",
+    effectMonitors: "The monitors stay ({list}) and now watch the new person's approvals.",
+    effectNoMonitors: "No one watches this place. You can add monitors afterwards.",
+    effectRemoved: "{name} is taken off this place's backups and monitors, because they now hold it.",
+    effectSuccession: "The passing reported for {name} is cancelled, so no backup takes over.",
+    effectHistory: "The new person becomes holder number {n} of this place.",
+    submit: "Replace {name}",
+    fillSubmit: "Fill this place",
+    done: "The trusted place has a new holder",
+    errors: {
+      name: "Enter the new trusted person's name.",
+      wallet: "That doesn't look like a Solana wallet address.",
+      owner: "You can't be your own trusted person. Choose someone else.",
+      holder: "That person already holds a trusted place. Each place needs a different person.",
+    },
   },
 
   peopleErrors: {

@@ -158,6 +158,16 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
         `Trusted person whose death is reported: ${person} (seat ${index + 1}, wallet ${holder}). This is not the estate owner.`, index);
       return { tx, report: r.report };
     },
+    async ownerReplaceSeat(estate, index, newHolder) {
+      const owner = d.requireOwnerOf(estate);
+      const wallet = newHolder.wallet.trim();
+      let holder: PublicKey;
+      try { holder = pk(wallet); } catch { throw new Error("InvalidAddress: that is not a Solana wallet address."); }
+      // The name goes off-chain first: the snapshot shows it for this seat once generation > 0.
+      await rememberNames(estate, [{ wallet, name: newHolder.name.trim() }]);
+      return d.send([ix.ownerReplaceSeat(chainCtx(), owner, index, holder)]);
+    },
+
     confirmSeatDeath: (estate, index) => d.send([ix.confirmSeatDeath(chainCtx(), me(), pk(estate), index)]),
     vetoSeatDeath: (estate, index) => d.send([ix.vetoSeatDeath(chainCtx(), me(), pk(estate), index)]),
     finalizeSuccession: (estate, index) => d.send([ix.finalizeSuccession(chainCtx(), pk(estate), index)]),

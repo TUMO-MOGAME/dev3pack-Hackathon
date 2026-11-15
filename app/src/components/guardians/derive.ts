@@ -189,7 +189,30 @@ export function checkPeople(
   return null;
 }
 
-export type FallbackError = "name" | "wallet" | "duplicate" | "tooMany" | "empty";
+export type ReplaceError = "name" | "wallet" | "owner" | "holder";
+
+/**
+ * Checks the new holder of a seat before owner_replace_seat is sent (mirrors DuplicateVerifier): a name, a wallet,
+ * never the owner and never anyone who holds a seat now (this seat's own holder included). Returns the problem or null.
+ */
+export function checkReplacement(p: Person, ctx: { owner: Base58; holders: readonly (Base58 | null)[] }): ReplaceError | null {
+  const w = p.wallet.trim();
+  if (!p.name.trim()) return "name";
+  if (!looksLikeWallet(w)) return "wallet";
+  if (w === ctx.owner) return "owner";
+  if (ctx.holders.some((h) => h && h === w)) return "holder";
+  return null;
+}
+
+/** What owner_replace_seat does to a seat's lists: the new holder is dropped from its backups and monitors. */
+export function afterReplacement(seat: Seat, wallet: Base58): { backups: Person[]; monitors: Person[]; removed: boolean } {
+  const w = wallet.trim();
+  const backups = seat.backups.filter((b) => b.wallet !== w);
+  const monitors = seat.monitors.filter((m) => m.wallet !== w);
+  return { backups, monitors, removed: backups.length !== seat.backups.length || monitors.length !== seat.monitors.length };
+}
+
+export type FallbackError ="name" | "wallet" | "duplicate" | "tooMany" | "empty";
 
 export function checkFallback(list: readonly DraftRecipient[]): { row: number; error: FallbackError } | null {
   if (list.length === 0) return { row: 0, error: "empty" };
