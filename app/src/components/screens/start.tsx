@@ -8,7 +8,7 @@ import { useLocalized } from "@/lib/i18n/client";
 import type { Role } from "@/lib/types";
 import { usePhoneWallets, useWallet, type PhoneWalletOption } from "@/lib/hooks/wallet-source";
 import { useEstate } from "@/lib/hooks/estate";
-import { Badge, Button, Card, Consent, Eyebrow, Field, inputClass, Notice } from "@/components/ui/primitives";
+import { Badge, Button, ButtonLink, Card, Consent, Eyebrow, Field, inputClass, Notice } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/client";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { usePin } from "@/components/shell/pin-gate";
@@ -156,7 +156,12 @@ export function StartScreen({ copy: english }: { copy: ScreensCopy["start"] }) {
                       {snap ? copy.demo.resume : copy.demo.cta}<ArrowRight className="size-5" aria-hidden="true" />
                     </Button>
                   ) : wallet.ready && !isMock ? (
-                    <p className="mt-3 text-small text-ink-2">{copy.demo.unavailable}</p>
+                    <>
+                      <p className="mt-3 text-small text-ink-2">{copy.demo.unavailable}</p>
+                      <ButtonLink href={copy.demo.demoUrl} variant="secondary" block className="mt-4">
+                        {copy.demo.openDemo}<ArrowRight className="size-5" aria-hidden="true" />
+                      </ButtonLink>
+                    </>
                   ) : null}
                 </Card>
                 <Card>
