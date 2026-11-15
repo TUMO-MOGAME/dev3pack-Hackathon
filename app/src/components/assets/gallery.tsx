@@ -67,7 +67,8 @@ export function Gallery({ id, photos: all, title, copy, labels, badge }: {
         <div role="group" aria-roledescription="slide" aria-label={fmt(copy.slide, { n: i + 1, total: n })} className="absolute inset-0">
           <Image
             key={photo.sha256} src={photo.url} alt={altOf(photo, i)} fill draggable={false}
-            sizes="(min-width: 1024px) 560px, 100vw" className="object-contain" unoptimized priority={i === 0}
+            // Bundled demo photos are resized for the screen (quality 80); uploaded photos are shown as stored.
+            sizes="(min-width: 1024px) 560px, 100vw" className="object-contain" quality={80} unoptimized={!photo.url.startsWith("/demo/")} priority={i === 0}
             onError={() => setBroken((b) => new Set(b).add(photo.sha256))}
           />
         </div>

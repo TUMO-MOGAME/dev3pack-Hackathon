@@ -7,7 +7,7 @@
  */
 import { useState, type FormEvent } from "react";
 import clsx from "clsx";
-import { motion, useReducedMotion } from "motion/react";
+import { m as motion, useReducedMotion } from "motion/react";
 import { Lock, Sparkles } from "@/components/ui/icons";
 import { Button, Card, Consent, Eyebrow, Field, inputClass, Money, PageHeader } from "@/components/ui/primitives";
 import { FilePicker } from "@/components/ui/client";
