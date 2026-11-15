@@ -25,16 +25,18 @@ export const DEMO_WILL: WillDraft = {
     { beneficiaryLabel: "Sipho (son)", category: "Tuition", allowedPayeeKind: "University", maxPerClaimUsdt: 4000, lifetimeCapUsdt: 16000, validUntil: "2033-12-31", notes: "University fees paid to the university only", startsNow: false },
     { beneficiaryLabel: "Naledi (daughter)", category: "Tuition", allowedPayeeKind: "School", maxPerClaimUsdt: 2500, lifetimeCapUsdt: 12000, validUntil: "2034-12-31", notes: "School fees, claimable now with Thabo's approval (living plan)", startsNow: true },
   ],
+  // The will names one asset (the schema allows one); Thabo's motorbike is added next to it, as on the demo site
+  // (scripts/seed-guardians-assets.ts registers both on devnet).
   assets: [{
-    title: "2019 Toyota Corolla 1.8 Prestige", floorPriceUsdt: 9000, hardshipFloorUsdt: 7000, askingPriceUsdt: 10500,
-    proceedsTo: "estate vault", hardshipPolicy: "Below the floor only for proven hardship, approved by 2 of 3 verifiers, never below 7,000 USD₮",
+    title: "2017 Toyota Corolla 1.8 Exclusive CVT", floorPriceUsdt: 12500, hardshipFloorUsdt: 10500, askingPriceUsdt: 13500,
+    proceedsTo: "estate vault", hardshipPolicy: "Below the floor only for proven hardship, approved by 2 of 3 verifiers, never below 10,500 USD₮",
   }],
   waitingPeriodDays: 14,
   plainLanguageSummary:
     "Thabo's USD₮ pays his children's education directly to their university, school or residence, within fixed caps. " +
     "Two rules work now, while he is alive: Lerato's residence rent is paid automatically every month, and Naledi's school fees can be claimed with his approval. " +
     "Everything else waits until two of three verifiers confirm his death and 14 days pass, and he can veto at any time. " +
-    "The Corolla is sold for at least 9,000 USD₮, or at least 7,000 USD₮ if a child proves real hardship.",
+    "The Corolla is sold for at least 12,500 USD₮, or at least 10,500 USD₮ if a child proves real hardship.",
 };
 
 export function cannedWillTurn(turns: number): { reply: string; draft: WillDraft | null } {
@@ -62,11 +64,11 @@ export function cannedReport(purpose: "death" | "claim" | "hardship" | "seat-dea
 
 export function cannedValuation(): CarValuation {
   return {
-    suggestedAskingUsdt: 10500, lowUsdt: 9200, highUsdt: 11400,
+    suggestedAskingUsdt: 13500, lowUsdt: 12500, highUsdt: 14200,
     comparables: [
-      { title: "2019 Toyota Corolla 1.8 Prestige, 78,000 km (demo)", priceZar: 189_900, source: "demo data" },
-      { title: "2019 Toyota Corolla 1.8 XS CVT, 92,000 km (demo)", priceZar: 174_995, source: "demo data" },
-      { title: "2020 Toyota Corolla 1.8 Prestige, 65,000 km (demo)", priceZar: 214_900, source: "demo data" },
+      { title: "2017 Toyota Corolla 1.8 Exclusive CVT, 118,000 km (demo)", priceZar: 229_900, source: "demo data" },
+      { title: "2017 Toyota Corolla 1.8 Prestige CVT, 131,000 km (demo)", priceZar: 214_995, source: "demo data" },
+      { title: "2018 Toyota Corolla 1.8 Exclusive CVT, 105,000 km (demo)", priceZar: 244_900, source: "demo data" },
     ],
     rationale: `${CANNED_PREFIX}Fixed example comparables; live web-search valuation needs GEMINI_API_KEY.`,
   };

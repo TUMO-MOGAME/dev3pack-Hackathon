@@ -8,7 +8,9 @@
  */
 import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import type { AgentReport, Base58, Claim, Estate } from "../types";
-import type { FallbackRecipient, GuardiansService, GuardiansSnapshot } from "../guardians/types";
+import type { AssetMediaInfo, FallbackRecipient, GuardiansService, GuardiansSnapshot } from "../guardians/types";
+import { chainConfig } from "../chain/config";
+import { DEVNET_DEMO_ESTATE, DEVNET_DEMO_FALLBACK_KINDS } from "../chain/demo-estate";
 import type { TxResult } from "./types";
 import type { EstateMeta } from "../db";
 import { chainCtx } from "../chain/client";
@@ -41,7 +43,9 @@ export interface ChainGuardianDeps {
 /** Off-chain extras for the guardians view: names from the estate meta and this device, reasons and kinds from this device. */
 export function guardianExtras(meta: EstateMeta | null, reports: Record<string, AgentReport>): GuardianExtras {
   const l = local();
-  return { names: { ...l.names, ...(meta?.buyerNames ?? {}) }, reasons: l.reasons, fallbackKinds: l.fallbackKinds, reports };
+  // The seeded devnet demo estate's fallback kinds (children, then a charity); this device's choices win.
+  const demoKinds = meta?.estate === DEVNET_DEMO_ESTATE && chainConfig.cluster !== "mainnet-beta" ? DEVNET_DEMO_FALLBACK_KINDS : {};
+  return { names: { ...l.names, ...(meta?.buyerNames ?? {}) }, reasons: l.reasons, fallbackKinds: { ...demoKinds, ...l.fallbackKinds }, reports };
 }
 
 /** The guardians view of an estate from its already-loaded pieces (used by chain.ts getEstate). */
@@ -234,12 +238,19 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
 
     async getAssetMedia(estate) {
       const [listed, raw] = await Promise.all([photosApi.list(estate).catch(() => []), fetchGuardiansRaw(estate)]);
-      return Promise.all(listed.map(async (m) => {
+      const out: AssetMediaInfo[] = await Promise.all(listed.map(async (m) => {
         const onChain = raw.media[m.asset];
         if (!onChain) return { ...m };
         const root = await mediaRootHex(m.photos, cleanSpec(m.spec));
         return { ...m, onChainMatch: decodeMedia(onChain).photosRoot === root };
       }));
+      // Devnet without a photo server: the bundled demo photos for assets whose on-chain root is a demo root.
+      const missing = Object.entries(raw.media).filter(([asset]) => !out.some((m) => m.asset === asset));
+      if (missing.length && chainConfig.cluster !== "mainnet-beta") {
+        const { bundledDemoMedia } = await import("./demo-media");
+        out.push(...bundledDemoMedia(missing.map(([asset, r]) => ({ asset, ...decodeMedia(r) })), chainConfig.cluster));
+      }
+      return out;
     },
 
     async setAssetMedia(estate, asset, input) {

@@ -19,7 +19,7 @@ describe("WillDraft schema", () => {
 
   it("rejects hardship floor above floor and asking below floor", () => {
     const a = DEMO_WILL.assets[0];
-    expect(willDraftChecked.safeParse({ ...DEMO_WILL, assets: [{ ...a, hardshipFloorUsdt: 9500 }] }).success).toBe(false);
+    expect(willDraftChecked.safeParse({ ...DEMO_WILL, assets: [{ ...a, hardshipFloorUsdt: a.floorPriceUsdt + 500 }] }).success).toBe(false);
     expect(willDraftChecked.safeParse({ ...DEMO_WILL, assets: [{ ...a, askingPriceUsdt: 100 }] }).success).toBe(false);
   });
 

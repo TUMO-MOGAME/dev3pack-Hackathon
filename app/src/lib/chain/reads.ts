@@ -86,10 +86,14 @@ export async function fetchEstateRaw(estate: Base58, names: OffChainNames = {}, 
     fetchChildren(conn, "Claim", estateKey),
     fetchChildren(conn, "Asset", estateKey),
   ]);
-  const assetObjs = assets.map((a) => {
-    const nft = key(a.raw, "nft_mint");
-    return decodeAsset(a.address, a.raw, names.assetTitles?.[nft]);
-  });
+  // A program scan returns accounts in no fixed order: list assets in the order their titles were recorded
+  // (registration order), so the first asset (the car) stays first on every load; untitled ones go last.
+  const titleOrder = Object.keys(names.assetTitles ?? {});
+  const rank = (nft: string) => { const i = titleOrder.indexOf(nft); return i < 0 ? titleOrder.length : i; };
+  const assetObjs = assets
+    .map((a) => ({ a, nft: key(a.raw, "nft_mint") }))
+    .sort((x, y) => rank(x.nft) - rank(y.nft) || x.a.address.localeCompare(y.a.address))
+    .map(({ a, nft }) => decodeAsset(a.address, a.raw, names.assetTitles?.[nft]));
   const perAsset = await Promise.all(assetObjs.map(async (a) => {
     const k = new PublicKey(a.address);
     const [o, h] = await Promise.all([fetchChildren(conn, "Offer", k), fetchChildren(conn, "Hardship", k)]);

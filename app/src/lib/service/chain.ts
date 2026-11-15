@@ -34,7 +34,7 @@ import type { EstateMeta } from "../db";
 import { legacyApi, type LegacySigner } from "../legacy/client";
 import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-guardians";
 import { createChainDisputes, loadDisputes } from "./chain-disputes";
-import { disabledGuardians } from "../chain/guardians";
+import { disabledGuardians, SEAT_MONITOR_OFFSETS } from "../chain/guardians";
 import { SystemProgram } from "@solana/web3.js";
 import {
   AuthorityType, MINT_SIZE, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction as createAtaIx,
@@ -191,7 +191,7 @@ function chunk<T>(xs: T[], n: number): T[][] {
   return out;
 }
 
-/** Estates this wallet owns, inherits from or verifies (owner lookup is a PDA read; the rest are program scans). */
+/** Estates this wallet owns, inherits from, verifies or monitors (owner lookup is a PDA read; the rest are program scans). */
 async function listEstatesUncached(wallet: Base58) {
   const out: { estate: Base58; role: string; ownerName: string }[] = [];
   const me = pk(wallet);
@@ -208,6 +208,13 @@ async function listEstatesUncached(wallet: Base58) {
   for (const v of verifierHits.flat()) {
     const estate = v.pubkey.toBase58();
     out.push({ estate, role: "verifier", ownerName: (await getMeta(estate))?.ownerName ?? "Family estate" });
+  }
+  // Monitors (guardians): Seat = [disc][estate 32][index 1][holder 32][backups 2×32][monitors 2×32] → monitor j at 137 + 32j.
+  const monitorHits = await Promise.all(SEAT_MONITOR_OFFSETS.map((offset) => scanAccounts("Seat", [{ offset, key: me }]).catch(() => [])));
+  for (const s of monitorHits.flat()) {
+    const estate = new PublicKey(s.data.subarray(8, 40)).toBase58();
+    if (out.some((o) => o.estate === estate)) continue;
+    out.push({ estate, role: "monitor", ownerName: (await getMeta(estate))?.ownerName ?? "Family estate" });
   }
   return demoEstateFirst(out);
 }

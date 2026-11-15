@@ -14,6 +14,8 @@ import { scanAccounts, type ChainEvent } from "./reads";
 import { getConnection } from "./tx";
 
 const DEFAULT_KEY = "11111111111111111111111111111111";
+/** Byte offsets of Seat.monitors[0] and [1] (8 discriminator + 32 estate + 1 index + 32 holder + 2×32 backups). */
+export const SEAT_MONITOR_OFFSETS = [137, 169] as const;
 const ZERO_HASH = "0".repeat(64);
 const NO_SEAT = 255;
 const DISPUTE_SEAT = 254;
