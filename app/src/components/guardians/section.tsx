@@ -50,7 +50,7 @@ export function GuardiansPeople({ snap }: { snap: EstateSnapshot }) {
   return (
     <>
       <FallbackStatus snap={snap} className="md:col-span-2" />
-      <Card id="guardians" className="scroll-mt-24 md:col-span-2">
+      <Card id="guardians" className="min-w-0 scroll-mt-24 md:col-span-2">
         <h2 className="flex items-center gap-2 text-h3"><UsersRound className="size-5" aria-hidden="true" />{c.setup.title}</h2>
         <p className="mt-1 text-ink-2">{c.setup.body}</p>
         <ul className="mt-4 grid gap-3 *:min-w-0 lg:grid-cols-3">
@@ -59,7 +59,7 @@ export function GuardiansPeople({ snap }: { snap: EstateSnapshot }) {
       </Card>
       <div className="md:col-span-2"><ReportPassing /></div>
       <Card className="md:col-span-2"><ObjectionList snap={snap} /></Card>
-      <FallbackPlanCard snap={snap} className="md:col-span-2" />
+      <FallbackPlanCard snap={snap} className="min-w-0 md:col-span-2" />
     </>
   );
 }

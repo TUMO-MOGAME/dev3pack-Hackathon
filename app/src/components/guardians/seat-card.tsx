@@ -1,8 +1,8 @@
 "use client";
 /** One trusted place ("seat"): who holds it, their backups and watchers, its succession history and any pending passing. */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
-import { Pencil, Search, ShieldCheck, UsersRound } from "@/components/ui/icons";
+import { Pencil, Repeat, Search, ShieldCheck, UsersRound } from "@/components/ui/icons";
 import type { Seat } from "@/lib/guardians/types";
 import type { EstateSnapshot } from "@/lib/service";
 import { shortAddress } from "@/lib/format";
@@ -12,6 +12,7 @@ import { Avatar } from "@/components/shell/avatar";
 import { fmt, useCopy } from "@/components/shell/copy";
 import type { Person } from "./derive";
 import { PeopleEditor } from "./people-editor";
+import { ReplaceSeatForm } from "./replace-seat";
 import { ActionResult, useAction, useGuardians } from "./parts";
 import { SuccessionStatus } from "./succession";
 
@@ -21,6 +22,13 @@ export function SeatCard({ seat, snap }: { seat: Seat; snap: EstateSnapshot }) {
   const g = useGuardians();
   const { act, busy, receipt, refusal } = useAction();
   const [editing, setEditing] = useState<"backups" | "monitors" | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  const replaceRef = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+  // After the replace form closes, focus goes back to the button that opened it (once it is rendered again).
+  useEffect(() => {
+    if (!replacing && refocus.current && replaceRef.current) { refocus.current = false; replaceRef.current.focus(); }
+  });
   const e = snap.estate;
   const me = session?.address;
   const ownerActive = role === "owner" && me === e.owner && e.status === "Active";
@@ -43,6 +51,13 @@ export function SeatCard({ seat, snap }: { seat: Seat; snap: EstateSnapshot }) {
     if (res.ok) setEditing(null);
   };
 
+  /** Closes the replace form and puts focus back on the button that opened it. */
+  const closeReplace = () => { refocus.current = true; setReplacing(false); };
+  const replace = async (person: Person) => {
+    const res = await act(`replace-${seat.index}`, (s, est) => s.ownerReplaceSeat(est, seat.index, person), c.replace.done);
+    if (res.ok) closeReplace();
+  };
+
   const list = (kind: "backups" | "monitors") => {
     const people = kind === "backups" ? seat.backups : seat.monitors;
     const may = kind === "backups" ? canBackups : canMonitors;
@@ -54,7 +69,7 @@ export function SeatCard({ seat, snap }: { seat: Seat; snap: EstateSnapshot }) {
           <h4 className="flex items-center gap-1.5 font-sans text-small font-semibold uppercase tracking-[0.1em]">
             {kind === "backups" ? <UsersRound className="size-4" aria-hidden="true" /> : <Search className="size-4" aria-hidden="true" />}{title}
           </h4>
-          {may && editing !== kind && (
+          {may && editing !== kind && !replacing && (
             <Button variant="quiet" small onClick={() => setEditing(kind)} aria-label={`${kind === "backups" ? c.seat.editBackups : c.seat.editMonitors}: ${seat.holderName}`}>
               <Pencil className="size-4" aria-hidden="true" />{c.edit}
             </Button>
@@ -104,6 +119,21 @@ export function SeatCard({ seat, snap }: { seat: Seat; snap: EstateSnapshot }) {
           {seat.vacant ? c.seat.historyVacant : seat.generation === 0 ? c.seat.historyFirst : fmt(c.seat.historyLater, { name: seat.holderName, n: seat.generation + 1 })}
         </span>
       </p>
+      {ownerActive && !replacing && (
+        <Button
+          ref={replaceRef} variant="secondary" small className="mt-3"
+          onClick={() => { setEditing(null); setReplacing(true); }}
+          aria-label={seat.vacant ? fmt(c.replace.fillSr, { place: c.seats[seat.index] ?? "" }) : fmt(c.replace.ctaSr, { name: seat.holderName })}
+        >
+          <Repeat className="size-4" aria-hidden="true" />{seat.vacant ? c.replace.fillCta : c.replace.cta}
+        </Button>
+      )}
+      {replacing && (
+        <ReplaceSeatForm
+          seat={seat} owner={e.owner} holders={holders} suggestions={suggestions}
+          busy={busy === `replace-${seat.index}`} onSubmit={(p) => void replace(p)} onCancel={closeReplace}
+        />
+      )}
       {seat.succession && <SuccessionStatus seat={seat} />}
       {list("backups")}
       {list("monitors")}

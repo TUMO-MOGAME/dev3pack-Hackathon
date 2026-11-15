@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EstateSnapshot } from "@/lib/service";
 import type { GuardiansSnapshot, Objection, Seat, SeatApprovalItem } from "@/lib/guardians/types";
 import {
-  allVacant, canConfirm, canObject, canReport, checkFallback, checkPeople, clock, fallbackStage, fallbackWinner, feedFor,
+  afterReplacement, allVacant, canConfirm, checkReplacement, canObject, canReport, checkFallback, checkPeople, clock, fallbackStage, fallbackWinner, feedFor,
   guardianTodo, heldSeat, isMonitor, monitorPending, moveItem, pausedBy, secondsLeft, shortName, successionStage, voterRole,
   waitFraction, waitUnit,
 } from "./derive";
@@ -221,5 +221,30 @@ describe("inbox count", () => {
     expect(guardianTodo(g, snap(), BONGANI, 1000)).toBe(1); // I'm still here
     expect(guardianTodo(g, snap(), ZODWA, 1000)).toBe(1);   // feed item
     expect(guardianTodo(null, snap(), THANDI, 1000)).toBe(0);
+  });
+});
+
+describe("replacing a trusted person (owner_replace_seat)", () => {
+  const holders = guard().seats.map((s) => s.holder);
+  const ctx = { owner: OWNER, holders };
+  it("needs a name and a wallet", () => {
+    expect(checkReplacement({ name: " ", wallet: LERATO }, ctx)).toBe("name");
+    expect(checkReplacement({ name: "Lerato", wallet: "nope" }, ctx)).toBe("wallet");
+  });
+  it("never the owner, never anyone holding a place (this one included): DuplicateVerifier", () => {
+    expect(checkReplacement({ name: "Thabo", wallet: OWNER }, ctx)).toBe("owner");
+    expect(checkReplacement({ name: "Thandi", wallet: THANDI }, ctx)).toBe("holder");
+    expect(checkReplacement({ name: "Bongani", wallet: ` ${BONGANI} ` }, ctx)).toBe("holder");
+  });
+  it("a backup, a monitor or a new person is fine; an empty place does not count as a holder", () => {
+    expect(checkReplacement({ name: "Kagiso", wallet: KAGISO }, ctx)).toBeNull();
+    expect(checkReplacement({ name: "Zodwa", wallet: ZODWA }, ctx)).toBeNull();
+    expect(checkReplacement({ name: "Lerato", wallet: LERATO }, { owner: OWNER, holders: [null, ANITA, BONGANI] })).toBeNull();
+  });
+  it("shows the lists after the swap: the new holder leaves this place's backups and monitors", () => {
+    const s = guard().seats[2];
+    expect(afterReplacement(s, LERATO)).toMatchObject({ removed: false, backups: s.backups, monitors: s.monitors });
+    expect(afterReplacement(s, KAGISO)).toMatchObject({ removed: true, backups: [{ wallet: NAIDOO, name: "Adv. Naidoo" }] });
+    expect(afterReplacement(s, ZODWA)).toMatchObject({ removed: true, monitors: [] });
   });
 });
