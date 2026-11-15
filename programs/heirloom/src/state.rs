@@ -13,6 +13,7 @@ pub const GUARD_SEED: &[u8] = b"guard";
 pub const STAMP_SEED: &[u8] = b"stamp";
 pub const OBJECTION_SEED: &[u8] = b"objection";
 pub const MEDIA_SEED: &[u8] = b"media";
+pub const YEAR_CAP_SEED: &[u8] = b"yearcap";
 
 pub const MAX_WILL_URI_LEN: usize = 200;
 pub const MAX_LABEL_LEN: usize = 32;
@@ -23,6 +24,12 @@ pub const FALLBACK_COUNT: usize = 4;
 pub const MAX_PHOTOS: u8 = 24;
 /// `Objection.seat_index` when the objection is not about one seat (Unlock, Fallback).
 pub const NO_SEAT: u8 = 255;
+/// `Objection.seat_index` of a dispute (U9): raised by a beneficiary or a verifier, resolved by 2 of 3 verifiers.
+pub const DISPUTE_SEAT: u8 = 254;
+/// A dispute lapses after the estate's waiting period, but never sooner than this.
+pub const DISPUTE_MIN_SECS: i64 = 60;
+/// Length of a yearly-cap period (365 days).
+pub const YEAR_SECS: i64 = 365 * 86_400;
 
 // ---------------------------------------------------------------- enums (Borsh order matters)
 
@@ -377,6 +384,24 @@ pub struct Objection {
     pub bump: u8,
 }
 
+impl Objection {
+    /// A dispute (U9) rather than a monitor's objection.
+    pub fn is_dispute(&self) -> bool {
+        self.seat_index == DISPUTE_SEAT
+    }
+
+    /// Unix time an Open dispute lapses (counts as Dismissed): raised_at + max(waiting period, 60 s).
+    pub fn dispute_lapses_at(&self, estate: &Estate) -> i64 {
+        self.raised_at
+            .saturating_add(estate.waiting_period_secs.max(DISPUTE_MIN_SECS))
+    }
+
+    /// Open and still binding: a dispute past its lapse time no longer blocks anything.
+    pub fn is_effectively_open(&self, estate: &Estate, ts: i64) -> bool {
+        self.status == ObjectionStatus::Open && !(self.is_dispute() && ts >= self.dispute_lapses_at(estate))
+    }
+}
+
 /// Seeds: ["media", asset]
 #[account]
 #[derive(InitSpace)]
@@ -388,4 +413,32 @@ pub struct AssetMedia {
     pub photo_count: u8,
     pub updated_at: i64,
     pub bump: u8,
+}
+
+// ================================================================ yearly caps (added 2026-11-15)
+
+/// Seeds: ["yearcap", rule]. Optional per-rule cap per 365-day period, on top of the per-claim and
+/// lifetime caps. Claims and scheduled payments under the rule add to `period_spent`.
+#[account]
+#[derive(InitSpace)]
+pub struct YearCap {
+    pub rule: Pubkey,
+    /// Most that may be paid under the rule per period (base units).
+    pub cap: u64,
+    /// Start of the current period; rolls forward by whole periods.
+    pub period_start: i64,
+    /// Paid in the period that starts at `period_start`.
+    pub period_spent: u64,
+    pub bump: u8,
+}
+
+impl YearCap {
+    /// (start, spent) of the period that contains `ts`: once a period has ended, spending starts again from 0.
+    pub fn current(&self, ts: i64) -> (i64, u64) {
+        if ts < self.period_start.saturating_add(YEAR_SECS) {
+            return (self.period_start, self.period_spent);
+        }
+        let periods = (ts - self.period_start) / YEAR_SECS;
+        (self.period_start.saturating_add(periods.saturating_mul(YEAR_SECS)), 0)
+    }
 }

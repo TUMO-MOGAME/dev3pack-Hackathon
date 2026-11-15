@@ -88,4 +88,11 @@ pub enum HeirloomError {
     ObjectionLapsed,
     #[msg("This objection cannot lapse yet")]
     ObjectionNotLapsed,
+    // ---- disputes, yearly caps (added 2026-11-15; append only, never reorder)
+    #[msg("Only a beneficiary or a trusted person can dispute")]
+    NotDisputer,
+    #[msg("This dispute has lapsed: its time to resolve it is over")]
+    DisputeLapsed,
+    #[msg("Payment would exceed the rule's cap for this year")]
+    ExceedsYearlyCap,
 }
