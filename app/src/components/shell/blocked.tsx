@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, type ReactNode } from "react";
-import { motion } from "motion/react";
+import { m as motion } from "motion/react";
 import { ShieldX } from "@/components/ui/icons";
 import { useCopy } from "./copy";
 

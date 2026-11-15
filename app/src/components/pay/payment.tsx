@@ -7,7 +7,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
-import { motion, useReducedMotion } from "motion/react";
+import { m as motion, useReducedMotion } from "motion/react";
 import { BadgeCheck, Check, CircleAlert, Loader2, RefreshCw, ShieldAlert, WifiOff } from "@/components/ui/icons";
 import type { HeirloomService } from "@/lib/service";
 import type { PaymentReview } from "@/lib/types";
