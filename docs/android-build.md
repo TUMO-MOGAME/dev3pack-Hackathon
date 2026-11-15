@@ -111,15 +111,17 @@ Check once it is deployed (after `agent/apk` is merged to `main` and Vercel has 
 
 1. **Back up the keystore and password** (see above). Do this first.
 2. Merge `agent/apk` to `main` so the site serves `assetlinks.json`, then run the two checks above.
-3. Test the APK on a real Android phone (sideload `app-release.apk`): open, sign in, and "Use my phone wallet" with
+3. Two things seen on the emulator (411 px wide) to fix on the site before listing: the landing header's
+   "Open the app" button is cut off at the right edge, and the hero says "No app store." (odd inside a store app).
+4. Test the APK on a real Android phone (sideload `app-release.apk`): open, sign in, and "Use my phone wallet" with
    Phantom / Solflare / the Mock MWA Wallet; the hardware back button; pull to refresh.
-4. **Publisher portal:** https://publish.solanamobile.com. Sign up as a person, connect a Solana wallet that will own
+5. **Publisher portal:** https://publish.solanamobile.com. Sign up as a person, connect a Solana wallet that will own
    the publisher and app NFTs (a hardware or well-kept wallet; it is needed for every update).
-5. **KYC:** complete identity verification in the portal (Tumo as a person, per the plan's decisions).
-6. **Mainnet SOL:** the publisher, app and release NFTs are minted on **Solana mainnet**, so the wallet needs a small
+6. **KYC:** complete identity verification in the portal (Tumo as a person, per the plan's decisions).
+7. **Mainnet SOL:** the publisher, app and release NFTs are minted on **Solana mainnet**, so the wallet needs a small
    amount of **real SOL** for rent and fees (the docs only say "a small amount"; check the portal before buying).
    Saving the app in the portal mints the App NFT. The app itself still runs on devnet; say so in the description.
-7. **Listing** (requirements from docs.solanamobile.com, "Submit a new app"): app name "Heirloom", package
+8. **Listing** (requirements from docs.solanamobile.com, "Submit a new app"): app name "Heirloom", package
    `tech.tumoolo.heirloom`, the signed APK above (APK only, release-signed; it ships arm64-v8a, armeabi-v7a, x86 and
    x86_64 libraries, so the arm64-v8a requirement is met); icon **512 x 512 with a background, no transparency** (use
    `app/public/icons/icon-maskable-512.png`, which has the black background); a **1200 x 600 banner** (to make);
@@ -127,5 +129,5 @@ Check once it is deployed (after `agent/apk` is merged to `main` and Vercel has 
    on a phone); short and long descriptions; a contact email; the **privacy policy URL
    https://heirloom.tumoolo.tech/privacy** (still a template for a legal adviser to review) and the **terms URL
    https://heirloom.tumoolo.tech/terms** (both required, each on its own HTTPS page).
-8. Submit for review, then answer any reviewer questions from the portal.
-9. For each later update: bump the version, rebuild with the same key, upload a new release in the portal.
+9. Submit for review, then answer any reviewer questions from the portal.
+10. For each later update: bump the version, rebuild with the same key, upload a new release in the portal.

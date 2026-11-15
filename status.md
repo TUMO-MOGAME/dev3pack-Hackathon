@@ -6,6 +6,12 @@
 **Last updated:** 2026-11-15 (devnet re-seeded: guardians demo estate 2LXv…ymP7; see the first section)
 **Phase:** SUBMITTED (13 Nov 11:04 SAST); judging was Sat 14 Nov. Now: post-hackathon features on branch `feature/guardians`.
 
+## ANDROID APP / APK (branch agent/apk, 15 Nov 2026): NOT merged, NOT deployed
+- Plan step 3 (docs/solana-mobile-plan.md). Built with Solana Mobile's `webshell` (solana-mobile CLI 0.6.0), the wrapper their docs now recommend for web apps: an Android WebView shell, not a TWA (TWAs can break wallet connections; the shell handles wallet intents natively). Package `tech.tumoolo.heirloom`, "Heirloom", 1 / 1.0.0, start `https://heirloom.tumoolo.tech/`, black splash/bars/window. Project, keystore and password live OUTSIDE git in `C:\Users\tumom\Hackathons\heirloom-android` (Tumo must back up `keys/`). How-to: docs/android-build.md.
+- `app/public/.well-known/assetlinks.json` (signer SHA-256 AC:BB:AF:...:35:E9) served as application/json via next.config.ts headers(); not needed by a WebView shell, kept for a TWA/App Links later.
+- Checked: apksigner verifies (v2, 1 signer, SHA-256 matches assetlinks), aapt package/version; installed and launched on an API 36 emulator (live site full-screen, night). Seen there: landing header "Open the app" button clipped at 411 px; hero says "No app store.". Not checked: real phone, MWA wallets, back button.
+- Next (Tumo): back up keys, merge, check assetlinks live, publisher portal + KYC, mainnet SOL for the NFTs, banner 1200x600, 4-8 screenshots, privacy + terms URLs.
+
 ## REDESIGN: THE APP'S DESIGN SYSTEM (branch agent/theme, 15 Nov 2026): NOT merged, NOT deployed
 - Brings the approved concept (`design/landing/index.html`) to the whole app. The landing page itself (`/`) is rebuilt by a separate agent on the same tokens.
 - **Default is dark (night).** The bare `:root` holds the night tokens, so the server HTML, a no-JS page and the first frame are dark with no script. A saved choice (`localStorage["heirloom.theme"]` = dark / light / system) goes on `<html data-theme>` before first paint (layout.tsx PREPAINT); "system" follows `prefers-color-scheme`. theme-color / manifest are black; PREPAINT and `applyTheme()` switch the meta to white when the choice shows light. Persona sheet order: Dark, Light, System.
