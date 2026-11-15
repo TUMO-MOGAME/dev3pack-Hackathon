@@ -6,7 +6,8 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getService, type EstateSnapshot, type HeirloomService } from "../service";
-import { DEMO_STAGES, isMockService, type DemoStage } from "../service/mock";
+import { isMockService } from "../service/is-mock";
+import type { DemoStage } from "../service/mock";
 import type { FxRate, Role, WalletSession } from "../types";
 import { useWallet } from "./wallet-source";
 
@@ -53,6 +54,9 @@ interface EstateCtx {
 const Ctx = createContext<EstateCtx | null>(null);
 const LAST_ESTATE = "heirloom.lastEstate";
 
+/** A value's content as a string (bigints included), to tell a changed snapshot from a re-fetched identical one. */
+const contentKey = (v: unknown) => JSON.stringify(v, (_k, x: unknown) => (typeof x === "bigint" ? `${x}n` : x));
+
 export function EstateProvider({ children, errors }: { children: ReactNode; errors: Record<string, string> }) {
   const wallet = useWallet();
   const session = wallet.session;
@@ -68,6 +72,7 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
   const [proofOpen, setProofOpen] = useState(false);
   const [walletUsdt, setWalletUsdt] = useState<bigint>(BigInt(0));
   const estateRef = useRef<string | null>(null);
+  const snapKey = useRef<string | null>(null);
   const toastId = useRef(0);
   const loadSeq = useRef(0);
   const inFlight = useRef(0);
@@ -121,10 +126,13 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
         try { estate = window.localStorage.getItem(LAST_ESTATE); } catch { /* ignore */ }
       }
       if (seq !== loadSeq.current) return;
-      if (rate) setFx(rate);
+      // The background poll re-fetches every few seconds; unchanged data keeps the same object, so the app
+      // doesn't re-render for nothing (phones notice).
+      if (rate) setFx((prev) => (prev && prev.usdtZar === rate.usdtZar && prev.source === rate.source ? prev : rate));
       setWalletUsdt(isMockService(service) && address ? service.balanceOf(address) ?? sessionUsdt : sessionUsdt);
       if (!estate) {
         estateRef.current = null;
+        snapKey.current = null;
         setSnap(null);
         setPhase("empty");
         return;
@@ -133,7 +141,8 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
       if (seq !== loadSeq.current) return;
       estateRef.current = estate;
       try { window.localStorage.setItem(LAST_ESTATE, estate); } catch { /* ignore */ }
-      setSnap(next);
+      const key = contentKey(next);
+      if (key !== snapKey.current) { snapKey.current = key; setSnap(next); }
       setLoadError(null);
       setPhase("ready");
     } catch (e) {
@@ -196,10 +205,14 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
     linked.current = true;
     const url = new URL(window.location.href);
     const stage = url.searchParams.get("demo");
-    if (!stage || !(DEMO_STAGES as readonly string[]).includes(stage)) return;
-    url.searchParams.delete("demo");
-    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
-    void Promise.resolve().then(() => resetDemo(stage as DemoStage));
+    if (!stage) return;
+    // The demo module is already loaded here (the service is the mock), so this import costs nothing.
+    void import("../service/mock").then(({ DEMO_STAGES }) => {
+      if (!(DEMO_STAGES as readonly string[]).includes(stage)) return;
+      url.searchParams.delete("demo");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+      return resetDemo(stage as DemoStage);
+    });
   }, [service, resetDemo]);
 
   const demoShortcut = useCallback(async (kind: DemoShortcut) => {

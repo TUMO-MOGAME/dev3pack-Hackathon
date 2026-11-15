@@ -18,20 +18,5 @@ export const uiActionSchema = z.discriminatedUnion("type", [
 
 export type UiAction = z.infer<typeof uiActionSchema>;
 
-/** Browser event name carrying a UiAction in `detail`. */
-export const AGENT_ACTION_EVENT = "heirloom:agent-action";
-
-export function dispatchAgentAction(action: UiAction): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<UiAction>(AGENT_ACTION_EVENT, { detail: action }));
-}
-
-/** Subscribe to agent UI intents. Returns an unsubscribe function. */
-export function onAgentAction(handler: (action: UiAction) => void): () => void {
-  const fn = (e: Event) => {
-    const parsed = uiActionSchema.safeParse((e as CustomEvent).detail);
-    if (parsed.success) handler(parsed.data);
-  };
-  window.addEventListener(AGENT_ACTION_EVENT, fn);
-  return () => window.removeEventListener(AGENT_ACTION_EVENT, fn);
-}
+// The browser event helpers live in ./action-events (no zod, so the shell stays light); re-exported here.
+export { AGENT_ACTION_EVENT, dispatchAgentAction, onAgentAction } from "./action-events";

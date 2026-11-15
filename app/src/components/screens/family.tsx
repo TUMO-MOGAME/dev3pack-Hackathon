@@ -15,7 +15,7 @@ import { FilePicker, Quorum } from "@/components/ui/client";
 import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
-import { LegacyEntry, MilestoneMoment } from "@/components/legacy/legacy-entry";
+import { LegacyEntry, MilestoneMoment } from "@/components/legacy/lazy";
 import { PausedNotice } from "@/components/guardians/parts";
 import { guardiansOf, isMonitor, objectionFor } from "@/components/guardians/derive";
 import { RaiseObjection } from "@/components/guardians/objections";

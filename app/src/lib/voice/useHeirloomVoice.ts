@@ -8,7 +8,8 @@
  * the "agent_tool_response_full_payload" client event is enabled, its { specialist, actions } are applied here too.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { VoiceConversation } from "@elevenlabs/react";
+// Type only: the SDK itself (~600 KB with LiveKit) is fetched when a call starts, not with every page.
+import type { VoiceConversation } from "@elevenlabs/react";
 import type { HeirloomVoice, SpecialistName, VoiceContext, VoiceStatus, VoiceTranscriptLine } from "./types";
 import { dispatchAgentAction, uiActionSchema, type UiAction } from "../agent/actions";
 import { stripVoiceTags } from "./tags";
@@ -99,6 +100,7 @@ export function useHeirloomVoice(): HeirloomVoice {
       }
       const legacy = Boolean(ctx.signedUrl);
 
+      const { VoiceConversation } = await import("@elevenlabs/react");
       conv.current = await VoiceConversation.startSession({
         signedUrl,
         // The legacy agent gets nothing from the client: no tools (no navigation, no claims), no variables.

@@ -7,9 +7,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { useLocale } from "@/lib/i18n/client";
-import { milestonesFor } from "@/lib/legacy/schema";
 import { deriveNudges, loadDismissed, saveDismissed, visibleNudges, type LegacyHint } from "./derive-nudges";
-import type { NudgesApi } from "./types";
+import type { Nudge, NudgesApi } from "./types";
 
 const storage = (): Storage | null => {
   try { return typeof window === "undefined" ? null : window.localStorage; } catch { return null; }
@@ -36,7 +35,8 @@ export function useNudges(): NudgesApi {
   useEffect(() => {
     if (!wantsLegacy || !service || !estate) return;
     let alive = true;
-    service.legacyStatus(estate).then((st) => {
+    // The Legacy Book schema module (zod) is only needed here, so it loads with the book rather than with every page.
+    Promise.all([service.legacyStatus(estate), import("@/lib/legacy/schema")]).then(([st, { milestonesFor }]) => {
       if (!alive) return;
       const hint: LegacyHint | null = st.book
         ? { calledBy: st.book.calledBy, milestones: milestonesFor(st.book, st.childId).filter((m) => m.kind === "firstFees").map((m) => ({ id: m.id, title: m.title })) }
@@ -55,6 +55,8 @@ export function useNudges(): NudgesApi {
     });
   }, [persona]);
 
+  // The clock ticks every few seconds; the list keeps its identity while its content is unchanged, so the
+  // sidebar, top bar and chat home only re-render when a card actually changes.
   const nudges = useMemo(() => {
     if (now === null || dismissed.persona !== persona) return [];
     // Until the Legacy Book has loaded (or if it can't be), no legacy nudge is shown.
@@ -62,6 +64,8 @@ export function useNudges(): NudgesApi {
     const all = deriveNudges(snap, role, now, { address, usdtZar: fx?.usdtZar ?? null, locale, legacy: hint });
     return visibleNudges(all, dismissed.ids);
   }, [now, dismissed, persona, legacy, legacyKey, snap, role, address, fx, locale]);
+  const key = useMemo(() => JSON.stringify(nudges), [nudges]);
+  const stable = useMemo<Nudge[]>(() => JSON.parse(key), [key]);
 
-  return { nudges, dismiss };
+  return useMemo(() => ({ nudges: stable, dismiss }), [stable, dismiss]);
 }

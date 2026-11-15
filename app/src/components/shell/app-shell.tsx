@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { MotionConfig } from "motion/react";
@@ -16,14 +17,11 @@ import { useWallet } from "@/lib/hooks/wallet-source";
 import { chainConfig } from "@/lib/chain/config";
 import { LogoMark } from "@/components/ui/primitives";
 import { Toaster } from "@/components/ui/client";
-import { AgentSheet } from "@/components/agent/agent-sheet";
 import { AgentActionBridge } from "@/components/agent/chat-parts";
 import { ChatProvider, useAttention } from "@/components/chat/chat-context";
 import { Avatar } from "./avatar";
 import { CopyProvider, fmt, useCopy } from "./copy";
 import { PinGate } from "./pin-gate";
-import { PersonaSheet } from "./persona-sheet";
-import { ProofDrawer } from "./proof-drawer";
 import { DemoGuide } from "./demo-guide";
 import { Sidebar } from "./sidebar";
 import { applyTheme, useTheme } from "./theme";
@@ -35,7 +33,29 @@ import { disputesToDecide } from "@/components/disputes/disputes";
 
 export { Avatar } from "./avatar";
 
+// Sheets that start closed: fetched once the first screen has settled (or as soon as one is opened), so the page
+// never waits on their code (the agent sheet brings the chat and voice layers). Nothing of theirs shows until opened.
+const PersonaSheet = dynamic(() => import("./persona-sheet").then((m) => m.PersonaSheet), { ssr: false });
+const ProofDrawer = dynamic(() => import("./proof-drawer").then((m) => m.ProofDrawer), { ssr: false });
+const AgentSheet = dynamic(() => import("@/components/agent/agent-sheet").then((m) => m.AgentSheet), { ssr: false });
+
 const COLLAPSE_KEY = "heirloom.sidebar";
+
+/** True once the page has shown its data (or has none to wait for) and the browser has had an idle moment. */
+function useSettled(waiting: boolean): boolean {
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (settled || waiting) return;
+    const done = () => setSettled(true);
+    if (typeof window.requestIdleCallback !== "function") { // Safari before 18
+      const t = window.setTimeout(done, 300);
+      return () => window.clearTimeout(t);
+    }
+    const id = window.requestIdleCallback(done, { timeout: 2000 });
+    return () => window.cancelIdleCallback(id);
+  }, [settled, waiting]);
+  return settled;
+}
 
 export function AppShell({ common: commonEn, assistant: assistantEn, pay: payEn, guardians: guardiansEn, disputes: disputesEn, siteName, children }: { common: CommonCopy; assistant: AssistantCopy; pay: PayCopy; guardians: GuardiansCopy; disputes: DisputesCopy; siteName: string; children: ReactNode }) {
   // English is passed from the server; the visitor's language (if any) is laid over it in the browser.
@@ -74,7 +94,7 @@ function CountDot({ n }: { n: number }) {
 function Chrome({ children }: { children: ReactNode }) {
   const { common, assistant, siteName } = useCopy();
   const s = assistant.shell;
-  const { session, role, snap, isMock: mockService, service, setProofOpen } = useEstate();
+  const { session, role, snap, isMock: mockService, service, setProofOpen, phase, proofOpen, agent } = useEstate();
   // The service is created after mount; until then the build's data mode says whether this is the demo, so the
   // demo guide's space is reserved from the first paint.
   const isMock = service ? mockService : chainConfig.dataMode === "mock";
@@ -90,6 +110,7 @@ function Chrome({ children }: { children: ReactNode }) {
   // Until the wallet has loaded (it lives in this browser), assume the signed-in frame: in demo mode there is
   // always a persona, so the sidebar and demo guide are laid out from the first paint and nothing jumps.
   const framed = !onboarding && (!!session || !wallet.ready);
+  const settled = useSettled(!wallet.ready || (!!session && phase === "loading"));
   const isChat = pathname === "/chat";
   const guardNow = useNow(15000);
   const hasInbox = role === "verifier" || role === "monitor";
@@ -253,9 +274,9 @@ function Chrome({ children }: { children: ReactNode }) {
         </>
       )}
 
-      <PersonaSheet open={personaOpen} onClose={() => setPersonaOpen(false)} />
-      <ProofDrawer />
-      <AgentSheet />
+      {(settled || personaOpen) && <PersonaSheet open={personaOpen} onClose={() => setPersonaOpen(false)} />}
+      {(settled || proofOpen) && <ProofDrawer />}
+      {(settled || agent !== null) && <AgentSheet />}
       <AgentActionBridge />
       <Toaster dismissLabel={common.toast.dismiss} />
     </div>

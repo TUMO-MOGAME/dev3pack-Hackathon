@@ -5,12 +5,11 @@
  * and an attached document is read by the document reviewer first.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { assistant, type AssistantCopy } from "@/content/assistant";
+import type { AssistantCopy } from "@/content/assistant";
 import { useEstate } from "@/lib/hooks/estate";
 import { useLocale } from "@/lib/i18n/client";
 import { attachmentKind, attachmentReply, reviewContext, reviewPurpose, suggestionsFor } from "./attachment";
 import { chatCopy, fill } from "./nudge-copy";
-import { runAssistantTurn, turnText } from "./pipeline";
 import {
   emptyThreadState, loadThreads, newThreadId, saveThreads, threadReducer,
   type NewMessage, type ThreadAction, type ThreadState,
@@ -30,10 +29,10 @@ const storage = (): Storage | null => {
 };
 
 /**
- * @param copy The assistant copy (localised by the caller); defaults to English.
+ * @param copy The assistant copy (localised by the caller, passed down from the server layout).
  * @param page The current route, passed to the orchestrator as context.
  */
-export function useChatThreads(copy: AssistantCopy = assistant, page = "/"): ChatThreadsApi {
+export function useChatThreads(copy: AssistantCopy, page = "/"): ChatThreadsApi {
   const { service, isMock, snap, fx, session, role } = useEstate();
   const locale = useLocale();
   const persona = session?.address ?? "guest";
@@ -100,6 +99,8 @@ export function useChatThreads(copy: AssistantCopy = assistant, page = "/"): Cha
         const r = attachmentReply(report, { name: file.name, purpose, role: c.role, snap: c.snap, address: c.session?.address ?? null }, c.locale);
         reply = { role: "agent", specialist: "DocumentReviewer", text: r.text, actions: r.actions, fresh: true, ts: Date.now() };
       } else {
+        // The assistant pipeline (intent parsing, the demo orchestrator, schemas) loads with the first message.
+        const { runAssistantTurn, turnText } = await import("./pipeline");
         const r = await runAssistantTurn(trimmed, history, c, copy);
         reply = { role: "agent", specialist: r.reply.specialist, text: turnText(r, copy), actions: r.reply.actions, fresh: true, ts: Date.now() };
       }
@@ -117,9 +118,10 @@ export function useChatThreads(copy: AssistantCopy = assistant, page = "/"): Cha
   const status = snap?.estate.status ?? null;
   const suggestions = useMemo(() => suggestionsFor(role, status, locale), [role, status, locale]);
 
-  return {
-    threads, activeId, active,
-    busy: !!activeId && busyIds.includes(activeId),
+  const busy = !!activeId && busyIds.includes(activeId);
+  // One object per actual change, so every consumer doesn't re-render on each estate poll or clock tick.
+  return useMemo(() => ({
+    threads, activeId, active, busy,
     newThread, select, rename, remove, send, suggestions,
-  };
+  }), [threads, activeId, active, busy, newThread, select, rename, remove, send, suggestions]);
 }

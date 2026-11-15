@@ -57,9 +57,7 @@ export interface MockService extends HeirloomService {
   setCheckInDaysLeft(daysLeft: number): void;
 }
 
-export function isMockService(s: HeirloomService | null | undefined): s is MockService {
-  return !!s && s.mode === "mock" && typeof (s as MockService).setActor === "function";
-}
+export { isMockService } from "./is-mock";
 
 /* ---------- demo cast ---------- */
 

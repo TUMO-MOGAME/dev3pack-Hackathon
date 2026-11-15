@@ -7,7 +7,7 @@ import { ArrowRight, ArrowUp, Sparkles } from "@/components/ui/icons";
 import type { AssistantCopy } from "@/content/assistant";
 import type { SpecialistName } from "@/lib/voice/types";
 import { mapAgentPath, type AgentAction } from "@/lib/hooks/agent-types";
-import { onAgentAction } from "@/lib/agent/actions";
+import { onAgentAction } from "@/lib/agent/action-events";
 import { useEstate } from "@/lib/hooks/estate";
 import { shortAddress } from "@/lib/format";
 import { usePay } from "@/components/pay/payment";
