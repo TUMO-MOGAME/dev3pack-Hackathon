@@ -105,7 +105,8 @@ export function Gallery({ id, photos: all, title, copy, labels, badge }: {
                   type="button" onClick={() => go(j)} aria-label={p.label ? `${fmt(copy.show, { n: number(j) })}: ${labels[p.label]}` : fmt(copy.show, { n: number(j) })} aria-current={j === i ? "true" : undefined}
                   className={clsx("relative block size-14 overflow-hidden rounded-md border-2 bg-surface-2", j === i ? "border-ink" : "border-transparent opacity-75 hover:opacity-100")}
                 >
-                  <Image src={p.url} alt="" fill sizes="56px" className="object-cover" unoptimized />
+                  {/* Bundled demo photos get resized thumbnails (each original is ~120 KB for a 56 px tile); uploads stay as they are. */}
+                  <Image src={p.url} alt="" fill sizes="56px" className="object-cover" unoptimized={!p.url.startsWith("/demo/")} />
                 </button>
               </li>
             ))}
