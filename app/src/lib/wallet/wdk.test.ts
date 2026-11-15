@@ -3,7 +3,8 @@ import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import bs58 from "bs58";
 import { newSeedPhrase, openAccount, wdkSign } from "./wdk";
 
-describe("WDK sign-only (offline)", () => {
+// Opening a WDK wallet derives keys (slow under a full parallel test run), so these get more than the 5 s default.
+describe("WDK sign-only (offline)", { timeout: 30_000 }, () => {
   it("signs a base64 tx and returns wire bytes web3.js can parse, with the fee payer's signature", async () => {
     const acc = await openAccount(await newSeedPhrase(), "https://api.devnet.solana.com");
     const payer = new PublicKey(acc.address);
