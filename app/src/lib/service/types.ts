@@ -32,6 +32,12 @@ export interface EstateSnapshot {
   guardians?: GuardiansSnapshot;
   /** Disputes (U9) on claims and on the unlock, newest first. Absent on older snapshots. */
   disputes?: Dispute[];
+  /**
+   * Off-chain display names by wallet that the service knows beyond the roles above (chain: the estate meta's
+   * names and the names this device gave backups, monitors and fallback recipients). For the activity feed
+   * (lib/people.ts); never on-chain, and dropped from the public record.
+   */
+  names?: Record<Base58, string>;
 }
 
 export interface HeirloomService extends GuardiansService, DisputesService {

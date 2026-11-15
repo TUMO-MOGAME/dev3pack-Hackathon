@@ -24,6 +24,7 @@ import { FallbackStatus } from "@/components/guardians/fallback";
 import { ObjectionList } from "@/components/guardians/objections";
 import { YearlyCapEditor, YearlyUsage } from "@/components/disputes/yearly";
 import { Marked } from "@/components/ui/marked";
+import { ActivityText, useNameBook } from "@/components/shell/activity-text";
 import { guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
 
 type Copy = ScreensCopy["estate"];
@@ -39,6 +40,7 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
   const { common } = useCopy();
   const { fx, setProofOpen, walletUsdt } = useEstate();
   const now = useNow(10000);
+  const book = useNameBook(snap);
   const e = snap.estate;
   const rate = fx?.usdtZar ?? null;
   const car = snap.assets[0];
@@ -155,7 +157,7 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
               <ol className="mt-2">
                 {snap.activity.slice(0, 6).map((a, i) => (
                   <motion.li key={`${a.txSignature}-${a.ts}-${i}`} layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="border-b border-line/70 py-2 last:border-0">
-                    <p className="text-small font-medium">{a.text}</p>
+                    <p className="text-small font-medium"><ActivityText item={a} book={book} /></p>
                     <div className="flex flex-wrap items-center justify-between gap-x-3">
                       <span className="text-[0.75rem] text-ink-2">{timeAgo(a.ts, now, common.time)}</span>
                       {a.txSignature && <ExplorerLink signature={a.txSignature} label={copy.activity.receipt} srLabel={copy.activity.receiptSr} className="min-h-9!" />}

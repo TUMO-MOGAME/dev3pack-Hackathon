@@ -25,6 +25,7 @@ import type { Claim, EstateStatus } from "@/lib/types";
 import { Badge, Button, ButtonLink, Card, DefList, EmptyState, ExplorerLink, LoadingCards, Notice, type Tone } from "@/components/ui/primitives";
 import { CopyProvider, fmt, useCopy } from "@/components/shell/copy";
 import { ActivityList, CopyValue } from "@/components/shell/proof-drawer";
+import { usePublicNameBook } from "@/components/shell/activity-text";
 import { Marked } from "@/components/ui/marked";
 
 type Copy = ScreensCopy["audit"];
@@ -132,6 +133,7 @@ function Fingerprint({ label, value }: { label: string; value: string | null }) 
 function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMock: boolean }) {
   const { common } = useCopy();
   const now = useNow(30000);
+  const book = usePublicNameBook(snap);
   const e = snap.estate;
   const plan = checkInPlan(isMock ? "mock" : "chain");
   const payeeName = (wallet: string) => snap.payees.find((p) => p.wallet === wallet)?.name ?? wallet.slice(0, 4) + "…" + wallet.slice(-4);
@@ -202,7 +204,7 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
       </Section>
 
       <Section id="audit-payments" title={copy.payments.title} body={copy.payments.body} icon={<FileCheck2 className="size-5 text-amber" aria-hidden="true" />}>
-        {payments.length === 0 ? <p className="text-ink-2">{copy.payments.empty}</p> : <ActivityList items={payments} now={now} />}
+        {payments.length === 0 ? <p className="text-ink-2">{copy.payments.empty}</p> : <ActivityList items={payments} now={now} book={book} />}
       </Section>
 
       <Section id="audit-decisions" title={copy.decisions.title} body={copy.decisions.body} icon={<UsersRound className="size-5 text-amber" aria-hidden="true" />}>
@@ -246,7 +248,7 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
         )}
 
         <h3 className="mt-5 font-sans text-body font-semibold tracking-normal">{copy.decisions.steps}</h3>
-        {decisions.length === 0 ? <p className="mt-1 text-small text-ink-2">{copy.decisions.none}</p> : <ActivityList items={decisions} now={now} />}
+        {decisions.length === 0 ? <p className="mt-1 text-small text-ink-2">{copy.decisions.none}</p> : <ActivityList items={decisions} now={now} book={book} />}
       </Section>
 
       <div className="grid gap-5 *:min-w-0 lg:grid-cols-2 lg:items-start">

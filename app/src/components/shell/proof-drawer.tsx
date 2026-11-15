@@ -9,6 +9,8 @@ import { useNow } from "@/lib/hooks/use-now";
 import { Sheet } from "@/components/ui/client";
 import { ExplorerLink, Notice } from "@/components/ui/primitives";
 import { timeAgo, useCopy } from "./copy";
+import { ActivityText, useNameBook } from "./activity-text";
+import type { NameBook } from "@/lib/people";
 
 const PROGRAM_ID = process.env.NEXT_PUBLIC_HEIRLOOM_PROGRAM_ID ?? "";
 
@@ -30,7 +32,7 @@ export function CopyValue({ value, copyLabel, copiedLabel }: { value: string; co
 }
 
 /** Activity lines, newest first, each with its receipt (the Proof drawer and the public record share it). */
-export function ActivityList({ items, now }: { items: ActivityItem[]; now: number | null }) {
+export function ActivityList({ items, now, book }: { items: ActivityItem[]; now: number | null; book: NameBook }) {
   const { common } = useCopy();
   const c = common.proof;
   return (
@@ -38,7 +40,7 @@ export function ActivityList({ items, now }: { items: ActivityItem[]; now: numbe
       {items.map((a, i) => (
         <li key={`${a.txSignature}-${i}`} className="border-b border-line py-2.5 last:border-0">
           <div className="flex items-start justify-between gap-3">
-            <p className="min-w-0 text-small font-medium">{a.text}</p>
+            <p className="min-w-0 text-small font-medium"><ActivityText item={a} book={book} /></p>
             {a.amount !== undefined && <span className="shrink-0 text-small font-semibold tabular-nums">{formatUsdt(a.amount, { decimals: 0 })}</span>}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-x-3">
@@ -57,6 +59,7 @@ export function ProofDrawer() {
   const c = common.proof;
   const { proofOpen, setProofOpen, snap, isMock } = useEstate();
   const now = useNow(15000);
+  const book = useNameBook(snap);
   const e = snap?.estate;
   const facts = e ? [
     ...(PROGRAM_ID ? [{ term: c.facts.program, value: PROGRAM_ID }] : []),
@@ -94,7 +97,7 @@ export function ProofDrawer() {
         {!snap || snap.activity.length === 0 ? (
           <p className="py-8 text-center text-ink-2">{c.empty}</p>
         ) : (
-          <ActivityList items={snap.activity} now={now} />
+          <ActivityList items={snap.activity} now={now} book={book} />
         )}
       </div>
     </Sheet>

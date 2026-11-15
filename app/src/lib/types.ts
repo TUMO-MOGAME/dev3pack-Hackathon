@@ -203,6 +203,11 @@ export interface ActivityItem {
   reportHash?: HexHash;
   /** For AssetSold: which asset, who bought it and where the money went (from the event; no personal data). */
   sale?: SaleRecord;
+  /**
+   * Wallets that `text` names by their short address (chain events). The feed shows each as the person's name when
+   * the app knows it (lib/people.ts), else the short address. Demo lines carry names in `text` and leave this out.
+   */
+  parties?: Base58[];
 }
 
 export interface SaleRecord {

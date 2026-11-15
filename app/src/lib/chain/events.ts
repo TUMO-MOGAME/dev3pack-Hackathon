@@ -1,6 +1,7 @@
 /**
  * Turns program events (spec §Events) into plain-language activity lines. No personal data: events only
- * carry pubkeys, amounts and timestamps.
+ * carry pubkeys, amounts and timestamps. A wallet appears as its short address and is listed in `parties`;
+ * the feed puts a name there when the app knows one (lib/people.ts).
  */
 import { formatUsdt, shortAddress } from "../format";
 import type { Raw } from "./decoders";
@@ -80,11 +81,23 @@ const TEXT: Record<string, (d: Raw, amt?: bigint) => string> = {
   AssetSold: (d, a) => `Car sold for ${a !== undefined ? formatUsdt(a) : "USD₮"} to ${who(d, "buyer")}: USD₮ and title swapped atomically`,
 };
 
-export function describeEvent(name: string, data: Raw): { kind: string; text: string; amount?: bigint } {
+/** Every wallet in the event's fields whose short address the line shows (so the feed can put a name there). */
+function partiesIn(d: Raw, text: string): string[] {
+  const out: string[] = [];
+  for (const v of Object.values(d)) {
+    const b58 = v && typeof (v as { toBase58?: () => string }).toBase58 === "function" ? (v as { toBase58: () => string }).toBase58() : null;
+    if (b58 && !out.includes(b58) && text.includes(shortAddress(b58))) out.push(b58);
+  }
+  return out;
+}
+
+export function describeEvent(name: string, data: Raw): { kind: string; text: string; amount?: bigint; parties?: string[] } {
   const key = Object.keys(TEXT).find((k) => k.toLowerCase() === name.toLowerCase()) ?? name;
   const amount = amountOf(data);
   const fn = TEXT[key];
-  return { kind: key, text: fn ? fn(data, amount) : key, amount };
+  const text = fn ? fn(data, amount) : key;
+  const parties = partiesIn(data, text);
+  return { kind: key, text, amount, ...(parties.length ? { parties } : {}) };
 }
 
 function key(d: Raw, ...names: string[]): string | null {

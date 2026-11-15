@@ -369,6 +369,7 @@ export const af: Bundle = {
       simulated: "gesimuleer",
       facts: { program: "Heirloom-program (Solana devnet)", estate: "Boedelrekening", will: "Plan-vingerafdruk (SHA-256)", mint: "Aanvaarde geld (USD₮ mint)", network: "Netwerk", agent: "Agent se wallet" },
       notSigned: "Nog nie geteken nie",
+      walletTitle: "Wallet {address}",
       network: "Solana devnet",
       empty: "Nog geen transaksies nie. Hulle sal hier verskyn soos die boedel gebruik word.",
       receipt: "Kwitansie",
