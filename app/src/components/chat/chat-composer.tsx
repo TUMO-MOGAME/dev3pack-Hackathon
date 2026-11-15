@@ -119,7 +119,7 @@ export function ChatComposer({ onSend, disabled }: { onSend: (text: string, opts
       <div className="flex items-end gap-2 pl-3">
         <label htmlFor={fieldId} className="sr-only">{assistant.chat.inputLabel}</label>
         <textarea
-          id={fieldId} ref={field} rows={1} value={value}
+          id={fieldId} ref={field} rows={1} value={value} data-composer-field
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
           placeholder={c.placeholder}

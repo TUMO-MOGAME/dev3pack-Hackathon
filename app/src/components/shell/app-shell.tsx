@@ -214,7 +214,14 @@ function Chrome({ children }: { children: ReactNode }) {
               )}
               {framed && (
                 <>
-                  <Link href="/chat" aria-current={isChat ? "page" : undefined} aria-label={nudges.length ? fmt(s.top.homeCount, { n: nudges.length }) : s.top.home} title={s.top.home} className={clsx(roundBtn, isChat && "border-ink")}>
+                  <Link href="/chat" onClick={(e) => {
+                    // Already on the chat home: the badge counts the cards there, so show them instead of doing nothing.
+                    const stack = isChat && nudges.length ? document.getElementById("nudges") : null;
+                    if (!stack) return;
+                    e.preventDefault();
+                    stack.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+                    stack.focus({ preventScroll: true });
+                  }} aria-current={isChat ? "page" : undefined} aria-label={nudges.length ? fmt(s.top.homeCount, { n: nudges.length }) : s.top.home} title={s.top.home} className={clsx(roundBtn, isChat && "border-ink")}>
                     <House className="size-5" aria-hidden="true" /><CountDot n={nudges.length} />
                   </Link>
                   <button type="button" onClick={() => setProofOpen(true)} aria-label={common.proof.openLabel} title={common.proof.open} className={clsx(roundBtn, "hidden min-[400px]:grid")}>

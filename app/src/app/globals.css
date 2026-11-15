@@ -415,6 +415,8 @@ h1 .mark, .text-display .mark { background-size: 100% 0.12em; }
 }
 
 [data-sheet-title]:focus-visible { outline: none; }
+/* The chat field sits inside the composer, which draws the focus ring (focus-within); one ring, not two. */
+[data-composer-field]:focus-visible { outline: none; }
 
 ::selection {
   background: var(--accent);

@@ -60,7 +60,7 @@ export function NudgeStack({ className }: { className?: string }) {
 
   return (
     <section
-      aria-label={c.label} aria-roledescription="carousel" className={className}
+      id="nudges" tabIndex={-1} aria-label={c.label} aria-roledescription="carousel" className={className}
       onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}
       onFocus={() => setHeld(true)} onBlur={() => setHeld(false)}
     >
