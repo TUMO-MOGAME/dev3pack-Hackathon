@@ -166,6 +166,7 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
                 ))}
               </ol>
               <Button variant="quiet" small block className="mt-3" onClick={() => setProofOpen(true)}>{copy.activity.all}</Button>
+              <ButtonLink href="/statement" variant="ghost" small block className="mt-1.5">{copy.activity.statement}</ButtonLink>
             </>
           )}
         </Card>

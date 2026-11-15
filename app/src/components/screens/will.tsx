@@ -2,12 +2,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import { AnimatePresence, m as motion } from "motion/react";
-import { ArrowLeft, ArrowRight, CalendarClock, CarFront, Check, Clock, GraduationCap, Hourglass, Lock, PenLine, Phone, ShieldCheck, Sparkles, UsersRound, Zap } from "@/components/ui/icons";
+import { ArrowLeft, ArrowRight, CalendarClock, CarFront, Check, Clock, GraduationCap, Hourglass, Lock, PenLine, Phone, ShieldCheck, Sparkles, UsersRound, X, Zap } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocale, useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot, TxResult } from "@/lib/service";
 import type { WalletSession, WillChatMessage, WillDraft } from "@/lib/types";
-import { formatUsdt, shortAddress, toBase } from "@/lib/format";
+import { formatUsdt, fromBase, shortAddress, toBase } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, ButtonLink, Card, Consent, Eyebrow, ExplorerLink, Notice, PageHeader } from "@/components/ui/primitives";
 import { Bubble, Chips, Composer, Thinking } from "@/components/agent/chat-parts";
@@ -16,8 +16,10 @@ import { Gate } from "@/components/shell/gate";
 import { categoryIcon } from "./estate";
 import { FallbackPlanCard } from "@/components/guardians/fallback";
 import { GuardiansPlanLink } from "@/components/guardians/section";
+import { BillTemplates } from "@/components/everyday/bill-templates";
 
 type Copy = ScreensCopy["will"];
+type BillsCopy = ScreensCopy["bills"];
 interface Msg extends WillChatMessage { id: number; fresh?: boolean }
 const usd = (n: number) => formatUsdt(toBase(n), { decimals: 0 });
 const ruleKey = (r: WillDraft["rules"][number]) => `${r.beneficiaryLabel}|${r.category}|${r.recurring ? "recurring" : "claim"}`;
@@ -32,21 +34,22 @@ function everyKey(secs: number): keyof Copy["preview"]["every"] {
   return "year";
 }
 
-export function WillScreen({ copy: english }: { copy: Copy }) {
+export function WillScreen({ copy: english, bills: billsEnglish }: { copy: Copy; bills: BillsCopy }) {
   const copy = useLocalized(english, (t) => t.screens.will);
+  const bills = useLocalized(billsEnglish, (t) => t.screens.bills);
   return (
     <Gate roles={["owner"]} allowEmpty>
-      {({ snap, session }) => <WillFlow copy={copy} snap={snap} session={session} />}
+      {({ snap, session }) => <WillFlow copy={copy} bills={bills} snap={snap} session={session} />}
     </Gate>
   );
 }
 
-function WillFlow({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot | null; session: WalletSession }) {
+function WillFlow({ copy, bills, snap, session }: { copy: Copy; bills: BillsCopy; snap: EstateSnapshot | null; session: WalletSession }) {
   // Kept here so the "locked in" moment survives the estate appearing underneath it.
   const [txs, setTxs] = useState<TxResult[] | null>(null);
   if (txs) return <Done copy={copy} txs={txs} />;
-  if (snap) return <Locked copy={copy} snap={snap} />;
-  return <Writer copy={copy} session={session} onSigned={setTxs} />;
+  if (snap) return <Locked copy={copy} bills={bills} snap={snap} />;
+  return <Writer copy={copy} bills={bills} session={session} onSigned={setTxs} />;
 }
 
 function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
@@ -74,7 +77,7 @@ function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
 
 /* ---------- Conversation + live preview + review + sign ---------- */
 
-function Writer({ copy, session, onSigned }: { copy: Copy; session: WalletSession; onSigned: (txs: TxResult[]) => void }) {
+function Writer({ copy, bills, session, onSigned }: { copy: Copy; bills: BillsCopy; session: WalletSession; onSigned: (txs: TxResult[]) => void }) {
   const locale = useLocale();
   const { common, assistant } = useCopy();
   const { service, run, busy, openAgent } = useEstate();
@@ -84,10 +87,17 @@ function Writer({ copy, session, onSigned }: { copy: Copy; session: WalletSessio
   // The owner's own Now / After-I'm-gone choices, kept when the agent sends a fresh draft.
   // Keyed by who + what (not row position), so a re-ordered or extended draft can't move a choice onto another rule.
   const [starts, setStarts] = useState<Record<string, boolean>>({});
+  // Rules the owner added from a bill template: kept beside the agent's draft, so a fresh draft doesn't drop them.
+  const [extra, setExtra] = useState<WillDraft["rules"]>([]);
   const draft = useMemo<WillDraft | null>(
-    () => (rawDraft ? { ...rawDraft, rules: rawDraft.rules.map((r) => { const k = ruleKey(r); return k in starts ? { ...r, startsNow: starts[k] } : r; }) } : null),
-    [rawDraft, starts],
+    () => (rawDraft ? { ...rawDraft, rules: [...rawDraft.rules, ...extra].map((r) => { const k = ruleKey(r); return k in starts ? { ...r, startsNow: starts[k] } : r; }) } : null),
+    [rawDraft, extra, starts],
   );
+  const addBill = (rule: WillDraft["rules"][number]) => {
+    setExtra((x) => [...x, rule]);
+    // The form's own Now / After choice wins over an older toggle on a rule with the same key.
+    setStarts((prev) => ({ ...prev, [ruleKey(rule)]: rule.startsNow }));
+  };
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
@@ -209,6 +219,8 @@ function Writer({ copy, session, onSigned }: { copy: Copy; session: WalletSessio
         <div className="flex max-h-[min(42rem,80dvh)] min-h-0 flex-col lg:h-full lg:max-h-none">
           <Preview
             copy={copy} draft={draft} onStart={(i, now) => { const r = draft?.rules[i]; if (r) setStarts((prev) => ({ ...prev, [ruleKey(r)]: now })); }}
+            bills={bills} extraFrom={rawDraft?.rules.length ?? 0} onAddBill={addBill}
+            onRemoveBill={(i) => setExtra((x) => x.filter((_, j) => j !== i))}
             footer={
               <AnimatePresence>
                 {complete && (
@@ -239,7 +251,10 @@ function Slot({ icon, title, filled, pending, children }: { icon: ReactNode; tit
   );
 }
 
-function Preview({ copy, draft, onStart, footer }: { copy: Copy; draft: WillDraft | null; onStart: (index: number, now: boolean) => void; footer?: ReactNode }) {
+function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, onRemoveBill }: {
+  copy: Copy; draft: WillDraft | null; onStart: (index: number, now: boolean) => void; footer?: ReactNode;
+  bills: BillsCopy; extraFrom: number; onAddBill: (rule: WillDraft["rules"][number]) => void; onRemoveBill: (index: number) => void;
+}) {
   const { common } = useCopy();
   const p = copy.preview;
   const parts = [!!draft?.beneficiaries.length, !!draft?.rules.length, (draft?.verifiers.length ?? 0) >= 3, !!draft?.assets.length];
@@ -280,6 +295,14 @@ function Preview({ copy, draft, onStart, footer }: { copy: Copy; draft: WillDraf
                     </div>
                     {r.recurring && <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-ink px-2 py-0.5 text-[0.7rem] font-semibold text-ink"><CalendarClock className="size-3" aria-hidden="true" />{p.scheduled}</span>}
                   </div>
+                  {i >= extraFrom && (
+                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2">
+                      <span className="text-[0.75rem] font-semibold text-ink-2">{bills.form.fromTemplate}</span>
+                      <button type="button" onClick={() => onRemoveBill(i - extraFrom)} className="inline-flex min-h-9 items-center gap-1 rounded-full px-1 text-[0.75rem] font-semibold text-ink underline underline-offset-4 hover:decoration-2">
+                        <X className="size-3.5" aria-hidden="true" />{fmt(bills.form.remove, { name: cat.toLowerCase() })}
+                      </button>
+                    </div>
+                  )}
                   <fieldset className="mt-2">
                     <legend className="sr-only">{fmt(p.startLabel, { category: cat.toLowerCase(), name: r.beneficiaryLabel })}</legend>
                     <div className="flex rounded-full bg-surface p-0.5 ring-1 ring-line-strong">
@@ -297,6 +320,14 @@ function Preview({ copy, draft, onStart, footer }: { copy: Copy; draft: WillDraf
             })}
           </ul>
         </Slot>
+        <section aria-label={bills.title} className="rounded-md border border-dashed border-line-strong/60 p-3">
+          <p className="text-small font-semibold">{bills.title}</p>
+          <p className="mb-2 mt-0.5 text-[0.75rem] text-ink-2">{draft?.beneficiaries.length ? bills.body : bills.needFamily}</p>
+          <BillTemplates
+            compact copy={bills} disabled={!draft?.beneficiaries.length}
+            target={{ mode: "draft", beneficiaries: (draft?.beneficiaries ?? []).map((b) => ({ value: b.label, label: `${b.label.split(" ")[0]} · ${b.relationship}` })), onAdd: onAddBill }}
+          />
+        </section>
         <Slot icon={<ShieldCheck className="size-4" aria-hidden="true" />} title={p.trusted} filled={parts[2]} pending={p.pending}>
           <ul className="flex flex-col gap-1">
             {draft?.verifiers.map((v, i) => (
@@ -408,7 +439,7 @@ function Review({ copy, draft, onBack, onSign, signing }: { copy: Copy; draft: W
 
 /* ---------- After signing: the will as it stands on-chain ---------- */
 
-function Locked({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
+function Locked({ copy, bills, snap }: { copy: Copy; bills: BillsCopy; snap: EstateSnapshot }) {
   const { common } = useCopy();
   const { openAgent } = useEstate();
   const l = copy.locked;
@@ -439,6 +470,22 @@ function Locked({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
       </ol>
       {snap.estate.willHash && (
         <p className="mt-4 flex flex-wrap items-center gap-2 text-small text-ink-2"><Lock className="size-4" aria-hidden="true" />{l.fingerprint}: <span className="font-mono text-ink">{shortAddress(snap.estate.willHash, 10)}</span></p>
+      )}
+      {snap.estate.status === "Active" && (
+        <section aria-labelledby="bills-title" className="mt-6">
+          <h2 id="bills-title" className="text-h3">{bills.signedTitle}</h2>
+          <p className="mb-3 mt-1 text-small text-ink-2">{bills.signedBody}</p>
+          <BillTemplates
+            copy={bills}
+            target={{
+              mode: "signed",
+              beneficiaries: snap.beneficiaries.filter((b) => b.active).map((b) => ({ value: b.wallet, label: b.label })),
+              payees: snap.payees.map((x) => ({ value: x.wallet, label: x.name, kind: x.kind })),
+              // The estate's value for the executor's cap: the vault plus each unsold asset's minimum price.
+              estateUsdt: fromBase(snap.estate.vaultBalance) + snap.assets.filter((a) => a.status !== "Sold").reduce((n, a) => n + fromBase(a.floorPrice), 0),
+            }}
+          />
+        </section>
       )}
       <GuardiansPlanLink />
       <FallbackPlanCard snap={snap} className="mt-5" />

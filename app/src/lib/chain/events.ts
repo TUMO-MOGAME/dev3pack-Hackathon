@@ -114,3 +114,14 @@ export function saleFromEvent(name: string, data: Raw): { asset: string; buyer: 
   if (!asset || !buyer || !recipient) return null;
   return { asset, buyer, recipient, hardship: !!pick(data, "hardship") };
 }
+
+/** ClaimPaid / ScheduledPaid / FallbackExecuted: the payee (or fallback recipient), rule and claim, or null. */
+export function paymentFromEvent(name: string, data: Raw): { payee: string; rule?: string; claim?: string } | null {
+  const n = name.toLowerCase();
+  if (n !== "claimpaid" && n !== "scheduledpaid" && n !== "fallbackexecuted") return null;
+  const payee = n === "fallbackexecuted" ? key(data, "recipient") : key(data, "payee", "fixed_payee", "payee_wallet");
+  if (!payee) return null;
+  const rule = key(data, "rule");
+  const claim = key(data, "claim");
+  return { payee, ...(rule ? { rule } : {}), ...(claim ? { claim } : {}) };
+}

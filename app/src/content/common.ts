@@ -158,6 +158,8 @@ export const common = {
     copy: "Copy",
     copied: "Copied",
     close: "Close",
+    statement: "Monthly statement",
+    statementHint: "What the plan paid each month, to print or share with the family.",
   },
   report: {
     title: "Agent's report",

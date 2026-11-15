@@ -8,7 +8,7 @@
  */
 import { explorerTx, fromBase, toBase } from "../format";
 import type {
-  AgentReport, Asset, Base58, Claim, Hardship, OfferRanking, PaymentReceipt, PaymentReview, Role, SavedRecipient, WillChatMessage, WillDraft,
+  AgentReport, Asset, Base58, Claim, Hardship, OfferRanking, PayeeKind, PaymentReceipt, PaymentRef, PaymentReview, Role, SavedRecipient, WillChatMessage, WillDraft,
 } from "../types";
 import type { EstateSnapshot, HeirloomService, TxResult } from "./types";
 import { DEMO_PERSONAS as WALLET_PERSONAS } from "../wallet/personas";
@@ -233,8 +233,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
   const first = (a: Base58) => shortName(name(a)); // "Adv. Ndlovu", "Uncle Bongani", "Lerato"
   const me = (): Base58 => actor?.address ?? fail("NoWallet", "Choose who you are acting as first.");
   const tx = (): TxResult => { const signature = fakeSig(); return { signature, explorerUrl: explorerTx(signature) }; };
-  const log = (kind: string, text: string, t: TxResult, amount?: bigint) => {
-    s.snap.activity.unshift({ ts: nowSecs(), kind, text, amount, txSignature: t.signature });
+  const log = (kind: string, text: string, t: TxResult, amount?: bigint, payment?: PaymentRef) => {
+    s.snap.activity.unshift({ ts: nowSecs(), kind, text, amount, txSignature: t.signature, ...(payment ? { payment } : {}) });
   };
   const need = (ok: boolean, code: string, detail: string) => { if (!ok) fail(code, detail); };
   const needCreated = () => need(s.created, "NoEstate", "There is no estate yet. The owner signs the will first.");
@@ -290,9 +290,16 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       s.snap.beneficiaries.push({ address: fakeAddr(), wallet: resolved, label: `${b.label.split(" ")[0]} (${b.relationship})`, active: true });
     });
     PAYEES.forEach((p) => s.snap.payees.push({ address: fakeAddr(), ...p }));
+    const newPayee = (payeeName: string, kind: PayeeKind) => {
+      const p = { address: fakeAddr(), wallet: fakeAddr(), kind, name: payeeName.trim().slice(0, 64) || "Payee" };
+      s.snap.payees.push(p);
+      s.names[p.wallet] = p.name;
+      return p;
+    };
     draft.rules.forEach((r, i) => {
       const ben = s.snap.beneficiaries.find((b) => b.label.toLowerCase().startsWith(r.beneficiaryLabel.toLowerCase().split(" ")[0])) ?? s.snap.beneficiaries[0];
-      const fixed = r.recurring ? s.snap.payees.find((p) => p.name === r.recurring!.payeeName) ?? s.snap.payees.find((p) => p.kind === r.allowedPayeeKind) : undefined;
+      // A payee the demo doesn't know yet (a bill template's "Funeral cover insurer") gets a made-up wallet of its own.
+      const fixed = r.recurring ? s.snap.payees.find((p) => p.name === r.recurring!.payeeName) ?? newPayee(r.recurring.payeeName, r.allowedPayeeKind) : undefined;
       s.snap.rules.push({
         address: fakeAddr(), id: i, beneficiary: ben.wallet, category: r.category, allowedPayeeKind: r.allowedPayeeKind,
         maxPerClaim: toBase(r.maxPerClaimUsdt), lifetimeCap: toBase(r.lifetimeCapUsdt), spentTotal: 0n,
@@ -511,7 +518,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     credit(r.fixedPayee!, r.recurringAmount);
     r.nextDue = nowSecs() + r.intervalSecs;
     const t = tx();
-    log("ScheduledPaid", `Scheduled payment: ${usd(r.recurringAmount)} paid to ${name(r.fixedPayee!)} for ${first(r.beneficiary)}`, t, r.recurringAmount);
+    log("ScheduledPaid", `Scheduled payment: ${usd(r.recurringAmount)} paid to ${name(r.fixedPayee!)} for ${first(r.beneficiary)}`, t, r.recurringAmount, { payee: r.fixedPayee!, rule: r.address });
     return t;
   }
 
@@ -537,7 +544,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     c.status = "Paid";
     const t = tx();
     c.txSignature = t.signature;
-    log("ClaimPaid", `${usd(c.amount)} paid straight to ${name(c.payee)} for ${first(c.beneficiary)}`, t, c.amount);
+    log("ClaimPaid", `${usd(c.amount)} paid straight to ${name(c.payee)} for ${first(c.beneficiary)}`, t, c.amount, { payee: c.payee, rule: c.rule, claim: c.address });
     return t;
   }
 

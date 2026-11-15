@@ -208,7 +208,15 @@ export interface ActivityItem {
    * the app knows it (lib/people.ts), else the short address. Demo lines carry names in `text` and leave this out.
    */
   parties?: Base58[];
+  /**
+   * For payments out of the vault (ClaimPaid, ScheduledPaid, FallbackExecuted): who was paid and under which rule or
+   * claim (from the event's fields). The monthly statement (lib/everyday/statement.ts) joins these to the rules.
+   */
+  payment?: PaymentRef;
 }
+
+/** A vault payment's payee and, when the event names them, its rule and claim. */
+export interface PaymentRef { payee: Base58; rule?: Base58; claim?: Base58 }
 
 export interface SaleRecord {
   asset: Base58;

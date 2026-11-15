@@ -26,6 +26,9 @@ const fullSlices = (t: Bundle) => ({
   "screens.car.sold.openPackHint": [screens.car.sold.openPackHint, t.screens.car?.sold?.openPackHint],
   "assistant.publicRecord": [assistant.publicRecord, t.assistant.publicRecord],
   "screens.start.phone": [screens.start.phone, t.screens.start?.phone],
+  "screens.bills": [screens.bills, t.screens.bills],
+  "screens.statement": [screens.statement, t.screens.statement],
+  "screens.estate.activity.statement": [screens.estate.activity.statement, t.screens.estate?.activity?.statement],
 } as Record<string, [unknown, unknown]>);
 
 /** How many `*marks*` a string carries; -1 when an asterisk is left over (unbalanced). */

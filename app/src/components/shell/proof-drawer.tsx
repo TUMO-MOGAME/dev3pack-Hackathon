@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Copy, Info, ScrollText } from "@/components/ui/icons";
+import { ArrowRight, Check, Copy, FileText, Info, ScrollText } from "@/components/ui/icons";
 import type { ActivityItem } from "@/lib/types";
 import { formatUsdt, shortAddress } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
@@ -92,6 +92,10 @@ export function ProofDrawer() {
               <ScrollText className="size-4 shrink-0" aria-hidden="true" />{assistant.publicRecord.link}<ArrowRight className="size-4 shrink-0" aria-hidden="true" />
             </Link>
             <p className="text-small text-ink-2">{assistant.publicRecord.hint}</p>
+            <Link href="/statement" onClick={() => setProofOpen(false)} className="mt-1 inline-flex min-h-11 items-center gap-2 font-semibold text-ink underline decoration-1 underline-offset-4 hover:decoration-2">
+              <FileText className="size-4 shrink-0" aria-hidden="true" />{c.statement}<ArrowRight className="size-4 shrink-0" aria-hidden="true" />
+            </Link>
+            <p className="text-small text-ink-2">{c.statementHint}</p>
           </div>
         )}
         {!snap || snap.activity.length === 0 ? (

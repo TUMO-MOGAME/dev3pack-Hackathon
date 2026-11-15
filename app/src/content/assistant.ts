@@ -186,6 +186,7 @@ export const assistant = {
       hardship: "Hardship",
       legacy: "Legacy voice",
       send: "Send to family",
+      statement: "Monthly statement",
       call: "Talk to Heirloom",
       demo: "Demo mode",
       darkMode: "Dark mode",

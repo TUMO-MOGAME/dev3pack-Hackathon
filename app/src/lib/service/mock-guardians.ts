@@ -6,7 +6,7 @@
  * Synchronous "instructions" only; mock.ts wraps them in the async GuardiansService methods (hashing, the agent's
  * review, latency) and calls the hooks (recordApproval, check*) from its existing instructions.
  */
-import type { AgentReport, Base58 } from "../types";
+import type { AgentReport, Base58, PaymentRef } from "../types";
 import type { EstateSnapshot, TxResult } from "./types";
 import type {
   AssetKind, AssetMediaInfo, AssetPhoto, FallbackRecipient, GuardiansSnapshot, ObjectionStatus, SeatApprovalItem, TargetKind,
@@ -97,7 +97,7 @@ export interface GuardDeps {
   me(): Base58;
   agent: Base58;
   tx(): TxResult;
-  log(kind: string, text: string, t: TxResult, amount?: bigint): void;
+  log(kind: string, text: string, t: TxResult, amount?: bigint, payment?: PaymentRef): void;
   credit(wallet: Base58, amount: bigint): void;
   usd(amount: bigint): string;
 }
@@ -598,7 +598,7 @@ export function createMockGuardians(d: GuardDeps) {
     g().fallbackDone = true;
     e.status = "Unlocked";
     const t = d.tx();
-    d.log("FallbackExecuted", `Fallback plan: the whole vault (${d.usd(amount)}) went to ${r.name}`, t, amount);
+    d.log("FallbackExecuted", `Fallback plan: the whole vault (${d.usd(amount)}) went to ${r.name}`, t, amount, { payee: r.wallet });
     return t;
   }
 
