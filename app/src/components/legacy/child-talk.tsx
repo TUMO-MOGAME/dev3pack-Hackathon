@@ -14,6 +14,7 @@ import { Bubble } from "./bubble";
 import { DisclosureLabel, PlayButton, SafetyCard } from "./parts";
 import { useLegacyPlayer } from "./use-player";
 import { legacyError } from "./use-legacy";
+import { shortName } from "@/lib/names";
 
 interface Line { id: number; role: "user" | "agent"; text: string; voice?: "parent" | "heirloom"; source?: LegacyChatReply["source"]; speech?: LegacySpeech }
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
@@ -77,7 +78,7 @@ function Talk({ copy, safety, status, snap, reload }: { copy: LegacyCopy; safety
   const nextId = useRef(1);
   const end = useRef<HTMLDivElement>(null);
   const ms = milestonesFor(book, status.childId);
-  const adults = snap.estate.verifierNames.join(", ");
+  const adults = snap.estate.verifierNames.map(shortName).join(", ");
   const callVoice = useHeirloomVoice();
   const [callNote, setCallNote] = useState<string | null>(null);
   const live = callVoice.status === "connected" || callVoice.status === "connecting" || callVoice.status === "requesting-mic";

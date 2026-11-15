@@ -14,6 +14,7 @@ import { usePay } from "@/components/pay/payment";
 import { Avatar } from "@/components/shell/app-shell";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
+import { shortName } from "@/lib/names";
 
 type Copy = ScreensCopy["send"];
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "del"] as const;
@@ -161,7 +162,7 @@ function Send({ copy }: { copy: Copy }) {
                   <label key={p.address} className={clsx("relative flex w-[5.25rem] shrink-0 cursor-pointer flex-col items-center gap-1 rounded-md border p-2 text-center has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--focus)]", on ? "border-accent bg-accent-soft" : "border-transparent hover:bg-surface-2")}>
                     <input type="radio" name="send-to" className="sr-only" checked={on} onChange={() => { setTo(p); setOther(false); setFieldError({}); setProblem(null); }} />
                     <Avatar name={p.label} role={p.relationship?.includes("trusted") || p.relationship === "executor" ? "verifier" : p.relationship === "estate owner" ? "owner" : "beneficiary"} className="size-11" />
-                    <span className="w-full truncate text-small font-semibold">{p.label.replace(/^(Adv\.|Ms\.|Mr\.|Uncle)\s+/i, "").split(" ")[0]}</span>
+                    <span className="w-full truncate text-small font-semibold">{shortName(p.label)}</span>
                     <span className="w-full truncate text-[0.7rem] text-ink-2">{p.relationship}</span>
                   </label>
                 );

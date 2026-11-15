@@ -7,6 +7,7 @@ import type { EstateSnapshot } from "../service";
 import type { FxRate, Role } from "../types";
 import type { AssistantCopy } from "@/content/assistant";
 import type { AgentAction, OrchestratorReply } from "./agent-types";
+import { shortName } from "../names";
 
 export interface OrchestratorContext { role: Role | null; address: string | null; snap: EstateSnapshot | null; fx: FxRate | null }
 
@@ -69,7 +70,7 @@ export function mockOrchestrate(text: string, ctx: OrchestratorContext, copy: As
     if (role === "verifier") return out("DocumentReviewer", f.deathVerifier, [{ type: "navigate", to: "/inbox" }]);
     const wait = e.waitingPeriodSecs >= 86400 ? `${Math.round(e.waitingPeriodSecs / 86400)} days` : `${e.waitingPeriodSecs} seconds in this demo`;
     const actions: AgentAction[] = e.status === "Active" && role === "beneficiary" ? [{ type: "startUpload", purpose: "death" }] : [{ type: "navigate", to: "/family" }];
-    return out("DocumentReviewer", fill(f.deathFamily, { v1: e.verifierNames[0], v2: e.verifierNames[1], v3: e.verifierNames[2], wait }), actions);
+    return out("DocumentReviewer", fill(f.deathFamily, { v1: shortName(e.verifierNames[0]), v2: shortName(e.verifierNames[1]), v3: shortName(e.verifierNames[2]), wait }), actions);
   }
 
   if (has("claim", "fee", "tuition", "rent", "pay", "approves")) {

@@ -19,14 +19,8 @@ export function guardiansOf(snap: EstateSnapshot | null | undefined): GuardiansS
   return snap?.guardians ?? null;
 }
 
-/** First name for friendly sentences: "Uncle Bongani Mokoena" → "Uncle Bongani", "Adv. Thandi Ndlovu" → "Adv. Thandi". */
-export function shortName(name: string): string {
-  const clean = name.replace(/\s*\(.*\)$/, "").trim();
-  const parts = clean.split(/\s+/);
-  if (parts.length <= 1) return clean;
-  const title = /^(Adv\.|Ms\.|Mr\.|Mrs\.|Dr\.|Uncle|Aunt|Auntie|Gogo|Pastor|Cousin)$/i.test(parts[0]);
-  return title ? parts.slice(0, 2).join(" ") : parts[0];
-}
+/** Short form for friendly sentences: "Uncle Bongani Mokoena" → "Uncle Bongani", "Adv. Thandi Ndlovu" → "Adv. Ndlovu" (lib/names). */
+export { shortName } from "@/lib/names";
 
 /** Seats this wallet watches as a monitor. */
 export function watchedSeats(g: GuardiansSnapshot | null, wallet: Base58 | null | undefined): Seat[] {

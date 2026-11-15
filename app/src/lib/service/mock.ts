@@ -18,6 +18,7 @@ import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type M
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, mediaRootHex, specInputSchema } from "../assets/spec";
 import { DEMO_ASSETS } from "./demo-asset-photos";
+import { shortName } from "../names";
 
 export interface MockActor { address: Base58; role: Role; label: string }
 /** "guardians": the estate unlocked, with a Guard set up before Thabo passed (seats, backups, Aunt Zodwa, fallback; 60/60/120 s). */
@@ -226,7 +227,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
 
   const est = () => s.snap.estate;
   const name = (a: Base58) => s.names[a] ?? "Someone";
-  const first = (a: Base58) => name(a).split(" ")[0];
+  const first = (a: Base58) => shortName(name(a)); // "Adv. Ndlovu", "Uncle Bongani", "Lerato"
   const me = (): Base58 => actor?.address ?? fail("NoWallet", "Choose who you are acting as first.");
   const tx = (): TxResult => { const signature = fakeSig(); return { signature, explorerUrl: explorerTx(signature) }; };
   const log = (kind: string, text: string, t: TxResult, amount?: bigint) => {
@@ -391,7 +392,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(!d.attestations[i], "AlreadyApproved", "You have already confirmed this.");
     d.attestations[i] = true;
     const t = tx();
-    log("DeathAttested", `${name(me())} confirmed the passing (${count(d.attestations)} of ${est().deathThreshold})`, t);
+    log("DeathAttested", `${first(me())} confirmed the passing (${count(d.attestations)} of ${est().deathThreshold})`, t);
     if (count(d.attestations) >= est().deathThreshold && est().status === "Active") {
       est().status = "DeathPending";
       d.pendingSince = nowSecs();
@@ -462,7 +463,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(!c.approvals[i], "AlreadyApproved", "You have already approved this.");
     c.approvals[i] = true;
     const t = tx();
-    log("ClaimApproved", `${name(me())} approved ${first(c.beneficiary)}'s claim`, t);
+    log("ClaimApproved", `${first(me())} approved ${first(c.beneficiary)}'s claim`, t);
     const deadline = count(c.approvals) >= est().claimThreshold ? G.stamp(c.address, i) : null;
     G.recordApproval({ kind: "Claim", seatIndex: i, target: c.address, t, deadline, summary: `Approved ${usd(c.amount)} to ${name(c.payee)} for ${first(c.beneficiary)}` });
     return t;
@@ -641,7 +642,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(!h.approvals[i], "AlreadyApproved", "You have already approved this.");
     h.approvals[i] = true;
     const t = tx();
-    log("HardshipApproved", `${name(me())} approved ${first(h.beneficiary)}'s hardship request (${count(h.approvals)} of ${est().hardshipThreshold})`, t);
+    log("HardshipApproved", `${first(me())} approved ${first(h.beneficiary)}'s hardship request (${count(h.approvals)} of ${est().hardshipThreshold})`, t);
     G.recordApproval({ kind: "Hardship", seatIndex: i, target: h.address, t, deadline: null, summary: `Approved ${first(h.beneficiary)}'s request to sell below the minimum price` });
     if (count(h.approvals) >= est().hardshipThreshold) {
       h.status = "Approved";
