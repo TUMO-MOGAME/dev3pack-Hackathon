@@ -6,6 +6,7 @@ import type { EstateSnapshot } from "@/lib/service";
 import type { WalletSession } from "@/lib/types";
 import { useWallet } from "@/lib/hooks/wallet-source";
 import { useEstate } from "@/lib/hooks/estate";
+import { shortName } from "@/lib/names";
 import type { CommonCopy } from "@/content/common";
 import { fmt, useCopy } from "./copy";
 
@@ -59,7 +60,7 @@ export function DemoGuide() {
   const n = ORDER.indexOf(step.key) + 1;
   const wrongPerson = step.actor && step.actor.address !== session?.address;
   const wrongPage = pathname !== step.href;
-  const first = step.actor?.label.replace(/\s*\(.*\)$/, "").replace(/^(Adv\.|Ms\.|Mr\.|Uncle)\s+/i, (m) => m) ?? "";
+  const first = step.actor ? shortName(step.actor.label) : "";
   const pill = "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-ink px-3.5 text-small font-semibold text-bg";
 
   return (
@@ -77,7 +78,7 @@ export function DemoGuide() {
         ) : wrongPerson && step.actor ? (
           <button type="button" onClick={() => wallet.switchTo(step.actor!.address)} className={pill}>
             <Repeat className="size-4" aria-hidden="true" />
-            <span className="max-w-[9.5rem] truncate">{fmt(d.switchTo, { name: first.split(" ").slice(0, 2).join(" ") })}</span>
+            <span className="max-w-[9.5rem] truncate">{fmt(d.switchTo, { name: first })}</span>
           </button>
         ) : wrongPage ? (
           <Link href={step.href} className={pill}>{d.go}<ArrowRight className="size-4" aria-hidden="true" /></Link>

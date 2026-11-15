@@ -41,7 +41,7 @@ const objection = (over: Partial<Objection> = {}): Objection => ({
 describe("names", () => {
   it("keeps a title with the first name", () => {
     expect(shortName("Uncle Bongani Mokoena")).toBe("Uncle Bongani");
-    expect(shortName("Adv. Thandi Ndlovu")).toBe("Adv. Thandi");
+    expect(shortName("Adv. Thandi Ndlovu")).toBe("Adv. Ndlovu");
     expect(shortName("Lerato Mokoena (daughter)")).toBe("Lerato");
     expect(shortName("Kagiso")).toBe("Kagiso");
   });

@@ -13,7 +13,7 @@ import type {
 import type { Locale } from "../i18n/locales";
 import type { LegacyBook, LegacyChatReply, LegacySpeech, LegacyStatus, LegacyVoiceInfo } from "../legacy/schema";
 import type { LegacyVoiceUpload, SpeakInput } from "../legacy/client";
-import type { GuardiansService, GuardiansSnapshot } from "../guardians/types";
+import type { AssetKind, GuardiansService, GuardiansSnapshot } from "../guardians/types";
 
 export interface TxResult { signature: string; explorerUrl: string }
 
@@ -43,7 +43,8 @@ export interface HeirloomService extends GuardiansService {
   /** `locale` asks the agent to reply in the visitor's language. */
   willChat(history: WillChatMessage[], locale?: Locale): Promise<{ reply: string; draft: WillDraft | null }>;
   reviewDocument(input: { file: File; purpose: "death" | "claim" | "hardship"; context: string }): Promise<AgentReport>;
-  valueCar(input: { make: string; model: string; year: number; mileageKm: number; condition: string }): Promise<CarValuation>;
+  /** Cars and motorbikes (lib/media/api.ts VALUED_KINDS); `kind` defaults to a car. */
+  valueCar(input: { make: string; model: string; year: number; mileageKm: number; condition: string; kind?: AssetKind }): Promise<CarValuation>;
   rankOffers(asset: Base58): Promise<OfferRanking>;
 
   // Owner

@@ -9,8 +9,10 @@ import { CAR_BROKER } from "./prompts";
 import { comparablesSchema } from "./schemas";
 import { cannedValuation } from "./canned";
 import { getUsdtZar } from "../fx";
+import type { AssetKind } from "../guardians/types";
+import { DEMO_FX, estimateValuation } from "../service/mock-valuation";
 
-export interface CarInput { make: string; model: string; year: number; mileageKm: number; condition: string }
+export interface CarInput { make: string; model: string; year: number; mileageKm: number; condition: string; kind?: AssetKind }
 
 /** Median-based range; trims outliers so one silly listing can't move the price much. */
 export function summarize(pricesZar: number[], usdtZar: number): { suggested: number; low: number; high: number } {
@@ -22,8 +24,12 @@ export function summarize(pricesZar: number[], usdtZar: number): { suggested: nu
 }
 
 export async function valueCar(car: CarInput): Promise<CarValuation> {
-  if (!hasGemini()) return cannedValuation();
+  const bike = car.kind === "Motorbike";
+  // Without a key: the fixed car example, or for a motorbike the demo estimate (a Corolla's price would be absurd).
+  const example = () => (bike ? estimateValuation(car, DEMO_FX) : cannedValuation());
+  if (!hasGemini()) return example();
   const fx = await getUsdtZar();
+  const vehicle = bike ? "used motorbike" : "used-car";
   const query = `${car.year} ${car.make} ${car.model}, about ${car.mileageKm.toLocaleString("en-ZA")} km, condition: ${car.condition || "good"}`;
 
   const searched = await generate({
@@ -31,19 +37,19 @@ export async function valueCar(car: CarInput): Promise<CarValuation> {
     thinking: "low",
     timeoutMs: 45_000,
     config: { tools: [{ googleSearch: {} }] },
-    contents: [{ role: "user", parts: [{ text: `Find 4-8 current used-car listings in South Africa for: ${query}. For each give title, asking price in rand, the site, and the URL.` }] }],
+    contents: [{ role: "user", parts: [{ text: `Find 4-8 current ${vehicle} listings in South Africa for: ${query}. For each give title, asking price in rand, the site, and the URL.` }] }],
   });
   const sources = (searched.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [])
     .map((c) => c.web).filter((w): w is { uri?: string; title?: string } => Boolean(w?.uri));
 
   const parsed = await generateJson(comparablesSchema, {
-    system: "Extract used-car comparables from the research notes. Use only prices explicitly stated in rand. Do not invent listings.",
+    system: `Extract ${vehicle} comparables from the research notes. Use only prices explicitly stated in rand. Do not invent listings.`,
     thinking: "low",
-    contents: [{ role: "user", parts: [{ text: `Car: ${query}\n\nResearch notes:\n${searched.text ?? ""}\n\nSource URLs:\n${sources.map((s) => `${s.title ?? ""} ${s.uri}`).join("\n")}` }] }],
+    contents: [{ role: "user", parts: [{ text: `${bike ? "Motorbike" : "Car"}: ${query}\n\nResearch notes:\n${searched.text ?? ""}\n\nSource URLs:\n${sources.map((s) => `${s.title ?? ""} ${s.uri}`).join("\n")}` }] }],
   });
 
   if (parsed.comparables.length === 0) {
-    const fallback = cannedValuation();
+    const fallback = example();
     return { ...fallback, rationale: `No live listings could be confirmed, so these are example figures. ${fallback.rationale}` };
   }
   const s = summarize(parsed.comparables.map((c) => c.priceZar), fx.usdtZar);

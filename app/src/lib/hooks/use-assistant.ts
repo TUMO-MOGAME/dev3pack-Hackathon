@@ -5,6 +5,7 @@ import { useEstate } from "./estate";
 import type { AssistantMessage } from "./agent-types";
 import { useLocale } from "@/lib/i18n/client";
 import { runAssistantTurn, turnText } from "../chat/pipeline";
+import { shortName } from "../names";
 
 /** General assistant chat. Mock mode answers on-device; chain mode calls the orchestrator and falls back on-device. */
 export function useAssistant(copy: AssistantCopy, page: string) {
@@ -16,7 +17,7 @@ export function useAssistant(copy: AssistantCopy, page: string) {
   const ctx = useRef({ snap, fx, session, role, page, isMock, locale, service });
   useEffect(() => { ctx.current = { snap, fx, session, role, page, isMock, locale, service }; });
 
-  const name = session?.label.split(/[ (]/)[0] ?? "";
+  const name = session ? shortName(session.label) : "";
   // Roles without their own greeting (agent, and monitor until content/assistant.ts has one) get the general one.
   const greetKey = role && role !== "agent" && role in copy.greeting ? (role as keyof typeof copy.greeting) : "none";
   const greeting = copy.greeting[greetKey].replace("{name}", name);

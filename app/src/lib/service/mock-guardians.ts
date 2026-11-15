@@ -12,6 +12,7 @@ import type {
   AssetKind, AssetMediaInfo, AssetPhoto, FallbackRecipient, GuardiansSnapshot, ObjectionStatus, SeatApprovalItem, TargetKind,
 } from "../guardians/types";
 import { fail, need } from "./mock-errors";
+import { shortName } from "../names";
 import { cleanSpec, foreignSpecKeys, isPhotoLabel, specInputSchema, type AssetSpec } from "../assets/spec";
 
 /** Demo timings: objection window, succession wait and fallback wait (real: 2 days, 7 days, 90 days). */
@@ -105,7 +106,7 @@ export function createMockGuardians(d: GuardDeps) {
   const g = () => d.guard();
   const est = () => d.snap().estate;
   const name = (a: Base58) => d.names()[a] ?? "Someone";
-  const first = (a: Base58) => name(a).replace(/^(Adv\.|Ms\.|Mr\.|Mrs\.|Dr\.|Uncle|Aunt|Cousin)\s+/i, "").split(" ")[0];
+  const first = (a: Base58) => shortName(name(a)); // the short form used in sentences (lib/names)
   const remember = (people: Named[]) => { for (const p of people) if (p.name && !(p.wallet in d.names())) d.names()[p.wallet] = p.name; };
 
   const needCreated = () => need(d.created(), "NoEstate", "There is no estate yet. The owner signs the will first.");
@@ -197,8 +198,8 @@ export function createMockGuardians(d: GuardDeps) {
     validBackups(index, wallets);
     s.backups = [...wallets];
     const t = d.tx();
-    const who = s.holder ? name(s.holder) : "this seat";
-    d.log("SeatBackupsSet", wallets.length ? `Backups for ${who}: ${wallets.map(name).join(", then ")}` : `${who} has no backups`, t);
+    const who = s.holder ? first(s.holder) : "this seat";
+    d.log("SeatBackupsSet", wallets.length ? `Backups for ${who}: ${wallets.map(first).join(", then ")}` : `${who} has no backups`, t);
     return t;
   }
 
@@ -209,8 +210,8 @@ export function createMockGuardians(d: GuardDeps) {
     s.monitors = [...wallets];
     const t = d.tx();
     d.log("SeatMonitorsSet", wallets.length
-      ? `${wallets.map(name).join(" and ")} now ${wallets.length > 1 ? "watch" : "watches"} ${s.holder ? name(s.holder) : "this seat"}'s approvals`
-      : `Nobody watches ${s.holder ? name(s.holder) : "this seat"} now`, t);
+      ? `${wallets.map(first).join(" and ")} now ${wallets.length > 1 ? "watch" : "watches"} ${s.holder ? first(s.holder) : "this seat"}'s approvals`
+      : `Nobody watches ${s.holder ? first(s.holder) : "this seat"} now`, t);
     return t;
   }
 
@@ -273,7 +274,7 @@ export function createMockGuardians(d: GuardDeps) {
     need(d.me() !== s.holder, "BadStatus", "You cannot report your own passing.");
     need(!s.succession, "SuccessionPending", "A passing is already being confirmed for this seat.");
     const t = d.tx();
-    d.log("SeatDeathReported", `${first(d.me())} reported that ${name(s.holder!)} has passed away`, t);
+    d.log("SeatDeathReported", `${first(d.me())} reported that ${first(s.holder!)} has passed away`, t);
     if (report.verdict === "reject") {
       d.log("SeatDeathReviewed", "The agent could not accept the certificate. Nothing has changed", d.tx());
       return t;
@@ -306,7 +307,7 @@ export function createMockGuardians(d: GuardDeps) {
     sc.confirmedBy = me;
     sc.pendingSince = nowSecs();
     const t = d.tx();
-    d.log("SeatDeathConfirmed", `${name(me)} confirmed ${name(s.holder!)}'s passing. ${s.backups[0] ? `${name(s.backups[0])} takes the seat after a short wait` : "The seat becomes empty after a short wait"}`, t);
+    d.log("SeatDeathConfirmed", `${first(me)} confirmed ${first(s.holder!)}'s passing. ${s.backups[0] ? `${first(s.backups[0])} takes the seat after a short wait` : "The seat becomes empty after a short wait"}`, t);
     return t;
   }
 
@@ -317,7 +318,7 @@ export function createMockGuardians(d: GuardDeps) {
     need(d.me() === s.holder, "NotVerifier", "Only the person reported as passed can cancel this.");
     s.succession = null;
     const t = d.tx();
-    d.log("SeatDeathVetoed", `${name(s.holder!)} said "I'm still here". The report was cancelled`, t);
+    d.log("SeatDeathVetoed", `${first(s.holder!)} said "I'm still here". The report was cancelled`, t);
     return t;
   }
 
@@ -344,13 +345,13 @@ export function createMockGuardians(d: GuardDeps) {
       s.monitors = s.monitors.filter((m) => m !== next);
       e.verifiers[index] = next;
       e.verifierNames[index] = name(next);
-      d.log("SuccessionFinalized", `${name(next)} now holds ${first(gone)}'s seat as a trusted person`, t);
+      d.log("SuccessionFinalized", `${first(next)} now holds ${first(gone)}'s seat as a trusted person`, t);
     } else {
       s.holder = null;
       s.vacant = true;
       s.backups = [];
       e.verifiers[index] = VACANT_KEY;
-      d.log("SeatVacated", `${name(gone)}'s seat is now empty: no backup was left`, t);
+      d.log("SeatVacated", `${first(gone)}'s seat is now empty: no backup was left`, t);
     }
     return t;
   }
@@ -427,7 +428,7 @@ export function createMockGuardians(d: GuardDeps) {
     remember([{ wallet: me, name: name(me) }]);
     const t = d.tx();
     const watched = seatSpecific ? seat(input.seatIndex!).holder : null;
-    d.log("ObjectionRaised", `${name(me)} objected${watched ? ` to ${first(watched)}'s approval` : ""}. It is paused until the trusted people decide`, t);
+    d.log("ObjectionRaised", `${first(me)} objected${watched ? ` to ${first(watched)}'s approval` : ""}. It is paused until the trusted people decide`, t);
     return t;
   }
 
@@ -500,7 +501,7 @@ export function createMockGuardians(d: GuardDeps) {
     need(((o.votesUphold | o.votesDismiss) & bit) === 0, "AlreadyApproved", "You have already voted.");
     o[uphold ? "votesUphold" : "votesDismiss"] |= bit;
     const n = bitCount(uphold ? o.votesUphold : o.votesDismiss);
-    d.log("ObjectionVoted", `${name(me)} voted to ${uphold ? "uphold" : "dismiss"} the objection (${n} of 2)`, t);
+    d.log("ObjectionVoted", `${first(me)} voted to ${uphold ? "uphold" : "dismiss"} the objection (${n} of 2)`, t);
     if (n >= 2) {
       resolve(o, uphold);
       d.log("ObjectionResolved", uphold ? "The objection was upheld. The paused step was cancelled" : "The objection was dismissed. The paused step can go ahead", d.tx());

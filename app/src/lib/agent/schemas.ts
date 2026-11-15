@@ -110,6 +110,7 @@ export const willChatBody = z.object({ history: z.array(chatMessageSchema).min(1
 export const valuationBody = z.object({
   make: z.string().min(1).max(40), model: z.string().min(1).max(60), year: z.number().int().min(1980).max(2030),
   mileageKm: z.number().int().min(0).max(2_000_000), condition: z.string().max(200),
+  kind: z.enum(["Car", "Motorbike"]).optional(),
 });
 
 const bigintString = z.union([z.string().regex(/^\d+$/), z.number().int().nonnegative()]).transform((v) => BigInt(v));

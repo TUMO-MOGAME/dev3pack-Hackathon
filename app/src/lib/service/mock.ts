@@ -8,7 +8,7 @@
  */
 import { explorerTx, fromBase, toBase } from "../format";
 import type {
-  AgentReport, Asset, Base58, CarValuation, Claim, Hardship, OfferRanking, PaymentReceipt, PaymentReview, Role, SavedRecipient, WillChatMessage, WillDraft,
+  AgentReport, Asset, Base58, Claim, Hardship, OfferRanking, PaymentReceipt, PaymentReview, Role, SavedRecipient, WillChatMessage, WillDraft,
 } from "../types";
 import type { EstateSnapshot, HeirloomService, TxResult } from "./types";
 import { DEMO_PERSONAS as WALLET_PERSONAS } from "../wallet/personas";
@@ -18,6 +18,8 @@ import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type M
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, mediaRootHex, specInputSchema } from "../assets/spec";
 import { DEMO_ASSETS } from "./demo-asset-photos";
+import { shortName } from "../names";
+import { DEMO_FX, estimateValuation } from "./mock-valuation";
 
 export interface MockActor { address: Base58; role: Role; label: string }
 /** "guardians": the estate unlocked, with a Guard set up before Thabo passed (seats, backups, Aunt Zodwa, fallback; 60/60/120 s). */
@@ -103,7 +105,7 @@ const PAYEES = [
   { wallet: "VaNs5cHaIkBoOkStOrEbRaAmFoNtEiNg8uE6rAoPaY55", kind: "Other" as const, name: "Van Schaik Bookstore" },
 ];
 
-export const DEMO_FX = 17.85;
+export { DEMO_FX };
 /** Demo clock: a 30 day waiting period lasts 60 seconds, and every schedule repeats every 60 seconds. */
 export const DEMO_SECONDS_PER_DAY = 2;
 export const DEMO_INTERVAL_SECS = 60;
@@ -226,7 +228,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
 
   const est = () => s.snap.estate;
   const name = (a: Base58) => s.names[a] ?? "Someone";
-  const first = (a: Base58) => name(a).split(" ")[0];
+  const first = (a: Base58) => shortName(name(a)); // "Adv. Ndlovu", "Uncle Bongani", "Lerato"
   const me = (): Base58 => actor?.address ?? fail("NoWallet", "Choose who you are acting as first.");
   const tx = (): TxResult => { const signature = fakeSig(); return { signature, explorerUrl: explorerTx(signature) }; };
   const log = (kind: string, text: string, t: TxResult, amount?: bigint) => {
@@ -391,7 +393,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(!d.attestations[i], "AlreadyApproved", "You have already confirmed this.");
     d.attestations[i] = true;
     const t = tx();
-    log("DeathAttested", `${name(me())} confirmed the passing (${count(d.attestations)} of ${est().deathThreshold})`, t);
+    log("DeathAttested", `${first(me())} confirmed the passing (${count(d.attestations)} of ${est().deathThreshold})`, t);
     if (count(d.attestations) >= est().deathThreshold && est().status === "Active") {
       est().status = "DeathPending";
       d.pendingSince = nowSecs();
@@ -462,7 +464,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(!c.approvals[i], "AlreadyApproved", "You have already approved this.");
     c.approvals[i] = true;
     const t = tx();
-    log("ClaimApproved", `${name(me())} approved ${first(c.beneficiary)}'s claim`, t);
+    log("ClaimApproved", `${first(me())} approved ${first(c.beneficiary)}'s claim`, t);
     const deadline = count(c.approvals) >= est().claimThreshold ? G.stamp(c.address, i) : null;
     G.recordApproval({ kind: "Claim", seatIndex: i, target: c.address, t, deadline, summary: `Approved ${usd(c.amount)} to ${name(c.payee)} for ${first(c.beneficiary)}` });
     return t;
@@ -641,7 +643,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(!h.approvals[i], "AlreadyApproved", "You have already approved this.");
     h.approvals[i] = true;
     const t = tx();
-    log("HardshipApproved", `${name(me())} approved ${first(h.beneficiary)}'s hardship request (${count(h.approvals)} of ${est().hardshipThreshold})`, t);
+    log("HardshipApproved", `${first(me())} approved ${first(h.beneficiary)}'s hardship request (${count(h.approvals)} of ${est().hardshipThreshold})`, t);
     G.recordApproval({ kind: "Hardship", seatIndex: i, target: h.address, t, deadline: null, summary: `Approved ${first(h.beneficiary)}'s request to sell below the minimum price` });
     if (count(h.approvals) >= est().hardshipThreshold) {
       h.status = "Approved";
@@ -1036,24 +1038,9 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       await wait(1600);
       return report(purpose, file, { payee: context });
     },
-    async valueCar({ make, model, year, mileageKm, condition }) {
+    async valueCar(input) {
       await wait(1700);
-      const cond = /excellent/i.test(condition) ? 1.04 : /fair|poor/i.test(condition) ? 0.9 : 1;
-      // Anchored on Thabo's 2017 Corolla 1.8 Exclusive at 124,455 km: about 13,500 USD₮ asking.
-      const baseZar = Math.max(60000, (241000 + (year - 2017) * 12000 + (124455 - mileageKm) * 0.22) * cond);
-      const round = (z: number) => Math.round(z / 100) * 100 - 100;
-      const mid = Math.round(baseZar / DEMO_FX / 50) * 50;
-      const out: CarValuation = {
-        // The low end is the minimum the plan uses with this asking price (asking = minimum x 1.08): 13,500 -> 12,500.
-        suggestedAskingUsdt: mid, lowUsdt: Math.round(mid / 1.08 / 50) * 50, highUsdt: Math.round(mid * 1.06 / 50) * 50,
-        comparables: [
-          { title: `${year} ${make} ${model}, ${(mileageKm + 9000).toLocaleString("en-ZA")} km, Johannesburg`, priceZar: round(baseZar * 0.97), source: "AutoTrader · demo example" },
-          { title: `${year} ${make} ${model}, ${(mileageKm - 14000).toLocaleString("en-ZA")} km, Pretoria`, priceZar: round(baseZar * 1.05), source: "Cars.co.za · demo example" },
-          { title: `${year + 1} ${make} ${model}, ${(mileageKm + 2000).toLocaleString("en-ZA")} km, Soweto`, priceZar: round(baseZar * 1.02), source: "WeBuyCars · demo example" },
-        ],
-        rationale: `Three similar ${make} ${model}s are advertised between R ${round(baseZar * 0.97).toLocaleString("en-ZA")} and R ${round(baseZar * 1.05).toLocaleString("en-ZA")}. Private sales usually close a little under the advertised price, so a fair asking price is about ${mid.toLocaleString("en-ZA")} USD₮. Your minimum price is yours to set; it is what the contract enforces.`,
-      };
-      return out;
+      return estimateValuation(input, DEMO_FX);
     },
     async rankOffers(asset) {
       await wait(300);

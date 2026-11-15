@@ -7,6 +7,7 @@ import { useWallet } from "@/lib/hooks/wallet-source";
 import { useEstate } from "@/lib/hooks/estate";
 import { Button, ButtonLink, EmptyState, LoadingCards } from "@/components/ui/primitives";
 import { fmt, useCopy } from "./copy";
+import { fullName, shortName } from "@/lib/names";
 
 interface GateProps {
   /** Roles allowed on this screen. Omit for everyone. */
@@ -33,10 +34,10 @@ export function Gate({ roles, allowEmpty = false, children }: GateProps) {
       <EmptyState level={1}
         icon={<UsersRound className="size-6" aria-hidden="true" />}
         title={fmt(g.wrongRoleTitle, { roles: roles.map((r) => common.persona.groups[r].toLowerCase()).join(", ") })}
-        body={fmt(g.wrongRoleBody, { name: session.label, role: common.roles[session.role].toLowerCase() })}
+        body={fmt(g.wrongRoleBody, { name: fullName(session.label), role: common.roles[session.role].toLowerCase() })}
         action={
           <>
-            {other && <Button onClick={() => wallet.switchTo(other.address)}>{fmt(common.demo.switchTo, { name: other.label.replace(/\s*\(.*\)$/, "") })}</Button>}
+            {other && <Button onClick={() => wallet.switchTo(other.address)}>{fmt(common.demo.switchTo, { name: shortName(other.label) })}</Button>}
             <ButtonLink href="/estate" variant="secondary">{g.backToEstate}</ButtonLink>
           </>
         }
@@ -57,7 +58,7 @@ export function Gate({ roles, allowEmpty = false, children }: GateProps) {
     return (
       <EmptyState level={1}
         icon={<ScrollText className="size-6" aria-hidden="true" />} title={g.noEstateTitle}
-        body={`${owner ? g.noEstateOwner : fmt(g.noEstateOther, { name: session.label.replace(/\s*\(.*\)$/, "") })}${isMock ? ` ${g.noEstateDemoHint}` : ""}`}
+        body={`${owner ? g.noEstateOwner : fmt(g.noEstateOther, { name: shortName(session.label) })}${isMock ? ` ${g.noEstateDemoHint}` : ""}`}
         action={(owner || isMock) ? (
           <>
             {owner && <ButtonLink href="/will">{g.noEstateCta}</ButtonLink>}

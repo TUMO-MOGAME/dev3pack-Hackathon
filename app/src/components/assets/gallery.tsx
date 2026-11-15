@@ -79,7 +79,8 @@ export function Gallery({ id, photos: all, title, copy, labels, badge }: {
           <>
             <button type="button" onClick={() => go(i - 1)} aria-label={copy.previous} className={clsx(navBtn, "left-2")}><ChevronLeft className="size-5" aria-hidden="true" /></button>
             <button type="button" onClick={() => go(i + 1)} aria-label={copy.next} className={clsx(navBtn, "right-2")}><ChevronRight className="size-5" aria-hidden="true" /></button>
-            <span className="absolute bottom-2 right-2 rounded-full bg-ink px-2.5 py-0.5 text-[0.75rem] font-semibold tabular-nums text-bg" aria-hidden="true">{i + 1} / {n}</span>
+            {/* Top right: on phones the floating "Ask Heirloom" button sits over the photo's bottom right corner. */}
+            <span className="absolute right-3 top-3 rounded-full bg-ink px-2.5 py-0.5 text-[0.75rem] font-semibold tabular-nums text-bg" aria-hidden="true">{i + 1} / {n}</span>
           </>
         )}
       </div>
