@@ -10,7 +10,7 @@ import type { EstateSnapshot, HeirloomService } from "@/lib/service";
 import type { FxRate, Role, WalletSession } from "@/lib/types";
 import type { Locale } from "@/lib/i18n/locales";
 import { looksLikeSend } from "@/lib/assistant/intent";
-import { describeResult, interpretRequest, reviewLabel } from "@/lib/assistant/client";
+import { billFor, describeResult, interpretRequest, reviewLabel } from "@/lib/assistant/client";
 import { normaliseReply, type OrchestratorReply } from "../hooks/agent-types";
 import { mockOrchestrate } from "../hooks/mock-orchestrator";
 
@@ -59,14 +59,15 @@ export async function runAssistantTurn(
     try {
       const r = await d.interpret(text, c.service, c.fx?.usdtZar ?? null, copy.wallet);
       const engine = r.engine === "qvac" ? copy.wallet.engineQvac : copy.wallet.engineFallback;
+      const bill = billFor(r);
       return {
         fellBack: false,
         reply: {
           specialist: "Orchestrator",
           reply: `${describeResult(r, copy.wallet)}\n\n${engine}${r.note ? `: ${r.note}` : ""}`,
           actions: r.plan.ok
-            ? [{ type: "reviewSend", to: r.plan.to, toLabel: reviewLabel(r.plan, copy.wallet), amountUsdt: r.plan.amountUsdt }]
-            : [{ type: "navigate", to: "/send" }],
+            ? [{ type: "reviewSend", to: r.plan.to, toLabel: bill ? r.plan.toLabel : reviewLabel(r.plan, copy.wallet), amountUsdt: r.plan.amountUsdt, ...(bill ? { bill } : {}) }]
+            : [{ type: "navigate", to: r.bill ? "/bill" : "/send" }],
         },
       };
     } catch { /* fall through to the orchestrator */ }

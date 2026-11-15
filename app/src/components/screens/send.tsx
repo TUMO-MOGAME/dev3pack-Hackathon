@@ -7,7 +7,7 @@ import { useLocalized } from "@/lib/i18n/client";
 import type { SavedRecipient } from "@/lib/types";
 import { formatUsdt, formatZar, fromBase, toBase } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
-import { describeResult, interpretRequest, reviewLabel } from "@/lib/assistant/client";
+import { billFor, describeResult, interpretRequest, reviewLabel } from "@/lib/assistant/client";
 import type { IntentEngine } from "@/lib/assistant/intent";
 import { Badge, Button, ButtonLink, Card, Field, inputClass, Notice, PageHeader, Skeleton } from "@/components/ui/primitives";
 import { usePay } from "@/components/pay/payment";
@@ -103,8 +103,10 @@ function Send({ copy }: { copy: Copy }) {
       const saved = r.recipients.find((x) => x.address === p.to);
       if (saved) { setTo(saved); setOther(false); } else { setOther(true); setAddress(p.to); }
       setAsking(false);
-      const rv = await service.reviewSend({ to: p.to, toLabel: reviewLabel(p, w), amountUsdt: p.amountUsdt });
-      const res = await pay({ kind: "p2p", to: rv.to, toLabel: rv.toLabel, amount: rv.amount, review: rv });
+      // A saved bill payee ("Pay Ndlovu Attorneys R2 500 for the will") goes through as a bill, same review sheet.
+      const bill = billFor(r);
+      const rv = await service.reviewSend({ to: p.to, toLabel: bill ? p.toLabel : reviewLabel(p, w), amountUsdt: p.amountUsdt, ...(bill ? { bill } : {}) });
+      const res = await pay({ kind: rv.kind, to: rv.to, toLabel: rv.toLabel, amount: rv.amount, review: rv });
       if (res.ok) { setSent(true); setAmount(""); setAsk(""); setHeard(null); }
     } catch (err) {
       setProblem(explain(err));
@@ -215,6 +217,7 @@ function Send({ copy }: { copy: Copy }) {
         <Button block className="mt-4 min-h-13!" loading={busy} disabled={!online} onClick={review}>{busy ? copy.reviewing : copy.review}{!busy && <ArrowRight className="size-5" aria-hidden="true" />}</Button>
         <p className="mt-3 text-center text-[0.75rem] text-ink-2">{copy.note}</p>
       </Card>
+      <ButtonLink href="/bill" variant="quiet" small className="mt-4">{copy.billLink}<ArrowRight className="size-4" aria-hidden="true" /></ButtonLink>
     </div>
   );
 }

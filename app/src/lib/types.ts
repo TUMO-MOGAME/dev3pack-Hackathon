@@ -5,6 +5,7 @@
  * Do not change shapes without updating docs/program-spec.md and both service implementations.
  */
 import type { YearlyCap } from "./disputes/types";
+import type { BillDetails } from "./bills/types";
 
 export type Base58 = string;
 export type HexHash = string; // 64 hex chars, sha256
@@ -231,7 +232,7 @@ export interface FxRate {
  */
 export interface PaymentReview {
   id: string; // idempotency key, generated before signing; reused on retry so nobody pays twice
-  kind: "p2p" | "vault-deposit" | "offer" | "claim-payout" | "scheduled" | "program";
+  kind: "p2p" | "bill" | "vault-deposit" | "offer" | "claim-payout" | "scheduled" | "program";
   from: Base58;
   to: Base58;
   toLabel: string; // "Lerato (daughter)", "University of Cape Town"
@@ -242,6 +243,8 @@ export interface PaymentReview {
   balances: { usdt: bigint; sol: number; sufficient: boolean };
   warnings: string[]; // e.g. "Recipient has no USD₮ account yet — it will be created (small SOL fee)"
   simulated?: boolean; // label on screen when any part is simulated
+  /** kind "bill": who it pays, the reference and how the invoice compared (lib/bills). */
+  bill?: BillDetails;
 }
 
 export type PaymentStatus = "draft" | "awaiting-approval" | "signing" | "submitted" | "pending" | "confirmed" | "failed" | "cancelled";

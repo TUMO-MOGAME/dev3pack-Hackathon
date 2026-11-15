@@ -22,6 +22,9 @@ import { DEMO_ASSETS } from "./demo-asset-photos";
 import { shortName } from "../names";
 import { DEMO_FX, estimateValuation } from "./mock-valuation";
 import { checkInPlan, heartbeatFor } from "../checkin";
+import type { BillDetails, BillPayee } from "../bills/types";
+import { billActivityText, billDetailsSchema, DEMO_BILL_PAYEES, upsertPayee } from "../bills/payees";
+import { demoInvoiceReading } from "../bills/demo";
 
 export interface MockActor { address: Base58; role: Role; label: string }
 /** "guardians": the estate unlocked, with a Guard set up before Thabo passed (seats, backups, Aunt Zodwa, fallback; 60/60/120 s). */
@@ -122,7 +125,9 @@ interface State {
   balances: Record<Base58, bigint>;
   names: Record<Base58, string>;
   /** P2P sends: receipt plus what is needed to settle it once "the network" confirms. */
-  sends: Record<string, { receipt: PaymentReceipt; from: Base58; to: Base58; toLabel: string; amount: bigint; confirmAt: number }>;
+  sends: Record<string, { receipt: PaymentReceipt; from: Base58; to: Base58; toLabel: string; amount: bigint; confirmAt: number; bill?: BillDetails; ts?: number }>;
+  /** Saved bill payees per wallet (added after v5 shipped; Thabo's demo payees appear on first use). */
+  billPayees?: Record<Base58, BillPayee[]>;
   /** Guardians (added after v5 shipped; created on first use when a saved state has none). */
   guard?: MockGuardState;
 }
@@ -155,6 +160,7 @@ function blank(): State {
   }
   RIVALS.forEach((r, i) => { names[r.address] = r.name; balances[r.address] = toBase(i === 0 ? 15000 : 13000); });
   PAYEES.forEach((p) => { names[p.wallet] = p.name; balances[p.wallet] = 0n; });
+  DEMO_BILL_PAYEES.forEach((p) => { names[p.wallet] = p.name; balances[p.wallet] = 0n; });
   Object.values(DEMO_GUARDIANS).forEach((p) => { names[p.wallet] = p.name; balances[p.wallet] = 0n; });
   return {
     v: 5,
@@ -669,6 +675,13 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
 
   /* ----- plain USD₮ transfers (the Tether payment flow) ----- */
 
+  /** A wallet's saved bill payees; Thabo starts with his lawyer, plumber and Naledi's school (lib/bills/payees.ts). */
+  function payeesOf(wallet: Base58): BillPayee[] {
+    const all = (s.billPayees ??= {});
+    if (!all[wallet] && wallet === s.bind.thabo) all[wallet] = structuredClone(DEMO_BILL_PAYEES);
+    return all[wallet] ?? [];
+  }
+
   /** Moves a pending send to confirmed once its (simulated) confirmation time has passed. Never re-sends. */
   function settle(id: string): PaymentReceipt | null {
     const x = s.sends[id];
@@ -676,7 +689,9 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     if (x.receipt.status === "pending" && Date.now() >= x.confirmAt) {
       credit(x.to, x.amount);
       x.receipt = { ...x.receipt, status: "confirmed", confirmations: 32, updatedAt: nowSecs() };
-      s.snap.activity.unshift({ ts: nowSecs(), kind: "Transfer", text: `${first(x.from)} sent ${usd(x.amount)} to ${x.toLabel}`, amount: x.amount, txSignature: x.receipt.signature });
+      s.snap.activity.unshift(x.bill
+        ? { ts: nowSecs(), kind: "BillPaid", text: billActivityText(first(x.from), x.bill, usd(x.amount)), amount: x.amount, txSignature: x.receipt.signature }
+        : { ts: nowSecs(), kind: "Transfer", text: `${first(x.from)} sent ${usd(x.amount)} to ${x.toLabel}`, amount: x.amount, txSignature: x.receipt.signature });
       save();
     }
     return { ...x.receipt };
@@ -895,21 +910,22 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     },
     resetDemo(stage) { seed(stage); save(); resetLegacy(); },
 
-    async reviewSend({ to, toLabel, amountUsdt }) {
+    async reviewSend({ to, toLabel, amountUsdt, bill }) {
       await wait(500);
       const from = me();
       const dest = to.trim();
       need(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(dest), "InvalidAddress", "That is not a valid Solana address.");
       const amount = toBase(amountUsdt);
       need(amount > 0n, "InvalidAmount", "Enter an amount above zero.");
+      const details = bill ? billDetailsSchema.parse(bill) : undefined;
       const balance = s.balances[from] ?? 0n;
-      const known = dest in s.names;
+      const known = dest in s.names || payeesOf(from).some((p) => p.wallet === dest);
       const warnings: string[] = [];
       if (dest === from) warnings.push("This is your own wallet. Sending to yourself only costs the fee.");
       if (!known) warnings.push("You have not sent to this address before. Check it carefully: transfers cannot be reversed.");
       if (!(dest in s.balances)) warnings.push("The recipient has no USD₮ account yet: it will be created, and Heirloom covers the cost.");
       const review: PaymentReview = {
-        id: `pay_${rand(16, B58)}`, kind: "p2p", from, to: dest, toLabel: toLabel || name(dest), amount,
+        id: `pay_${rand(16, B58)}`, kind: details ? "bill" : "p2p", from, to: dest, toLabel: toLabel || details?.payee || name(dest), amount, ...(details ? { bill: details } : {}),
         token: { symbol: "USD₮", mint: est().usdtMint, verified: true },
         network: { name: "Solana devnet", cluster: "devnet" },
         // Like chain mode with the sponsor on: Heirloom's sponsor wallet pays the network fee, so families need no SOL.
@@ -928,7 +944,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       s.balances[review.from] -= review.amount;
       const t = tx();
       const receipt: PaymentReceipt = { id: review.id, status: "pending", signature: t.signature, explorerUrl: t.explorerUrl, confirmations: 0, updatedAt: nowSecs() };
-      s.sends[review.id] = { receipt, from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount, confirmAt: Date.now() + 2000 + Math.floor(Math.random() * 2000) };
+      s.sends[review.id] = { receipt, from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount, confirmAt: Date.now() + 2000 + Math.floor(Math.random() * 2000), ts: nowSecs(), ...(review.bill ? { bill: billDetailsSchema.parse(review.bill) } : {}) };
       save();
       return { ...receipt };
     },
@@ -951,6 +967,34 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
         ]
         : DEMO_PERSONAS.filter((p) => p.role !== "buyer").map((p) => ({ label: p.label, address: p.address, relationship: p.relation.toLowerCase() }));
       return out.filter((r) => r.address !== self);
+    },
+
+    /* ----- pay a bill once: Thabo's own wallet, never the vault ----- */
+    async billPayees() {
+      await wait(150);
+      return structuredClone(payeesOf(me()));
+    },
+    async saveBillPayee(input) {
+      await wait(300);
+      const owner = me();
+      const { list, payee } = upsertPayee(payeesOf(owner), input);
+      (s.billPayees ??= {})[owner] = list;
+      if (!(payee.wallet in s.names)) s.names[payee.wallet] = payee.name;
+      save();
+      return { ...payee };
+    },
+    async readInvoice(file) {
+      await wait(1400); // "the AI is reading it"
+      // Scripted by file name (lib/bills/demo.ts) and labelled as a demo on screen. Only the hash is kept, never the file.
+      return { reading: demoInvoiceReading(file.name), sha256: await hashFile(file), engine: "demo" as const };
+    },
+    async paidBills() {
+      await wait(150);
+      const self = me();
+      return Object.entries(s.sends)
+        .filter(([, x]) => x.bill && x.from === self)
+        .map(([id, x]) => { const r = settle(id)!; return { id, to: x.to, bill: x.bill!, amount: x.amount, status: r.status, signature: r.signature, explorerUrl: r.explorerUrl, ts: x.ts ?? r.updatedAt }; })
+        .sort((a, b) => b.ts - a.ts);
     },
     simulatePassing() {
       needCreated();

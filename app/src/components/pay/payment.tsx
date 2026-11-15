@@ -238,6 +238,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
                 <dl className="text-small">
                   {[
                     { k: c.from, v: fromVault ? c.viaContract : `${session?.label ?? ""} · ${shortAddress(review.from)}` },
+                    // Pay a bill once: what it is for, the reference the payee sees, and how the invoice compared.
+                    ...(review.bill?.note ? [{ k: c.billFor, v: review.bill.note }] : []),
+                    ...(review.bill?.reference ? [{ k: c.reference, v: review.bill.reference }] : []),
+                    ...(review.bill?.invoiceCheck ? [{ k: c.invoice, v: <span className={clsx("font-semibold", review.bill.invoiceCheck === "mismatch" && "rounded-[3px] bg-ink px-1.5 text-bg")}>{review.bill.invoiceCheck === "match" ? c.invoiceMatch : review.bill.invoiceCheck === "mismatch" ? c.invoiceMismatch : c.invoiceUnread}</span> }] : []),
                     { k: c.network, v: review.network.name },
                     { k: c.token, v: <span className={clsx("inline-flex items-center gap-1 font-semibold", review.token.verified ? "text-ink" : "rounded-[3px] bg-ink px-1.5 text-bg")}>{review.token.verified ? <BadgeCheck className="size-4" aria-hidden="true" /> : <ShieldAlert className="size-4" aria-hidden="true" />}{review.token.verified ? c.verified : c.unverified}</span> },
                     { k: c.fee, v: fmt(review.fee.sponsored ? c.feeSponsored : review.fee.payer === session?.address ? c.feeYou : c.feeBy, { sol: review.fee.sol.toFixed(6), payer: shortAddress(review.fee.payer) }) },

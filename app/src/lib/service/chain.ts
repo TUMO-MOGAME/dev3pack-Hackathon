@@ -20,14 +20,14 @@ import { base64ToBytes, bytesToBase64, ChainTxError, getConnection } from "../ch
 import { activityFrom, fetchAccountRaw, fetchEstateRaw, fetchEvents, findEstateOf, invalidateProgramAccounts, scanAccounts } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
 import { hex, key, num, type Raw } from "../chain/decoders";
-import { getActiveSigner } from "../wallet/signer";
+import { getActiveSigner, peekActiveSigner } from "../wallet/signer";
 import {
   defaultReceiptStore, feeForReview, newPaymentId, openReceipts, recheck, resumeOnReconnect, runPayment, signSponsoredOrSelf, SponsorError, waitForFinal,
   type ChainOps, type SponsorClient, type SponsorStatus, type StoredPayment,
 } from "../wallet/payments";
 import { readOnly } from "../wallet/wdk";
 import { loadWallets } from "../wallet/store";
-import { explorerTx, toBase } from "../format";
+import { explorerTx, fromBase, toBase } from "../format";
 import { hashJson, sha256Hex } from "../agent/hash";
 import { intervalSecs, willDraftSchema } from "../agent/schemas";
 import type { EstateMeta } from "../db";
@@ -36,6 +36,10 @@ import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-gua
 import { createChainDisputes, loadDisputes } from "./chain-disputes";
 import { disabledGuardians, SEAT_MONITOR_OFFSETS } from "../chain/guardians";
 import { SystemProgram } from "@solana/web3.js";
+import type { ActivityItem } from "../types";
+import type { PaidBill } from "../bills/types";
+import { billActivityText, billDetailsSchema, billPayeeStore } from "../bills/payees";
+import { invoiceReadSchema, type InvoiceRead } from "../bills/invoice";
 import {
   AuthorityType, MINT_SIZE, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction as createAtaIx,
   createInitializeMint2Instruction, createMintToInstruction, createSetAuthorityInstruction,
@@ -52,6 +56,29 @@ const pk = (a: string) => new PublicKey(a);
 
 // ---------- pay-once pipeline (wallet/payments.ts) ----------
 const receipts = defaultReceiptStore();
+
+// ---------- pay a bill once (lib/bills): the owner's own wallet, never the vault ----------
+const billBook = billPayeeStore();
+
+/** Bills this device paid from `wallet` (kept with the receipts), newest first. */
+function billsFrom(wallet: Base58): PaidBill[] {
+  return receipts.list()
+    .filter((r) => r.kind === "bill" && r.bill && r.to && r.from === wallet)
+    .map((r) => ({ id: r.id, to: r.to!, bill: r.bill!, amount: BigInt(r.amount ?? "0"), status: r.status, signature: r.signature, explorerUrl: r.explorerUrl, ts: Math.floor(r.updatedAt / 1000) }))
+    .sort((a, b) => b.ts - a.ts);
+}
+
+/**
+ * The owner's confirmed bills as activity lines, on the owner's own device only (the bills are not estate events,
+ * so nobody else sees them; the public record drops them too, lib/audit.ts).
+ */
+function billActivity(estate: Base58, ownerName: string): ActivityItem[] {
+  const me = peekActiveSigner()?.address;
+  if (!me || estatePda(chainCtx().programId, me).toBase58() !== estate) return [];
+  const usd = (b: bigint) => `${fromBase(b).toLocaleString("en-ZA", { maximumFractionDigits: 2 })} USD₮`;
+  return billsFrom(me).filter((b) => b.status === "confirmed")
+    .map((b) => ({ ts: b.ts, kind: "BillPaid", text: billActivityText(ownerName.split(" ")[0] || "The owner", b.bill, usd(b.amount)), amount: b.amount, txSignature: b.signature }));
+}
 
 export function chainOps(): ChainOps {
   const conn = getConnection();
@@ -89,7 +116,7 @@ type Ixs = TransactionInstruction[] | ((feePayer: PublicKey) => TransactionInstr
  * Builds the tx (fee payer = Heirloom's sponsor when available, else the user), WDK signs it (sign-only; partial
  * when sponsored, then the server co-signs), the signature is persisted, then broadcast; returns the receipt.
  */
-async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount">) {
+async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill">) {
   const signer = getActiveSigner();
   return runPayment(receipts, chainOps(), id, () => signSponsoredOrSelf({
     user: signer.address,
@@ -295,7 +322,9 @@ export function createChainService(): HeirloomService {
       // Names the meta and this device know, for the activity feed (lib/people.ts) and the sale line's buyer.
       const names = extras.names;
       const withBuyers = out.activity.map((a) => (a.sale && !a.sale.buyerName && names[a.sale.buyer] ? { ...a, sale: { ...a.sale, buyerName: names[a.sale.buyer] } } : a));
-      return { ...out, activity: withBuyers, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names };
+      const bills = billActivity(estate, out.estate.ownerName);
+      const withBills = bills.length ? [...withBuyers, ...bills].sort((a, b) => b.ts - a.ts) : withBuyers;
+      return { ...out, activity: withBills, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names };
     },
 
     listEstatesFor(wallet) {
@@ -509,8 +538,9 @@ export function createChainService(): HeirloomService {
     },
 
     // ----- P2P USD₮ (Tether track flow: review → approve → WDK sign → pending → confirmed) -----
-    async reviewSend({ to, toLabel, amountUsdt }): Promise<PaymentReview> {
+    async reviewSend({ to, toLabel, amountUsdt, bill: billInput }): Promise<PaymentReview> {
       const from = getActiveSigner().address;
+      const bill = billInput ? billDetailsSchema.parse(billInput) : undefined;
       let toKey: PublicKey;
       try { toKey = pk(to); } catch { throw new Error("That is not a valid Solana address."); }
       if (to === from) throw new Error("You cannot send to your own wallet.");
@@ -551,14 +581,15 @@ export function createChainService(): HeirloomService {
       if (Number(lamports) < userLamports) warnings.push("Not enough SOL to pay the network fee.");
 
       const review: PaymentReview = {
-        id: newPaymentId(), kind: "p2p", from, to, toLabel, amount,
+        id: newPaymentId(), kind: bill ? "bill" : "p2p", from, to, toLabel: toLabel || bill?.payee || "", amount,
         token: { symbol: "USD₮", mint: mint.toBase58(), verified },
         network: { name: `Solana ${chainConfig.cluster}`, cluster: chainConfig.cluster === "mainnet-beta" ? "mainnet-beta" : chainConfig.cluster === "localnet" ? "localnet" : "devnet" },
         fee,
         balances: { usdt, sol, sufficient },
         warnings,
+        ...(bill ? { bill } : {}),
       };
-      receipts.put({ id: review.id, status: "awaiting-approval", kind: "p2p", to, toLabel, amount: amount.toString(), updatedAt: Date.now() });
+      receipts.put({ id: review.id, status: "awaiting-approval", kind: review.kind, from, to, toLabel: review.toLabel, amount: amount.toString(), updatedAt: Date.now(), ...(bill ? { bill } : {}) });
       return review;
     },
 
@@ -575,7 +606,8 @@ export function createChainService(): HeirloomService {
         ...(needsAta ? [createAssociatedTokenAccountIdempotentInstruction(!feePayer.equals(from) && sponsorPaysRent ? feePayer : from, ata(mint, to), to, mint)] : []),
         createTransferCheckedInstruction(ata(mint, from), mint, ata(mint, to), from, review.amount, 6),
       ];
-      return pay(review.id, ixs, { kind: "p2p", to: review.to, toLabel: review.toLabel, amount: review.amount.toString() });
+      const bill = review.bill ? billDetailsSchema.parse(review.bill) : undefined;
+      return pay(review.id, ixs, { kind: bill ? "bill" : "p2p", from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount.toString(), ...(bill ? { bill } : {}) });
     },
 
     getReceipt: (id): Promise<PaymentReceipt | null> => recheck(receipts, chainOps(), id),
@@ -594,6 +626,21 @@ export function createChainService(): HeirloomService {
         if (r.kind === "p2p" && r.to && r.toLabel && !seen.has(r.to) && r.to !== me) seen.set(r.to, { label: r.toLabel, address: r.to });
       }
       return [...seen.values()];
+    },
+
+    // ----- Pay a bill once: same WDK transfer as a send, with the bill's details on the receipt -----
+    async billPayees() { return billBook.list(getActiveSigner().address); },
+    async saveBillPayee(input) { return billBook.save(getActiveSigner().address, input); },
+    async readInvoice(file): Promise<InvoiceRead> {
+      const form = new FormData();
+      form.set("file", file);
+      return invoiceReadSchema.parse(await api<unknown>("/api/invoice", { method: "POST", body: form }));
+    },
+    async paidBills() {
+      const me = getActiveSigner().address;
+      // Re-check open ones first (never re-sends), so a bill confirmed while away shows as paid.
+      for (const b of billsFrom(me)) if (["signing", "submitted", "pending"].includes(b.status)) await recheck(receipts, chainOps(), b.id).catch(() => null);
+      return billsFrom(me).filter((b) => b.status !== "awaiting-approval");
     },
 
     // ----- Car sale -----

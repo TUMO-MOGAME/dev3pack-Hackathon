@@ -125,9 +125,9 @@ export function usePerformAction() {
   return useCallback((x: AgentAction) => {
     if (x.type === "reviewSend") {
       if (!service) return;
-      router.push("/send");
-      service.reviewSend({ to: x.to, toLabel: x.toLabel, amountUsdt: x.amountUsdt })
-        .then((r) => pay({ kind: "p2p", to: r.to, toLabel: r.toLabel, amount: r.amount, review: r }))
+      router.push(x.bill ? "/bill" : "/send");
+      service.reviewSend({ to: x.to, toLabel: x.toLabel, amountUsdt: x.amountUsdt, ...(x.bill ? { bill: x.bill } : {}) })
+        .then((r) => pay({ kind: r.kind, to: r.to, toLabel: r.toLabel, amount: r.amount, review: r }))
         .catch((e: unknown) => notify("error", explain(e).message));
       return;
     }
@@ -158,7 +158,7 @@ export function ActionButtons({ actions, copy, onDone }: { actions: AgentAction[
     x.type === "navigate" ? fmt(a.navigate, { page: a.pages[x.to.split("?")[0]] ?? a.fallbackPage })
       : x.type === "openClaimForm" ? a.openClaimForm
         : x.type === "showRule" ? a.showRule
-          : x.type === "reviewSend" ? fmt(a.reviewSend, { name: x.toLabel.split(" · ")[0] || shortAddress(x.to) })
+          : x.type === "reviewSend" ? fmt(x.bill ? a.reviewBill : a.reviewSend, { name: x.toLabel.split(" · ")[0] || shortAddress(x.to) })
           : x.purpose === "death" ? a.startUploadDeath : x.purpose === "claim" ? a.startUploadClaim : a.startUploadHardship;
   const perform = (x: AgentAction) => { run(x); onDone?.(); };
   const visible = actions.filter((x) => !(x.type === "openClaimForm" && role !== "beneficiary"));
