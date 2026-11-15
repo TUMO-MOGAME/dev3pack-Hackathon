@@ -2,7 +2,7 @@
 export const screens = {
   start: {
     eyebrow: "Welcome",
-    title: "Let's set up Heirloom",
+    title: "Let's set up *Heirloom*",
     body: "See a whole family's story with the demo, or create your own wallet on this device.",
     demo: {
       title: "Try the demo",
@@ -82,7 +82,7 @@ export const screens = {
   },
 
   estate: {
-    title: "{name}'s estate",
+    title: "{name}'s *estate*",
     eyebrow: "Estate",
     vault: "Secure vault",
     rate: "1 USD₮ = R {rate} · {source}",
@@ -182,7 +182,7 @@ export const screens = {
 
   will: {
     eyebrow: "Plan builder",
-    title: "Build your family plan",
+    title: "Build your *family* plan",
     body: "Write the way you speak. The agent turns it into rules. You choose which start now and which wait until you're gone, and you approve every one before anything is locked.",
     talk: "Talk instead",
     consentLead: "Before we start",
@@ -273,7 +273,7 @@ export const screens = {
 
   vault: {
     eyebrow: "Vault",
-    title: "Fund the vault",
+    title: "Fund the *vault*",
     body: "The vault holds USD₮ for your family. Rules marked \"Now\" pay from it on schedule. While you are alive it is yours: add or withdraw whenever you like.",
     balance: "In the vault",
     payVault: "The family vault",
@@ -409,7 +409,7 @@ export const screens = {
 
   people: {
     eyebrow: "People",
-    title: "Who is part of this estate",
+    title: "Who is part of this *estate*",
     body: "The people and institutions the owner chose. No one else can receive or approve anything.",
     trusted: {
       title: "Trusted people",
@@ -441,7 +441,7 @@ export const screens = {
 
   family: {
     eyebrow: "Timeline",
-    title: "The estate's journey",
+    title: "The estate's *journey*",
     body: "Every step from the signed will to the unlocked estate, and who has to agree.",
     steps: {
       signed: { title: "Plan signed and vault funded", done: "Signed by {name}. The vault holds {amount}. Living rules are already paying.", todo: "The owner signs the plan and funds the vault." },
@@ -484,7 +484,7 @@ export const screens = {
 
   claims: {
     eyebrow: "Claims",
-    title: "Fees and rent, paid to the institution",
+    title: "Fees and rent, paid to the *institution*",
     body: "Pick a rule, upload the statement and Heirloom pays the institution directly. Nothing is paid to you in cash.",
     locked: {
       title: "You can claim these after {owner}'s passing",
@@ -570,7 +570,7 @@ export const screens = {
 
   hardship: {
     eyebrow: "Hardship",
-    title: "Ask for a hardship exception",
+    title: "Ask for a *hardship* exception",
     body: "If you are in real need, the car may be sold below the minimum price, but never below the hardship floor. The money then goes to you.",
     noCar: "There is no car on this estate, so there is nothing to request.",
     sold: "The car has already been sold.",
@@ -604,7 +604,7 @@ export const screens = {
 
   send: {
     eyebrow: "Send",
-    title: "Send to family",
+    title: "Send to *family*",
     body: "A direct USD₮ transfer from your Tether wallet to someone you trust. You review everything before it is signed.",
     wallet: "Your wallet",
     recipients: "Who is it for?",
@@ -635,7 +635,7 @@ export const screens = {
 
   inbox: {
     eyebrow: "Inbox",
-    title: "Waiting for you",
+    title: "*Waiting* for you",
     body: "Read the agent's report, then confirm only what you know to be true. Without enough approvals, nothing moves.",
     empty: { title: "You're all caught up", body: "New requests from the family will appear here with the agent's report." },
     kinds: { death: "Passing reported", claim: "Fee claim", hardship: "Hardship request" },
@@ -658,7 +658,7 @@ export const screens = {
     metaTitle: "Public estate record",
     metaDescription: "A read-only record of an Heirloom estate: its status, its rules and every payment and decision, each with its receipt.",
     eyebrow: "Public record",
-    title: "{name}'s estate",
+    title: "{name}'s *estate*",
     body: "A read-only page anyone with the link can open, no wallet needed. It shows what the estate's contract records: its status, its rules, and every payment and decision with its receipt. Documents appear only as fingerprints (SHA-256 hashes).",
     loading: "Loading the estate record",
     notFound: { title: "No estate at this address", body: "Check the link. A record appears once the owner has signed a plan." },

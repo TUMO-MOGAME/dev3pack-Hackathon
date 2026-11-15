@@ -119,8 +119,8 @@ function HardshipView({ copy, snap, session, role }: { copy: Copy; snap: EstateS
 
       {showForm && busy !== "hardship" && (
         <Card>
-          <h2 className="flex items-center gap-2 text-h3"><HandHeart className="size-5 text-accent" aria-hidden="true" />{copy.needTitle}</h2>
-          <ul className="mt-2 list-disc space-y-1.5 pl-5 text-ink-2 marker:text-brass">
+          <h2 className="flex items-center gap-2 text-h3"><HandHeart className="size-5 text-amber" aria-hidden="true" />{copy.needTitle}</h2>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5 text-ink-2 marker:text-amber">
             {copy.need.map((n) => <li key={n}>{n}</li>)}
           </ul>
           <form onSubmit={submit} noValidate className="mt-4 flex flex-col gap-4">

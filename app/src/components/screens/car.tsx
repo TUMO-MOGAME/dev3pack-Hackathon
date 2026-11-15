@@ -217,8 +217,8 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
         {/* What this person can do */}
         {car.status === "Held" && (
           isVerifier && e.status === "Unlocked" ? (
-            <Card className="border-ink bg-surface-2">
-              <h2 className="flex items-center gap-2 text-h3"><Store className="size-5 text-accent" aria-hidden="true" />{copy.list.title}</h2>
+            <Card>
+              <h2 className="flex items-center gap-2 text-h3"><Store className="size-5 text-amber" aria-hidden="true" />{copy.list.title}</h2>
               <p className="mt-1 text-ink-2">{copy.list.body}</p>
               <Button className="mt-3" loading={busy === "list"} onClick={() => run("list", (s, est) => s.listAsset(est, car.address, 7 * 86400), copy.list.done)}>{copy.list.cta}</Button>
             </Card>
@@ -238,7 +238,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
 
         {car.status === "Listed" && (isVerifier || isFamily) && (
           <Card>
-            <h2 className="flex items-center gap-2 text-h3"><Gavel className="size-5 text-accent" aria-hidden="true" />{copy.settle.title}</h2>
+            <h2 className="flex items-center gap-2 text-h3"><Gavel className="size-5 text-amber" aria-hidden="true" />{copy.settle.title}</h2>
             <p className="mt-1 text-ink-2">{copy.settle.body}</p>
             <Button className="mt-3" loading={busy === "settle"} disabled={offers.length === 0} onClick={settle}>{busy === "settle" ? copy.settle.working : copy.settle.cta}</Button>
             {blocked && (
@@ -279,7 +279,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
             )}
             {offers.length > 0 && car.status !== "Sold" && (
               <p className="mt-2 flex items-center gap-1.5 text-[0.75rem] text-ink-2" role="status">
-                {ranking ? <ShieldCheck className="size-4 text-accent" aria-hidden="true" /> : <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                {ranking ? <ShieldCheck className="size-4 text-amber" aria-hidden="true" /> : <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
                 {ranking ? copy.offers.ranking : copy.offers.rankingLoading}
               </p>
             )}
@@ -290,7 +290,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
         {hardship ? (
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 text-h3"><HandHeart className="size-5 text-accent" aria-hidden="true" />{copy.hardship.title}</h2>
+              <h2 className="flex items-center gap-2 text-h3"><HandHeart className="size-5 text-amber" aria-hidden="true" />{copy.hardship.title}</h2>
               <Badge tone={hardship.status === "Approved" ? "ok" : "warn"}>{common.status.hardship[hardship.status]}</Badge>
             </div>
             <p className="mt-1 text-ink-2">{fmt(copy.hardship.from, { name: snap.beneficiaries.find((b) => b.wallet === hardship.beneficiary)?.label ?? "" })}</p>
@@ -326,7 +326,7 @@ function Protect({ copy, car, offers, owner, rate, hardshipName }: {
   ];
   return (
     <Card>
-      <h2 className="flex items-center gap-2 text-h3"><ShieldCheck className="size-5 text-accent" aria-hidden="true" />{p.title}</h2>
+      <h2 className="flex items-center gap-2 text-h3"><ShieldCheck className="size-5 text-amber" aria-hidden="true" />{p.title}</h2>
       <p className="mt-1 text-ink-2">{fmt(p.body, { owner })}</p>
       {relaxed && <Notice tone="warn" className="mt-3"><p className="text-body">{fmt(p.hardshipOn, { name: hardshipName, floor: formatUsdt(car.hardshipFloor, { decimals: 0 }) })}</p></Notice>}
 

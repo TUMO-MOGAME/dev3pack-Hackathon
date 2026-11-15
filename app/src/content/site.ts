@@ -53,7 +53,7 @@ export const site = {
   },
   notFound: {
     eyebrow: "Page not found",
-    title: "This page isn't part of the estate.",
+    title: "This page isn't part of the *estate*.",
     body: "The link may be old, or the page may have moved. Nothing has been lost. Your vault and rules are exactly where you left them.",
     home: "Back to the start",
     app: "Open my estate",
@@ -66,7 +66,7 @@ export const site = {
     { src: "/screenshots/wide-estate.webp", sizes: "2560x1600", formFactor: "wide", label: "The estate on a larger screen" },
   ],
   offline: {
-    title: "You're offline",
+    title: "You're *offline*",
     body: "Heirloom needs a connection to read the vault and send instructions. Your wallet and rules are safe. Reconnect and try again.",
     retry: "Try again",
   },

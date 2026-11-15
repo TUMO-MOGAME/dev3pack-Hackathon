@@ -25,6 +25,7 @@ import type { Claim, EstateStatus } from "@/lib/types";
 import { Badge, Button, ButtonLink, Card, DefList, EmptyState, ExplorerLink, LoadingCards, Notice, type Tone } from "@/components/ui/primitives";
 import { CopyProvider, fmt, useCopy } from "@/components/shell/copy";
 import { ActivityList, CopyValue } from "@/components/shell/proof-drawer";
+import { Marked } from "@/components/ui/marked";
 
 type Copy = ScreensCopy["audit"];
 const PROGRAM_ID = process.env.NEXT_PUBLIC_HEIRLOOM_PROGRAM_ID ?? "";
@@ -143,13 +144,13 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
     <div className="grid gap-5 *:min-w-0">
       <header className="min-w-0 max-w-3xl">
         <p className="text-small font-semibold uppercase tracking-[0.14em] text-ink">{copy.eyebrow}</p>
-        <h1 className="mt-1 text-h2">{fmt(copy.title, { name: e.ownerName })}</h1>
+        <h1 className="mt-1 text-h2"><Marked text={fmt(copy.title, { name: e.ownerName })} /></h1>
         <p className="mt-2 text-ink-2">{copy.body}</p>
       </header>
       {isMock && <Notice tone="warn" icon={<Info className="size-5" aria-hidden="true" />}>{copy.demoNote}</Notice>}
 
       <div className="grid gap-5 *:min-w-0 lg:grid-cols-2 lg:items-start">
-        <Section id="audit-status" title={copy.status.title} icon={<Landmark className="size-5 text-accent" aria-hidden="true" />}>
+        <Section id="audit-status" title={copy.status.title} icon={<Landmark className="size-5 text-amber" aria-hidden="true" />}>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={statusTone[e.status]}>{common.status.estate[e.status]}</Badge>
             <span className="text-small text-ink-2">{common.status.estateHint[e.status]}</span>
@@ -161,7 +162,7 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
           ]} />
         </Section>
 
-        <Section id="audit-people" title={copy.rules.who} icon={<UsersRound className="size-5 text-accent" aria-hidden="true" />}>
+        <Section id="audit-people" title={copy.rules.who} icon={<UsersRound className="size-5 text-amber" aria-hidden="true" />}>
           <DefList items={[
             { term: copy.rules.death, value: fmt(copy.rules.quorum, { need: e.deathThreshold }) },
             { term: copy.rules.claims, value: fmt(copy.rules.quorum, { need: e.claimThreshold }) },
@@ -174,7 +175,7 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
         </Section>
       </div>
 
-      <Section id="audit-rules" title={copy.rules.title} body={copy.rules.body} icon={<ScrollText className="size-5 text-accent" aria-hidden="true" />}>
+      <Section id="audit-rules" title={copy.rules.title} body={copy.rules.body} icon={<ScrollText className="size-5 text-amber" aria-hidden="true" />}>
         {snap.rules.length === 0 ? <p className="text-ink-2">{copy.rules.empty}</p> : (
           <ul className="grid gap-3 *:min-w-0 sm:grid-cols-2">
             {snap.rules.map((r) => (
@@ -193,11 +194,11 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
         )}
       </Section>
 
-      <Section id="audit-payments" title={copy.payments.title} body={copy.payments.body} icon={<FileCheck2 className="size-5 text-accent" aria-hidden="true" />}>
+      <Section id="audit-payments" title={copy.payments.title} body={copy.payments.body} icon={<FileCheck2 className="size-5 text-amber" aria-hidden="true" />}>
         {payments.length === 0 ? <p className="text-ink-2">{copy.payments.empty}</p> : <ActivityList items={payments} now={now} />}
       </Section>
 
-      <Section id="audit-decisions" title={copy.decisions.title} body={copy.decisions.body} icon={<UsersRound className="size-5 text-accent" aria-hidden="true" />}>
+      <Section id="audit-decisions" title={copy.decisions.title} body={copy.decisions.body} icon={<UsersRound className="size-5 text-amber" aria-hidden="true" />}>
         <h3 className="font-sans text-body font-semibold tracking-normal">{copy.decisions.passing}</h3>
         {e.death.certHash ? (
           <>

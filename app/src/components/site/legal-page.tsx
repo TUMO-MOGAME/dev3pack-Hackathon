@@ -4,6 +4,7 @@ import type { SiteCopy } from "@/content/site";
 import { Notice } from "@/components/ui/primitives";
 import { SiteFooter, SiteHeader } from "./site-chrome";
 import { LegalLanguageNote } from "./language-switcher";
+import { Marked } from "@/components/ui/marked";
 
 export function LegalPage({ site, doc }: {
   site: SiteCopy;
@@ -13,7 +14,7 @@ export function LegalPage({ site, doc }: {
     <>
       <SiteHeader site={site} minimal />
       <main id="main" className="mx-auto w-full max-w-3xl px-4 py-10 md:py-14">
-        <h1 className="text-h1">{doc.title}</h1>
+        <h1 className="text-h1"><Marked text={doc.title} /></h1>
         <LegalLanguageNote />
         <p className="mt-2 text-small text-ink-2">{doc.updated}</p>
         <Notice tone="warn" icon={<Scale className="size-5" aria-hidden="true" />} className="mt-5">
@@ -25,7 +26,7 @@ export function LegalPage({ site, doc }: {
             <h2 className="text-h3">{s.heading}</h2>
             {s.paragraphs?.map((p) => <p key={p} className="mt-3">{p}</p>)}
             {s.list && (
-              <ul className="mt-3 list-disc space-y-2 pl-5 marker:text-brass">
+              <ul className="mt-3 list-disc space-y-2 pl-5 marker:text-amber">
                 {s.list.map((li) => <li key={li}>{li}</li>)}
               </ul>
             )}

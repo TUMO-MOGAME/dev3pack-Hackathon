@@ -41,7 +41,7 @@ export function SpecSheet({ spec: raw, kind, copy, headingLevel = 2 }: { spec?: 
   const sections = (["details", "condition", "performance"] as const).map((s) => ({ s, keys: filled(spec, layout[s] ?? []) })).filter((x) => x.keys.length);
   return (
     <Card>
-      <H className="flex items-center gap-2 text-h3"><ScrollText className="size-5 text-accent" aria-hidden="true" />{copy.title}</H>
+      <H className="flex items-center gap-2 text-h3"><ScrollText className="size-5 text-amber" aria-hidden="true" />{copy.title}</H>
       {facts.length > 0 && (
         <>
           <S className="sr-only">{copy.keyFacts}</S>

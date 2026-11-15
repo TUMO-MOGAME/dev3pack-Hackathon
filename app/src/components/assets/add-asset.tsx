@@ -183,7 +183,7 @@ export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: 
 
         {vehicle && valuation && !valuing && (
           <motion.div initial={reduce ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="border-ink bg-surface-2">
+            <Card>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Eyebrow>{r.valuationTitle}</Eyebrow>
                 <SpecialistChip name="CarBroker" copy={assistant} />

@@ -269,7 +269,7 @@ function Preview({ copy, draft, onStart, footer }: { copy: Copy; draft: WillDraf
               return (
                 <motion.li key={`${r.beneficiaryLabel}-${r.category}-${i}`} {...item} transition={{ delay: i * 0.08 }} className="rounded-md border border-line bg-surface-2/50 p-2.5">
                   <div className="flex items-start gap-2">
-                    <Icon className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden="true" />
+                    <Icon className="mt-0.5 size-4 shrink-0 text-amber" aria-hidden="true" />
                     <div className="min-w-0 flex-1">
                       <p><span className="font-semibold">{r.beneficiaryLabel}</span> · {cat}</p>
                       <p className="text-ink-2">
@@ -333,7 +333,7 @@ function Review({ copy, draft, onBack, onSign, signing }: { copy: Copy; draft: W
       <Eyebrow>{r.eyebrow}</Eyebrow>
       <h1 className="mt-1.5 text-h1">{r.title}</h1>
 
-      <Card className="mt-5 border-ink bg-surface-2">
+      <Card className="mt-5">
         <h2 className="text-h3">{r.summaryTitle}</h2>
         <p className="mt-2 text-lead">{draft.plainLanguageSummary}</p>
       </Card>
@@ -343,7 +343,7 @@ function Review({ copy, draft, onBack, onSign, signing }: { copy: Copy; draft: W
         return (
           <section key={String(now)} className="mt-6">
             <h2 className="flex items-center gap-2 text-h3">
-              {now ? <Zap className="size-5 text-accent" aria-hidden="true" /> : <Hourglass className="size-5 text-brass" aria-hidden="true" />}
+              {now ? <Zap className="size-5 text-amber" aria-hidden="true" /> : <Hourglass className="size-5 text-amber-ink" aria-hidden="true" />}
               {now ? r.nowTitle : r.laterTitle}
             </h2>
             <p className="mt-1 text-small text-ink-2">{now ? (group.length ? r.nowBody : r.noneNow) : r.laterBody}</p>
@@ -356,7 +356,7 @@ function Review({ copy, draft, onBack, onSign, signing }: { copy: Copy; draft: W
                 };
                 return (
                   <li key={i} className="flex gap-3 rounded-md border border-line bg-surface p-3.5">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent"><Icon className="size-5" aria-hidden="true" /></span>
+                    <span className="grid size-9 shrink-0 place-items-center rounded-sm bg-surface-2 text-amber"><Icon className="size-5" aria-hidden="true" /></span>
                     <p>{rule.recurring
                       ? fmt(r.recurringRule, { ...base, amount: usd(rule.recurring.amountUsdt), payee: rule.recurring.payeeName, every: copy.preview.every[rule.recurring.every] })
                       : fmt(r.rule, base)}</p>
@@ -391,12 +391,12 @@ function Review({ copy, draft, onBack, onSign, signing }: { copy: Copy; draft: W
 
       <section className="mt-6">
         <h2 className="text-h3">{r.limitsTitle}</h2>
-        <ul className="mt-2 list-disc space-y-1.5 pl-5 text-ink-2 marker:text-brass">
+        <ul className="mt-2 list-disc space-y-1.5 pl-5 text-ink-2 marker:text-amber">
           {r.limits.map((l) => <li key={l}>{l}</li>)}
         </ul>
       </section>
 
-      <div className="sticky bottom-[var(--safe-b)] -mx-4 mt-6 border-t border-ink bg-bg px-4 py-3 lg:bottom-0">
+      <div className="sticky bottom-[var(--safe-b)] -mx-4 mt-6 border-t border-line bg-bg px-4 py-3 lg:bottom-0">
         <Button block onClick={onSign} loading={signing} className="min-h-13!">
           <Lock className="size-5" aria-hidden="true" />{signing ? r.signing : r.sign}
         </Button>
@@ -426,7 +426,7 @@ function Locked({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
           const recurring = rule.recurringAmount > BigInt(0);
           return (
             <li key={rule.address} className="flex gap-3 rounded-md border border-line bg-surface p-3.5 shadow-card">
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent"><Icon className="size-5" aria-hidden="true" /></span>
+              <span className="grid size-9 shrink-0 place-items-center rounded-sm bg-surface-2 text-amber"><Icon className="size-5" aria-hidden="true" /></span>
               <div className="min-w-0">
                 <Badge tone={rule.startsNow ? "gold" : "neutral"}>{rule.startsNow ? <Zap className="size-3.5" aria-hidden="true" /> : <Hourglass className="size-3.5" aria-hidden="true" />}{rule.startsNow ? copy.preview.now : copy.preview.later}</Badge>
                 <p className="mt-1.5">{recurring

@@ -6,7 +6,7 @@ export interface LegalSection {
 }
 
 export const privacy = {
-  title: "Privacy policy",
+  title: "*Privacy* policy",
   templateNotice:
     "Template for legal review. This policy was drafted for a hackathon prototype and must be reviewed by the responsible party's legal adviser before Heirloom is offered to the public.",
   updated: "Last updated: 11 November 2026",
@@ -122,7 +122,7 @@ export const privacy = {
 } as const;
 
 export const terms = {
-  title: "Terms of use",
+  title: "*Terms* of use",
   templateNotice:
     "Template for legal review. These terms describe a hackathon prototype and must be reviewed by a legal adviser before public use.",
   updated: "Last updated: 11 November 2026",
