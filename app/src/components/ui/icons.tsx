@@ -35,7 +35,7 @@
  *               CalendarClock calendar-clock, Clock clock, Hourglass hourglass,
  *               Milestone flag ~, Compass compass-alt, FlaskConical flask, LifeBuoy life-ring
  *   Talk        MessageCircle comment, MessageSquare comment-alt, MessageSquareHeart message-heart,
- *               Send paper-plane, Phone phone-call, PhoneOff phone-slash, Mic microphone,
+ *               Send paper-plane, Phone phone-call, PhoneOff phone-slash, Smartphone mobile-notch, Mic microphone,
  *               MicOff microphone-slash, Volume2 volume, Languages language, Bot robot,
  *               ScanSearch search-alt ~
  *   Controls    Play play, Pause pause, Square stop, Power power, Plus plus, Ellipsis menu-dots,
@@ -122,6 +122,7 @@ export const GLYPHS = {
   Pencil: "pencil",
   Phone: "phone-call",
   PhoneOff: "phone-slash",
+  Smartphone: "mobile-notch",
   Play: "play",
   Plus: "plus",
   Power: "power",
@@ -271,6 +272,7 @@ export const PenLine = make("PenLine");
 export const Pencil = make("Pencil");
 export const Phone = make("Phone");
 export const PhoneOff = make("PhoneOff");
+export const Smartphone = make("Smartphone");
 export const Play = make("Play");
 export const Plus = make("Plus");
 export const Power = make("Power");

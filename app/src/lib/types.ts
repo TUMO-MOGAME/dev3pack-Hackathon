@@ -264,4 +264,10 @@ export interface WalletSession {
   role: Role;
   solBalance: number;
   usdtBalance: bigint;
+  /** Which wallet signs for this session: Heirloom's Tether WDK wallet (default) or a phone wallet (Wallet Standard / MWA). */
+  source?: "wdk" | "phone";
+  /** Phone wallets: the Wallet Standard name of the wallet app ("Mobile Wallet Adapter", "Phantom", ...). */
+  phoneWallet?: string;
+  /** Demo mode's simulated phone wallet: nothing real signs. */
+  simulated?: boolean;
 }

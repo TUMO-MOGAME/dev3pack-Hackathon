@@ -6,6 +6,9 @@
  *   encrypted with the user's PIN (PBKDF2 + AES-GCM, ./crypto.ts) into localStorage, and unlocked into
  *   memory for this tab only when it first needs to sign. Nothing about the seed is ever sent anywhere.
  * - mock mode: fixed demo personas (./personas.ts), fake signatures, no network.
+ * - phone wallets (./phone.ts): a Wallet Standard wallet (Mobile Wallet Adapter on Android) can be added next to the WDK
+ *   ones. Only its address and the wallet app's name are stored; it signs in its own app. Same WalletApi and
+ *   ActiveSigner, so screens and the fee sponsor don't care which wallet signed. Mock mode: a simulated phone wallet.
  *
  * PIN entry: pass `requestPin` to show your own PIN sheet; the default falls back to window.prompt.
  */
@@ -14,7 +17,9 @@ import type { Base58, Role, WalletSession } from "../types";
 import type { WalletApi } from "./types";
 import { chainConfig } from "../chain/config";
 import { decryptSeed, encryptSeed, assertPin } from "./crypto";
-import { loadActive, loadWallets, saveActive, saveWallets, type StoredWallet } from "./store";
+import { isPhoneWallet, loadActive, loadWallets, saveActive, saveWallets, type StoredWallet } from "./store";
+import { loadPhoneDriver } from "./phone";
+import type { PhoneSigner } from "./phone-signer";
 import { isValidSeed, newSeedPhrase, openAccount, readOnly, wdkPartialSign, wdkSign, wdkSignAndSend, type WdkAccount } from "./wdk";
 import { mockSignature, personaSessions } from "./personas";
 import { setActiveSigner } from "./signer";
@@ -26,6 +31,11 @@ const defaultRequestPin: RequestPin = async (reason, label) =>
   window.prompt(reason === "create" ? `Choose a PIN (6+ digits) to protect "${label}" on this device` : `Enter the PIN for "${label}"`);
 
 const WalletContext = createContext<WalletApi | null>(null);
+
+const toSession = (w: StoredWallet, sol = 0, usdt = 0n): WalletSession => ({
+  address: w.address, label: w.label, role: w.role, solBalance: sol, usdtBalance: usdt,
+  ...(isPhoneWallet(w) ? { source: "phone" as const, phoneWallet: w.wallet } : {}),
+});
 
 export function WalletProvider({ children, requestPin = defaultRequestPin }: { children: ReactNode; requestPin?: RequestPin }) {
   const isMock = chainConfig.dataMode === "mock";
@@ -48,7 +58,7 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
         setActiveAddr(loadActive() ?? s[0]?.address ?? null);
       } else {
         stored.current = loadWallets();
-        setSessions(stored.current.map((w) => ({ address: w.address, label: w.label, role: w.role, solBalance: 0, usdtBalance: 0n })));
+        setSessions(stored.current.map((w) => toSession(w)));
         const a = loadActive();
         setActiveAddr(a && stored.current.some((w) => w.address === a) ? a : stored.current[0]?.address ?? null);
       }
@@ -65,9 +75,9 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
       try {
         const acc = unlocked.current.get(w.address)?.account ?? (await readOnly(w.address, chainConfig.rpcUrl));
         const [lamports, usdt] = await Promise.all([acc.getBalance(), mint ? acc.getTokenBalance(mint) : Promise.resolve(0n)]);
-        return { address: w.address, label: w.label, role: w.role, solBalance: Number(lamports) / 1e9, usdtBalance: usdt };
+        return toSession(w, Number(lamports) / 1e9, usdt);
       } catch {
-        return { address: w.address, label: w.label, role: w.role, solBalance: 0, usdtBalance: 0n };
+        return toSession(w);
       }
     }));
     setSessions(updated);
@@ -87,7 +97,7 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
       if (!pin) { acc.manager.dispose(); throw new Error("A PIN is needed to keep the wallet safe on this device."); }
       assertPin(pin);
       const enc = await encryptSeed(seedPhrase, pin);
-      persist([...stored.current.filter((w) => w.address !== acc.address), { address: acc.address, label, role, enc, createdAt: Date.now() }]);
+      persist([...stored.current.filter((w) => w.address !== acc.address), { kind: "wdk", address: acc.address, label, role, enc, createdAt: Date.now() }]);
       unlocked.current.set(acc.address, acc);
     }
     setSessions((prev) => [...prev.filter((s) => s.address !== acc.address), session]);
@@ -107,6 +117,25 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
     return addWallet(label, role, seedPhrase);
   }, [addWallet]);
 
+  const connectPhone = useCallback(async (label: string, role: Role, walletName: string): Promise<WalletSession> => {
+    const driver = await loadPhoneDriver(isMock);
+    const { address, walletName: name } = await driver.connect(walletName);
+    const session: WalletSession = { address, label, role, solBalance: 0, usdtBalance: 0n, source: "phone", phoneWallet: name, ...(isMock ? { simulated: true } : {}) };
+    if (!isMock) persist([...stored.current.filter((w) => w.address !== address), { kind: "phone", address, label, role, wallet: name, createdAt: Date.now() }]);
+    setSessions((prev) => [...prev.filter((s) => s.address !== address), session]);
+    setActiveAddr(address);
+    saveActive(address);
+    return session;
+  }, [isMock]);
+
+  /** The phone signer for a stored phone wallet, or null for a WDK wallet. Loaded only when a phone wallet signs. */
+  const phoneFor = useCallback(async (address: Base58): Promise<PhoneSigner | null> => {
+    const w = stored.current.find((x) => x.address === address);
+    if (!w || !isPhoneWallet(w)) return null;
+    const [driver, { phoneSigner, rpcSender }] = await Promise.all([loadPhoneDriver(false), import("./phone-signer")]);
+    return phoneSigner(driver, w.wallet, address, rpcSender(chainConfig.rpcUrl));
+  }, []);
+
   const switchTo = useCallback((address: Base58) => { setActiveAddr(address); saveActive(address); }, []);
 
   const remove = useCallback((address: Base58) => {
@@ -122,6 +151,7 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
     if (hit) return hit;
     const w = stored.current.find((x) => x.address === address);
     if (!w) throw new Error("This wallet is not stored on this device.");
+    if (isPhoneWallet(w)) throw new Error("This wallet signs in your phone wallet app.");
     const pin = await pinRef.current("unlock", w.label);
     if (!pin) throw new Error("Signing cancelled.");
     const acc = await openAccount(await decryptSeed(w.enc, pin), chainConfig.rpcUrl);
@@ -132,27 +162,35 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
 
   const signAndSendAs = useCallback(async (address: Base58, base64Tx: string): Promise<string> => {
     if (isMock) return mockSignature();
+    const phone = await phoneFor(address);
+    if (phone) return phone.signAndSend(base64Tx);
     const acc = await unlock(address);
     return wdkSignAndSend(acc.account, base64Tx);
-  }, [isMock, unlock]);
+  }, [isMock, unlock, phoneFor]);
 
   const signOnlyAs = useCallback(async (address: Base58, base64Tx: string) => {
     if (isMock) { const signature = mockSignature(); return { signature, wireBase64: "" }; }
+    const phone = await phoneFor(address);
+    if (phone) return phone.signOnly(base64Tx);
     const acc = await unlock(address);
     return wdkSign(acc.account, base64Tx);
-  }, [isMock, unlock]);
+  }, [isMock, unlock, phoneFor]);
 
   const signPartialAs = useCallback(async (address: Base58, base64Tx: string) => {
     if (isMock) { const signature = mockSignature(); return { signature, wireBase64: "" }; }
+    const phone = await phoneFor(address);
+    if (phone) return phone.signPartial(base64Tx);
     const acc = await unlock(address);
     return wdkPartialSign(acc.account, base64Tx);
-  }, [isMock, unlock]);
+  }, [isMock, unlock, phoneFor]);
 
   const signMessageAs = useCallback(async (address: Base58, message: string): Promise<string> => {
     if (isMock) return "demo";
+    const phone = await phoneFor(address);
+    if (phone) return phone.signMessage(message);
     const acc = await unlock(address);
     return acc.account.sign(message);
-  }, [isMock, unlock]);
+  }, [isMock, unlock, phoneFor]);
 
   const signAndSend = useCallback(async (base64Tx: string) => {
     if (!activeAddr) throw new Error("No wallet is active. Create or choose a wallet first.");
@@ -172,8 +210,8 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
 
   const session = sessions.find((s) => s.address === activeAddr) ?? null;
   const api = useMemo<WalletApi>(() => ({
-    ready, session, sessions, create, importSeed, switchTo, remove, refreshBalances, signAndSend,
-  }), [ready, session, sessions, create, importSeed, switchTo, remove, refreshBalances, signAndSend]);
+    ready, session, sessions, create, importSeed, connectPhone, switchTo, remove, refreshBalances, signAndSend,
+  }), [ready, session, sessions, create, importSeed, connectPhone, switchTo, remove, refreshBalances, signAndSend]);
 
   return <WalletContext.Provider value={api}>{children}</WalletContext.Provider>;
 }

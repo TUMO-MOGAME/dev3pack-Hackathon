@@ -41,6 +41,8 @@ export const common = {
     themeLight: "Light",
     themeDark: "Dark",
     remove: "Remove {name} from this device",
+    phoneWallet: "Phone wallet",
+    simulatedPhone: "Simulated phone wallet",
   },
   demo: {
     badge: "Demo mode",

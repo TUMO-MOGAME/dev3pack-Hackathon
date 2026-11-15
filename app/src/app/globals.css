@@ -90,6 +90,9 @@
   --sidebar-w: 18.25rem;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
+  /* Left/right: a phone held sideways puts the camera cut-out or rounded corners at the side. */
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
 
   color-scheme: light;
 }
@@ -363,6 +366,9 @@ html {
 }
 
 body {
+  /* Keeps every in-flow screen (and the sticky header) clear of side cut-outs; fixed parts add their own insets. */
+  padding-left: var(--safe-l);
+  padding-right: var(--safe-r);
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
@@ -473,6 +479,8 @@ dialog.sheet {
   inset: auto 0 0 0;
   width: 100%;
   max-height: min(92dvh, 100dvh - var(--safe-t));
+  /* Bottom sheet on a phone: content and buttons stay above the home indicator and clear of side cut-outs. */
+  padding: 0 var(--safe-r) var(--safe-b) var(--safe-l);
   border-radius: var(--r-xl) var(--r-xl) 0 0;
   border-top: 1px solid var(--ink);
   box-shadow: var(--shadow-3);
@@ -516,6 +524,7 @@ dialog.sheet::backdrop {
     border-radius: 0;
     border-top: 0;
     border-left: 1px solid var(--ink);
+    padding: var(--safe-t) var(--safe-r) var(--safe-b) 0;
   }
   dialog.sheet.sheet-tall { height: 100dvh; }
   dialog.sheet[open] { animation-name: sheet-side; }
@@ -525,7 +534,7 @@ dialog.sheet::backdrop {
 /* Phone navigation drawer: the sidebar as a modal panel from the left edge. */
 dialog.drawer {
   margin: 0;
-  padding: var(--safe-t) 0 var(--safe-b);
+  padding: var(--safe-t) 0 var(--safe-b) var(--safe-l);
   border: 0;
   border-right: 1px solid var(--ink);
   inset: 0 auto 0 0;

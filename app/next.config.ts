@@ -3,7 +3,11 @@ import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV !== "production";
 
-/** Origins the browser may talk to: our API (self), Solana RPC (devnet/mainnet or a custom RPC), ElevenLabs voice. */
+/**
+ * Origins the browser may talk to: our API (self), Solana RPC (devnet/mainnet or a custom RPC), ElevenLabs voice, and
+ * Mobile Wallet Adapter's local association socket: on Android the page talks to the wallet app on this phone over
+ * ws://localhost:<random port>/solana-wallet (@solana-mobile/mobile-wallet-adapter-protocol). Loopback only, never LAN.
+ */
 function connectSrc(): string {
   const rpc = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
   const rpcOrigins = rpc ? (() => { const u = new URL(rpc); return [u.origin, u.origin.replace(/^http/, "ws")]; })() : [];
@@ -13,7 +17,8 @@ function connectSrc(): string {
     "https://api.mainnet-beta.solana.com", "wss://api.mainnet-beta.solana.com",
     ...rpcOrigins,
     "https://api.elevenlabs.io", "wss://api.elevenlabs.io", "wss://livekit.rtc.elevenlabs.io", "https://livekit.rtc.elevenlabs.io",
-    ...(isDev ? ["ws://localhost:*", "http://127.0.0.1:8899", "ws://127.0.0.1:8900"] : []),
+    "ws://localhost:*",
+    ...(isDev ? ["http://127.0.0.1:8899", "ws://127.0.0.1:8900"] : []),
   ].join(" ");
 }
 

@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Check, CircleAlert, FileCheck2, FileUp, Info, X } from "@/components/ui/icons";
 import { useEstate } from "@/lib/hooks/estate";
+import { useBackClose } from "@/lib/hooks/use-back-close";
 
 /* ---------- Sheet: bottom sheet on phones, side panel on desktop (native <dialog>) ---------- */
 
@@ -15,6 +16,7 @@ export function Sheet({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  useBackClose(open, onClose); // Android back closes the sheet first
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -43,7 +45,7 @@ export function Sheet({
             </button>
           </div>
           <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">{children}</div>
-          {footer && <div className="pb-safe shrink-0 border-t border-line bg-surface px-4 pt-3 sm:px-5"><div className="pb-3">{footer}</div></div>}
+          {footer && <div className="shrink-0 border-t border-line bg-surface px-4 pt-3 sm:px-5"><div className="pb-3">{footer}</div></div>}
         </>
       )}
     </dialog>

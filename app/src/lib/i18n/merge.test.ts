@@ -23,6 +23,7 @@ const fullSlices = (t: Bundle) => ({
   "screens.car.sold.openPack": [screens.car.sold.openPack, t.screens.car?.sold?.openPack],
   "screens.car.sold.openPackHint": [screens.car.sold.openPackHint, t.screens.car?.sold?.openPackHint],
   "assistant.publicRecord": [assistant.publicRecord, t.assistant.publicRecord],
+  "screens.start.phone": [screens.start.phone, t.screens.start?.phone],
 } as Record<string, [unknown, unknown]>);
 
 const placeholders = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");

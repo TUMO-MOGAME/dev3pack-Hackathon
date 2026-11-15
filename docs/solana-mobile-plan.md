@@ -41,3 +41,6 @@ phone's own wallet, including Seed Vault on the Seeker, while the web app and th
 - **Domain = heirloom.tumoolo.tech**, pointed at the `heirloom-devnet` Vercel project before the APK is built.
 - **Publisher = Tumo as a person** (KYC).
 - **Wallets = both:** the Tether WDK wallet stays the default; "Use my phone wallet" (MWA / Seeker Connect) is added.
+
+## Progress
+- 15 Nov 2026, branch agent/mobile: steps 1 and 2 built (see status.md, "SOLANA MOBILE STEPS 1-2"). Not yet tested on a phone.

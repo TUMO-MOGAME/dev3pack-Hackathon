@@ -58,6 +58,13 @@ export const site = {
     home: "Back to the start",
     app: "Open my estate",
   },
+  /** Install-sheet screenshots (manifest.ts); images made from the demo by the browser checks at 412 and 1280 px. */
+  screenshots: [
+    { src: "/screenshots/phone-chat.webp", sizes: "1080x2400", formFactor: "narrow", label: "Ask Heirloom: the family's plan in plain words" },
+    { src: "/screenshots/phone-estate.webp", sizes: "1080x2400", formFactor: "narrow", label: "The estate: vault in USD₮, rules and trusted people" },
+    { src: "/screenshots/phone-assets.webp", sizes: "1080x2400", formFactor: "narrow", label: "Assets with photos and a spec sheet" },
+    { src: "/screenshots/wide-estate.webp", sizes: "2560x1600", formFactor: "wide", label: "The estate on a larger screen" },
+  ],
   offline: {
     title: "You're offline",
     body: "Heirloom needs a connection to read the vault and send instructions. Your wallet and rules are safe. Reconnect and try again.",

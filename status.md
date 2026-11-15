@@ -13,6 +13,35 @@
 - App: lib/chain/demo-estate.ts points at the new estate (titles, names of guardians/children/buyers, fallback kinds; the first estate's names kept as DEVNET_FIRST_META, preloaded by db.ts); lib/service/demo-media.ts shows the bundled photos + spec when an on-chain media root equals a DEMO_ASSETS root (never on mainnet; Supabase records win); chain listEstatesFor also finds monitors (Seat scan), so Aunt Zodwa opens the estate; assets are listed in title-registration order (the Corolla first, not scan order); DEMO_WILL / canned valuation now the 2017 Corolla at 12,500. SOL: 0.4 from the deployer to thabo (0.112 used, 0.07 of it parked in zodwa/kagiso/priya for objection rent; 0.288 left).
 - Checked in chain mode (built + `next start -p 3107`, because a mock `next dev` on 3100 holds this checkout's dev lock) as Thabo (1280 + 360), Adv. Ndlovu (1280) and Aunt Zodwa (360): /car 19/19 photos, spec sheets, price ladder 12,500; /people backups, monitor, fallback with kinds; /estate "350 of 3 000 USD₮ used this year"; no sideways scroll. Checks: tsc + eslint clean, 493/493 vitest. Re-run: see scripts/README.md §3b; test path: docs/devnet-test-guide.md.
 - Left: activity rows name payees by address ("paid to 6dnr…eKwi"; pre-existing, the activity decoder has no names); with Supabase, photos/specs/names/objection reasons would come from the database instead of bundled defaults (and edits by the owner would persist across devices); the heirloom-devnet Vercel site still needs connecting + deploying.
+**Last updated:** 2026-11-15 (Solana Mobile steps 1-2 on branch agent/mobile; guardians feature + richer assets on branch feature/guardians; see the section below)
+**Phase:** SUBMITTED (13 Nov 11:04 SAST); judging was Sat 14 Nov. Now: post-hackathon features on branch `feature/guardians`.
+
+## SOLANA MOBILE STEPS 1-2 (branch agent/mobile, 15 Nov 2026): NOT merged, NOT deployed
+- Plan: docs/solana-mobile-plan.md steps 1 (phone wallet) and 2 (phone-store polish). APK, domain and listing not started.
+- Phone wallet ("Use my phone wallet"): lib/wallet/phone*.ts. Wallet Standard wallets, with Mobile Wallet Adapter on Android
+  (@solana-mobile/wallet-standard-mobile 0.7.0, registerMwa; protocol pinned to 3.0.1 via package.json overrides;
+  @wallet-standard/app + base 1.1.1). Same WalletApi/ActiveSigner as WDK (new `connectPhone`), so screens and service/chain.ts
+  are unchanged. Stored: address + wallet name only. Fee sponsorship: phoneCoSign takes only the user's signature from the
+  wallet's signTransaction and refuses if the wallet changed the message (the sponsor would reject it); user-paid fallback keeps
+  the wallet's bytes; signMessage = hex ed25519 (what /api/legacy + /api/media verify). MWA code loads only after "Open my
+  wallet"; /start lists wallets when idle. Offered on /start (card + "How will you sign?" on the add-wallet form) only when MWA
+  (Android, secure page, not an app WebView) or an installed Wallet Standard wallet exists. Demo: a "Simulated phone wallet"
+  with its own approval sheet, labelled Simulated. CSP: connect-src ws://localhost:* (MWA local association). WDK stays default.
+- Seeker Connect (@solana-mobile/seeker-connect-wallet-standard 0.2.0, 20 Oct) NOT added: it is a UX layer on MWA for certified
+  devices (Seeker); plan step 5. MWA already reaches the Seeker's Seed Vault Wallet.
+- Polish: maskable icons regenerated with sharp (scripts/pwa-icons.mjs), manifest screenshots (public/screenshots, 3 phone +
+  1 wide, from the demo), side safe-area insets (--safe-l/--safe-r on body, sheets, drawer, FAB; sheets keep content above the
+  home indicator), Android back closes sheets/drawer first (lib/hooks/use-back-close.ts: native close requests in Chromium,
+  history fallback elsewhere), offline page via the existing service worker (unchanged; verified). Copy in content + af/st/zu
+  (screens.start.phone is a guarded slice in merge.test.ts). New icon Smartphone.
+- Checks: tsc, eslint, 498/498 vitest (11 new: sponsor compatibility, MWA detection, simulated wallet), next build OK.
+  Browser (Playwright, Android UA + touch, 360 + 412 px): every in-app screen axe clean, no sideways scroll; simulated phone
+  flow; back closes sheets (fallback path) and the drawer (close request); chain mode: not offered on desktop, offered on
+  Android with MWA loaded only on tap, full add flow with an injected Wallet Standard wallet; prod: CSP lets ws://localhost
+  through (not upgraded), offline page served by the SW with the server down, SW caches no pages or API responses.
+- NOT verified (needs a real Android phone): MWA association with Phantom/Solflare/Seed Vault, Chrome's Local Network Access
+  prompt, signing a sponsored transaction in a real wallet app (wallets that add a priority fee will be refused when sponsored),
+  the hardware back button, real safe-area insets.
 
 ## ROUND 2 (15 Nov 2026, 5 agents in ../heirloom-agents/*, merged to main and LIVE on the demo site at 16f1fb0)
 - Merged: agent/i18n (af/st/zu for guardians, assets, disputes, check-in, audit, handover; names consistent via lib/names.ts; motorbike valuation lib/service/mock-valuation.ts; gallery counter top right), agent/seats (owner replaces a trusted person, mock + chain; the lead added warnings for an open succession objection and a backup on another place), agent/features, agent/contract (sections below). agent/perf still running.
@@ -204,6 +233,7 @@
 7. Submit on BuilderBase by Fri 13 Nov 23:59 SAST
 
 ## Decisions log
+- 2026-11-15 (agent/mobile): phone wallets via Wallet Standard + MWA beside WDK (WDK default); Seeker Connect deferred to plan step 5; sponsored phone transactions must come back unchanged from the wallet (else refused) so the sponsor policy stays strict.
 | Date | Decision | Why |
 |---|---|---|
 | 2026-11-11 | Solana + native USD₮ SPL; per-estate mint check | The brief; blocks fake USDT |

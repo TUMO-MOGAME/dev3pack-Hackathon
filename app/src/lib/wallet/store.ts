@@ -5,7 +5,13 @@
 import type { Base58, Role } from "../types";
 import type { EncryptedSeed } from "./crypto";
 
-export interface StoredWallet { address: Base58; label: string; role: Role; enc: EncryptedSeed; createdAt: number }
+/** A Heirloom (Tether WDK) wallet: the seed is kept here, encrypted with the PIN. */
+export interface StoredWdkWallet { kind?: "wdk"; address: Base58; label: string; role: Role; enc: EncryptedSeed; createdAt: number }
+/** A phone wallet (Wallet Standard / MWA): only its public address and the wallet app's name. The keys stay in that app. */
+export interface StoredPhoneWallet { kind: "phone"; address: Base58; label: string; role: Role; wallet: string; createdAt: number }
+export type StoredWallet = StoredWdkWallet | StoredPhoneWallet;
+
+export const isPhoneWallet = (w: StoredWallet): w is StoredPhoneWallet => w.kind === "phone";
 
 const KEY = "heirloom.wallets.v1";
 const ACTIVE = "heirloom.wallets.active";
@@ -14,7 +20,7 @@ export function loadWallets(): StoredWallet[] {
   try {
     const raw = localStorage.getItem(KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as StoredWallet[]).filter((w) => w && typeof w.address === "string" && w.enc) : [];
+    return Array.isArray(parsed) ? (parsed as StoredWallet[]).filter((w) => w && typeof w.address === "string" && (isPhoneWallet(w) ? typeof w.wallet === "string" : Boolean(w.enc))) : [];
   } catch {
     return [];
   }
