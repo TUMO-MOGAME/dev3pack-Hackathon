@@ -7,8 +7,10 @@
  * Amounts, USD₮, "Heirloom" and people's and institutions' names are left as they are.
  */
 import type { Bundle } from "./types";
+import { askZu } from "./ask";
 
 export const zu: Bundle = {
+  ask: askZu,
   legalNote: "Leli khasi litholakala ngesiNgisi kuphela. Liyisifanekiso okumele sihlolwe ngumeluleki wezomthetho.",
 
   site: {
@@ -314,6 +316,8 @@ export const zu: Bundle = {
         fund: { title: "UThabo ufaka imali esisefweni", body: "Faka i-USD₮ ukuze imithetho ibe nemali esekelayo." },
         schedule: { title: "Khokha imali yokuqala ehleliwe", body: "Imali yezincwadi zikaLerato isifikile. Ukuthinta kanye kukhokhela isitolo sezincwadi." },
         car: { title: "UThabo wengeza imoto yomndeni", body: "Thola ukulinganiswa kwentengo nge-AI bese ubeka intengo ephansi." },
+        ask: { title: "ULerato ucela imali", body: "Engxoxweni, ucela imali yohambo lwesikole. Zama nokucela ngaphezu kwalokho umthetho okuvumelayo." },
+        answer: { title: "UThabo uphendula isicelo sikaLerato", body: "Vuma ukhokhe, noma wenqabe, khona ekhasini lasekhaya lengxoxo." },
         report: { title: "ULerato ubika ukudlula kukayise emhlabeni", body: "Layisha isitifiketi sokufa. I-agent isifunda kuqala." },
         attest: { title: "Abantu abathembekile bayaqinisekisa ({got} kwabangu-{need})", body: "Ngamunye ubona umbiko we-agent bese eqinisekisa." },
         wait: { title: "Isikhathi sokulinda siyaqhubeka", body: "UThabo usengakhansela ngokuthi \"Ngisekhona\". Uma siphela, vula ifa." },

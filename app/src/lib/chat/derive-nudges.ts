@@ -8,6 +8,8 @@ import type { EstateSnapshot } from "@/lib/service";
 import type { Base58, Role, Rule } from "@/lib/types";
 import type { Locale } from "@/lib/i18n/locales";
 import { chatCopy, fill } from "./nudge-copy";
+import { ask as askEnglish, type AskCopy } from "@/content/ask";
+import { askStatus, decider } from "@/lib/ask/logic";
 import type { Nudge, NudgeKind } from "./types";
 
 export const DAY = 86400;
@@ -31,17 +33,23 @@ export interface NudgeOptions {
   locale?: Locale;
   /** Legacy Book info for a child, when loaded. Undefined = unknown (a generic message nudge is shown). */
   legacy?: LegacyHint | null;
+  /** "Ask for money" card copy in the visitor's language (English when left out). */
+  ask?: AskCopy["nudges"];
 }
+
+/** A family member sees their own requests from the last 30 days, at most this many. */
+export const ASK_RECENT_SECS = 30 * DAY;
+export const ASK_MAX_CARDS = 3;
 
 const URGENCY_RANK: Record<Nudge["urgency"], number> = { now: 0, soon: 1, info: 2 };
 const KIND_RANK: Record<NudgeKind, number> = {
   "death-to-confirm": 0, "unlock-ready": 1, "claim-to-approve": 2, "scheduled-due": 3, "hardship-to-review": 4,
-  "offer-received": 5, heartbeat: 6, "fund-vault": 7, "legacy-message": 8,
+  "offer-received": 5, heartbeat: 6, "fund-vault": 7, "legacy-message": 8, "ask-update": 9,
 };
 
 /** Most urgent first; then by kind; then by id so the order never flickers. */
 export function sortNudges(list: Nudge[]): Nudge[] {
-  return [...list].sort((a, b) => URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency] || KIND_RANK[a.kind] - KIND_RANK[b.kind] || a.id.localeCompare(b.id));
+  return [...list].sort((a, b) => URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency] || KIND_RANK[a.kind] - KIND_RANK[b.kind] || (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
 }
 
 const count = (a: boolean[]) => a.filter(Boolean).length;
@@ -105,13 +113,32 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
     }
   }
 
-  // Claims: the owner approves living-plan claims while alive; after unlock a trusted person does.
+  // Claims ("Ask for money" requests): the owner approves or declines living-plan claims while alive, right on the
+  // card; after unlock a trusted person approves in their inbox. A request the owner declined is not sent on.
+  const a = opts.ask ?? askEnglish.nudges;
+  const notes = snap.asks ?? {};
+  // Everyday amounts are small, so cents count ("19.44 USD₮", not "19 USD₮").
+  const usdCents = (b: bigint) => formatUsdt(b, { decimals: b % BigInt(1_000_000) === BigInt(0) ? 0 : 2 });
+  // A request typed in rand shows the rand amount the family member asked for.
+  const askZar = (cl: { address: Base58; amount: bigint }) => {
+    const n = notes[cl.address];
+    return n?.currency === "ZAR" && n.typed > 0 ? ` · R ${Math.round(n.typed).toLocaleString("en-ZA")}` : zar(cl.amount);
+  };
   for (const cl of snap.claims) {
-    if (cl.status !== "Open" || cl.agentVerdict !== "Approved" || cl.ownerApproved) continue;
+    if (cl.status !== "Open" || cl.agentVerdict !== "Approved" || cl.ownerApproved || notes[cl.address]?.declinedAt) continue;
     const rule = snap.rules.find((r) => r.address === cl.rule);
     const vars = { name: personName(cl.beneficiary), amount: usd(cl.amount), zar: zar(cl.amount), payee: payeeName(cl.payee) };
     if (role === "owner" && e.status === "Active" && rule?.startsNow) {
-      push({ id: `claim:${cl.address}`, kind: "claim-to-approve", urgency: "now", title: c.claimOwner.title, body: fill(c.claimOwner.body, vars), primary: { label: c.claimOwner.cta, action: { type: "navigate", to: "/claims" } } });
+      const note = notes[cl.address];
+      const noDoc = note ? !note.attachment : cl.agentReport?.documentType === "request_note";
+      const check = noDoc ? a.owner.noDoc : cl.agentReport?.verdict === "approve" ? a.owner.checked : "";
+      const v = { ...vars, amount: usdCents(cl.amount), zar: askZar(cl), purpose: note?.purpose ?? "" };
+      push({
+        id: `claim:${cl.address}`, kind: "claim-to-approve", urgency: "now", title: fill(a.owner.title, v),
+        body: [fill(note?.purpose ? a.owner.body : a.owner.bodyNoPurpose, v), check].filter(Boolean).join(" "),
+        primary: { label: a.owner.approve, action: { type: "run", op: "approveAsk", target: cl.address } },
+      });
+      out[out.length - 1].secondary = { label: a.owner.decline, action: { type: "run", op: "declineAsk", target: cl.address } };
     } else if (isVerifier && e.status === "Unlocked" && !cl.approvals[vIndex] && count(cl.approvals) < e.claimThreshold) {
       push({ id: `claim:${cl.address}`, kind: "claim-to-approve", urgency: "now", title: c.claimVerifier.title, body: fill(c.claimVerifier.body, vars), primary: { label: c.claimVerifier.cta, action: { type: "navigate", to: "/inbox" } } });
     }
@@ -185,6 +212,30 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
           primary: { label: c.legacyMessage.cta, action: { type: "navigate", to: "/legacy" } },
         });
       }
+    }
+  }
+
+  // A family member's own requests: where each one stands (newest first, the last 30 days).
+  if (role === "beneficiary" && me) {
+    const mine = snap.claims.filter((cl) => cl.beneficiary === me && now - cl.createdAt <= ASK_RECENT_SECS).sort((x, y) => y.createdAt - x.createdAt);
+    let shown = 0;
+    for (const cl of mine) {
+      if (shown >= ASK_MAX_CARDS) break;
+      const rule = snap.rules.find((r) => r.address === cl.rule);
+      const note = notes[cl.address];
+      const status = askStatus(cl, e, note);
+      if (status === "checking") continue;
+      const v = { owner, purpose: note?.purpose || (rule ? rule.category.toLowerCase() : ""), amount: usdCents(cl.amount), zar: askZar(cl), payee: cl.payee === me ? a.asker.yourWallet : payeeName(cl.payee) };
+      const see = { label: a.asker.see, action: { type: "navigate" as const, to: "/claims" } };
+      const again = { label: a.asker.again, action: { type: "run" as const, op: "openAsk" as const, target: cl.rule } };
+      const card = status === "paid" ? { title: a.asker.paid, body: a.asker.paidBody, primary: see }
+        : status === "declined" ? { title: a.asker.declined, body: a.asker.declinedBody, primary: again }
+          : status === "refused" ? { title: a.asker.refused, body: a.asker.refusedBody, primary: again }
+            : { title: decider(e, rule) === "owner" ? a.asker.waitingOwner : a.asker.waitingTrusted, body: a.asker.waitingBody, primary: see };
+      // A "no" (or a letter not accepted) asks for a reaction; newest request first.
+      const urgency = status === "declined" || status === "refused" ? "soon" : "info";
+      push({ id: `ask:${cl.address}:${status === "approved" ? "waiting" : status}`, kind: "ask-update", urgency, order: -cl.createdAt, title: fill(card.title, v), body: fill(card.body, v), primary: card.primary });
+      shown++;
     }
   }
 

@@ -7,8 +7,10 @@
  * Amounts, USD₮, "Heirloom" and people's and institutions' names are left as they are.
  */
 import type { Bundle } from "./types";
+import { askSt } from "./ask";
 
 export const st: Bundle = {
+  ask: askSt,
   legalNote: "Leqephe lena le fumaneha ka Senyesemane feela. Ke mohlala o tlamehang ho hlahlojwa ke moeletsi wa molao.",
 
   site: {
@@ -314,6 +316,8 @@ export const st: Bundle = {
         fund: { title: "Thabo o kenya chelete polokelong", body: "Kenya USD₮ hore melao e be le chelete e e tshehetsang." },
         schedule: { title: "Lefa chelete ya pele e rerilweng", body: "Chelete ya dibuka ya Lerato e fihlile. Ho tobetsa hanngwe ho lefa lebenkele la dibuka." },
         car: { title: "Thabo o kenya koloi ya lelapa", body: "Fumana boleng ba AI mme o bee theko e tlase." },
+        ask: { title: "Lerato o kopa tjhelete", body: "Ho tswa moqoqong, o kopa leeto la sekolo. Leka hape ho kopa ho feta seo molao o se dumellang." },
+        answer: { title: "Thabo o araba kopo ya Lerato", body: "Dumella o lefe, kapa o hane, hona leqepheng la lehae la moqoqo." },
         report: { title: "Lerato o tlaleha lefu la ntate wa hae", body: "Kenya lengolo la lefu. Agent e le bala pele." },
         attest: { title: "Batho ba tshepahalang ba a netefatsa ({got} ho {need})", body: "E mong le e mong o bona tlaleho ya agent mme o a netefatsa." },
         wait: { title: "Nako ya ho emela e a tsamaya", body: "Thabo o sa ntse a ka hlakola ka \"Ke sa ntse ke le teng\". Ha e fela, bula lefa." },

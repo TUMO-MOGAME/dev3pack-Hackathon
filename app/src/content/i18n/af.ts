@@ -7,8 +7,10 @@
  * Amounts, USD₮, "Heirloom" and people's and institutions' names are left as they are.
  */
 import type { Bundle } from "./types";
+import { askAf } from "./ask";
 
 export const af: Bundle = {
+  ask: askAf,
   legalNote: "Hierdie bladsy is net in Engels beskikbaar. Dit is 'n sjabloon wat 'n regsadviseur moet nagaan.",
 
   site: {
@@ -314,6 +316,8 @@ export const af: Bundle = {
         fund: { title: "Thabo vul die kluis", body: "Deponeer USD₮ sodat die reëls geld agter hulle het." },
         schedule: { title: "Betaal die eerste geskeduleerde toelae", body: "Lerato se boeketoelae is betaalbaar. Een tik betaal die boekwinkel." },
         car: { title: "Thabo voeg die gesinsmotor by", body: "Kry 'n KI-waardasie en stel die minimum prys." },
+        ask: { title: "Lerato vra vir geld", body: "In die klets vra sy vir 'n skooluitstappie. Probeer ook om meer te vra as wat die reël toelaat." },
+        answer: { title: "Thabo antwoord op Lerato se versoek", body: "Keur goed en betaal, of keur af, reg op die kletstuisblad." },
         report: { title: "Lerato meld haar pa se afsterwe aan", body: "Laai die doodsertifikaat op. Die agent lees dit eerste." },
         attest: { title: "Vertroude persone bevestig ({got} van {need})", body: "Elkeen sien die agent se verslag en bevestig." },
         wait: { title: "Die wagtydperk loop", body: "Thabo kan steeds kanselleer met \"Ek is nog hier\". Wanneer dit verby is, ontsluit die boedel." },

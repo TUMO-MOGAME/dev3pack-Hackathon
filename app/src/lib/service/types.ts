@@ -15,6 +15,7 @@ import type { LegacyBook, LegacyChatReply, LegacySpeech, LegacyStatus, LegacyVoi
 import type { LegacyVoiceUpload, SpeakInput } from "../legacy/client";
 import type { AssetKind, GuardiansService, GuardiansSnapshot } from "../guardians/types";
 import type { Dispute, DisputesService } from "../disputes/types";
+import type { AskNote, AskService } from "../ask/types";
 
 export interface TxResult { signature: string; explorerUrl: string }
 
@@ -38,9 +39,11 @@ export interface EstateSnapshot {
    * (lib/people.ts); never on-chain, and dropped from the public record.
    */
   names?: Record<Base58, string>;
+  /** "Ask for money" notes by claim address (purpose, the owner's decline; off-chain, lib/ask). Absent on older snapshots. */
+  asks?: Record<Base58, AskNote>;
 }
 
-export interface HeirloomService extends GuardiansService, DisputesService {
+export interface HeirloomService extends GuardiansService, DisputesService, AskService {
   mode: "mock" | "chain";
 
   // Reads

@@ -16,6 +16,8 @@ import { createMockLegacy } from "./mock-legacy";
 import { fail } from "./mock-errors";
 import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type MockGuardState, type Named } from "./mock-guardians";
 import { createMockDisputes } from "./mock-disputes";
+import { createMockAsk } from "./mock-ask";
+import type { AskNote } from "../ask/types";
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, mediaRootHex, specInputSchema } from "../assets/spec";
 import { DEMO_ASSETS } from "./demo-asset-photos";
@@ -125,6 +127,8 @@ interface State {
   sends: Record<string, { receipt: PaymentReceipt; from: Base58; to: Base58; toLabel: string; amount: bigint; confirmAt: number }>;
   /** Guardians (added after v5 shipped; created on first use when a saved state has none). */
   guard?: MockGuardState;
+  /** "Ask for money" notes by claim (added after v5 shipped; created on first use). */
+  asks?: Record<Base58, AskNote>;
 }
 
 const KEY = "heirloom.mock.v5";
@@ -260,6 +264,13 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     objectionOpen: (target) => (s.guard?.objections ?? []).some((o) => o.target === target && o.status === "Open"),
   });
 
+  // "Ask for money": a living claim plus its off-chain note (mock-ask.ts).
+  const A = createMockAsk({
+    snap: () => s.snap, notes: () => (s.asks ??= {}), me, first, payeeName: (w) => s.snap.payees.find((p) => p.wallet === w)?.name ?? name(w),
+    submit: (input, hash, r, reviewed) => submitClaim(input, hash, r, reviewed),
+    hashFile: (f) => hashFile(f), suspicious: (f) => suspicious(f), fakeHash, zar: (u) => zar(u), now: nowSecs, wait: async (ms) => { await wait(ms); }, save,
+  });
+
   /* ----- synchronous "instructions" (shared by the async API and the stage seeder) ----- */
 
   function createEstate(draft: WillDraft): TxResult[] {
@@ -290,6 +301,14 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       s.snap.beneficiaries.push({ address: fakeAddr(), wallet: resolved, label: `${b.label.split(" ")[0]} (${b.relationship})`, active: true });
     });
     PAYEES.forEach((p) => s.snap.payees.push({ address: fakeAddr(), ...p }));
+    // "Everyday needs" (General, paid to an "Other" payee): the child's own wallet is an approved payee too.
+    for (const r of draft.rules.filter((x) => x.category === "General" && x.allowedPayeeKind === "Other")) {
+      const ben = s.snap.beneficiaries.find((b) => b.label.toLowerCase().startsWith(r.beneficiaryLabel.toLowerCase().split(" ")[0]));
+      if (ben && !s.snap.payees.some((p) => p.wallet === ben.wallet)) {
+        s.snap.payees.push({ address: fakeAddr(), wallet: ben.wallet, kind: "Other", name: `${ben.label.split(" ")[0]}'s own wallet` });
+        s.names[ben.wallet] = s.names[ben.wallet] ?? ben.label;
+      }
+    }
     draft.rules.forEach((r, i) => {
       const ben = s.snap.beneficiaries.find((b) => b.label.toLowerCase().startsWith(r.beneficiaryLabel.toLowerCase().split(" ")[0])) ?? s.snap.beneficiaries[0];
       const fixed = r.recurring ? s.snap.payees.find((p) => p.name === r.recurring!.payeeName) ?? s.snap.payees.find((p) => p.kind === r.allowedPayeeKind) : undefined;
@@ -439,7 +458,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     return t;
   }
 
-  function submitClaim(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport): { t: TxResult; claim: Claim } {
+  function submitClaim(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport, reviewed?: string): { t: TxResult; claim: Claim } {
     needCreated(); needBeneficiary();
     const rule = s.snap.rules.find((r) => r.address === input.rule) ?? fail("BadStatus", "That rule does not exist.");
     need(est().status === "Unlocked" || (rule.startsNow && est().status === "Active"), "BadStatus", rule.startsNow ? "Claims are paused while a passing is being confirmed." : "This rule only starts after the estate is unlocked.");
@@ -452,7 +471,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(rule.spentTotal + amt <= rule.lifetimeCap, "ExceedsLifetimeCap", `Only ${usd(rule.lifetimeCap - rule.spentTotal)} is left under this rule.`);
     need(nowSecs() <= rule.validUntil, "RuleExpired", "This rule has ended.");
     D.checkYearly(rule, amt, false);
-    const approved = report.verdict === "approve";
+    // As on-chain (/api/review): only "reject" blocks; "needs_human" goes to the people who decide.
+    const approved = report.verdict !== "reject";
     const claim: Claim = {
       address: fakeAddr(), rule: rule.address, id: s.snap.claims.length, beneficiary: me(), payee: payee.wallet, amount: amt,
       evidenceHash, agentVerdict: approved ? "Approved" : "Rejected", agentReport: report,
@@ -461,7 +481,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     s.snap.claims.unshift(claim);
     const t = tx();
     log("ClaimSubmitted", `${first(me())} asked for ${usd(amt)} to be paid to ${payee.name}`, t, amt);
-    log("ClaimReviewed", approved ? `The agent checked the ${rule.category.toLowerCase()} statement: it matches the claim` : "The agent could not accept the document. The claim was declined", tx());
+    log("ClaimReviewed", reviewed ?? (approved ? `The agent checked the ${rule.category.toLowerCase()} statement: it matches the claim` : "The agent could not accept the document. The claim was declined"), tx());
     return { t, claim };
   }
 
@@ -771,6 +791,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       rules: [
         { beneficiaryLabel: "Lerato", category: "Books", allowedPayeeKind: "Other", maxPerClaimUsdt: 85, lifetimeCapUsdt: 3000, validUntil: "2030-12-31", notes: "Monthly book allowance (about R1,500), paid to the bookstore account", startsNow: true, recurring: { amountUsdt: 85, every: "month", payeeName: "Van Schaik Bookstore" } },
         { beneficiaryLabel: "Lerato", category: "Tuition", allowedPayeeKind: "University", maxPerClaimUsdt: 3500, lifetimeCapUsdt: 14000, validUntil: "2030-12-31", notes: "University fees, paid to the university only. You approve while you are here", startsNow: true },
+        { beneficiaryLabel: "Lerato", category: "General", allowedPayeeKind: "Other", maxPerClaimUsdt: 60, lifetimeCapUsdt: 720, validUntil: "2030-12-31", notes: "Everyday needs (a school trip, transport, data), up to 60 USD₮ (about R1,100) a time, paid to her own wallet or the bookstore. She asks, you approve each one", startsNow: true },
         { beneficiaryLabel: "Lerato", category: "Accommodation", allowedPayeeKind: "Landlord", maxPerClaimUsdt: 450, lifetimeCapUsdt: 6000, validUntil: "2030-12-31", notes: "Residence rent every month, paid to the residence", startsNow: false, recurring: { amountUsdt: 450, every: "month", payeeName: "South Point Student Residences" } },
         { beneficiaryLabel: "Sipho", category: "Tuition", allowedPayeeKind: "University", maxPerClaimUsdt: 3500, lifetimeCapUsdt: 14000, validUntil: "2032-12-31", notes: "University fees, paid to the university only", startsNow: false },
         { beneficiaryLabel: "Naledi", category: "Tuition", allowedPayeeKind: "School", maxPerClaimUsdt: 1500, lifetimeCapUsdt: 9000, validUntil: "2034-12-31", notes: "High school fees now, university later by a new rule", startsNow: false },
@@ -784,8 +805,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       }] : [],
       waitingPeriodDays: 30,
       plainLanguageSummary: stage >= 3
-        ? `Starting now, Lerato's book allowance is paid every month and you approve her university fees yourself. After two of your three trusted people confirm your passing and 30 days go by, the same plan carries on without you: rent, school and university fees are paid straight to approved institutions, within the limits you set. Your Corolla is sold to the best offer at or above ${floor.toLocaleString("en-ZA")} USD₮, and the money goes into the family vault. Nothing is paid to anyone in cash.`
-        : "Two rules start now (Lerato's book allowance and her university fees) and three carry on after you're gone. Every payment goes straight to an approved institution. We still need to settle who confirms your passing and what happens to the car.",
+        ? `Starting now, Lerato's book allowance is paid every month, and you approve her university fees and her everyday requests (up to 60 USD₮ a time) yourself. After two of your three trusted people confirm your passing and 30 days go by, the same plan carries on without you: rent, school and university fees are paid straight to approved institutions, within the limits you set. Your Corolla is sold to the best offer at or above ${floor.toLocaleString("en-ZA")} USD₮, and the money goes into the family vault. Nothing is paid to anyone in cash.`
+        : "Three rules start now (Lerato's book allowance, her university fees and her everyday needs) and three carry on after you're gone. Every payment goes straight to an approved institution. We still need to settle who confirms your passing and what happens to the car.",
     };
     return { stage, draft };
   }
@@ -855,7 +876,13 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       const allowance = s.snap.rules.find((r) => r.startsNow && r.recurringAmount > 0n);
       if (allowance) executeScheduled(allowance.address, true);
     });
-    if (stage === "funded") return;
+    if (stage === "funded") {
+      // Everyday money: Lerato has asked for her field trip, so Thabo's chat home shows the request to approve.
+      const everyday = s.snap.rules.find((r) => r.category === "General" && r.startsNow && r.beneficiary === s.bind.lerato);
+      const own = s.snap.payees.find((p) => p.wallet === s.bind.lerato);
+      if (everyday && own) as("lerato", () => A.seedAsk({ rule: everyday.address, payee: own.wallet, amountUsdt: Math.round((350 / DEMO_FX) * 100) / 100, purpose: "Geology field trip to the Cradle of Humankind", typed: 350 }));
+      return;
+    }
     reportOwnerPassing();
     as("nomsa", attestDeath);
     as("david", attestDeath);
@@ -1031,7 +1058,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     async getEstate() {
       await wait(120);
       needCreated();
-      return { ...structuredClone(s.snap), guardians: G.snapshot() };
+      return { ...structuredClone(s.snap), guardians: G.snapshot(), asks: structuredClone(s.asks ?? {}) };
     },
     async listEstatesFor(wallet) {
       await wait(80);
@@ -1051,7 +1078,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       const { stage, draft } = draftFor(history);
       const firstName = draft.ownerName.split(" ")[0];
       const reply = stage <= 1
-        ? `Thank you, ${firstName}. I've set that up as a plan in two parts. Starting now: Lerato's book allowance of 85 USD₮ (about R1,500) goes to the bookstore every month, and her university fees are paid to the university when you approve them. After you're gone: rent, school and university fees for all three carry on, paid straight to the institution, never in cash. You can switch any rule between "Now" and "After I'm gone" in the plan beside this chat.\n\nWho should confirm your passing when the time comes? Most people choose three: the executor named in their will, and two people the family trusts. Any two of them must agree.`
+        ? `Thank you, ${firstName}. I've set that up as a plan in two parts. Starting now: Lerato's book allowance of 85 USD₮ (about R1,500) goes to the bookstore every month, and her university fees are paid to the university when you approve them. She can also ask you for everyday needs, up to 60 USD₮ a time, and you approve each one. After you're gone: rent, school and university fees for all three carry on, paid straight to the institution, never in cash. You can switch any rule between "Now" and "After I'm gone" in the plan beside this chat.\n\nWho should confirm your passing when the time comes? Most people choose three: the executor named in their will, and two people the family trusts. Any two of them must agree.`
         : stage === 2
           ? `Good choices. Adv. Ndlovu, Ms. Pillay and your brother Bongani are now your three trusted people. Two of them must confirm before anything unlocks, and then a 30 day waiting period runs. You can cancel it with one tap if a report is ever wrong.\n\nLast thing: the car. What is the lowest price you would accept for the Corolla, and should that ever bend if one of the children is in real need?`
           : `Understood. The Corolla sells to the best offer at or above ${draft.assets[0]?.floorPriceUsdt.toLocaleString("en-ZA")} USD₮. Below that, only if one of your children proves hardship with a sworn affidavit and two trusted people agree, and never below ${draft.assets[0]?.hardshipFloorUsdt.toLocaleString("en-ZA")} USD₮. The money goes into the family vault.\n\nYour rules are ready. Please read them in plain language before you sign.`;
@@ -1119,6 +1146,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     ownerApproveClaim: (_e, claim) => mutate(900, () => ownerApproveClaim(claim)),
     executeScheduled: (_e, rule) => mutate(1000, () => executeScheduled(rule)),
     vetoDeath: () => mutate(800, vetoDeath),
+    askForMoney: (e, input) => A.askForMoney(e, input),
+    declineAsk: (e, claim) => A.declineAsk(e, claim),
 
     async submitDeathClaim(_e, certificate) {
       needCreated(); needBeneficiary();

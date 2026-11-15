@@ -6,10 +6,12 @@
  */
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ChangeEvent, type FormEvent } from "react";
 import clsx from "clsx";
-import { ArrowUp, FileText, Mic, Paperclip, Phone, Send, Square, X } from "@/components/ui/icons";
+import { ArrowUp, FileText, HandCoins, Mic, Paperclip, Phone, Send, Square, X } from "@/components/ui/icons";
 import type { ChatAttachment } from "@/lib/chat/types";
 import { useEstate } from "@/lib/hooks/estate";
 import { fmt, useCopy } from "@/components/shell/copy";
+import { ask as askEnglish } from "@/content/ask";
+import { useLocalized } from "@/lib/i18n/client";
 
 type Purpose = NonNullable<ChatAttachment["purpose"]>;
 const PURPOSES: Purpose[] = ["general", "death", "claim", "hardship"];
@@ -35,7 +37,10 @@ const tool = "inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 
 export function ChatComposer({ onSend, disabled }: { onSend: (text: string, opts?: { attachment?: File; purpose?: Purpose }) => void; disabled?: boolean }) {
   const { assistant } = useCopy();
   const c = assistant.home.composer;
-  const { openAgent, notify } = useEstate();
+  const { openAgent, notify, role, snap, setIntent } = useEstate();
+  const askLabel = useLocalized(askEnglish, (t) => t.ask).entry;
+  // Family members can ask for money from the chat home (the sheet explains when nothing can be asked yet).
+  const canAsk = role === "beneficiary" && !!snap;
   const [value, setValue] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [purpose, setPurpose] = useState<Purpose>("general");
@@ -139,9 +144,14 @@ export function ChatComposer({ onSend, disabled }: { onSend: (text: string, opts
         <button type="button" onClick={() => openAgent("call")} aria-label={c.call} title={c.call} className={clsx(tool, "w-11")}>
           <Phone className="size-5" aria-hidden="true" />
         </button>
-        <button type="button" onClick={() => picker.current?.click()} disabled={disabled} className={clsx(tool, "px-3.5")}>
-          <Paperclip className="size-4" aria-hidden="true" />{c.attach}
+        <button type="button" onClick={() => picker.current?.click()} disabled={disabled} className={clsx(tool, "px-3.5", canAsk && "max-[399px]:w-11 max-[399px]:px-0")}>
+          <Paperclip className="size-4" aria-hidden="true" /><span className={clsx(canAsk && "max-[399px]:sr-only")}>{c.attach}</span>
         </button>
+        {canAsk && (
+          <button type="button" onClick={() => setIntent({ kind: "ask" })} className={clsx(tool, "px-3.5")}>
+            <HandCoins className="size-4" aria-hidden="true" />{askLabel}
+          </button>
+        )}
         <button type="button" onClick={draftPayment} className={clsx(tool, "px-3.5 max-[399px]:hidden")}>
           <Send className="size-4" aria-hidden="true" />{c.sendMoney}
         </button>
