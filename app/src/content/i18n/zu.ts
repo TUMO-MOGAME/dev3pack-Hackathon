@@ -369,6 +369,7 @@ export const zu: Bundle = {
       simulated: "kulingisiwe",
       facts: { program: "Uhlelo lwe-Heirloom (Solana devnet)", estate: "I-akhawunti yefa", will: "Isigxivizo sohlelo (SHA-256)", mint: "Imali eyamukelwayo (USD₮ mint)", network: "Inethiwekhi", agent: "I-wallet ye-agent" },
       notSigned: "Akukasayinwa",
+      walletTitle: "I-wallet {address}",
       network: "Solana devnet",
       empty: "Akukabikho okwenziwe. Kuzovela lapha njengoba ifa lisetshenziswa.",
       receipt: "Irisidi",

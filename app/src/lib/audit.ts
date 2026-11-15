@@ -27,8 +27,9 @@ export function publicSnapshot(snap: EstateSnapshot): EstateSnapshot {
   const { agentReport: _death, ...death } = snap.estate.death;
   void _death;
   // Guardians (backups, monitors, objection reasons) are shown in the app to the people involved, not here.
-  const { guardians: _g, ...rest } = snap;
-  void _g;
+  // So are the extra names the service knows (they include names this device gave backups and monitors).
+  const { guardians: _g, names: _n, ...rest } = snap;
+  void _g; void _n;
   return {
     ...rest,
     estate: { ...snap.estate, death },

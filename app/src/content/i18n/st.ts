@@ -369,6 +369,7 @@ export const st: Bundle = {
       simulated: "e etsisitsoe",
       facts: { program: "Lenaneo la Heirloom (Solana devnet)", estate: "Akhaonto ya lefa", will: "Monwana wa moralo (SHA-256)", mint: "Chelete e amohelwang (USD₮ mint)", network: "Netweke", agent: "Wallet ya agent" },
       notSigned: "Ha e so saenwe",
+      walletTitle: "Wallet {address}",
       network: "Solana devnet",
       empty: "Ha ho di-transaction hajwale. Di tla hlaha mona ha lefa le ntse le sebediswa.",
       receipt: "Rasiti",

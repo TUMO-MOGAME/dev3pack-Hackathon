@@ -150,6 +150,7 @@ export const common = {
     simulated: "simulated",
     facts: { program: "Heirloom program (Solana devnet)", estate: "Estate account", will: "Plan fingerprint (SHA-256)", mint: "Accepted money (USD₮ mint)", network: "Network", agent: "Agent's wallet" },
     notSigned: "Not signed yet",
+    walletTitle: "Wallet {address}",
     network: "Solana devnet",
     empty: "No transactions yet. They will appear here as the estate is used.",
     receipt: "Receipt",

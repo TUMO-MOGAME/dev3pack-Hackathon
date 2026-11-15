@@ -292,7 +292,10 @@ export function createChainService(): HeirloomService {
       }) as [string, string, string];
       // Disputes (U9) and each rule's yearly cap: new accounts, read from the same program scan.
       const extra = await loadDisputes(estate, { estate: out.estate, rules: out.rules }, extras.names).catch(() => ({ disputes: [], rules: out.rules }));
-      return { ...out, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians };
+      // Names the meta and this device know, for the activity feed (lib/people.ts) and the sale line's buyer.
+      const names = extras.names;
+      const withBuyers = out.activity.map((a) => (a.sale && !a.sale.buyerName && names[a.sale.buyer] ? { ...a, sale: { ...a.sale, buyerName: names[a.sale.buyer] } } : a));
+      return { ...out, activity: withBuyers, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names };
     },
 
     listEstatesFor(wallet) {

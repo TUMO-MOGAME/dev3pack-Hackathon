@@ -17,6 +17,7 @@ import { Quorum } from "@/components/ui/client";
 import { Blocked } from "@/components/shell/blocked";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
+import { ActivityText, useNameBook } from "@/components/shell/activity-text";
 import { usePay } from "@/components/pay/payment";
 import { AddAsset } from "@/components/assets/add-asset";
 import { AssetList } from "@/components/assets/asset-list";
@@ -82,6 +83,9 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
 }) {
   const { common } = useCopy();
   const { service, fx, run, busy } = useEstate();
+  const book = useNameBook(snap);
+  // A buyer's name: the one the offer carries, else whatever this estate or device knows about that wallet.
+  const buyerName = (o: { buyer: string; buyerName?: string }) => o.buyerName ?? book.get(o.buyer)?.name;
   const now = useNow();
   const rate = fx?.usdtZar ?? null;
   const e = snap.estate;
@@ -189,7 +193,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
           <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
             <Card className="border-2 border-ink">
               <p className="flex items-center gap-2 text-h3 font-display"><TickDisc className="size-7" />{copy.sold.title}</p>
-              <p className="mt-2 font-medium">{sale.text}</p>
+              <p className="mt-2 font-medium"><ActivityText item={sale} book={book} /></p>
               <p className="mt-2 text-small text-ink-2">{copy.sold.body}</p>
               {sale.amount !== undefined && (
                 <div className="mt-3"><p className="text-small text-ink-2">{copy.sold.price}</p><Money base={sale.amount} rate={rate} size="lg" /></div>
@@ -210,7 +214,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
           </motion.div>
         )}
 
-        <Protect copy={copy} car={car} offers={offers.map((o) => ({ amount: o.amount, name: o.buyerName ?? "", mine: o.buyer === session.address }))} owner={e.ownerName.split(" ")[0]} rate={rate} hardshipName={hardshipName} />
+        <Protect copy={copy} car={car} offers={offers.map((o) => ({ amount: o.amount, name: buyerName(o) ?? "", mine: o.buyer === session.address }))} owner={e.ownerName.split(" ")[0]} rate={rate} hardshipName={hardshipName} />
       </div>
 
       <div className="grid gap-5 *:min-w-0">
@@ -267,7 +271,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
                   return (
                     <motion.li key={o.address} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="border-b border-line/70 py-3 last:border-0">
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                        <p className="min-w-0 font-semibold">{o.buyerName ?? common.roles.buyer}{o.buyer === session.address && <span className="ml-2 text-small font-medium text-accent">({copy.offers.you})</span>}</p>
+                        <p className="min-w-0 font-semibold">{buyerName(o) ?? common.roles.buyer}{o.buyer === session.address && <span className="ml-2 text-small font-medium text-accent">({copy.offers.you})</span>}</p>
                         <Badge tone={st.tone}>{st.text}</Badge>
                       </div>
                       <p className="tabular-nums">{formatUsdt(o.amount)}{rate ? <span className="ml-2 text-small text-ink-2">≈ {formatZar(o.amount, rate)}</span> : null}</p>
