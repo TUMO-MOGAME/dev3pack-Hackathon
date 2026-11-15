@@ -84,11 +84,12 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   // (chain.ts send); the review says so instead of "paid by you".
   const [sponsor, setSponsor] = useState<SponsorStatus | null>(null);
   useEffect(() => {
-    if (isMock) return;
+    // Wait for the service: until it has loaded isMock is still false, and the demo never needs this.
+    if (!service || isMock) return;
     let alive = true;
     fetch("/api/sponsor").then((r) => (r.ok ? r.json() : null)).then((v: SponsorStatus | null) => { if (alive) setSponsor(v); }).catch(() => {});
     return () => { alive = false; };
-  }, [isMock]);
+  }, [service, isMock]);
 
   // Hydrate from localStorage after mount (not during render, so SSR markup matches).
   // eslint-disable-next-line react-hooks/set-state-in-effect

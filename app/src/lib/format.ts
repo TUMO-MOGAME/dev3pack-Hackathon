@@ -11,13 +11,26 @@ export function fromBase(base: bigint): number {
   return Number(base) / Number(UNIT);
 }
 
+// Number.toLocaleString builds a new Intl.NumberFormat on every call, which is slow on phones and these run on
+// every render; one formatter per option set gives the same output.
+const formatters = new Map<string, Intl.NumberFormat>();
+function numberFormat(min: number | undefined, max: number): Intl.NumberFormat {
+  const key = `${min}:${max}`;
+  let f = formatters.get(key);
+  if (!f) {
+    f = new Intl.NumberFormat("en-ZA", min === undefined ? { maximumFractionDigits: max } : { minimumFractionDigits: min, maximumFractionDigits: max });
+    formatters.set(key, f);
+  }
+  return f;
+}
+
 export function formatUsdt(base: bigint, opts: { decimals?: number } = {}): string {
-  const n = fromBase(base);
-  return `${n.toLocaleString("en-ZA", { minimumFractionDigits: opts.decimals ?? 2, maximumFractionDigits: opts.decimals ?? 2 })} USD₮`;
+  const d = opts.decimals ?? 2;
+  return `${numberFormat(d, d).format(fromBase(base))} USD₮`;
 }
 
 export function formatZar(base: bigint, usdtZar: number): string {
-  return `R ${(fromBase(base) * usdtZar).toLocaleString("en-ZA", { maximumFractionDigits: 0 })}`;
+  return `R ${numberFormat(undefined, 0).format(fromBase(base) * usdtZar)}`;
 }
 
 export function shortAddress(a: string, n = 4): string {

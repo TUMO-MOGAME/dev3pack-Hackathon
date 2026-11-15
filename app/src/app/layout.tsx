@@ -9,7 +9,8 @@ import "./uicons.css";
 // next/font downloads these at build time and serves them from our own origin (no font CDN at runtime).
 const display = Fraunces({ variable: "--font-display-face", subsets: ["latin"], display: "swap", axes: ["opsz"] });
 const body = Geist({ variable: "--font-body", subsets: ["latin"], display: "swap" });
-const mono = Geist_Mono({ variable: "--font-mono-face", subsets: ["latin"], display: "swap" });
+// Mono is only used for small addresses and hashes, never on a first screen, so it isn't preloaded on every page.
+const mono = Geist_Mono({ variable: "--font-mono-face", subsets: ["latin"], display: "swap", preload: false });
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
