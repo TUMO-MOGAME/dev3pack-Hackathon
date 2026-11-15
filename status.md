@@ -52,6 +52,11 @@
   prompt, signing a sponsored transaction in a real wallet app (wallets that add a priority fee will be refused when sponsored),
   the hardware back button, real safe-area insets.
 
+## REDESIGN (16 Nov 2026, merged to main, live on both sites)
+- Concept approved by Tumo in design/landing/index.html, then built into the app by two agents: agent/theme (tokens, NIGHT BY DEFAULT with no flash, Work Sans display font replacing Fraunces, amber accent, .mark hand-drawn underline via `*word*` in content, flat pure white / pure black pages, no gradients, inverted strip, rounder cards; every app screen swept; contrast.mjs now allows only the amber and green token hues and checks 78 pairs) and agent/landing (photo landing page from the concept, copy in content/landing.ts + af/st/zu, Unsplash photos in public/landing with credit, real devnet receipts, facts quoted exactly with links).
+- Checks: 516/516 vitest, tsc, eslint, next build, contrast 78/78; agents: 21 screens + sheets axe-clean at 360/1280 in both themes; landing 16/16 (4 languages, both themes); landing Lighthouse mobile 90 (desktop 100) on a local production build.
+- Open: headings in af/st/zu have no underline mark; README still says "pure black and white"; site.accent unused; landing header nav has no "What it pays for" link.
+
 ## TWO LIVE SITES (16 Nov 2026): every push to main deploys BOTH
 - Demo (mock): https://heirloom-one-iota.vercel.app (Vercel project `heirloom`).
 - Devnet (chain): https://heirloom-devnet.vercel.app (Vercel project `heirloom-devnet`, Git-connected to main, root app). Env set by Tumo with scripts/devnet-site-env.ps1 (fixed: values passed with --value, since PS 5.1 pipes add CR LF). /api/health: chain, devnet, program deployed, agent wallet 261pQ…sjNg loaded, sponsor available, gemini + elevenlabs on, supabase off. ELEVENLABS_TOOL_SECRET is not set there (not in the local env files), so the voice agent's server tool won't authenticate on devnet until it is added.
