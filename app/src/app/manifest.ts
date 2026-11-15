@@ -3,8 +3,8 @@ import { site } from "@/content/site";
 
 /**
  * Web app manifest: the installable PWA, and the base of the Solana dApp Store app (a Trusted Web Activity wraps it).
- * Colours are the design tokens' page background (site.themeLight = --bg in light mode; the dark one is set per
- * colour scheme by the theme-color meta in layout.tsx). Maskable icons: scripts/pwa-icons.mjs. Screenshots: the demo
+ * Colours are the design tokens' page background in the default (dark) theme: site.themeDark = --bg. The light one is set
+ * by the theme-color meta when a saved choice shows light (layout.tsx PREPAINT, shell/theme.ts). Maskable icons: scripts/pwa-icons.mjs. Screenshots: the demo
  * at 412 px (phone) and 1280 px (wide), shown by Android's richer install sheet and reused for the store listing.
  */
 export default function manifest(): MetadataRoute.Manifest {
@@ -18,8 +18,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: site.themeLight,
-    theme_color: site.themeLight,
+    background_color: site.themeDark,
+    theme_color: site.themeDark,
     categories: ["finance", "lifestyle"],
     icons: [
       { src: "/icons/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
