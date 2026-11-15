@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
-import { Check, Copy, Info } from "@/components/ui/icons";
+import Link from "next/link";
+import { ArrowRight, Check, Copy, Info, ScrollText } from "@/components/ui/icons";
+import type { ActivityItem } from "@/lib/types";
 import { formatUsdt, shortAddress } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
@@ -10,7 +12,7 @@ import { timeAgo, useCopy } from "./copy";
 
 const PROGRAM_ID = process.env.NEXT_PUBLIC_HEIRLOOM_PROGRAM_ID ?? "";
 
-function CopyValue({ value, copyLabel, copiedLabel }: { value: string; copyLabel: string; copiedLabel: string }) {
+export function CopyValue({ value, copyLabel, copiedLabel }: { value: string; copyLabel: string; copiedLabel: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
@@ -27,9 +29,31 @@ function CopyValue({ value, copyLabel, copiedLabel }: { value: string; copyLabel
   );
 }
 
+/** Activity lines, newest first, each with its receipt (the Proof drawer and the public record share it). */
+export function ActivityList({ items, now }: { items: ActivityItem[]; now: number | null }) {
+  const { common } = useCopy();
+  const c = common.proof;
+  return (
+    <ol className="flex flex-col">
+      {items.map((a, i) => (
+        <li key={`${a.txSignature}-${i}`} className="border-b border-line py-2.5 last:border-0">
+          <div className="flex items-start justify-between gap-3">
+            <p className="min-w-0 text-small font-medium">{a.text}</p>
+            {a.amount !== undefined && <span className="shrink-0 text-small font-semibold tabular-nums">{formatUsdt(a.amount, { decimals: 0 })}</span>}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-x-3">
+            <span className="text-[0.75rem] text-ink-2"><span className="font-mono">{a.kind}</span> · {timeAgo(a.ts, now, common.time)}</span>
+            {a.txSignature && <ExplorerLink signature={a.txSignature} label={c.receipt} srLabel={c.receiptSr} />}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** Every on-chain transaction for this estate, one tap away from any screen. */
 export function ProofDrawer() {
-  const { common } = useCopy();
+  const { common, assistant } = useCopy();
   const c = common.proof;
   const { proofOpen, setProofOpen, snap, isMock } = useEstate();
   const now = useNow(15000);
@@ -59,23 +83,18 @@ export function ProofDrawer() {
             </div>
           </dl>
         )}
+        {e && (
+          <div className="rounded-lg border border-line bg-surface-2 px-3.5 py-2.5">
+            <Link href={`/audit/${e.address}`} onClick={() => setProofOpen(false)} className="inline-flex min-h-11 items-center gap-2 font-semibold text-ink underline decoration-1 underline-offset-4 hover:decoration-2">
+              <ScrollText className="size-4 shrink-0" aria-hidden="true" />{assistant.publicRecord.link}<ArrowRight className="size-4 shrink-0" aria-hidden="true" />
+            </Link>
+            <p className="text-small text-ink-2">{assistant.publicRecord.hint}</p>
+          </div>
+        )}
         {!snap || snap.activity.length === 0 ? (
           <p className="py-8 text-center text-ink-2">{c.empty}</p>
         ) : (
-          <ol className="flex flex-col">
-            {snap.activity.map((a, i) => (
-              <li key={`${a.txSignature}-${i}`} className="border-b border-line py-2.5 last:border-0">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="min-w-0 text-small font-medium">{a.text}</p>
-                  {a.amount !== undefined && <span className="shrink-0 text-small font-semibold tabular-nums">{formatUsdt(a.amount, { decimals: 0 })}</span>}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-x-3">
-                  <span className="text-[0.75rem] text-ink-2"><span className="font-mono">{a.kind}</span> · {timeAgo(a.ts, now, common.time)}</span>
-                  {a.txSignature && <ExplorerLink signature={a.txSignature} label={c.receipt} srLabel={c.receiptSr} />}
-                </div>
-              </li>
-            ))}
-          </ol>
+          <ActivityList items={snap.activity} now={now} />
         )}
       </div>
     </Sheet>

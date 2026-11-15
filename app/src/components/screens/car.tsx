@@ -26,6 +26,7 @@ import { PhotoEditor } from "@/components/assets/photo-editor";
 import { SpecSheet } from "@/components/assets/spec-sheet";
 import { SpecEditor } from "@/components/assets/spec-editor";
 import { hasSpec } from "@/lib/assets/spec";
+import { isSellerSide, saleOf } from "@/lib/assets/handover";
 import type { AssetMediaView } from "@/lib/media/api";
 import { clock } from "./family";
 import { PausedNotice } from "@/components/guardians/parts";
@@ -87,7 +88,10 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
   const mine = offers.find((o) => o.buyer === session.address);
   const hardship = snap.hardships.find((h) => h.asset === car.address && (h.status === "Open" || h.status === "Approved"));
   const hardshipName = car.hardshipBeneficiary ? (snap.beneficiaries.find((b) => b.wallet === car.hardshipBeneficiary)?.label.split(" ")[0] ?? "") : "";
-  const sale = car.status === "Sold" ? snap.activity.find((a) => a.kind === "AssetSold") : undefined;
+  // The sale line for this asset (an estate can sell more than one); see lib/assets/handover.ts.
+  const saleFacts = saleOf(snap, car.address);
+  const sale = saleFacts ? snap.activity.find((x) => x.kind === "AssetSold" && x.txSignature === saleFacts.txSignature && x.ts === saleFacts.ts) : undefined;
+  const sellerSide = isSellerSide(snap, session.address);
   const isFamily = snap.beneficiaries.some((b) => b.wallet === session.address);
   const isVerifier = e.verifiers.includes(session.address);
   const [blocked, setBlocked] = useState<{ code: string; message: string } | null>(null);
@@ -194,6 +198,12 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
               <ul className="mt-1 list-disc space-y-1 pl-5 text-small marker:text-ink">
                 {copy.sold.pack.map((p) => <li key={p}>{p}</li>)}
               </ul>
+              {sellerSide && (
+                <div className="mt-3">
+                  <ButtonLink href={`/car/handover?asset=${encodeURIComponent(car.address)}`} variant="secondary"><FileText className="size-5" aria-hidden="true" />{copy.sold.openPack}<ArrowRight className="size-4" aria-hidden="true" /></ButtonLink>
+                  <p className="mt-1 text-small text-ink-2">{copy.sold.openPackHint}</p>
+                </div>
+              )}
               {offers.length > 0 && <p className="mt-3 text-small text-ink-2">{copy.sold.refund}</p>}
             </Card>
           </motion.div>

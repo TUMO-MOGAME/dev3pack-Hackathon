@@ -566,3 +566,32 @@ dialog.drawer::backdrop {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------------------------------
+   Print: a page holding a .print-sheet (the handover pack) prints only
+   that sheet, black on white, without the app's frame (sidebar, top
+   bar, demo guide, chat button, toasts). .print-hide drops on-screen
+   controls; .print-avoid keeps a block on one page.
+------------------------------------------------------------------- */
+@media print {
+  @page { margin: 14mm; }
+  html:has(.print-sheet), body:has(.print-sheet) { background: #ffffff !important; }
+  body:has(.print-sheet) aside,
+  body:has(.print-sheet) header:not(.print-sheet header),
+  body:has(.print-sheet) nav:not(.print-sheet nav),
+  body:has(.print-sheet) dialog,
+  body:has(.print-sheet) [role="status"]:not(.print-sheet [role="status"]),
+  body:has(.print-sheet) [aria-live]:not(.print-sheet [aria-live]),
+  body:has(.print-sheet) a[href="#main"],
+  .print-hide { display: none !important; }
+  body:has(.print-sheet) main { padding: 0 !important; max-width: none !important; }
+  body:has(.print-sheet) .min-h-dvh { min-height: 0 !important; padding-left: 0 !important; }
+  .print-sheet {
+    --bg: #ffffff; --surface: #ffffff; --surface-2: #f2f2f2; --ink: #000000; --ink-2: #404040;
+    --line: #bdbdbd; --line-strong: #767676; --accent: #000000; --accent-ink: #ffffff;
+    max-width: none !important; color: #000000; background: #ffffff; gap: 0.75rem !important;
+  }
+  .print-sheet * { box-shadow: none !important; animation: none !important; transition: none !important; }
+  .print-avoid { break-inside: avoid; }
+  .print-sheet a { text-decoration: none; }
+}
