@@ -88,6 +88,9 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: securityHeaders },
       // The service worker must never be served stale, or a fix to it would not reach installed apps.
       { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }, { key: "Service-Worker-Allowed", value: "/" }] },
+      // Digital Asset Links for the Android app (tech.tumoolo.heirloom): Google's verifier wants application/json.
+      // No middleware or redirects touch /.well-known; the CSP above only governs pages, not this fetch.
+      { source: "/.well-known/assetlinks.json", headers: [{ key: "Content-Type", value: "application/json" }, { key: "Cache-Control", value: "public, max-age=3600" }] },
     ];
   },
 };
