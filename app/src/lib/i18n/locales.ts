@@ -5,6 +5,8 @@
 export const LOCALES = ["en", "zu", "st", "af"] as const;
 export type Locale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "en";
+/** Where the browser remembers the visitor's language (no cookie). */
+export const LOCALE_STORAGE_KEY = "heirloom.lang";
 
 /** Each language named in itself, for the switcher. */
 export const LOCALE_NAMES: Record<Locale, string> = {

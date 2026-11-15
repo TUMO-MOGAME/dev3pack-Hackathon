@@ -429,12 +429,28 @@ button:disabled { cursor: not-allowed; }
 
 /* Staggered CSS-only entrance used above the fold (never waits on JS). */
 .rise { animation: rise var(--dur-slow) var(--ease-out) both; animation-delay: calc(var(--i, 0) * 90ms); }
+/* A chat message arriving, as CSS so a server-rendered opening message needs no JavaScript (same as the motion fade).
+   It starts all but transparent rather than at 0: browsers skip a fully transparent first paint when timing the
+   largest paint, which would count this message as arriving only when the app replaces it. */
+@keyframes bubble-in {
+  from { opacity: 0.01; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.bubble-in { animation: bubble-in 0.25s var(--ease-out) both; }
 
 .skeleton {
   border-radius: var(--r-sm);
   background: var(--surface-2);
   animation: pulse-soft 1.6s ease-in-out infinite;
 }
+
+/* A first demo visit (<html data-fresh>, set before paint; lib/service/fresh-visit.ts): the shared Gate shows the
+   server-rendered first screen (.fresh-only) instead of its loading frame (.fresh-hide) until the app takes over.
+   Both wrappers lay out as if absent. */
+.fresh-only { display: none; }
+.fresh-hide { display: contents; }
+:root[data-fresh] .fresh-only { display: contents; }
+:root[data-fresh] .fresh-hide { display: none; }
 
 /* Solid inverted block (vault hero, proof band, guide bar, confirmed payment): black by day, white at night. */
 .brand-panel {

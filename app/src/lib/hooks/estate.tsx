@@ -7,6 +7,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getService, type EstateSnapshot, type HeirloomService } from "../service";
 import { isMockService } from "../service/is-mock";
+import { isFreshDemoVisit } from "../service/fresh-visit";
+import { chainConfig } from "../chain/config";
 import type { DemoStage } from "../service/mock";
 import type { FxRate, Role, WalletSession } from "../types";
 import { useWallet } from "./wallet-source";
@@ -62,6 +64,16 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
   const session = wallet.session;
   const [service, setService] = useState<HeirloomService | null>(null);
   const [phase, setPhase] = useState<EstateCtx["phase"]>("loading");
+  // A first demo visit has no estate yet, so the "no estate" screen can show as soon as the wallet is ready rather than
+  // after the demo service's code has downloaded (a slow phone notices). The service still loads and confirms it.
+  // Never in chain mode. Set after hydration (the demo guide renders by phase, so the first render must match the server).
+  const assumedEmpty = useRef(false);
+  useEffect(() => {
+    if (chainConfig.dataMode !== "mock" || !isFreshDemoVisit()) return;
+    assumedEmpty.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPhase((p) => (p === "loading" ? "empty" : p));
+  }, []);
   const [snap, setSnap] = useState<EstateSnapshot | null>(null);
   const [fx, setFx] = useState<FxRate | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -112,7 +124,7 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
     if (quiet && inFlight.current > 0) return;
     const seq = ++loadSeq.current;
     inFlight.current++;
-    if (!quiet) setPhase((p) => (p === "ready" ? p : "loading"));
+    if (!quiet && !assumedEmpty.current) setPhase((p) => (p === "ready" ? p : "loading"));
     try {
       if (isMockService(service)) {
         service.setActor(address && sessionRole && sessionLabel ? { address, role: sessionRole, label: sessionLabel } : null);
@@ -152,6 +164,7 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
       setPhase("error");
     } finally {
       inFlight.current--;
+      assumedEmpty.current = false;
     }
   }, [service, address, sessionRole, sessionLabel, sessionUsdt]);
 
@@ -192,8 +205,10 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
   }, [service, errors, load, wallet, notify, explain]);
 
   const resetDemo = useCallback(async (stage: DemoStage) => {
-    if (!isMockService(service)) return;
-    service.resetDemo(stage);
+    // On a first visit the "no estate" screen can show before the service has loaded: wait for it here.
+    const svc = service ?? (chainConfig.dataMode === "mock" ? await getService().catch(() => null) : null);
+    if (!isMockService(svc)) return;
+    svc.resetDemo(stage);
     await load(false);
   }, [service, load]);
 
