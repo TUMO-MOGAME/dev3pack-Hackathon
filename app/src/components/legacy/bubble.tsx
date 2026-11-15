@@ -12,7 +12,7 @@ export function Bubble({ role, text, voice = "parent", source, copy, called, act
   if (role === "user") {
     return (
       <li className="flex justify-end">
-        <p className="max-w-[85%] whitespace-pre-line rounded-[1.25rem] rounded-br-md bg-accent px-4 py-2.5 text-accent-ink">
+        <p className="max-w-[85%] whitespace-pre-line rounded-[1.25rem] rounded-br-md bg-ink px-4 py-2.5 text-bg">
           <span className="sr-only">{copy.child.you}: </span>{text}
         </p>
       </li>

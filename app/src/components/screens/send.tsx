@@ -129,7 +129,7 @@ function Send({ copy }: { copy: Copy }) {
   return (
     <div className="mx-auto max-w-md">
       <PageHeader eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />
-      <p className="mb-4 flex items-center gap-2 rounded-full bg-surface-2 px-4 py-2 text-small"><Wallet className="size-4 text-accent" aria-hidden="true" />{copy.wallet}: <span className="font-semibold tabular-nums">{formatUsdt(walletUsdt)}</span></p>
+      <p className="mb-4 flex items-center gap-2 rounded-full bg-surface-2 px-4 py-2 text-small"><Wallet className="size-4 text-amber" aria-hidden="true" />{copy.wallet}: <span className="font-semibold tabular-nums">{formatUsdt(walletUsdt)}</span></p>
 
       <Card className="mb-4">
         <form onSubmit={askWallet}>

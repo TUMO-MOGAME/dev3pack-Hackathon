@@ -7,7 +7,7 @@ export const assets = {
   meta: { title: "Assets" },
   eyebrow: "Assets",
   list: {
-    title: "Things to sell",
+    title: "Things to *sell*",
     body: "Everything the estate will sell for the family, never below the price that was set.",
     add: "Add an asset",
     current: "Showing",
@@ -20,7 +20,7 @@ export const assets = {
     Car: "Car", Motorbike: "Motorbike", Furniture: "Furniture", Jewellery: "Jewellery", Electronics: "Electronics", Other: "Other",
   },
   add: {
-    title: "Add an asset",
+    title: "Add an *asset*",
     body: "Add something you want sold after your death. The estate holds its digital title and sells it for your family.",
     kindLegend: "What is it?",
     titleLabel: "Name",

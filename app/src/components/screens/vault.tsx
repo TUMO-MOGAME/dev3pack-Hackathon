@@ -57,7 +57,7 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
     <div className="mx-auto max-w-3xl">
       <PageHeader eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card className="border-ink bg-surface-2">
+        <Card>
           <p className="flex items-center gap-2 text-small font-semibold text-accent"><Landmark className="size-4" aria-hidden="true" />{copy.balance}</p>
           <motion.div key={e.vaultBalance.toString()} initial={{ y: 4 }} animate={{ y: 0 }}><Money base={e.vaultBalance} rate={rate} size="lg" className="mt-1" /></motion.div>
         </Card>
@@ -118,7 +118,7 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
 
       {snap.rules.length > 0 && (
         <Card className="mt-4">
-          <h2 className="flex items-center gap-2 text-h3"><ShieldCheck className="size-5 text-accent" aria-hidden="true" />{copy.covers.title}</h2>
+          <h2 className="flex items-center gap-2 text-h3"><ShieldCheck className="size-5 text-amber" aria-hidden="true" />{copy.covers.title}</h2>
           <p className="mt-1 text-ink-2">{fmt(copy.covers.body, { total: formatUsdt(promised, { decimals: 0 }), pct: Math.round(cover * 100) })}</p>
           <div className="mt-3"><Meter value={cover} label={copy.covers.meter} tone={cover >= 1 ? "accent" : "brass"} /></div>
         </Card>

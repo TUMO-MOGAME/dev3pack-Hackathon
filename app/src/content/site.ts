@@ -20,6 +20,8 @@ export const site = {
     home: "Heirloom home",
     skip: "Skip to content",
     menu: "Main menu",
+    /** The day / night switch in the header (a switch: on = dark). */
+    darkMode: "Dark mode",
   },
   footer: {
     blurb:
@@ -27,8 +29,10 @@ export const site = {
     linksTitle: "Heirloom",
     legalTitle: "Legal",
     links: [
+      { href: "/#purposes", label: "What it pays for" },
       { href: "/#how", label: "How it works" },
       { href: "/#safety", label: "Safety" },
+      { href: "/#proof", label: "Proof" },
       { href: "/start", label: "Try the demo" },
     ],
     legal: [
@@ -49,11 +53,13 @@ export const site = {
     programId: process.env.NEXT_PUBLIC_HEIRLOOM_PROGRAM_ID ?? "b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY",
     rights: "Heirloom. Hackathon prototype, W3Node Cape Town 2026.",
     // Flaticon free licence: attribution required wherever the icons appear.
+    /** Shown on the landing page, the only page with photos. */
+    photoCredit: "Photos: Unsplash",
     iconCredit: { label: "Icons: Uicons by Flaticon", linkText: "flaticon.com/uicons", href: "https://www.flaticon.com/uicons" },
   },
   notFound: {
     eyebrow: "Page not found",
-    title: "This page isn't part of the estate.",
+    title: "This page isn't part of the *estate*.",
     body: "The link may be old, or the page may have moved. Nothing has been lost. Your vault and rules are exactly where you left them.",
     home: "Back to the start",
     app: "Open my estate",
@@ -66,7 +72,7 @@ export const site = {
     { src: "/screenshots/wide-estate.webp", sizes: "2560x1600", formFactor: "wide", label: "The estate on a larger screen" },
   ],
   offline: {
-    title: "You're offline",
+    title: "You're *offline*",
     body: "Heirloom needs a connection to read the vault and send instructions. Your wallet and rules are safe. Reconnect and try again.",
     retry: "Try again",
   },

@@ -2,6 +2,8 @@
 import Link from "next/link";
 import type { SiteCopy } from "@/content/site";
 import { ButtonLink, Logo } from "@/components/ui/primitives";
+import { Moon, Sun } from "@/components/ui/icons";
+import { setTheme, useTheme } from "@/components/shell/theme";
 import { useLocalized } from "@/lib/i18n/client";
 import { LanguageSwitcher } from "./language-switcher";
 
@@ -10,9 +12,9 @@ import { LanguageSwitcher } from "./language-switcher";
 export function SiteHeader({ site: english, minimal = false }: { site: SiteCopy; minimal?: boolean }) {
   const site = useLocalized(english, (t) => t.site);
   return (
-    <header className="pt-safe sticky top-0 z-40 border-b border-ink bg-bg">
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-accent focus:px-4 focus:py-2.5 focus:text-accent-ink">{site.nav.skip}</a>
-      <div className="mx-auto flex h-[var(--header-h)] w-full max-w-6xl items-center gap-2 px-4 min-[400px]:gap-3">
+    <header className="pt-safe sticky top-0 z-40 border-b border-line bg-bg">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-ink focus:px-4 focus:py-2.5 focus:text-bg">{site.nav.skip}</a>
+      <div className="mx-auto flex h-[var(--header-h)] w-full max-w-6xl items-center gap-1.5 px-3 min-[400px]:gap-3 min-[400px]:px-4">
         {/* Below 400px the wordmark gives way to the language switcher; the link keeps its accessible name. */}
         <Link href="/" aria-label={site.nav.home} className="shrink-0 rounded-full"><Logo name={site.name} className="max-[400px]:[&>span:last-child]:hidden" /></Link>
         {!minimal && (
@@ -23,56 +25,76 @@ export function SiteHeader({ site: english, minimal = false }: { site: SiteCopy;
           </nav>
         )}
         <LanguageSwitcher className="ml-auto" />
+        <ThemeSwitch label={site.nav.darkMode} />
         <ButtonLink href="/start" small className="shrink-0">{site.nav.open}</ButtonLink>
       </div>
     </header>
   );
 }
 
-export function SiteFooter({ site: english }: { site: SiteCopy }) {
+/** Day / night, as on the sidebar: a switch that is on when the page is dark (the default). */
+function ThemeSwitch({ label }: { label: string }) {
+  const { dark } = useTheme();
+  return (
+    <button
+      type="button" role="switch" aria-checked={dark} aria-label={label} title={label}
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      className="grid size-10 shrink-0 place-items-center min-[400px]:size-11 rounded-full border border-line text-ink hover:bg-surface-2"
+    >
+      {dark ? <Moon className="size-[18px]" /> : <Sun className="size-[18px]" />}
+    </button>
+  );
+}
+
+export function SiteFooter({ site: english, photoCredit = false }: { site: SiteCopy; photoCredit?: boolean }) {
   const site = useLocalized(english, (t) => t.site);
   const f = site.footer;
+  const heading = "font-sans text-[0.75rem] font-semibold uppercase leading-none tracking-[0.14em] text-ink";
+  const link = "inline-flex min-h-11 items-center text-small text-ink-2 underline-offset-4 hover:text-ink hover:underline";
   return (
-    <footer className="border-t border-ink bg-surface">
-      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 md:grid-cols-[1.3fr_0.7fr_0.7fr_1.5fr]">
+    <footer className="border-t border-line bg-bg text-ink-2">
+      <div className="mx-auto grid w-[min(1160px,100%_-_2*clamp(16px,4vw,40px))] gap-7 pb-6 pt-10 md:grid-cols-[1.2fr_1fr_1fr]">
         <div>
-          <Logo name={site.name} />
-          <p className="mt-3 max-w-sm text-small text-ink-2">{f.blurb}</p>
-          <p className="mt-4 inline-flex rounded-full border border-ink px-3 py-1.5 text-small font-semibold">{f.builtWith}</p>
-          <p className="mt-3 text-small text-ink-2">{f.program}:{" "}<a href={`https://explorer.solana.com/address/${f.programId}?cluster=devnet`} target="_blank" rel="noreferrer noopener" className="break-all font-mono text-ink underline underline-offset-4">{f.programId}</a></p>
+          <Link href="/" aria-label={site.nav.home} className="inline-flex rounded-full text-ink"><Logo name={site.name} /></Link>
+          <p className="mt-3.5 max-w-[42ch] text-small">{f.blurb}</p>
+          <p className="mt-3 text-small">{f.builtWith}</p>
+          <p className="mt-2 text-small">{f.program}:{" "}<a href={`https://explorer.solana.com/address/${f.programId}?cluster=devnet`} target="_blank" rel="noreferrer noopener" className="break-all font-mono text-ink underline underline-offset-4">{f.programId}</a></p>
         </div>
         <nav aria-label={f.linksTitle}>
-          <h2 className="font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{f.linksTitle}</h2>
-          <ul className="mt-2">
+          <h2 className={heading}>{f.linksTitle}</h2>
+          <ul className="mt-1.5">
             {f.links.map((l) => (
-              <li key={l.href}><Link href={l.href} className="inline-flex min-h-11 items-center text-small font-medium underline-offset-4 hover:underline">{l.label}</Link></li>
+              <li key={l.href}><Link href={l.href} className={link}>{l.label}</Link></li>
             ))}
           </ul>
         </nav>
         <nav aria-label={f.legalTitle}>
-          <h2 className="font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{f.legalTitle}</h2>
-          <ul className="mt-2">
+          <h2 className={heading}>{f.legalTitle}</h2>
+          <ul className="mt-1.5">
             {f.legal.map((l) => (
-              <li key={l.href}><Link href={l.href} className="inline-flex min-h-11 items-center text-small font-medium underline-offset-4 hover:underline">{l.label}</Link></li>
+              <li key={l.href}><Link href={l.href} className={link}>{l.label}</Link></li>
             ))}
           </ul>
         </nav>
-        <div>
-          <h2 className="font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{f.ectaTitle}</h2>
-          <dl className="mt-3 grid gap-1.5 text-small">
+        <div className="border-t border-line pt-5 md:col-span-3">
+          <h2 className={heading}>{f.ectaTitle}</h2>
+          <dl className="mt-3 grid gap-x-8 gap-y-1.5 text-small sm:grid-cols-2 lg:grid-cols-3">
             {f.ecta.map((row) => (
               <div key={row.term} className="grid grid-cols-[9.5rem_1fr] gap-2 max-[380px]:grid-cols-1 max-[380px]:gap-0">
-                <dt className="text-ink-2">{row.term}</dt>
-                <dd className="break-words font-medium">{row.value}</dd>
+                <dt>{row.term}</dt>
+                <dd className="break-words font-medium text-ink">{row.value}</dd>
               </div>
             ))}
           </dl>
         </div>
       </div>
       <div className="pb-safe border-t border-line">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap justify-between gap-x-6 gap-y-1 px-4 py-4 text-small text-ink-2">
+        <div className="mx-auto flex w-[min(1160px,100%_-_2*clamp(16px,4vw,40px))] flex-wrap justify-between gap-x-6 gap-y-1 py-4 text-small">
           <p>© 2026 {f.rights}</p>
-          <p>{f.iconCredit.label} (<a href={f.iconCredit.href} target="_blank" rel="noreferrer noopener" className="text-ink underline underline-offset-4">{f.iconCredit.linkText}</a>)</p>
+          <p>
+            {photoCredit && <>{f.photoCredit} · </>}
+            {f.iconCredit.label} (<a href={f.iconCredit.href} target="_blank" rel="noreferrer noopener" className="text-ink underline underline-offset-4">{f.iconCredit.linkText}</a>)
+          </p>
         </div>
       </div>
     </footer>

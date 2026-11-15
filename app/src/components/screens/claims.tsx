@@ -146,7 +146,7 @@ function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; 
   return (
     <motion.li layout className="rounded-lg border border-line bg-surface p-4 shadow-card">
       <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent"><Icon className="size-5" aria-hidden="true" /></span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-sm bg-surface-2 text-amber"><Icon className="size-5" aria-hidden="true" /></span>
         <div className="min-w-0 flex-1">
           <p className="font-semibold tabular-nums">{formatUsdt(claim.amount)}{rate ? <span className="block text-small font-normal text-ink-2">≈ {formatZar(claim.amount, rate)}</span> : null}</p>
           <p className="text-small text-ink-2">{fmt(copy.card.to, { payee })} · {fmt(copy.card.forWho, { name: who })}</p>
@@ -280,14 +280,14 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
                 return (
                   <label key={r.address} className={clsx("flex min-h-16 cursor-pointer items-center gap-3 rounded-md border p-3 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--focus)]", ruleAddr === r.address ? "border-accent bg-accent-soft" : "border-line-strong", !usable(r) && "cursor-not-allowed opacity-60")}>
                     <input type="radio" name="claim-rule" className="sr-only" disabled={!usable(r)} checked={ruleAddr === r.address} onChange={() => { setRuleAddr(r.address); setPayee(""); }} />
-                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface text-accent"><Icon className="size-5" aria-hidden="true" /></span>
+                    <span className="grid size-10 shrink-0 place-items-center rounded-sm bg-surface-2 text-amber"><Icon className="size-5" aria-hidden="true" /></span>
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-2 font-semibold">{common.status.category[r.category]}<Badge tone={r.startsNow ? "gold" : "neutral"}>{r.startsNow ? w.rule.now : w.rule.later}</Badge></span>
-                      {!usable(r) && <span className="block text-small font-medium text-brass">{fmt(w.rule.notYet, { owner: snap.estate.ownerName.split(" ")[0] })}</span>}
+                      {!usable(r) && <span className="block text-small font-medium text-amber-ink">{fmt(w.rule.notYet, { owner: snap.estate.ownerName.split(" ")[0] })}</span>}
                       <span className="block text-small text-ink-2">{fmt(w.rule.left, { amount: formatUsdt(r.lifetimeCap - r.spentTotal, { decimals: 0 }) })} · {fmt(w.rule.perClaim, { amount: formatUsdt(r.maxPerClaim, { decimals: 0 }) })}</span>
                       <YearlyLeft rule={r} className="block text-small text-ink-2" />
                     </span>
-                    {ruleAddr === r.address && <Check className="size-5 shrink-0 text-accent" aria-hidden="true" />}
+                    {ruleAddr === r.address && <Check className="size-5 shrink-0 text-amber" aria-hidden="true" />}
                   </label>
                 );
               })}
@@ -308,7 +308,7 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
                       <span className="block font-semibold">{p.name}</span>
                       <span className="block text-small text-ink-2">{common.status.payeeKind[p.kind]}</span>
                     </span>
-                    {payee === p.wallet && <Check className="size-5 shrink-0 text-accent" aria-hidden="true" />}
+                    {payee === p.wallet && <Check className="size-5 shrink-0 text-amber" aria-hidden="true" />}
                   </label>
                 ))}
               </div>
@@ -370,7 +370,7 @@ function OwnerApproval({ claim, snap, copy }: { claim: Claim; snap: EstateSnapsh
   const payee = snap.payees.find((p) => p.wallet === claim.payee)?.name ?? "";
   const who = snap.beneficiaries.find((b) => b.wallet === claim.beneficiary)?.label ?? "";
   return (
-    <motion.li layout className="rounded-xl border border-ink bg-surface p-4">
+    <motion.li layout className="rounded-lg border border-line bg-surface p-4 shadow-card">
       <p className="text-h3 font-display tabular-nums">{formatUsdt(claim.amount)}{rate ? <span className="ml-2 font-sans text-small text-ink-2">≈ {formatZar(claim.amount, rate)}</span> : null}</p>
       <p className="font-semibold">{fmt(copy.card.to, { payee })}</p>
       <p className="text-small text-ink-2">{fmt(copy.owner.forWho, { name: who, category: rule ? common.status.category[rule.category].toLowerCase() : "" })}</p>

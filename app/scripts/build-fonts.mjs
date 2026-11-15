@@ -6,10 +6,14 @@
  *
  * It does what next/font/google did at build time (same Google Fonts files, same unicode-range slices, same
  * size-adjusted fallbacks), with one change: the ₮ of "USD₮" (U+20AE, on almost every screen) sits in each
- * family's latin-ext slice, so every page used to download latin-ext Fraunces (~59 KB) and Geist (~17 KB) for that
- * one glyph. Here ₮ is cut out of the latin-ext file into its own ~1 KB face (every weight and optical size kept:
+ * family's latin-ext slice, so every page used to download latin-ext Geist (~17 KB) for that one glyph. Here ₮ is cut out of the latin-ext file into its own ~1 KB face (every weight and optical size kept:
  * the variation axes are preserved), and the latin-ext face no longer lists U+20AE. Text renders exactly as before;
  * latin-ext only loads when a page really has such a letter (a name with a diacritic, the Sesotho "ō").
+ *
+ * Work Sans (the display face: headings, big numbers, quotes) is downloaded as its latin slice only (weights
+ * 300-700). It has no ₮, so the display stack is "Work Sans", "Work Sans Fallback", then Geist: the fallback face
+ * is limited to the same latin range, so a ₮ (or a latin-ext letter) in a heading falls through to Geist's tiny
+ * tugrik face (or its latin-ext file) instead of a system font.
  *
  * The Google Fonts CSS API is only contacted here, never by visitors: the site serves every file itself.
  */
@@ -26,8 +30,9 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const TUGRIK = "₮";
 
 const FAMILIES = [
-  { family: "Fraunces", slug: "fraunces", query: "Fraunces:opsz,wght@9..144,100..900", variable: "--font-display-face",
-    fallback: "src:local(Times New Roman);ascent-override:84.71%;descent-override:22.09%;line-gap-override:0.0%;size-adjust:115.45%" },
+  // Fallback metrics: next/font's calculateSizeAdjustValues("Work Sans") (Arial, size-adjust 111.93%).
+  { family: "Work Sans", slug: "work-sans", query: "Work+Sans:wght@300..700", variable: "--font-display-face", subsets: ["latin"],
+    fallback: "src:local(Arial);ascent-override:83.09%;descent-override:21.71%;line-gap-override:0.0%;size-adjust:111.93%" },
   { family: "Geist", slug: "geist", query: "Geist:wght@100..900", variable: "--font-body",
     fallback: "src:local(Arial);ascent-override:95.94%;descent-override:28.16%;line-gap-override:0.0%;size-adjust:104.76%" },
   { family: "Geist Mono", slug: "geist-mono", query: "Geist+Mono:wght@100..900", variable: "--font-mono-face",
@@ -56,7 +61,9 @@ for (const f of FAMILIES) {
   const text = await res.text();
   const blocks = [...text.matchAll(/\/\*\s*([\w-]+)\s*\*\/\s*@font-face\s*\{([^}]*)\}/g)];
   if (!blocks.length) throw new Error(`${f.family}: no @font-face in the API answer`);
+  let latinRange = null;
   for (const [, subset, body] of blocks) {
+    if (f.subsets && !f.subsets.includes(subset)) continue;
     const url = body.match(/url\(([^)]+)\)/)[1];
     let range = body.match(/unicode-range:\s*([^;]+);/)[1].trim();
     const weight = body.match(/font-weight:\s*([^;]+);/)[1].trim();
@@ -72,10 +79,12 @@ for (const f of FAMILIES) {
       range = without(range, 0x20ae);
       console.log(`[fonts] ${f.family} ₮: ${data.length} B latin-ext -> ${glyph.length} B`);
     }
+    if (subset === "latin") latinRange = range;
     css.push(`@font-face{font-family:"${f.family}";font-style:${style};font-weight:${weight};font-display:swap;src:url(/fonts/${file}) format("woff2");unicode-range:${range}}`);
     console.log(`[fonts] ${f.family} ${subset}: ${data.length} B`);
   }
-  css.push(`@font-face{font-family:"${f.family} Fallback";${f.fallback}}`);
+  // A latin-only family's fallback covers only that range, so other glyphs (₮) fall through to the next family.
+  css.push(`@font-face{font-family:"${f.family} Fallback";${f.fallback}${f.subsets && latinRange ? `;unicode-range:${latinRange}` : ""}}`);
   vars.push(`${f.variable}:"${f.family}", "${f.family} Fallback"`);
 }
 css.push(`:root{${vars.join(";")}}`);

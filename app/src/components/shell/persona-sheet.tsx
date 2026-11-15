@@ -156,7 +156,7 @@ export function PersonaSheet({ open, onClose }: { open: boolean; onClose: () => 
         <fieldset>
           <legend className="mb-2 text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{c.theme}</legend>
           <div className="flex rounded-full border border-line-strong bg-surface p-1">
-            {(["system", "light", "dark"] as const).map((t) => (
+            {(["dark", "light", "system"] as const).map((t) => (
               <label key={t} className={clsx("flex min-h-10 flex-1 cursor-pointer items-center justify-center rounded-full text-small font-semibold has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--focus)]", theme === t ? "bg-ink text-bg" : "text-ink-2")}>
                 <input type="radio" name="theme" value={t} checked={theme === t} onChange={() => setTheme(t)} className="sr-only" />
                 {t === "system" ? c.themeSystem : t === "light" ? c.themeLight : c.themeDark}
@@ -166,7 +166,7 @@ export function PersonaSheet({ open, onClose }: { open: boolean; onClose: () => 
         </fieldset>
 
         {install.state !== "installed" && install.state !== "unsupported" && (
-          <section className="rounded-lg border border-line bg-surface-2 p-3.5">
+          <section className="rounded-lg border border-line bg-surface p-3.5">
             <h3 className="font-sans text-body font-semibold tracking-normal">{common.install.title}</h3>
             <p className="mt-1 text-small text-ink-2">{install.state === "ios" ? common.install.ios : common.install.body}</p>
             {install.state === "ready" && (

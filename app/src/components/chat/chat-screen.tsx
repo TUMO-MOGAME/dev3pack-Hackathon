@@ -42,7 +42,7 @@ function Chat({ pending = false }: { pending?: boolean }) {
         <div className="flex flex-1 flex-col">
           {!pending && <NudgeStack className="mx-auto w-full max-w-xl pt-3" />}
           <div className="flex flex-1 flex-col items-center justify-center gap-4 py-6 text-center sm:gap-5 sm:py-8">
-            <h1 className="rise rounded-xl border border-ink px-7 py-4 text-display leading-none sm:px-10">{siteName}</h1>
+            <h1 className="rise text-display leading-none">{siteName}</h1>
             <p className="rise max-w-xl text-lead text-ink-2" style={{ "--i": 1 } as React.CSSProperties}>{h.subtitle}</p>
             <div className="rise flex max-w-2xl justify-center [&>div]:justify-center max-sm:[&_button:nth-child(n+4)]:hidden" style={{ "--i": 2 } as React.CSSProperties}>
               {/* Suggestions depend on who is acting; until the wallet loads their row is kept empty. */}

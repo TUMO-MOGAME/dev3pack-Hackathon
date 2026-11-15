@@ -2,6 +2,7 @@ import { landing } from "@/content/landing";
 import { site } from "@/content/site";
 import { SiteFooter, SiteHeader } from "@/components/site/site-chrome";
 import { LandingBody } from "@/components/site/landing-body";
+import "./landing.css";
 
 export default function LandingPage() {
   const structured = {
@@ -18,7 +19,7 @@ export default function LandingPage() {
     <>
       <SiteHeader site={site} />
       <LandingBody copy={landing} />
-      <SiteFooter site={site} />
+      <SiteFooter site={site} photoCredit />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structured) }} />
     </>
   );

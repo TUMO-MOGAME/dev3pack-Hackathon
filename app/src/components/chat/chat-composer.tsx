@@ -92,7 +92,7 @@ export function ChatComposer({ onSend, disabled }: { onSend: (text: string, opts
   };
 
   return (
-    <form onSubmit={submit} className="rounded-[1.75rem] border border-ink bg-surface p-2 shadow-raised focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus)]">
+    <form onSubmit={submit} className="rounded-[1.75rem] border border-line-strong bg-surface p-2 shadow-raised focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus)]">
       {file && (
         <div className="mb-1 rounded-[1.25rem] border border-line-strong p-2.5">
           <div className="flex items-center gap-2">

@@ -12,6 +12,7 @@ import { Badge, Button, Card, Consent, Eyebrow, Field, inputClass, Notice } from
 import { Sheet } from "@/components/ui/client";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { usePin } from "@/components/shell/pin-gate";
+import { Marked } from "@/components/ui/marked";
 
 type Step = "choose" | "about" | "pin" | "seed" | "phone";
 type SignWith = "wdk" | "phone";
@@ -139,10 +140,10 @@ export function StartScreen({ copy: english }: { copy: ScreensCopy["start"] }) {
           {step === "choose" && (
             <>
               <Eyebrow>{copy.eyebrow}</Eyebrow>
-              <h1 className="mt-2 text-h1">{copy.title}</h1>
+              <h1 className="mt-2 text-h1"><Marked text={copy.title} /></h1>
               <p className="mt-3 text-lead text-ink-2">{copy.body}</p>
               <div className="mt-6 grid gap-4">
-                <Card className="border-ink bg-surface-2">
+                <Card>
                   <div className="flex items-start gap-3.5">
                     <span className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-accent-ink"><UsersRound className="size-6" aria-hidden="true" /></span>
                     <div className="min-w-0">

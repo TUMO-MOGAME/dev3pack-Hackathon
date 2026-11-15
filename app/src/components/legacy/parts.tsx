@@ -47,7 +47,7 @@ export function PlayButton({ playing, onPlay, onStop, label, stopLabel, disabled
   return (
     <button
       type="button" disabled={disabled} onClick={playing ? onStop : onPlay} aria-pressed={playing}
-      className={clsx("inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full font-semibold transition-colors disabled:opacity-50", small ? "px-3.5 text-small" : "px-5", playing ? "border-2 border-ink bg-surface text-ink" : "bg-accent text-accent-ink hover:bg-accent-hover")}
+      className={clsx("inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full font-semibold transition-colors disabled:opacity-50", small ? "px-3.5 text-small" : "px-5", playing ? "border-2 border-ink bg-surface text-ink" : "bg-ink text-bg hover:bg-ink-hover")}
     >
       {playing ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
       {playing ? stopLabel : label}

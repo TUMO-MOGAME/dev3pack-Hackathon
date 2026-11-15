@@ -48,7 +48,7 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
       <PageHeader eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />
       <div className="grid gap-5 md:grid-cols-2">
         <Card className="md:col-span-2">
-          <h2 className="flex items-center gap-2 text-h3"><ShieldCheck className="size-5 text-accent" aria-hidden="true" />{copy.trusted.title}</h2>
+          <h2 className="flex items-center gap-2 text-h3"><ShieldCheck className="size-5 text-amber" aria-hidden="true" />{copy.trusted.title}</h2>
           <p className="mt-1 text-ink-2">{copy.trusted.body}</p>
           <ul className="mt-4 grid gap-3 sm:grid-cols-3">
             {e.verifierNames.map((name, i) => { const n = vacant(i) ? gc.vacant : name; return (
@@ -75,7 +75,7 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
         <GuardiansPeople snap={snap} />
 
         <Card>
-          <h2 className="flex items-center gap-2 text-h3"><UsersRound className="size-5 text-accent" aria-hidden="true" />{copy.family.title}</h2>
+          <h2 className="flex items-center gap-2 text-h3"><UsersRound className="size-5 text-amber" aria-hidden="true" />{copy.family.title}</h2>
           <p className="mt-1 text-ink-2">{copy.family.body}</p>
           <ul className="mt-3 flex flex-col">
             {snap.beneficiaries.map((b) => {
@@ -95,7 +95,7 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
         </Card>
 
         <Card>
-          <h2 className="flex items-center gap-2 text-h3"><Building2 className="size-5 text-accent" aria-hidden="true" />{copy.payees.title}</h2>
+          <h2 className="flex items-center gap-2 text-h3"><Building2 className="size-5 text-amber" aria-hidden="true" />{copy.payees.title}</h2>
           <p className="mt-1 text-ink-2">{copy.payees.body}</p>
           {snap.payees.length === 0 ? <p className="mt-3 text-ink-2">{copy.payees.empty}</p> : (
             <ul className="mt-3 flex flex-col">

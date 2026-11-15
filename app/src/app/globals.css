@@ -1,64 +1,73 @@
 @import "tailwindcss";
 
 /* ------------------------------------------------------------------
-   Heirloom design tokens: pure black and white.
-   No hue and no colour blends anywhere. Light is a white page with black
-   ink; dark is a black page with white ink. Neutral greys (R = G = B)
-   are used only for secondary text, rules and one subtle surface step.
-   The token NAMES are kept from the earlier palette (accent, brand,
-   gold, ember, brass, danger, ok) so components keep working; every one
-   now resolves to black, white or a neutral grey. Meaning is carried by
-   shape, weight, rule style, icon and the word, never by colour:
-     danger / blocked  thick rule or solid inverted block + warning icon
-     success           solid outline + filled tick
-     pending / warning dashed rule + clock or warning icon
-     emphasis          solid inverted block (.brand-panel)
-   scripts/contrast.mjs checks every pair (WCAG 2.1 AA) and fails on any
-   hue or colour blend. Run it after changing a colour.
+   Heirloom design tokens (design/landing/index.html, the approved redesign).
+   One flat page colour everywhere: pure white by day, pure black at night.
+   No tinted section bands and no colour blends anywhere. Cards are the page
+   colour set apart by a hairline (plus a soft shadow by day only).
+
+   Default is DARK. The bare :root holds the night tokens, so the server
+   HTML, a page without JavaScript and the first paint are all dark. A
+   saved choice sets <html data-theme> before first paint (layout.tsx):
+     data-theme="light"   day tokens
+     data-theme="system"  day tokens only when the device prefers light
+     data-theme="dark"    the default, made explicit
+
+   Accent: amber. --amber for large text, icons, underlines and big
+   numbers; --amber-ink for small text (links, eyebrows); --on-amber is
+   text on an amber fill. Primary buttons stay ink on page. --accent is
+   the app's accent alias (= --amber-ink); --ok / --ok-soft is the green
+   success pill. Status never relies on colour alone: shape, icon and the
+   word carry it (see Badge / Notice in components/ui/primitives.tsx).
+
+   Inverted: --strip / --strip-ink / --ink-2-inv / --amber-inv is a band
+   that is black by day and white at night. .brand-panel is the general
+   inverted block: it swaps in the other theme's tokens wholesale.
+
+   scripts/contrast.mjs checks every text/background pair (WCAG 2.1 AA) in
+   both themes, the strip and the inverted panel, that the duplicated
+   blocks stay in step, and that only neutral, amber and green colours
+   (and no colour blends) appear. Run it after changing a colour.
 ------------------------------------------------------------------- */
 :root {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f2f2f2;
-  --ink: #000000;
-  --ink-2: #595959;
-  --line: #d4d4d4;
-  --line-strong: #767676;
-  --accent: #000000;
-  --accent-hover: #2e2e2e;
-  --accent-ink: #ffffff;
-  --accent-soft: #ebebeb;
-  --brand: #000000;
-  --brand-deep: #000000;
-  --brand-ink: #ffffff;
-  --gold: #000000;
-  --gold-hi: #000000;
-  --gold-ink: #ffffff;
-  --gold-edge: #000000;
-  --gold-soft: #f2f2f2;
-  --ember: #000000;
-  --ember-ink: #ffffff;
-  --brass: #000000;
-  --brass-soft: #f2f2f2;
-  --danger: #000000;
-  --danger-soft: #f2f2f2;
-  --ok: #000000;
-  --ok-soft: #f2f2f2;
-  --focus: #000000;
-  --scrim: rgb(0 0 0 / 0.6);
+  /* Night (the default) */
+  --bg: #000000;
+  --surface: #000000;
+  --surface-2: #161616;
+  --ink: #ffffff;
+  --ink-2: #ababab;
+  --ink-hover: #d6d6d6;
+  --line: #2e2e2e;
+  --line-strong: #8f8f8f;
+  --accent: #f0a35e;
+  --accent-ink: #000000;
+  --accent-soft: #161616;
+  --amber: #f0a35e;
+  --amber-ink: #f0a35e;
+  --on-amber: #000000;
+  --danger: #ffffff;
+  --ok: #6fcf9a;
+  --ok-soft: #0f2a1d;
+  --focus: #f0a35e;
+  --strip: #ffffff;
+  --strip-ink: #000000;
+  --ink-2-inv: #555555;
+  --amber-inv: #c25e12;
+  --scrim: rgb(0 0 0 / 0.72);
   --shadow-1: 0 0 0 0 rgb(0 0 0 / 0);
-  --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.3);
-  --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.4);
-  --shadow-cta: 0 0 0 0 rgb(0 0 0 / 0);
+  --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.6);
+  --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.7);
+  --underline: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 14' preserveAspectRatio='none'%3E%3Cpath d='M3 10 C 80 4, 200 2, 297 6' fill='none' stroke='%23f0a35e' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
+  color-scheme: dark;
 
-  /* Type scale (fluid, mobile first) */
+  /* Type scale (fluid, mobile first; sizes from the redesign, kept modest) */
   --step--1: 0.8125rem;
   --step-0: 1rem;
-  --step-1: 1.125rem;
-  --step-2: 1.375rem;
-  --step-3: clamp(1.625rem, 1.3rem + 1.4vw, 2.125rem);
-  --step-4: clamp(2rem, 1.5rem + 2.4vw, 3rem);
-  --step-5: clamp(2.5rem, 1.6rem + 4.4vw, 4.5rem);
+  --step-1: 1.0625rem;
+  --step-2: 1.25rem;
+  --step-3: clamp(1.625rem, 1.25rem + 1.6vw, 2.25rem);
+  --step-4: clamp(1.75rem, 1.2rem + 2.4vw, 2.75rem);
+  --step-5: clamp(2.125rem, 1.2rem + 4vw, 3.875rem);
 
   /* Spacing */
   --space-1: 0.25rem;
@@ -69,13 +78,13 @@
   --space-8: 2rem;
   --space-12: 3rem;
   --space-16: 4rem;
-  --gutter: 1rem;
+  --gutter: clamp(1rem, 4vw, 2.5rem);
 
-  /* Radius: tight, print-like corners */
-  --r-sm: 0.25rem;
-  --r-md: 0.5rem;
-  --r-lg: 0.75rem;
-  --r-xl: 1rem;
+  /* Radius: soft, rounded (cards 22px, small parts 14px, pills full) */
+  --r-sm: 0.625rem;
+  --r-md: 0.875rem;
+  --r-lg: 1.375rem;
+  --r-xl: 1.75rem;
 
   /* Motion */
   --dur-fast: 140ms;
@@ -93,191 +102,168 @@
   /* Left/right: a phone held sideways puts the camera cut-out or rounded corners at the side. */
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
+}
 
+/* Day: a saved light choice. */
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f3f3f3;
+  --ink: #111111;
+  --ink-2: #555555;
+  --ink-hover: #333333;
+  --line: #e0e0e0;
+  --line-strong: #767676;
+  --accent: #9c4a12;
+  --accent-ink: #ffffff;
+  --accent-soft: #f3f3f3;
+  --amber: #c25e12;
+  --amber-ink: #9c4a12;
+  --on-amber: #ffffff;
+  --danger: #111111;
+  --ok: #2f6b4f;
+  --ok-soft: #e6f2eb;
+  --focus: #9c4a12;
+  --strip: #000000;
+  --strip-ink: #ffffff;
+  --ink-2-inv: #ababab;
+  --amber-inv: #f0a35e;
+  --scrim: rgb(0 0 0 / 0.6);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.05), 0 12px 32px -16px rgb(0 0 0 / 0.22);
+  --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.3);
+  --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.4);
+  --underline: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 14' preserveAspectRatio='none'%3E%3Cpath d='M3 10 C 80 4, 200 2, 297 6' fill='none' stroke='%23c25e12' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
   color-scheme: light;
 }
 
-/* Inverted block: the opposite theme's tokens, for solid emphasis panels. */
+/* Day: a saved "system" choice on a device that prefers light. */
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f3f3f3;
+    --ink: #111111;
+    --ink-2: #555555;
+    --ink-hover: #333333;
+    --line: #e0e0e0;
+    --line-strong: #767676;
+    --accent: #9c4a12;
+    --accent-ink: #ffffff;
+    --accent-soft: #f3f3f3;
+    --amber: #c25e12;
+    --amber-ink: #9c4a12;
+    --on-amber: #ffffff;
+    --danger: #111111;
+    --ok: #2f6b4f;
+    --ok-soft: #e6f2eb;
+    --focus: #9c4a12;
+    --strip: #000000;
+    --strip-ink: #ffffff;
+    --ink-2-inv: #ababab;
+    --amber-inv: #f0a35e;
+    --scrim: rgb(0 0 0 / 0.6);
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.05), 0 12px 32px -16px rgb(0 0 0 / 0.22);
+    --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.3);
+    --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.4);
+    --underline: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 14' preserveAspectRatio='none'%3E%3Cpath d='M3 10 C 80 4, 200 2, 297 6' fill='none' stroke='%23c25e12' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
+    color-scheme: light;
+  }
+}
+
+/* Inverted block: the other theme's tokens. On the (default) night page it is a white block. */
 .brand-panel {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f3f3f3;
+  --ink: #111111;
+  --ink-2: #555555;
+  --ink-hover: #333333;
+  --line: #e0e0e0;
+  --line-strong: #767676;
+  --accent: #9c4a12;
+  --accent-ink: #ffffff;
+  --accent-soft: #f3f3f3;
+  --amber: #c25e12;
+  --amber-ink: #9c4a12;
+  --on-amber: #ffffff;
+  --danger: #111111;
+  --ok: #2f6b4f;
+  --ok-soft: #e6f2eb;
+  --focus: #9c4a12;
+  --strip: #000000;
+  --strip-ink: #ffffff;
+  --ink-2-inv: #ababab;
+  --amber-inv: #f0a35e;
+  --scrim: rgb(0 0 0 / 0.6);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.05), 0 12px 32px -16px rgb(0 0 0 / 0.22);
+  --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.3);
+  --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.4);
+  --underline: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 14' preserveAspectRatio='none'%3E%3Cpath d='M3 10 C 80 4, 200 2, 297 6' fill='none' stroke='%23c25e12' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
+  color-scheme: light;
+}
+
+/* On a day page the inverted block is black. */
+:root[data-theme="light"] .brand-panel {
   --bg: #000000;
   --surface: #000000;
-  --surface-2: #1c1c1c;
+  --surface-2: #161616;
   --ink: #ffffff;
-  --ink-2: #b0b0b0;
-  --line: #3a3a3a;
+  --ink-2: #ababab;
+  --ink-hover: #d6d6d6;
+  --line: #2e2e2e;
   --line-strong: #8f8f8f;
-  --accent: #ffffff;
-  --accent-hover: #d6d6d6;
+  --accent: #f0a35e;
   --accent-ink: #000000;
-  --accent-soft: #2b2b2b;
-  --brand: #ffffff;
-  --brand-deep: #ffffff;
-  --brand-ink: #000000;
-  --gold: #ffffff;
-  --gold-hi: #ffffff;
-  --gold-ink: #000000;
-  --gold-edge: #ffffff;
-  --gold-soft: #1c1c1c;
-  --ember: #ffffff;
-  --ember-ink: #000000;
-  --brass: #ffffff;
-  --brass-soft: #1c1c1c;
+  --accent-soft: #161616;
+  --amber: #f0a35e;
+  --amber-ink: #f0a35e;
+  --on-amber: #000000;
   --danger: #ffffff;
-  --danger-soft: #1c1c1c;
-  --ok: #ffffff;
-  --ok-soft: #1c1c1c;
-  --focus: #ffffff;
+  --ok: #6fcf9a;
+  --ok-soft: #0f2a1d;
+  --focus: #f0a35e;
+  --strip: #ffffff;
+  --strip-ink: #000000;
+  --ink-2-inv: #555555;
+  --amber-inv: #c25e12;
   --scrim: rgb(0 0 0 / 0.72);
   --shadow-1: 0 0 0 0 rgb(0 0 0 / 0);
   --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.6);
   --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.7);
-  --shadow-cta: 0 0 0 0 rgb(0 0 0 / 0);
+  --underline: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 14' preserveAspectRatio='none'%3E%3Cpath d='M3 10 C 80 4, 200 2, 297 6' fill='none' stroke='%23f0a35e' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
+  color-scheme: dark;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .brand-panel {
     --bg: #000000;
     --surface: #000000;
-    --surface-2: #1c1c1c;
+    --surface-2: #161616;
     --ink: #ffffff;
-    --ink-2: #b0b0b0;
-    --line: #3a3a3a;
+    --ink-2: #ababab;
+    --ink-hover: #d6d6d6;
+    --line: #2e2e2e;
     --line-strong: #8f8f8f;
-    --accent: #ffffff;
-    --accent-hover: #d6d6d6;
+    --accent: #f0a35e;
     --accent-ink: #000000;
-    --accent-soft: #2b2b2b;
-    --brand: #ffffff;
-    --brand-deep: #ffffff;
-    --brand-ink: #000000;
-    --gold: #ffffff;
-    --gold-hi: #ffffff;
-    --gold-ink: #000000;
-    --gold-edge: #ffffff;
-    --gold-soft: #1c1c1c;
-    --ember: #ffffff;
-    --ember-ink: #000000;
-    --brass: #ffffff;
-    --brass-soft: #1c1c1c;
+    --accent-soft: #161616;
+    --amber: #f0a35e;
+    --amber-ink: #f0a35e;
+    --on-amber: #000000;
     --danger: #ffffff;
-    --danger-soft: #1c1c1c;
-    --ok: #ffffff;
-    --ok-soft: #1c1c1c;
-    --focus: #ffffff;
+    --ok: #6fcf9a;
+    --ok-soft: #0f2a1d;
+    --focus: #f0a35e;
+    --strip: #ffffff;
+    --strip-ink: #000000;
+    --ink-2-inv: #555555;
+    --amber-inv: #c25e12;
     --scrim: rgb(0 0 0 / 0.72);
     --shadow-1: 0 0 0 0 rgb(0 0 0 / 0);
     --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.6);
     --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.7);
-    --shadow-cta: 0 0 0 0 rgb(0 0 0 / 0);
+    --underline: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 14' preserveAspectRatio='none'%3E%3Cpath d='M3 10 C 80 4, 200 2, 297 6' fill='none' stroke='%23f0a35e' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
     color-scheme: dark;
   }
-  :root:not([data-theme="light"]) .brand-panel {
-    --bg: #ffffff;
-    --surface: #ffffff;
-    --surface-2: #f2f2f2;
-    --ink: #000000;
-    --ink-2: #595959;
-    --line: #d4d4d4;
-    --line-strong: #767676;
-    --accent: #000000;
-    --accent-hover: #2e2e2e;
-    --accent-ink: #ffffff;
-    --accent-soft: #ebebeb;
-    --brand: #000000;
-    --brand-deep: #000000;
-    --brand-ink: #ffffff;
-    --gold: #000000;
-    --gold-hi: #000000;
-    --gold-ink: #ffffff;
-    --gold-edge: #000000;
-    --gold-soft: #f2f2f2;
-    --ember: #000000;
-    --ember-ink: #ffffff;
-    --brass: #000000;
-    --brass-soft: #f2f2f2;
-    --danger: #000000;
-    --danger-soft: #f2f2f2;
-    --ok: #000000;
-    --ok-soft: #f2f2f2;
-    --focus: #000000;
-    --scrim: rgb(0 0 0 / 0.6);
-    --shadow-1: 0 0 0 0 rgb(0 0 0 / 0);
-    --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.3);
-    --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.4);
-    --shadow-cta: 0 0 0 0 rgb(0 0 0 / 0);
-  }
-}
-
-:root[data-theme="dark"] {
-  --bg: #000000;
-  --surface: #000000;
-  --surface-2: #1c1c1c;
-  --ink: #ffffff;
-  --ink-2: #b0b0b0;
-  --line: #3a3a3a;
-  --line-strong: #8f8f8f;
-  --accent: #ffffff;
-  --accent-hover: #d6d6d6;
-  --accent-ink: #000000;
-  --accent-soft: #2b2b2b;
-  --brand: #ffffff;
-  --brand-deep: #ffffff;
-  --brand-ink: #000000;
-  --gold: #ffffff;
-  --gold-hi: #ffffff;
-  --gold-ink: #000000;
-  --gold-edge: #ffffff;
-  --gold-soft: #1c1c1c;
-  --ember: #ffffff;
-  --ember-ink: #000000;
-  --brass: #ffffff;
-  --brass-soft: #1c1c1c;
-  --danger: #ffffff;
-  --danger-soft: #1c1c1c;
-  --ok: #ffffff;
-  --ok-soft: #1c1c1c;
-  --focus: #ffffff;
-  --scrim: rgb(0 0 0 / 0.72);
-  --shadow-1: 0 0 0 0 rgb(0 0 0 / 0);
-  --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.6);
-  --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.7);
-  --shadow-cta: 0 0 0 0 rgb(0 0 0 / 0);
-  color-scheme: dark;
-}
-:root[data-theme="dark"] .brand-panel {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f2f2f2;
-  --ink: #000000;
-  --ink-2: #595959;
-  --line: #d4d4d4;
-  --line-strong: #767676;
-  --accent: #000000;
-  --accent-hover: #2e2e2e;
-  --accent-ink: #ffffff;
-  --accent-soft: #ebebeb;
-  --brand: #000000;
-  --brand-deep: #000000;
-  --brand-ink: #ffffff;
-  --gold: #000000;
-  --gold-hi: #000000;
-  --gold-ink: #ffffff;
-  --gold-edge: #000000;
-  --gold-soft: #f2f2f2;
-  --ember: #000000;
-  --ember-ink: #ffffff;
-  --brass: #000000;
-  --brass-soft: #f2f2f2;
-  --danger: #000000;
-  --danger-soft: #f2f2f2;
-  --ok: #000000;
-  --ok-soft: #f2f2f2;
-  --focus: #000000;
-  --scrim: rgb(0 0 0 / 0.6);
-  --shadow-1: 0 0 0 0 rgb(0 0 0 / 0);
-  --shadow-2: 0 10px 24px -14px rgb(0 0 0 / 0.3);
-  --shadow-3: 0 24px 48px -24px rgb(0 0 0 / 0.4);
-  --shadow-cta: 0 0 0 0 rgb(0 0 0 / 0);
 }
 
 @theme inline {
@@ -286,31 +272,27 @@
   --color-surface-2: var(--surface-2);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
+  --color-ink-hover: var(--ink-hover);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
-  --color-brand: var(--brand);
-  --color-brand-deep: var(--brand-deep);
-  --color-brand-ink: var(--brand-ink);
-  --color-gold: var(--gold);
-  --color-gold-ink: var(--gold-ink);
-  --color-gold-edge: var(--gold-edge);
-  --color-gold-soft: var(--gold-soft);
-  --color-ember: var(--ember);
-  --color-ember-ink: var(--ember-ink);
-  --color-brass: var(--brass);
-  --color-brass-soft: var(--brass-soft);
+  --color-amber: var(--amber);
+  --color-amber-ink: var(--amber-ink);
+  --color-on-amber: var(--on-amber);
   --color-danger: var(--danger);
-  --color-danger-soft: var(--danger-soft);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
+  --color-strip: var(--strip);
+  --color-strip-ink: var(--strip-ink);
+  --color-ink-2-inv: var(--ink-2-inv);
+  --color-amber-inv: var(--amber-inv);
   --color-scrim: var(--scrim);
 
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-display-face), ui-serif, Georgia, serif;
+  /* Work Sans, then Geist: Work Sans has no ₮, so the tugrik falls through to Geist's tiny tugrik face. */
+  --font-display: var(--font-display-face), var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono-face), ui-monospace, monospace;
 
   --text-small: var(--step--1);
@@ -329,7 +311,6 @@
   --shadow-card: var(--shadow-1);
   --shadow-raised: var(--shadow-2);
   --shadow-float: var(--shadow-3);
-  --shadow-btn: var(--shadow-cta);
 
   --ease-soft: var(--ease-out);
 
@@ -373,17 +354,52 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: var(--step-0);
-  line-height: 1.55;
+  line-height: 1.6;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
 }
 
-h1, h2, h3 {
-  font-family: var(--font-display);
-  font-weight: 500;
-  line-height: 1.12;
-  letter-spacing: -0.015em;
+/* Display type: Work Sans, regular weight, tight tracking. No italics for emphasis: use .mark.
+   In the base layer, so a utility on a heading (font-sans, font-semibold, tracking-normal) still wins. */
+@layer base {
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+  }
+  h3 { line-height: 1.15; letter-spacing: -0.01em; }
+  /* Big numbers and quotes set in the display face read tighter, as in the redesign. */
+  .font-display { letter-spacing: -0.02em; }
 }
+
+/* Small uppercase label above a heading, in the accent, with a short rule before it. */
+@layer components {
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--amber-ink);
+}
+.eyebrow::before { content: ""; flex: none; width: 1.625rem; height: 1.5px; background: currentColor; }
+}
+
+/* The hand-drawn underline under one key word of a heading (theme-aware SVG in --underline). In content, mark the
+   word as *word*; components/ui/marked.tsx renders it. */
+.mark {
+  background: var(--underline) no-repeat left bottom / 100% 0.16em;
+  padding-bottom: 0.08em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+h1 .mark, .text-display .mark { background-size: 100% 0.12em; }
+@media (forced-colors: active) { .mark { text-decoration: underline; } }
 
 /* In the base layer so utilities win: unlayered, `text-wrap` (a shorthand that also sets the wrap mode)
    overrode Tailwind's `truncate` (white-space: nowrap), so truncated lines wrapped instead. */
@@ -393,9 +409,9 @@ h1, h2, h3 {
 }
 
 :focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 6px;
 }
 
 [data-sheet-title]:focus-visible { outline: none; }
@@ -418,22 +434,16 @@ button:disabled { cursor: not-allowed; }
   animation: pulse-soft 1.6s ease-in-out infinite;
 }
 
-/* Solid inverted block (vault hero, proof band, guide bar, confirmed payment). Flips with the theme. */
+/* Solid inverted block (vault hero, proof band, guide bar, confirmed payment): black by day, white at night. */
 .brand-panel {
   color: var(--ink);
   background: var(--bg);
 }
 .brand-panel ::selection { background: var(--ink); color: var(--bg); }
 
-/* Solid emphasis fill: black on white, white on black. */
-.gold-fill {
-  color: var(--gold-ink);
-  background: var(--gold);
-}
-
-/* Progress: one solid fill on a neutral track. */
-.meter-track { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
-.meter-fill { background: var(--ink); }
+/* Progress: one amber fill on a soft track. */
+.meter-track { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.meter-fill { background: var(--amber); }
 
 /* One crisp ring behind the "Confirmed" tick. */
 @keyframes ring-out {
@@ -482,7 +492,7 @@ dialog.sheet {
   /* Bottom sheet on a phone: content and buttons stay above the home indicator and clear of side cut-outs. */
   padding: 0 var(--safe-r) var(--safe-b) var(--safe-l);
   border-radius: var(--r-xl) var(--r-xl) 0 0;
-  border-top: 1px solid var(--ink);
+  border-top: 1px solid var(--line);
   box-shadow: var(--shadow-3);
   overflow: hidden;
 }
@@ -523,7 +533,7 @@ dialog.sheet::backdrop {
     max-height: 100dvh;
     border-radius: 0;
     border-top: 0;
-    border-left: 1px solid var(--ink);
+    border-left: 1px solid var(--line);
     padding: var(--safe-t) var(--safe-r) var(--safe-b) 0;
   }
   dialog.sheet.sheet-tall { height: 100dvh; }
@@ -536,7 +546,7 @@ dialog.drawer {
   margin: 0;
   padding: var(--safe-t) 0 var(--safe-b) var(--safe-l);
   border: 0;
-  border-right: 1px solid var(--ink);
+  border-right: 1px solid var(--line);
   inset: 0 auto 0 0;
   width: min(20rem, 88vw);
   max-width: none;
@@ -597,7 +607,9 @@ dialog.drawer::backdrop {
   body:has(.print-sheet) .min-h-dvh { min-height: 0 !important; padding-left: 0 !important; }
   .print-sheet {
     --bg: #ffffff; --surface: #ffffff; --surface-2: #f2f2f2; --ink: #000000; --ink-2: #404040;
-    --line: #bdbdbd; --line-strong: #767676; --accent: #000000; --accent-ink: #ffffff;
+    --line: #bdbdbd; --line-strong: #767676; --accent: #000000; --accent-ink: #ffffff; --accent-soft: #f2f2f2;
+    --amber: #000000; --amber-ink: #000000; --on-amber: #ffffff; --danger: #000000; --ok: #000000; --ok-soft: #ffffff;
+    --focus: #000000; --shadow-1: 0 0 0 0 rgb(0 0 0 / 0); color-scheme: light;
     max-width: none !important; color: #000000; background: #ffffff; gap: 0.75rem !important;
   }
   .print-sheet * { box-shadow: none !important; animation: none !important; transition: none !important; }

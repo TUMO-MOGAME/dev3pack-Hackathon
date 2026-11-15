@@ -101,7 +101,7 @@ export function Composer({ onSend, disabled, copy, autoFocus }: { onSend: (text:
     ref.current?.focus();
   };
   return (
-    <form onSubmit={submit} className="flex items-end gap-2 rounded-[1.5rem] border border-ink bg-surface p-1.5 pl-4 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus)]">
+    <form onSubmit={submit} className="flex items-end gap-2 rounded-[1.5rem] border border-line-strong bg-surface p-1.5 pl-4 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--focus)]">
       <label htmlFor={fieldId} className="sr-only">{copy.inputLabel}</label>
       <textarea
         id={fieldId} ref={ref} rows={1} value={value} autoFocus={autoFocus}
@@ -167,7 +167,7 @@ export function ActionButtons({ actions, copy, onDone }: { actions: AgentAction[
       {visible.map((x, i) => (
         <button
           key={i} type="button" onClick={() => perform(x)}
-          className={clsx("inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 text-small font-semibold", i === 0 ? "border border-ink bg-ink text-bg hover:bg-accent-hover" : "border border-ink bg-surface hover:bg-surface-2")}
+          className={clsx("inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 text-small font-semibold", i === 0 ? "border border-ink bg-ink text-bg hover:bg-ink-hover" : "border border-ink bg-surface hover:bg-surface-2")}
         >
           {label(x)} <ArrowRight className="size-4" aria-hidden="true" />
         </button>
