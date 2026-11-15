@@ -36,11 +36,8 @@ phone's own wallet, including Seed Vault on the Seeker, while the web app and th
    then submit through the portal. The listing NFT is minted on mainnet, which costs a little SOL [Tumo].
 5. **Seeker extras (later).** "Connect with Seeker" one-tap button; Seed Vault signing for the owner's will.
 
-## Decisions for Tumo
-- **Which site goes in the store:** the devnet site (real transactions, test money; needs the devnet upgrade first)
-  or the demo site (simulated, always works)? Recommended: devnet, labelled "test network", because the store is for
-  real apps and reviewers may try it.
-- **Domain:** keep `heirloom-devnet.vercel.app`, or move to `heirloom.tumoolo.tech` first (better for a store listing
-  and the launch standard; the domain can't easily change after the APK ships, because assetlinks ties to it).
-- **Publisher:** you as a person (KYC) or Tumoolo as a company (KYB).
-- **A Seeker or any Android phone** for testing.
+## Decisions (Tumo, 15 Nov 2026)
+- **Store app = the devnet site** (real transactions on the test network, labelled), so it waits on the devnet upgrade.
+- **Domain = heirloom.tumoolo.tech**, pointed at the `heirloom-devnet` Vercel project before the APK is built.
+- **Publisher = Tumo as a person** (KYC).
+- **Wallets = both:** the Tether WDK wallet stays the default; "Use my phone wallet" (MWA / Seeker Connect) is added.
