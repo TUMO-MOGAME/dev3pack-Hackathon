@@ -98,7 +98,7 @@ function Pack({ copy, a, snap, session, asset }: { copy: Copy; a: AssetsCopy; sn
         <figure className="print-avoid overflow-hidden rounded-lg border border-line-strong">
           {cover?.url ? (
             <div className="relative aspect-[4/3] w-full bg-surface-2">
-              <Image src={cover.url} alt={fmt(copy.asset.cover, { title })} fill sizes="(min-width: 768px) 400px, 100vw" className="object-cover" unoptimized />
+              <Image src={cover.url} alt={fmt(copy.asset.cover, { title })} fill sizes="(min-width: 768px) 400px, 100vw" className="object-cover" quality={80} unoptimized={!cover.url.startsWith("/demo/")} />
             </div>
           ) : (
             <div className="grid aspect-[4/3] w-full place-items-center bg-surface-2 text-small text-ink-2">

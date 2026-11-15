@@ -57,6 +57,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  // 75 is the default; the asset gallery and handover cover ask for 80.
+  images: { qualities: [75, 80] },
   // WDK's server-side agent wallet loads the sodium-native addon; keep these out of the server bundle.
   serverExternalPackages: ["@tetherto/wdk-wallet-solana", "@tetherto/wdk-wallet", "sodium-universal", "sodium-native"],
   turbopack: {

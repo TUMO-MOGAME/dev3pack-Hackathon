@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, m as motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Banknote, Check, CircleX, Clock, Plus, Zap } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";

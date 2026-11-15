@@ -38,7 +38,7 @@ export function AssetList({ copy, assets, media, current, onSelect, onAdd }: {
                 className={clsx("flex w-full min-w-0 items-center gap-3 rounded-md border bg-surface p-2.5 text-left hover:bg-surface-2", on ? "border-2 border-ink" : "border-line-strong")}
               >
                 <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-md bg-surface-2">
-                  {cover ? <Image src={cover.url} alt="" fill sizes="64px" className="object-cover" unoptimized />
+                  {cover ? <Image src={cover.url} alt="" fill sizes="64px" className="object-cover" unoptimized={!cover.url.startsWith("/demo/")} />
                     : kind === "Car" ? <CarFront className="size-6 text-ink-2" aria-hidden="true" /> : <Store className="size-6 text-ink-2" aria-hidden="true" />}
                 </span>
                 <span className="min-w-0 flex-1">

@@ -1,7 +1,7 @@
 "use client";
 import { useState, type FormEvent } from "react";
 import clsx from "clsx";
-import { motion } from "motion/react";
+import { m as motion } from "motion/react";
 import { ArrowDownToLine, ArrowUpFromLine, HeartPulse, Landmark, Lock, ShieldCheck, Wallet } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
@@ -11,14 +11,14 @@ import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Button, ButtonLink, Card, ExplorerLink, Field, inputClass, Meter, Money, Notice, PageHeader } from "@/components/ui/primitives";
 import { fmt, timeAgo, useCopy } from "@/components/shell/copy";
-import { Gate } from "@/components/shell/gate";
+import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { usePay } from "@/components/pay/payment";
 
 type Copy = ScreensCopy["vault"];
 
 export function VaultScreen({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.vault);
-  return <Gate roles={["owner"]}>{({ snap }) => <Vault copy={copy} snap={snap!} />}</Gate>;
+  return <Gate roles={["owner"]} frame={<HeaderFrame width="max-w-3xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap }) => <Vault copy={copy} snap={snap!} />}</Gate>;
 }
 
 function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {

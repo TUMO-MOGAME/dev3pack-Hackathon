@@ -2,7 +2,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Image from "next/image";
 import clsx from "clsx";
-import { motion } from "motion/react";
+import { m as motion } from "motion/react";
 import { ArrowRight, CarFront, FileText, Gavel, HandHeart, Loader2, Lock, Pencil, ShieldCheck, Store } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import type { AssetsCopy } from "@/content/assets";
