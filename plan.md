@@ -356,3 +356,33 @@ Full design: [docs/guardians-spec.md](docs/guardians-spec.md). Built on branch `
 trusted person and can object (pausing that payment); each trusted person has 2 backups who take over after a verified
 death (chain never runs out); if everyone is gone, an ordered fallback (children, heir, charity) runs after a long wait;
 any asset can have WebP photos (hash on-chain).
+
+## 13. Everyday money (started 16 Nov 2026)
+
+Heirloom does one thing: money set aside for a purpose, paid to the right place, now and after you're gone. These four
+features make it something a family opens every week, **without a program upgrade** (the program already allows living
+claims under "starts now" rules, owner approval while Active, and caps per claim and lifetime).
+
+1. **Ask for money.** A family member (a beneficiary) asks: "School trip, R300", with an optional letter or quote. It
+   is a living claim under a "starts now" rule (an "Everyday needs" rule: General, small per-claim and monthly-ish
+   lifetime caps, paid to an approved payee, which may be the school or the child's own wallet added as an "Other"
+   payee). The AI checks the attachment when there is one; the request lands as a "Needs your attention" card on the
+   parent's chat home; the parent approves (owner_approve_claim) and it pays. Over the cap, the contract refuses with
+   a plain reason. After death the same requests go to the trusted people. The asker sees status: waiting, paid,
+   declined.
+2. **Pay a bill once.** The owner pays a one-off bill (a lawyer, a plumber, a school trip) from **their own WDK wallet**
+   through the existing Tether send flow (review → approve → pending → confirmed, pay-once protection), to a saved
+   payee, with an optional invoice photo the AI reads (amount, payee name, reference) and compares with what was typed.
+   Not from the vault: the vault only pays by the plan's rules. A plan template "Legal and executor fees" (after I'm
+   gone, capped; South African executor fees are capped at 3.5% of the estate plus VAT) covers the estate's lawyer.
+3. **Bill templates.** In the plan builder: ready-made recurring rules (funeral cover, rent or support for a parent,
+   medical aid, school fees, books), pre-filled and editable. Scheduled payments as today.
+4. **Monthly statement.** A page per month: what the plan paid, to whom, for what, with proof links; printable and
+   shareable with the family. Built from the same activity data as the proof drawer.
+
+**Not doing** (over-engineering, or needs a licensed partner): shop/merchant payments in USD₮, booking lawyers or a
+marketplace, airtime/electricity vouchers, an in-app rand off-ramp (link to VALR instead), cards, loans, yield,
+stokvels.
+
+Every feature works in mock mode (demo site) and chain mode (devnet site), copy in `app/src/content` with af/st/zu,
+design tokens, tests for every rule check.
