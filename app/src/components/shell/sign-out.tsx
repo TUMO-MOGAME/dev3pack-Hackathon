@@ -49,9 +49,14 @@ export function SignOut({ onDone }: { onDone: () => void }) {
     const others = wallet.sessions.filter((s) => s.address !== session.address);
     wallet.remove(session.address);
     if (others[0]) wallet.switchTo(others[0].address);
+    if (!others.length) {
+      // A full reload, not a client navigation: nothing from the removed wallet (keys, a recovery phrase still on
+      // screen in an unfinished set-up) may stay in memory.
+      window.location.assign("/start");
+      return;
+    }
     notify("info", fmt(c.done, { name }));
     onDone();
-    if (!others.length) router.push("/start");
   };
 
   return (

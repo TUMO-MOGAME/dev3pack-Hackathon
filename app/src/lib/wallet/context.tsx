@@ -143,7 +143,11 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
     unlocked.current.delete(address);
     if (!isMock) persist(stored.current.filter((w) => w.address !== address));
     setSessions((prev) => prev.filter((s) => s.address !== address));
-    setActiveAddr((cur) => (cur === address ? null : cur));
+    setActiveAddr((cur) => {
+      if (cur !== address) return cur;
+      if (!isMock) saveActive(null);
+      return null;
+    });
   }, [isMock]);
 
   const lockAll = useCallback(() => {
