@@ -23,10 +23,12 @@ export type AgentIx = (typeof AGENT_ALLOWED)[number];
 
 let wallet: Promise<WdkAccount> | null = null;
 
-export const hasAgentWallet = () => Boolean(process.env.AGENT_SEED_PHRASE);
+/** The seed with stray whitespace (a trailing CR LF from a Windows paste or pipe) removed. */
+const agentSeed = () => process.env.AGENT_SEED_PHRASE?.trim().split(/\s+/).join(" ") || "";
+export const hasAgentWallet = () => Boolean(agentSeed());
 
 function agentAccount(): Promise<WdkAccount> {
-  const seed = process.env.AGENT_SEED_PHRASE;
+  const seed = agentSeed();
   if (!seed) throw new Error("AGENT_SEED_PHRASE is not set, so the agent cannot sign on-chain.");
   if (!wallet) wallet = openAccount(seed, process.env.SOLANA_RPC_URL || chainConfig.rpcUrl).catch((e) => { wallet = null; throw e; });
   return wallet;

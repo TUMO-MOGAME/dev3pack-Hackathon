@@ -47,8 +47,14 @@ Set-Location $root
 foreach ($name in $names) {
   if (-not $values.ContainsKey($name)) { Write-Host "  skip  $name (not set locally)"; continue }
   $type = if ($name.StartsWith("NEXT_PUBLIC_")) { "--no-sensitive" } else { "--sensitive" }
-  $values[$name] | npx vercel env add $name --environment production $type --force --yes -p $project 2>$null | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "Vercel refused $name (exit $LASTEXITCODE). Is the CLI logged in as tumo-mogame?" }
+  # The Vercel CLI writes its banner to stderr; in Windows PowerShell 5.1 that counts as an error under "Stop",
+  # so only the exit code decides here.
+  $ErrorActionPreference = "Continue"
+  # --value, not a pipe: Windows PowerShell 5.1 adds CR LF to piped text, which corrupts seed phrases and keys.
+  & npx.cmd vercel env add $name --environment production $type --force --yes -p $project --value $values[$name] 2>&1 | Out-Null
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = "Stop"
+  if ($code -ne 0) { throw "Vercel refused $name (exit $code). Is the CLI logged in as tumo-mogame?" }
   Write-Host "  set   $name"
 }
 Write-Host "Done. Tell Claude, and it will connect the site to GitHub and deploy it."
