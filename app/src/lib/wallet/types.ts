@@ -22,6 +22,8 @@ export interface WalletApi {
   connectPhone(label: string, role: Role, walletName: string): Promise<WalletSession>;
   switchTo(address: Base58): void;
   remove(address: Base58): void;
+  /** Forgets every unlocked key in memory; the next signature asks for the PIN again. Deletes nothing. */
+  lockAll(): void;
   refreshBalances(): Promise<void>;
   /** Signs + sends a serialized (base64) Solana transaction with the active wallet (WDK or phone). */
   signAndSend(base64Tx: string): Promise<string>;

@@ -17,6 +17,7 @@ import { Avatar } from "./app-shell";
 import { fmt, useCopy } from "./copy";
 import { useInstall } from "./install";
 import { setTheme, useTheme } from "./theme";
+import { SignOut } from "./sign-out";
 import { LanguageSwitcher } from "@/components/site/language-switcher";
 
 const ORDER: Role[] = ["owner", "beneficiary", "verifier", "monitor", "buyer", "agent"];
@@ -174,6 +175,8 @@ export function PersonaSheet({ open, onClose }: { open: boolean; onClose: () => 
             )}
           </section>
         )}
+
+        <SignOut onDone={onClose} />
       </div>
     </Sheet>
   );

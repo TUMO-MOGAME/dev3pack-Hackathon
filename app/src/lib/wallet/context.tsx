@@ -146,6 +146,12 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
     setActiveAddr((cur) => (cur === address ? null : cur));
   }, [isMock]);
 
+  const lockAll = useCallback(() => {
+    if (isMock) return; // demo personas have no PIN
+    unlocked.current.forEach((a) => a.manager.dispose());
+    unlocked.current.clear();
+  }, [isMock]);
+
   const unlock = useCallback(async (address: Base58): Promise<WdkAccount> => {
     const hit = unlocked.current.get(address);
     if (hit) return hit;
@@ -210,8 +216,8 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
 
   const session = sessions.find((s) => s.address === activeAddr) ?? null;
   const api = useMemo<WalletApi>(() => ({
-    ready, session, sessions, create, importSeed, connectPhone, switchTo, remove, refreshBalances, signAndSend,
-  }), [ready, session, sessions, create, importSeed, connectPhone, switchTo, remove, refreshBalances, signAndSend]);
+    ready, session, sessions, create, importSeed, connectPhone, switchTo, remove, lockAll, refreshBalances, signAndSend,
+  }), [ready, session, sessions, create, importSeed, connectPhone, switchTo, remove, lockAll, refreshBalances, signAndSend]);
 
   return <WalletContext.Provider value={api}>{children}</WalletContext.Provider>;
 }
