@@ -6,7 +6,7 @@ import type { EstateSnapshot } from "@/lib/service";
 import { useEstate } from "@/lib/hooks/estate";
 import { useHeirloomVoice } from "@/lib/voice/useHeirloomVoice";
 import { detectDistress, disclosureLine, pronouns } from "@/lib/legacy/prompt";
-import { milestonesFor, type LegacyChatReply, type LegacySpeech, type LegacyStatus } from "@/lib/legacy/schema";
+import { milestonesFor, type LegacyChatReply, type LegacySpeech, type LegacyStatus } from "@/lib/legacy/rules";
 import { Button, ButtonLink, Card, Notice } from "@/components/ui/primitives";
 import { Chips, Composer, Thinking } from "@/components/agent/chat-parts";
 import { fmt } from "@/components/shell/copy";

@@ -8,3 +8,7 @@ import type { MockService } from "./mock";
 export function isMockService(s: HeirloomService | null | undefined): s is MockService {
   return !!s && s.mode === "mock" && typeof (s as MockService).setActor === "function";
 }
+
+/** Where the demo keeps its simulated estate in this browser (see ./mock). */
+export const MOCK_STORE_KEY = "heirloom.mock.v5";
+

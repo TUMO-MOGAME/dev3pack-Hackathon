@@ -9,7 +9,7 @@ import clsx from "clsx";
 import { ArrowRight, BellRing, HeartPulse } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import type { EstateSnapshot } from "@/lib/service";
-import { isMockService } from "@/lib/service/mock";
+import { isMockService } from "@/lib/service/is-mock";
 import { checkInPlan, checkInStatus, type CheckInStatus } from "@/lib/checkin";
 import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, ButtonLink, Card, Eyebrow, Meter, Notice, type Tone } from "@/components/ui/primitives";

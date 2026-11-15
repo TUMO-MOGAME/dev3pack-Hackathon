@@ -17,7 +17,7 @@ import { fail } from "./mock-errors";
 import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type MockGuardState, type Named } from "./mock-guardians";
 import { createMockDisputes } from "./mock-disputes";
 import { sha256Hex } from "../agent/hash";
-import { cleanSpec, mediaRootHex, specInputSchema } from "../assets/spec";
+import { cleanSpec, mediaRootHex } from "../assets/spec";
 import { DEMO_ASSETS } from "./demo-asset-photos";
 import { shortName } from "../names";
 import { DEMO_FX, estimateValuation } from "./mock-valuation";
@@ -58,6 +58,7 @@ export interface MockService extends HeirloomService {
 }
 
 export { isMockService } from "./is-mock";
+import { MOCK_STORE_KEY } from "./is-mock";
 
 /* ---------- demo cast ---------- */
 
@@ -127,7 +128,7 @@ interface State {
   guard?: MockGuardState;
 }
 
-const KEY = "heirloom.mock.v5";
+const KEY = MOCK_STORE_KEY;
 const nowSecs = () => Math.floor(Date.now() / 1000);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -1230,8 +1231,11 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       return G.assetMedia();
     },
     async setAssetMedia(_e, asset, input) {
-      const root = await mediaRootHex(input.photos, cleanSpec(specInputSchema.safeParse(input.spec).data));
-      return mutate(900, () => G.setAssetMedia(asset, input, root));
+      // The spec sheet's zod schema loads with the first save, not with the demo.
+      const { specInputSchema } = await import("../assets/spec-schema");
+      const checked = input.spec === undefined ? undefined : specInputSchema.safeParse(input.spec);
+      const root = await mediaRootHex(input.photos, cleanSpec(checked?.success ? checked.data : undefined));
+      return mutate(900, () => G.setAssetMedia(asset, input, root, checked));
     },
   };
 }

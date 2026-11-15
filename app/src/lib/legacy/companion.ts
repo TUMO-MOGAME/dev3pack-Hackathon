@@ -3,7 +3,8 @@
  * as the server fallback when Gemini is not configured. Same guards as the model path (./prompt.ts).
  */
 import { detectDistress, detectMoneyRequest, noWordsLine, refusalLine, safetyLine } from "./prompt";
-import { milestonesFor, type Guidance, type LegacyBook, type LegacyChatReply, type LegacyChild, type Milestone, type MilestoneKind } from "./schema";
+import { milestonesFor, type LegacyChatReply, type MilestoneKind } from "./rules";
+import type { Guidance, LegacyBook, LegacyChild, Milestone } from "./schema";
 
 const TOPICS: [keyof Guidance, RegExp][] = [
   ["study", /\b(stud(y|ies|ying)|exam|test|school|varsity|university|uct|marks?|fail(ed)?|lecture|degree|homework|class)\b/i],

@@ -21,7 +21,8 @@ import { assembleGuardians, decodeMedia, disabledGuardians, fetchGuardiansRaw, t
 import { enumOf, key, num } from "../chain/decoders";
 import { getActiveSigner } from "../wallet/signer";
 import { sha256Hex } from "../agent/hash";
-import { cleanSpec, foreignSpecKeys, mediaRootHex, parseSpec } from "../assets/spec";
+import { cleanSpec, foreignSpecKeys, mediaRootHex } from "../assets/spec";
+import { parseSpec } from "../assets/spec-schema";
 import { MAX_PHOTOS } from "../media/webp";
 import { photosApi } from "../media/client";
 
