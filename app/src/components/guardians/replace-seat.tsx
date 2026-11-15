@@ -12,8 +12,12 @@ import type { Base58 } from "@/lib/types";
 import { afterReplacement, checkReplacement, shortName, type Person, type ReplaceError } from "./derive";
 
 export function ReplaceSeatForm({
-  seat, owner, holders, suggestions, busy, onSubmit, onCancel,
+  seat, owner, holders, suggestions, busy, onSubmit, onCancel, openObjection = false, otherSeats = [],
 }: {
+  /** An Open objection to this place's succession: the contract leaves it in place, and until it is voted on it blocks the next succession here. */
+  openObjection?: boolean;
+  /** The other places: if the new person is a backup there, the contract leaves them on that list. */
+  otherSeats?: readonly Seat[];
   seat: Seat;
   owner: Base58;
   holders: readonly (Base58 | null)[];
@@ -40,6 +44,7 @@ export function ReplaceSeatForm({
   const holderName = shortName(seat.holderName);
   const after = afterReplacement(seat, person.wallet);
   const picks = suggestions.filter((p) => p.wallet !== owner && !holders.includes(p.wallet)).slice(0, 6);
+  const otherBackupOf = otherSeats.find((o) => o.backups.some((b) => b.wallet === person.wallet.trim()));
   const list = (people: Person[]) => people.map((p) => p.name).join(", ");
 
   const update = (patch: Partial<Person>) => { setPerson((p) => ({ ...p, ...patch })); setError(null); };
@@ -103,6 +108,8 @@ export function ReplaceSeatForm({
           <li>{after.monitors.length ? fmt(c.effectMonitors, { list: list(after.monitors) }) : c.effectNoMonitors}</li>
           {after.removed && <li>{fmt(c.effectRemoved, { name: person.name.trim() || person.wallet.trim() })}</li>}
           <li>{fmt(c.effectHistory, { n: seat.generation + 2 })}</li>
+          {openObjection && !vacant && <li>{c.warnObjection}</li>}
+          {otherBackupOf && <li>{fmt(c.warnOtherBackup, { name: person.name.trim() || person.wallet.trim(), holder: shortName(otherBackupOf.holderName) })}</li>}
         </ul>
       </Notice>
 

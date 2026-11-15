@@ -131,6 +131,8 @@ export function SeatCard({ seat, snap }: { seat: Seat; snap: EstateSnapshot }) {
       {replacing && (
         <ReplaceSeatForm
           seat={seat} owner={e.owner} holders={holders} suggestions={suggestions}
+          openObjection={(g?.objections ?? []).some((o) => o.status === "Open" && o.kind === "Succession" && o.seatIndex === seat.index)}
+          otherSeats={(g?.seats ?? []).filter((s) => s.index !== seat.index)}
           busy={busy === `replace-${seat.index}`} onSubmit={(p) => void replace(p)} onCancel={closeReplace}
         />
       )}

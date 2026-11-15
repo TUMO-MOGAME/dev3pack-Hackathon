@@ -97,6 +97,8 @@ export const guardians = {
     effectRemoved: "{name} is taken off this place's backups and monitors, because they now hold it.",
     effectSuccession: "The passing reported for {name} is cancelled, so no backup takes over.",
     effectHistory: "The new person becomes holder number {n} of this place.",
+    warnObjection: "A monitor's objection to the reported passing is still open. It stays after the change, and no backup can take over this place until the verifiers vote on it.",
+    warnOtherBackup: "{name} is also a backup for {holder}'s place and stays on that list. {holder} will need to replace them there before saving that list again.",
     submit: "Replace {name}",
     fillSubmit: "Fill this place",
     done: "The trusted place has a new holder",
