@@ -64,7 +64,7 @@ export const st: Bundle = {
       body: "Bolella Heirloom ka mantswe a hao seo lelapa la hao le se hlokang. Se fetoha moralo polokelong e sireletsehileng ya USD₮: dibuka le ditefello tsa kotara tse lefuwang ka nako kajeno, le melao eo e tswelang pele ha o se o hlokahetse. Chelete e tsamaya feela bakeng sa morero wa yona, e ya hantle yunivesithing kapa ntlong ya baithuti.",
       primary: "Leka demo",
       secondary: "Bona hore e sebetsa jwang",
-      note: "Ha ho app store. Ha ho extension ya browser. E sebetsa ho fono efe kapa efe.",
+      note: "E sebetsa fonong efe kapa efe, ho browser kapa jwalo ka app. Ha ho extension ya browser.",
       photoAlt: "Ntate o aka mora wa hae e monyane ya bososelang lerameng.",
       receipt: { title: "3 200 USD₮ e lefilwe", detail: "ho University of Cape Town" },
       card: {

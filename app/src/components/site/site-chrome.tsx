@@ -15,8 +15,8 @@ export function SiteHeader({ site: english, minimal = false }: { site: SiteCopy;
     <header className="pt-safe sticky top-0 z-40 border-b border-line bg-bg">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-ink focus:px-4 focus:py-2.5 focus:text-bg">{site.nav.skip}</a>
       <div className="mx-auto flex h-[var(--header-h)] w-full max-w-6xl items-center gap-1.5 px-3 min-[400px]:gap-3 min-[400px]:px-4">
-        {/* Below 400px the wordmark gives way to the language switcher; the link keeps its accessible name. */}
-        <Link href="/" aria-label={site.nav.home} className="shrink-0 rounded-full"><Logo name={site.name} className="max-[400px]:[&>span:last-child]:hidden" /></Link>
+        {/* Below 480px the wordmark gives way to the language switcher; the link keeps its accessible name. */}
+        <Link href="/" aria-label={site.nav.home} className="shrink-0 rounded-full"><Logo name={site.name} className="max-[479px]:[&>span:last-child]:hidden" /></Link>
         {!minimal && (
           <nav aria-label={site.nav.menu} className="ml-6 hidden items-center gap-1 md:flex">
             {[["#how", site.nav.how], ["#safety", site.nav.safety], ["#proof", site.nav.proof]].map(([href, label]) => (

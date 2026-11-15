@@ -11,7 +11,7 @@ export const landing = {
     body: "Tell Heirloom what your family needs, in your own words. It becomes a plan on a secure vault of USD₮: books and term fees paid on schedule today, and the same rules carrying on after you're gone. Money only ever moves for its purpose, straight to the university or the residence.",
     primary: "Try the demo",
     secondary: "See how it works",
-    note: "No app store. No browser extension. Works on any phone.",
+    note: "Works on any phone, in the browser or as an app. No browser extension.",
     photoAlt: "A father kisses his smiling young son on the cheek.",
     receipt: { title: "3 200 USD₮ paid", detail: "to University of Cape Town" },
     card: {

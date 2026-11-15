@@ -64,7 +64,7 @@ export const af: Bundle = {
       body: "Vertel Heirloom in jou eie woorde wat jou gesin nodig het. Dit word 'n plan op 'n veilige kluis van USD₮: boeke en kwartaalgelde wat vandag op skedule betaal word, en dieselfde reëls wat aanhou nadat jy heengegaan het. Geld beweeg net vir sy doel, reguit na die universiteit of die koshuis.",
       primary: "Probeer die demo",
       secondary: "Kyk hoe dit werk",
-      note: "Geen app-winkel nie. Geen blaaier-uitbreiding nie. Werk op enige foon.",
+      note: "Werk op enige foon, in die blaaier of as 'n app. Geen blaaier-uitbreiding nie.",
       photoAlt: "'n Pa soen sy glimlaggende seuntjie op die wang.",
       receipt: { title: "3 200 USD₮ betaal", detail: "aan University of Cape Town" },
       card: {

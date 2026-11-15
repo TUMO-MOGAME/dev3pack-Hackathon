@@ -64,7 +64,7 @@ export const zu: Bundle = {
       body: "Tshela i-Heirloom ngamazwi akho ukuthi umndeni wakho udingani. Kuba uhlelo esisefweni esiphephile se-USD₮: izincwadi nezimali zekota ezikhokhwa ngesikhathi namuhla, nemithetho efanayo eqhubekayo nangemva kokuthi ungasekho. Imali ihamba kuphela ngenhloso yayo, iqonde enyuvesi noma endaweni yokuhlala.",
       primary: "Zama i-demo",
       secondary: "Bona ukuthi kusebenza kanjani",
-      note: "Akudingeki isitolo sama-app. Akudingeki isengezo sesiphequluli. Isebenza kunoma iyiphi ifoni.",
+      note: "Isebenza kunoma iyiphi ifoni, kusiphequluli noma njenge-app. Akudingeki isandiso sesiphequluli.",
       photoAlt: "Ubaba uqabula indodana yakhe encane emamathelayo esihlathini.",
       receipt: { title: "3 200 USD₮ ikhokhiwe", detail: "ku-University of Cape Town" },
       card: {
