@@ -6,6 +6,7 @@ import { pay } from "@/content/pay";
 import { assistant } from "@/content/assistant";
 import { guardians } from "@/content/guardians";
 import { assets } from "@/content/assets";
+import { site } from "@/content/site";
 import { disputes } from "@/content/disputes";
 import type { Bundle } from "@/content/i18n/types";
 import { af } from "@/content/i18n/af";
@@ -13,6 +14,7 @@ import { st } from "@/content/i18n/st";
 import { zu } from "@/content/i18n/zu";
 import { mergeCopy } from "./merge";
 import { isLocale } from "./locales";
+import { unmark } from "@/lib/marked";
 
 /** Partial slices (screens, assistant) that must still be translated in full: the newer guardians-era screens. */
 const fullSlices = (t: Bundle) => ({
@@ -25,6 +27,12 @@ const fullSlices = (t: Bundle) => ({
   "assistant.publicRecord": [assistant.publicRecord, t.assistant.publicRecord],
   "screens.start.phone": [screens.start.phone, t.screens.start?.phone],
 } as Record<string, [unknown, unknown]>);
+
+/** How many `*marks*` a string carries; -1 when an asterisk is left over (unbalanced). */
+const markCount = (s: string) => {
+  const n = (s.match(/\*[^*\n]+\*/g) ?? []).length;
+  return unmark(s).includes("*") ? -1 : n;
+};
 
 const placeholders = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
 
@@ -57,6 +65,17 @@ describe.each([["af", af], ["st", st], ["zu", zu]] as const)("%s translation", (
     const english = { landing, common, screens, pay, assistant, guardians, assets, disputes };
     const translated = { landing: t.landing, common: t.common, screens: t.screens, pay: t.pay, assistant: t.assistant, guardians: t.guardians, assets: t.assets, disputes: t.disputes };
     for (const [path, en, tr] of pairs(english, translated)) expect(placeholders(tr), path).toBe(placeholders(en));
+  });
+
+  it("marks the same number of key words as the English copy (the hand-drawn underline), with balanced asterisks", () => {
+    const english = { landing, common, screens, pay, assistant, guardians, assets, disputes, site };
+    const translated = { landing: t.landing, common: t.common, screens: t.screens, pay: t.pay, assistant: t.assistant, guardians: t.guardians, assets: t.assets, disputes: t.disputes, site: t.site };
+    const wrong: string[] = [];
+    for (const [path, en, tr] of pairs(english, translated)) {
+      if (markCount(en) === 0 && !tr.includes("*")) continue;
+      if (markCount(tr) !== markCount(en)) wrong.push(`${path}: ${JSON.stringify(tr)}`);
+    }
+    expect(wrong).toEqual([]);
   });
 
   it("translates every guardians, assets and disputes key, every contract error name, the newer common keys and screens", () => {

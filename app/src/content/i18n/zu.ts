@@ -45,13 +45,13 @@ export const zu: Bundle = {
     },
     notFound: {
       eyebrow: "Ikhasi alitholakalanga",
-      title: "Leli khasi aliyona ingxenye yefa.",
+      title: "Leli khasi aliyona ingxenye *yefa*.",
       body: "Isixhumanisi singase sibe sidala, noma ikhasi lisusiwe. Akukho okulahlekile. Isisefo sakho nemithetho kusendaweni oshiye kuyo.",
       home: "Buyela ekuqaleni",
       app: "Vula ifa lami",
     },
     offline: {
-      title: "Awuxhunyiwe ku-inthanethi",
+      title: "*Awuxhunyiwe* ku-inthanethi",
       body: "I-Heirloom idinga uxhumano ukuze ifunde isisefo futhi ithumele imiyalelo. I-wallet yakho nemithetho kuphephile. Xhuma futhi bese uzama futhi.",
       retry: "Zama futhi",
     },
@@ -525,7 +525,7 @@ export const zu: Bundle = {
   screens: {
     start: {
       eyebrow: "Siyakwamukela",
-      title: "Ake silungise i-Heirloom",
+      title: "Ake silungise *i-Heirloom*",
       body: "Bona indaba yomndeni wonke nge-demo, noma udale i-wallet yakho kule divayisi.",
       demo: {
         title: "Zama i-demo",
@@ -604,7 +604,7 @@ export const zu: Bundle = {
       },
     },
     estate: {
-      title: "Ifa lika-{name}",
+      title: "*Ifa* lika-{name}",
       eyebrow: "Ifa",
       vault: "Isisefo esiphephile",
       vaultHolds: "Igcinwe nge-USD₮ yinkontileka yefa ku-Solana",
@@ -682,7 +682,7 @@ export const zu: Bundle = {
     },
     will: {
       eyebrow: "Umakhi wohlelo",
-      title: "Yakha uhlelo lomndeni wakho",
+      title: "Yakha uhlelo *lomndeni* wakho",
       body: "Bhala ngendlela okhuluma ngayo. I-agent ikwenza imithetho. Ukhetha ukuthi yimiphi eqala manje nokuthi yimiphi elinda uze ungabi bikho, futhi uvuma ngamunye ngaphambi kokuthi kuvalwe lutho.",
       talk: "Khuluma esikhundleni salokho",
       consentLead: "Ngaphambi kokuthi siqale",
@@ -700,7 +700,7 @@ export const zu: Bundle = {
     },
     vault: {
       eyebrow: "Isisefo",
-      title: "Faka imali esisefweni",
+      title: "Faka imali *esisefweni*",
       body: "Isisefo sigcina i-USD₮ yomndeni wakho. Imithetho emakwe ngokuthi \"Manje\" ikhokha kuso ngesikhathi. Ngenkathi usaphila singesakho: faka noma ukhiphe noma nini uma uthanda.",
       balance: "Esisefweni",
       wallet: "Ku-wallet yakho",
@@ -732,7 +732,7 @@ export const zu: Bundle = {
     },
     people: {
       eyebrow: "Abantu",
-      title: "Obani abayingxenye yaleli fa",
+      title: "Obani abayingxenye *yaleli fa*",
       body: "Abantu nezikhungo umnikazi azikhethile. Akekho omunye ongathola noma avume lutho.",
       trusted: { title: "Abantu abathembekile" },
       family: { title: "Umndeni" },
@@ -740,7 +740,7 @@ export const zu: Bundle = {
     },
     family: {
       eyebrow: "Umlando",
-      title: "Uhambo lwefa",
+      title: "*Uhambo* lwefa",
       body: "Zonke izinyathelo kusukela encwadini yefa esayiniwe kuya efeni elivuliwe, nokuthi ubani okufanele avume.",
       report: { title: "Bika ukudlula emhlabeni", submit: "Thumela ukuze kuhlolwe" },
       veto: { title: "Ingabe lokhu kuyiphutha?", body: "Kubikwe ukudlula emhlabeni efeni lakho. Uma ufunda lokhu, kukhansele. Isisefo sihlala sivaliwe futhi akukho okukhokhwayo.", cta: "Ngisekhona" },
@@ -749,7 +749,7 @@ export const zu: Bundle = {
     },
     claims: {
       eyebrow: "Izicelo",
-      title: "Izimali zesikole nerenti, zikhokhelwa isikhungo",
+      title: "Izimali zesikole nerenti, zikhokhelwa *isikhungo*",
       body: "Khetha umthetho, layisha isitatimende futhi i-Heirloom ikhokhela isikhungo ngqo. Akukho okukhokhelwa wena ngokheshi.",
       owner: { title: "Kulindele imvume yakho", approve: "Vuma futhi ukhokhe" },
       newCta: "Qala isicelo esisha",
@@ -761,14 +761,14 @@ export const zu: Bundle = {
     },
     hardship: {
       eyebrow: "Ubunzima",
-      title: "Cela ukuxolelwa ngenxa yobunzima",
+      title: "Cela ukuxolelwa ngenxa *yobunzima*",
       body: "Uma usebunzimeni ngempela, imoto ingathengiswa ngaphansi kwentengo ephansi, kodwa hhayi ngaphansi kwentengo ephansi yobunzima. Imali bese iya kuwe.",
       submit: "Thumela isicelo",
       viewCar: "Buka imoto",
     },
     send: {
       eyebrow: "Thumela",
-      title: "Thumela emndenini",
+      title: "Thumela *emndenini*",
       body: "Ukudlulisa i-USD₮ ngqo kusuka ku-wallet yakho ye-Tether kumuntu omethembayo. Uhlola konke ngaphambi kokuthi kusayinwe.",
       recipients: "Ngekabani?",
       amount: "Imali nge-USD₮",
@@ -779,7 +779,7 @@ export const zu: Bundle = {
     },
     inbox: {
       eyebrow: "Imiyalezo",
-      title: "Kulindele wena",
+      title: "*Kulindele* wena",
       body: "Funda umbiko we-agent, bese uqinisekisa kuphela lokho owaziyo ukuthi kuyiqiniso. Ngaphandle kwezimvume ezanele, akukho okuhambayo.",
       empty: { title: "Akukho okusalele", body: "Izicelo ezintsha ezivela emndenini zizovela lapha nombiko we-agent." },
       decline: "Yenqaba",
@@ -789,7 +789,7 @@ export const zu: Bundle = {
       metaTitle: "Irekhodi lefa lomphakathi",
       metaDescription: "Irekhodi lefa le-Heirloom elingafundwa kuphela: isimo salo, imithetho yalo nayo yonke inkokhelo nesinqumo, ngasinye nerisidi laso.",
       eyebrow: "Irekhodi lomphakathi",
-      title: "Ifa lika-{name}",
+      title: "*Ifa* lika-{name}",
       body: "Ikhasi elingafundwa kuphela noma ubani onesixhumanisi angalivula, ngaphandle kwe-wallet. Libonisa lokho inkontileka yefa ekurekhodayo: isimo salo, imithetho yalo, nayo yonke inkokhelo nesinqumo nerisidi laso. Amaphepha avela kuphela njengezigxivizo (ama-hash e-SHA-256).",
       loading: "Kulayishwa irekhodi lefa",
       notFound: { title: "Alikho ifa kuleli kheli", body: "Hlola isixhumanisi. Irekhodi livela uma umnikazi esesayine uhlelo." },
@@ -1316,7 +1316,7 @@ export const zu: Bundle = {
     meta: { title: "Impahla" },
     eyebrow: "Impahla",
     list: {
-      title: "Izinto ezizothengiswa",
+      title: "Izinto *ezizothengiswa*",
       body: "Konke ifa elizokuthengisela umndeni, kungalokothi kube ngaphansi kwentengo ebekiwe.",
       add: "Engeza impahla",
       current: "Okuboniswayo",
@@ -1329,7 +1329,7 @@ export const zu: Bundle = {
       Car: "Imoto", Motorbike: "Isithuthuthu", Furniture: "Ifenisha", Jewellery: "Ubucwebe", Electronics: "Izinto zikagesi", Other: "Okunye",
     },
     add: {
-      title: "Engeza impahla",
+      title: "Engeza *impahla*",
       body: "Engeza okuthile ofuna kuthengiswe ngemuva kokushona kwakho. Ifa liphatha ubunikazi bayo bedijithali futhi liyithengisele umndeni wakho.",
       kindLegend: "Kuyini?",
       titleLabel: "Igama",

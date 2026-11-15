@@ -45,13 +45,13 @@ export const st: Bundle = {
     },
     notFound: {
       eyebrow: "Leqephe ha le a fumanwa",
-      title: "Leqephe lena ha se karolo ya lefa.",
+      title: "Leqephe lena ha se karolo ya *lefa*.",
       body: "Kgokahano e ka nna ya ba ya kgale, kapa leqephe le tlositswe. Ha ho letho le lahlehileng. Polokelo ya hao le melao di sa ntse di le moo o di siileng teng.",
       home: "Kgutlela qalong",
       app: "Bula lefa la ka",
     },
     offline: {
-      title: "Ha o a hokelwa",
+      title: "Ha o a *hokelwa*",
       body: "Heirloom e hloka kgokahano ho bala polokelo le ho romela ditaelo. Wallet ya hao le melao di bolokehile. Hokela hape mme o leke hape.",
       retry: "Leka hape",
     },
@@ -525,7 +525,7 @@ export const st: Bundle = {
   screens: {
     start: {
       eyebrow: "Rea o amohela",
-      title: "Ha re lokise Heirloom",
+      title: "Ha re lokise *Heirloom*",
       body: "Bona pale ya lelapa lohle ka demo, kapa o etse wallet ya hao sesebedisweng sena.",
       demo: {
         title: "Leka demo",
@@ -604,7 +604,7 @@ export const st: Bundle = {
       },
     },
     estate: {
-      title: "Lefa la {name}",
+      title: "*Lefa* la {name}",
       eyebrow: "Lefa",
       vault: "Polokelo e sireletsehileng",
       vaultHolds: "E bolokilwe ka USD₮ ke konteraka ya lefa ho Solana",
@@ -682,7 +682,7 @@ export const st: Bundle = {
     },
     will: {
       eyebrow: "Moetsi wa moralo",
-      title: "Haha moralo wa lelapa la hao",
+      title: "Haha moralo wa *lelapa* la hao",
       body: "Ngola kamoo o buang kateng. Agent e o fetola melao. O kgetha hore na ke efe e qalang jwale le efe e emang ho fihlela o se o le siile, mme o dumella e nngwe le e nngwe pele ho notlelwa letho.",
       talk: "Bua ho ena le ho ngola",
       consentLead: "Pele re qala",
@@ -700,7 +700,7 @@ export const st: Bundle = {
     },
     vault: {
       eyebrow: "Polokelo",
-      title: "Kenya chelete polokelong",
+      title: "Kenya chelete *polokelong*",
       body: "Polokelo e bolokela lelapa la hao USD₮. Melao e tshwailweng \"Jwale\" e lefa ho tswa ho yona ka nako. Ha o ntse o phela ke ya hao: kenya kapa o ntshe neng kapa neng ha o batla.",
       balance: "Polokelong",
       wallet: "Wallet ya hao",
@@ -728,7 +728,7 @@ export const st: Bundle = {
     },
     people: {
       eyebrow: "Batho",
-      title: "Ke bomang ba leng karolo ya lefa lena",
+      title: "Ke bomang ba leng karolo ya *lefa* lena",
       body: "Batho le ditheo tseo mong wa lefa a di kgethileng. Ha ho motho e mong ya ka amohelang kapa a dumella letho.",
       trusted: { title: "Batho ba tshepahalang" },
       family: { title: "Lelapa" },
@@ -736,7 +736,7 @@ export const st: Bundle = {
     },
     family: {
       eyebrow: "Tatellano",
-      title: "Leeto la lefa",
+      title: "*Leeto* la lefa",
       body: "Mohato o mong le o mong ho tloha lengolong la thato le saennweng ho isa lefeng le bulehileng, le hore na ke mang ya tlamehang ho dumela.",
       report: { title: "Tlaleha lefu", submit: "Romela hore le hlahlojwe" },
       veto: { title: "Na ena ke phoso?", body: "Lefu le tlalehilwe bakeng sa lefa la hao. Haeba o bala sena, le hlakole. Polokelo e dula e notletswe mme ha ho letho le lefuwang.", cta: "Ke sa ntse ke le teng" },
@@ -745,7 +745,7 @@ export const st: Bundle = {
     },
     claims: {
       eyebrow: "Dikopo",
-      title: "Ditefello le rente, di lefuwa setheong",
+      title: "Ditefello le rente, di lefuwa *setheong*",
       body: "Kgetha molao, kenya statemente mme Heirloom e lefa setheo ka kotloloho. Ha ho letho le lefuwang wena ka kheshe.",
       owner: { title: "Di emetse tumello ya hao", approve: "Dumella mme o lefe" },
       newCta: "Qala kopo e ntjha",
@@ -757,14 +757,14 @@ export const st: Bundle = {
     },
     hardship: {
       eyebrow: "Mathata",
-      title: "Kopa kgethollo ka lebaka la mathata",
+      title: "Kopa kgethollo ka lebaka la *mathata*",
       body: "Haeba o hlile o le mathateng, koloi e ka rekiswa ka tlase ho theko e tlase, empa ho hang e seng ka tlase ho theko e tlase ya mathata. Chelete e be e ya ho wena.",
       submit: "Romela kopo",
       viewCar: "Sheba koloi",
     },
     send: {
       eyebrow: "Romela",
-      title: "Romela ho lelapa",
+      title: "Romela ho *lelapa*",
       body: "Phetisetso ya USD₮ ka kotloloho ho tswa wallet ya hao ya Tether ho motho eo o mo tshepang. O hlahloba tsohle pele e saenwa.",
       recipients: "Ke ya mang?",
       amount: "Palo ka USD₮",
@@ -775,7 +775,7 @@ export const st: Bundle = {
     },
     inbox: {
       eyebrow: "Inbox",
-      title: "Di o emetse",
+      title: "Di o *emetse*",
       body: "Bala tlaleho ya agent, ebe o netefatsa feela seo o tsebang hore ke nnete. Ntle le ditumello tse lekaneng, ha ho letho le tsamayang.",
       empty: { title: "O phethile tsohle", body: "Dikopo tse ntjha tse tswang lelapeng di tla hlaha mona le tlaleho ya agent." },
       decline: "Hana",
@@ -785,7 +785,7 @@ export const st: Bundle = {
       metaTitle: "Rekoto ya setjhaba ya lefa",
       metaDescription: "Rekoto ya ho balwa feela ya lefa la Heirloom: boemo ba lona, melao ya lona le tefo e nngwe le e nngwe le qeto e nngwe le e nngwe, ka nngwe le rasiti ya yona.",
       eyebrow: "Rekoto ya setjhaba",
-      title: "Lefa la {name}",
+      title: "*Lefa* la {name}",
       body: "Leqephe la ho balwa feela leo mang kapa mang ya nang le link a ka le bulang, ho sa hlokehe wallet. Le bontsha seo konteraka ya lefa e se ngolang: boemo ba lona, melao ya lona, le tefo e nngwe le e nngwe le qeto e nngwe le e nngwe le rasiti ya yona. Ditokomane di hlaha feela e le menwana (di-hash tsa SHA-256).",
       loading: "Ho kenngwa rekoto ya lefa",
       notFound: { title: "Ha ho lefa atereseng ena", body: "Hlahloba link. Rekoto e hlaha hang ha mong wa lefa a saenne moralo." },
@@ -1313,7 +1313,7 @@ export const st: Bundle = {
     meta: { title: "Thepa" },
     eyebrow: "Thepa",
     list: {
-      title: "Dintho tse tla rekiswa",
+      title: "Dintho tse tla *rekiswa*",
       body: "Tsohle tseo lefa le tla di rekisetsa lelapa, le ka mohla e seng ka tlase ho theko e beilweng.",
       add: "Kenya thepa",
       current: "E bontshwang",
@@ -1326,7 +1326,7 @@ export const st: Bundle = {
       Car: "Koloi", Motorbike: "Sethuthuthu", Furniture: "Thepa ya ka tlung", Jewellery: "Mabenyane", Electronics: "Disebediswa tsa motlakase", Other: "Tse ding",
     },
     add: {
-      title: "Kenya thepa",
+      title: "Kenya *thepa*",
       body: "Kenya ntho eo o batlang e rekiswa kamora lefu la hao. Lefa le tshwara tokomane ya yona ya botho ya dijithale mme le e rekisetsa lelapa la hao.",
       kindLegend: "Ke eng?",
       titleLabel: "Lebitso",
