@@ -156,7 +156,7 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
             <div className={clsx("min-w-0 flex-1 rounded-lg border p-3.5", st.state === "now" ? "border-[1.5px] border-dashed border-ink bg-surface" : "border-line bg-surface")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="font-sans text-body font-semibold tracking-normal">{st.title}</h2>
-                <span className={clsx("text-[0.75rem] font-semibold uppercase tracking-wider", st.state === "done" ? "text-ok" : st.state === "now" ? "text-brass" : "text-ink-2")}>
+                <span className={clsx("text-[0.75rem] font-semibold uppercase tracking-wider", st.state === "done" ? "text-ok" : st.state === "now" ? "text-amber-ink" : "text-ink-2")}>
                   {st.state === "done" ? copy.stateDone : st.state === "now" ? copy.stateNow : copy.stateNext}
                 </span>
               </div>
@@ -219,7 +219,7 @@ function ReportForm({ copy }: { copy: Copy }) {
   }
   return (
     <Card>
-      <h2 className="flex items-center gap-2 text-h3"><FileHeart className="size-5 text-accent" aria-hidden="true" />{r.title}</h2>
+      <h2 className="flex items-center gap-2 text-h3"><FileHeart className="size-5 text-amber" aria-hidden="true" />{r.title}</h2>
       <p className="mt-1 text-ink-2">{r.body}</p>
       <form onSubmit={submit} noValidate className="mt-4 flex flex-col gap-4">
         <FilePicker id="death-cert" label={r.file} hint={r.fileHint} file={file} onFile={(f) => { setFile(f); setError(null); }} samples={r.samples} copy={common.file} />

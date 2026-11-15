@@ -10,8 +10,8 @@ import { LanguageSwitcher } from "./language-switcher";
 export function SiteHeader({ site: english, minimal = false }: { site: SiteCopy; minimal?: boolean }) {
   const site = useLocalized(english, (t) => t.site);
   return (
-    <header className="pt-safe sticky top-0 z-40 border-b border-ink bg-bg">
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-accent focus:px-4 focus:py-2.5 focus:text-accent-ink">{site.nav.skip}</a>
+    <header className="pt-safe sticky top-0 z-40 border-b border-line bg-bg">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-ink focus:px-4 focus:py-2.5 focus:text-bg">{site.nav.skip}</a>
       <div className="mx-auto flex h-[var(--header-h)] w-full max-w-6xl items-center gap-2 px-4 min-[400px]:gap-3">
         {/* Below 400px the wordmark gives way to the language switcher; the link keeps its accessible name. */}
         <Link href="/" aria-label={site.nav.home} className="shrink-0 rounded-full"><Logo name={site.name} className="max-[400px]:[&>span:last-child]:hidden" /></Link>

@@ -23,6 +23,7 @@ import { CheckInCard, CheckInWatch } from "./check-in";
 import { FallbackStatus } from "@/components/guardians/fallback";
 import { ObjectionList } from "@/components/guardians/objections";
 import { YearlyCapEditor, YearlyUsage } from "@/components/disputes/yearly";
+import { Marked } from "@/components/ui/marked";
 import { guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
 
 type Copy = ScreensCopy["estate"];
@@ -55,7 +56,7 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-small font-semibold uppercase tracking-[0.14em] opacity-80">{copy.eyebrow}</p>
-                <h1 id="estate-title" className="text-h2">{fmt(copy.title, { name: first })}</h1>
+                <h1 id="estate-title" className="text-h2"><Marked text={fmt(copy.title, { name: first })} /></h1>
               </div>
               <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full bg-ink px-3 text-small font-semibold text-bg">
                 <span className={clsx("size-2 rounded-full", e.status === "DeathPending" ? "animate-pulse-soft bg-bg" : "bg-bg")} aria-hidden="true" />
@@ -110,7 +111,7 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
         {/* Car */}
         <Card>
           <div className="flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-h3"><CarFront className="size-5 text-accent" aria-hidden="true" />{copy.car.title}</h2>
+            <h2 className="flex items-center gap-2 text-h3"><CarFront className="size-5 text-amber" aria-hidden="true" />{copy.car.title}</h2>
             {car && <Badge tone={car.status === "Sold" ? "ok" : car.status === "Listed" ? "warn" : "neutral"}>{common.status.asset[car.status]}</Badge>}
           </div>
           {car ? (
@@ -132,7 +133,7 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
         {/* Trusted people */}
         <Card>
           <div className="flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-h3"><UsersRound className="size-5 text-accent" aria-hidden="true" />{copy.people.title}</h2>
+            <h2 className="flex items-center gap-2 text-h3"><UsersRound className="size-5 text-amber" aria-hidden="true" />{copy.people.title}</h2>
             <ButtonLink href="/people" variant="ghost" small>{copy.people.view}</ButtonLink>
           </div>
           <p className="text-small text-ink-2">{fmt(copy.people.body, { need: e.deathThreshold })}</p>
@@ -198,7 +199,7 @@ function RuleCard({ rule, snap, copy, rate, now }: { rule: Rule; snap: EstateSna
     <li ref={ref} className={clsx("rounded-lg border bg-surface p-4 shadow-card transition-shadow duration-500", glow ? "border-ink ring-2 ring-ink" : "border-line")}>
       {glow && <p className="sr-only" role="status">{copy.rules.highlighted}</p>}
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent"><Icon className="size-5" aria-hidden="true" /></span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-sm bg-surface-2 text-amber"><Icon className="size-5" aria-hidden="true" /></span>
         <div className="min-w-0 flex-1 basis-32">
           <h3 className="font-sans text-body font-semibold tracking-normal">{common.status.category[rule.category]}</h3>
           <p className="truncate text-small text-ink-2">{fmt(copy.rules.forWho, { name: who })}</p>
@@ -304,7 +305,7 @@ function Scheduled({ copy, snap, rate }: { copy: Copy; snap: EstateSnapshot; rat
   return (
     <section aria-labelledby="scheduled-title">
       <div className="mb-3">
-        <h2 id="scheduled-title" className="flex items-center gap-2 text-h3"><CalendarClock className="size-5 text-accent" aria-hidden="true" />{c.title}</h2>
+        <h2 id="scheduled-title" className="flex items-center gap-2 text-h3"><CalendarClock className="size-5 text-amber" aria-hidden="true" />{c.title}</h2>
         <p className="text-small text-ink-2">{c.body}</p>
       </div>
       <ul className="grid gap-3">

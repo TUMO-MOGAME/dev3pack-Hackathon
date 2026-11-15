@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { Children, isValidElement, type ComponentProps, type ReactNode } from "react";
 import { Check, CircleDashed, Loader2, TriangleAlert } from "@/components/ui/icons";
 import { formatUsdt, formatZar } from "@/lib/format";
+import { Marked } from "@/components/ui/marked";
 
 /* ---------- Logo ---------- */
 
@@ -21,7 +22,7 @@ export function Logo({ name, className }: { name: string; className?: string }) 
   return (
     <span className={clsx("inline-flex items-center gap-2.5", className)}>
       <LogoMark className="size-8 shrink-0" />
-      <span className="font-display text-[1.375rem] leading-none tracking-tight">{name}</span>
+      <span className="font-display text-[1.25rem] font-medium leading-none tracking-[-0.01em]">{name}</span>
     </span>
   );
 }
@@ -29,10 +30,11 @@ export function Logo({ name, className }: { name: string; className?: string }) 
 /* ---------- Buttons ---------- */
 
 const btnBase =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-body font-medium leading-tight border transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] disabled:opacity-55 disabled:active:scale-100 select-none text-center";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-[0.9375rem] font-semibold leading-tight border-[1.5px] transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.98] disabled:opacity-55 disabled:active:scale-100 select-none text-center";
 const btnVariants = {
-  primary: "border-accent bg-accent text-accent-ink hover:border-accent-hover hover:bg-accent-hover",
-  secondary: "border-ink bg-surface text-ink hover:bg-surface-2",
+  /** Ink on the page: a black button by day, a white one at night. */
+  primary: "border-ink bg-ink text-bg hover:border-ink-hover hover:bg-ink-hover",
+  secondary: "border-ink bg-transparent text-ink hover:bg-ink hover:text-bg",
   ghost: "border-transparent text-ink hover:bg-surface-2",
   danger: "border-2 border-ink bg-surface text-ink hover:bg-surface-2",
   quiet: "border-transparent bg-surface-2 text-ink hover:bg-line",
@@ -70,40 +72,40 @@ export function ButtonLink({
 
 export function Card({ className, children, ...rest }: ComponentProps<"div">) {
   return (
-    <div {...rest} className={clsx("rounded-lg border border-line bg-surface p-4 sm:p-5", className)}>
+    <div {...rest} className={clsx("rounded-lg border border-line bg-surface p-4 shadow-card sm:p-5", className)}>
       {children}
     </div>
   );
 }
 
 export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={clsx("text-small font-semibold uppercase tracking-[0.14em] text-ink", className)}>{children}</p>;
+  return <p className={clsx("eyebrow", className)}>{children}</p>;
 }
 
 /**
- * Status without colour. Each tone has its own shape, and ok / warn / danger carry a default icon
- * (used unless the caller passes its own), so a badge reads at a glance and never relies on colour.
+ * Status never relies on colour. Each tone has its own shape, and ok / warn / danger carry a default icon
+ * (used unless the caller passes its own), so a badge reads at a glance. Success is also green (--ok).
  */
 const badgeTones = {
-  /** Quiet label: thin grey outline. */
-  neutral: "rounded-full border border-line-strong bg-surface text-ink-2",
-  /** Success: solid outline with a filled tick. */
-  ok: "rounded-full border-[1.5px] border-ink bg-surface text-ink",
+  /** Quiet label: hairline outline. */
+  neutral: "rounded-full border border-line bg-surface text-ink-2",
+  /** Success: green pill with a filled tick. */
+  ok: "rounded-full border border-transparent bg-ok-soft text-ok",
   /** Pending / caution: dashed outline. */
   warn: "rounded-full border-[1.5px] border-dashed border-ink bg-surface text-ink",
   /** Blocked / rejected: solid inverted block with square corners. */
   danger: "rounded-[3px] border border-ink bg-ink text-bg uppercase tracking-wide",
-  /** Informational: solid hairline outline. */
-  accent: "rounded-full border border-ink bg-surface text-ink",
+  /** Informational: soft pill with accent text (the redesign's tag). */
+  accent: "rounded-full border border-transparent bg-surface-2 text-amber-ink",
   /** Highlight ("Now", "Confirmed"): solid inverted pill. */
   gold: "rounded-full border border-ink bg-ink text-bg",
 } as const;
 export type Tone = keyof typeof badgeTones;
 
-/** A filled tick: a solid disc in the ink colour with the tick knocked out. */
-export function TickDisc({ className }: { className?: string }) {
+/** A filled tick: a solid disc in the ink colour (or `tone="ok"`, green) with the tick knocked out. */
+export function TickDisc({ className, tone = "ink" }: { className?: string; tone?: "ink" | "ok" }) {
   return (
-    <span className={clsx("grid size-4 shrink-0 place-items-center rounded-full bg-ink text-bg", className)} aria-hidden="true">
+    <span className={clsx("grid size-4 shrink-0 place-items-center rounded-full", tone === "ok" ? "bg-ok text-ok-soft" : "bg-ink text-bg", className)} aria-hidden="true">
       <Check className="size-[70%]" strokeWidth={3.5} />
     </span>
   );
@@ -113,7 +115,7 @@ export function Badge({ tone = "neutral", children, className }: { tone?: Tone; 
   const hasIcon = Children.toArray(children).some(isValidElement);
   return (
     <span className={clsx("inline-flex min-h-6 items-center gap-1 whitespace-nowrap px-2.5 text-small font-semibold", badgeTones[tone], className)}>
-      {!hasIcon && tone === "ok" && <TickDisc />}
+      {!hasIcon && tone === "ok" && <TickDisc tone="ok" />}
       {!hasIcon && tone === "warn" && <CircleDashed className="size-3.5 shrink-0" aria-hidden="true" />}
       {!hasIcon && tone === "danger" && <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" />}
       {children}
@@ -121,12 +123,13 @@ export function Badge({ tone = "neutral", children, className }: { tone?: Tone; 
   );
 }
 
+/** `title` may mark one key word as *word* (the amber underline; see lib/marked.ts). */
 export function PageHeader({ eyebrow, title, body, action }: { eyebrow?: string; title: string; body?: string; action?: ReactNode }) {
   return (
     <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0 max-w-2xl">
-        {eyebrow && <Eyebrow className="mb-1.5">{eyebrow}</Eyebrow>}
-        <h1 className="text-h2">{title}</h1>
+        {eyebrow && <Eyebrow className="mb-2 flex w-fit">{eyebrow}</Eyebrow>}
+        <h1 className="text-h2"><Marked text={title} /></h1>
         {body && <p className="mt-2 text-ink-2">{body}</p>}
       </div>
       {action}
@@ -139,7 +142,7 @@ export function PageHeader({ eyebrow, title, body, action }: { eyebrow?: string;
 export function Money({ base, rate, size = "md", className }: { base: bigint; rate?: number | null; size?: "md" | "lg" | "xl"; className?: string }) {
   return (
     <span className={clsx("inline-flex flex-col", className)}>
-      <span className={clsx("font-semibold tabular-nums", size === "xl" ? "font-display text-h1 font-medium" : size === "lg" ? "text-h3" : "")}>{formatUsdt(base)}</span>
+      <span className={clsx("tabular-nums", size === "xl" ? "font-display text-h1 font-normal" : size === "lg" ? "text-h3 font-semibold" : "font-semibold")}>{formatUsdt(base)}</span>
       {rate ? <span className="text-small text-ink-2 tabular-nums">≈ {formatZar(base, rate)}</span> : null}
     </span>
   );
@@ -229,7 +232,7 @@ export function EmptyState({ icon, title, body, action, level = 2 }: { icon?: Re
   const H = level === 1 ? "h1" : "h2";
   return (
     <div className="flex flex-col items-center rounded-lg border border-dashed border-line-strong bg-surface px-5 py-10 text-center">
-      {icon && <div className="mb-4 grid size-14 place-items-center rounded-full bg-ink text-bg">{icon}</div>}
+      {icon && <div className="mb-4 grid size-14 place-items-center rounded-md bg-surface-2 text-amber">{icon}</div>}
       <H className="text-h3">{title}</H>
       {body && <p className="mt-2 max-w-md text-ink-2">{body}</p>}
       {action && <div className="mt-5 flex flex-wrap justify-center gap-3">{action}</div>}
@@ -241,21 +244,21 @@ export function Notice({ tone = "accent", icon, title, children, className }: { 
   const tones = {
     /** Quiet aside: grey panel, no rule. */
     neutral: "border border-line bg-surface-2",
-    /** Success: solid outline, filled tick. */
-    ok: "border-[1.5px] border-ink bg-surface",
+    /** Success: green panel, filled green tick. */
+    ok: "border border-transparent bg-ok-soft",
     /** Caution / pending: dashed outline, warning icon. */
     warn: "border-[1.5px] border-dashed border-ink bg-surface",
     /** Danger: heavy outline with a thick left rule, warning icon in a solid block. */
     danger: "border-2 border-l-8 border-ink bg-surface",
-    /** Information: hairline outline with a medium left rule. */
-    accent: "border border-l-4 border-line-strong border-l-ink bg-surface",
-    /** Highlight: solid outline on grey. */
-    gold: "border-2 border-ink bg-surface-2",
+    /** Information: hairline outline with an amber left rule (the redesign's "honest" note). */
+    accent: "border border-l-[3px] border-line border-l-amber bg-surface",
+    /** Highlight: solid ink outline. */
+    gold: "border-[1.5px] border-ink bg-surface",
   } as const;
-  const mark = icon ?? (tone === "warn" || tone === "danger" ? <TriangleAlert className="size-5" aria-hidden="true" /> : tone === "ok" ? <TickDisc className="size-5" /> : null);
+  const mark = icon ?? (tone === "warn" || tone === "danger" ? <TriangleAlert className="size-5" aria-hidden="true" /> : tone === "ok" ? <TickDisc tone="ok" className="size-5" /> : null);
   return (
     <div className={clsx("flex gap-3 rounded-md p-3.5 text-ink", tones[tone], className)}>
-      {mark && <span className={clsx("shrink-0", tone === "danger" ? "-my-0.5 grid size-8 place-items-center self-start rounded-[3px] bg-ink text-bg" : "mt-0.5 text-ink")}>{mark}</span>}
+      {mark && <span className={clsx("shrink-0", tone === "danger" ? "-my-0.5 grid size-8 place-items-center self-start rounded-[3px] bg-ink text-bg" : tone === "accent" ? "mt-0.5 text-amber" : "mt-0.5 text-ink")}>{mark}</span>}
       <div className="min-w-0 text-small">
         {title && <p className="text-body font-semibold">{title}</p>}
         {children}

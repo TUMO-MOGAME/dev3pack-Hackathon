@@ -50,7 +50,7 @@ const GROUPS: { key: GroupKey; items: Item[] }[] = [
 
 const row = "relative flex min-h-11 w-full items-center gap-3 rounded-lg text-left text-small transition-colors";
 const rowIdle = "font-medium text-ink hover:bg-surface-2";
-const rowActive = "bg-ink font-semibold text-bg";
+const rowActive = "bg-surface-2 font-semibold text-ink [&>:first-child]:text-amber";
 const groupLabel = "px-3 pb-1 pt-4 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-2";
 
 export function Sidebar({
@@ -86,8 +86,8 @@ export function Sidebar({
     key === "hardship" ? s.nav.hardship : key === "legacy" ? s.nav.legacy : key === "send" ? s.nav.send : common.nav[key as "estate" | "will" | "vault" | "car" | "people" | "family" | "claims" | "inbox"];
 
   const text = (t: string) => <span className={rail ? "sr-only" : "min-w-0 flex-1 truncate"}>{t}</span>;
-  const badge = (n: number, active: boolean) => n > 0 && (
-    <span className={clsx("grid min-w-5 place-items-center rounded-full px-1 text-[0.7rem] font-bold leading-5", rail ? "absolute right-0.5 top-0.5 bg-ink text-bg ring-2 ring-surface" : active ? "bg-bg text-ink" : "bg-ink text-bg")}>{n}</span>
+  const badge = (n: number) => n > 0 && (
+    <span className={clsx("grid min-w-5 place-items-center rounded-full px-1 text-[0.7rem] font-bold leading-5", rail ? "absolute right-0.5 top-0.5 bg-ink text-bg ring-2 ring-surface" : "bg-ink text-bg")}>{n}</span>
   );
 
   const link = (it: Item) => {
@@ -101,7 +101,7 @@ export function Sidebar({
         >
           <it.icon className="size-5 shrink-0" aria-hidden="true" />
           {text(label(it.key))}
-          {badge(n, active)}
+          {badge(n)}
         </Link>
       </li>
     );
@@ -126,7 +126,7 @@ export function Sidebar({
           <LogoMark className="size-9 shrink-0" />
           {!rail && (
             <span className="min-w-0 leading-tight">
-              <span className="block font-display text-[1.375rem] leading-none">{siteName}</span>
+              <span className="block font-display text-[1.25rem] font-medium leading-none tracking-[-0.01em]">{siteName}</span>
               <span className="mt-0.5 block truncate text-[0.75rem] text-ink-2">{s.subtitle}</span>
             </span>
           )}

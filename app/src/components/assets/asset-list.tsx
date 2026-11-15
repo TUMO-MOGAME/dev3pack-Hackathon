@@ -8,6 +8,7 @@ import { fmt, useCopy } from "@/components/shell/copy";
 import type { AssetsCopy } from "@/content/assets";
 import type { Asset } from "@/lib/types";
 import { kindOf, type MediaMap } from "./media";
+import { Marked } from "@/components/ui/marked";
 
 export function AssetList({ copy, assets, media, current, onSelect, onAdd }: {
   copy: AssetsCopy; assets: Asset[]; media: MediaMap; current: string; onSelect: (address: string) => void; onAdd?: () => void;
@@ -19,7 +20,7 @@ export function AssetList({ copy, assets, media, current, onSelect, onAdd }: {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{copy.eyebrow}</p>
-          <h1 id="assets-list-title" className="text-h2">{l.title}</h1>
+          <h1 id="assets-list-title" className="text-h2"><Marked text={l.title} /></h1>
           <p className="mt-1 text-ink-2">{l.body}</p>
         </div>
         {onAdd && <Button variant="secondary" small onClick={onAdd}><Plus className="size-4" aria-hidden="true" />{l.add}</Button>}

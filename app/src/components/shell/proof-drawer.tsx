@@ -84,7 +84,7 @@ export function ProofDrawer() {
           </dl>
         )}
         {e && (
-          <div className="rounded-lg border border-line bg-surface-2 px-3.5 py-2.5">
+          <div className="rounded-lg border border-line bg-surface px-3.5 py-2.5">
             <Link href={`/audit/${e.address}`} onClick={() => setProofOpen(false)} className="inline-flex min-h-11 items-center gap-2 font-semibold text-ink underline decoration-1 underline-offset-4 hover:decoration-2">
               <ScrollText className="size-4 shrink-0" aria-hidden="true" />{assistant.publicRecord.link}<ArrowRight className="size-4 shrink-0" aria-hidden="true" />
             </Link>

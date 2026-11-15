@@ -161,19 +161,19 @@ function Chrome({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-dvh" style={vars}>
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[90] focus:rounded-full focus:bg-accent focus:px-4 focus:py-2.5 focus:text-accent-ink">{common.nav.skip}</a>
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[90] focus:rounded-full focus:bg-ink focus:px-4 focus:py-2.5 focus:text-bg">{common.nav.skip}</a>
 
       {framed && (
         <>
           {/* Wide screens: the full panel, collapsible to an icon rail. */}
           <aside aria-label={s.sidebarLabel} className="fixed inset-y-0 left-0 z-30 hidden w-[var(--sidebar-w)] py-3 pl-3 xl:block">
-            <div className="h-full overflow-hidden rounded-xl border border-line-strong bg-surface">
+            <div className="h-full overflow-hidden rounded-xl border border-line bg-surface">
               <Sidebar rail={collapsed} badges={badges} onPersona={openPersona} />
             </div>
           </aside>
           {/* Small laptops and tablets: always the rail, so pages keep their width; the menu button opens the full list. */}
           <aside aria-label={s.sidebarLabel} className="fixed inset-y-0 left-0 z-30 hidden w-[5.25rem] py-3 pl-3 lg:block xl:hidden">
-            <div className="h-full overflow-hidden rounded-xl border border-line-strong bg-surface">
+            <div className="h-full overflow-hidden rounded-xl border border-line bg-surface">
               <Sidebar rail badges={badges} onPersona={openPersona} />
             </div>
           </aside>
@@ -181,7 +181,7 @@ function Chrome({ children }: { children: ReactNode }) {
       )}
 
       <div className={clsx("flex min-h-dvh min-w-0 flex-col", framed && "lg:pl-[5.25rem] xl:pl-[var(--sidebar-w)]")}>
-        <header className={clsx("pt-safe sticky top-0 z-40 border-ink bg-bg", framed ? "border-b lg:border-b-0" : "border-b")}>
+        <header className={clsx("pt-safe sticky top-0 z-40 border-line bg-bg", framed ? "border-b lg:border-b-0" : "border-b")}>
           <div className={clsx("flex h-[var(--header-h)] w-full items-center gap-2", framed ? "px-3 lg:px-4" : "mx-auto max-w-6xl px-4")}>
             {framed ? (
               <>
@@ -190,7 +190,7 @@ function Chrome({ children }: { children: ReactNode }) {
                 </button>
                 <Link href="/chat" aria-label={common.nav.home} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-full lg:hidden">
                   <LogoMark className="size-9" />
-                  <span className="hidden font-display text-[1.375rem] leading-none min-[400px]:inline">{siteName}</span>
+                  <span className="hidden font-display text-[1.25rem] font-medium leading-none tracking-[-0.01em] min-[400px]:inline">{siteName}</span>
                 </Link>
                 <button type="button" onClick={toggleCollapsed} aria-label={collapsed ? s.expand : s.collapse} aria-expanded={!collapsed} title={collapsed ? s.expand : s.collapse} className={clsx(roundBtn, "hidden xl:grid")}>
                   {collapsed ? <PanelLeftOpen className="size-5" aria-hidden="true" /> : <PanelLeftClose className="size-5" aria-hidden="true" />}
@@ -199,7 +199,7 @@ function Chrome({ children }: { children: ReactNode }) {
             ) : (
               <Link href={session ? "/chat" : "/"} aria-label={common.nav.home} className="flex shrink-0 items-center gap-2 rounded-full pr-1">
                 <LogoMark className="size-9" />
-                <span className="hidden font-display text-[1.375rem] leading-none sm:inline">{siteName}</span>
+                <span className="hidden font-display text-[1.25rem] font-medium leading-none tracking-[-0.01em] sm:inline">{siteName}</span>
               </Link>
             )}
 
