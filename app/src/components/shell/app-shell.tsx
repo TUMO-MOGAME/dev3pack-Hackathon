@@ -13,6 +13,7 @@ import type { GuardiansCopy } from "@/content/guardians";
 import type { DisputesCopy } from "@/content/disputes";
 import { ConnectionBars, PaymentProvider } from "@/components/pay/payment";
 import { EstateProvider, useEstate } from "@/lib/hooks/estate";
+import { useBackClose } from "@/lib/hooks/use-back-close";
 import { useWallet } from "@/lib/hooks/wallet-source";
 import { chainConfig } from "@/lib/chain/config";
 import { LogoMark } from "@/components/ui/primitives";
@@ -143,6 +144,7 @@ function Chrome({ children }: { children: ReactNode }) {
     if (!drawerOpen && d.open) d.close();
   }, [drawerOpen]);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  useBackClose(drawerOpen, closeDrawer); // Android back closes the drawer first
   useEffect(() => {
     // The drawer is a phone pattern: close it if the window grows into the desktop layout.
     const mq = window.matchMedia("(min-width: 1280px)");
@@ -256,7 +258,7 @@ function Chrome({ children }: { children: ReactNode }) {
             <nav aria-label={assistant.sheet.fabLabel} className="contents">
             <Link
               href="/chat"
-              className="fixed bottom-[calc(var(--safe-b)+0.875rem)] right-4 z-30 inline-flex h-14 items-center gap-2 rounded-full bg-ink pl-4 pr-5 font-semibold text-bg shadow-raised ring-2 ring-bg transition-transform active:scale-95 lg:hidden"
+              className="fixed bottom-[calc(var(--safe-b)+0.875rem)] right-[calc(var(--safe-r)+1rem)] z-30 inline-flex h-14 items-center gap-2 rounded-full bg-ink pl-4 pr-5 font-semibold text-bg shadow-raised ring-2 ring-bg transition-transform active:scale-95 lg:hidden"
             >
               <MessageCircle className="size-6" aria-hidden="true" />
               <span className="text-small">{assistant.sheet.fabLabel}</span>
