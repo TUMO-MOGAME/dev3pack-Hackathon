@@ -14,11 +14,13 @@ nothing makes sure it is spent on the children.
 | | |
 |---|---|
 | **Live demo** | **https://heirloom-one-iota.vercel.app** *(works on a phone; installable as an app)*. Runs in **mock mode**: the whole story is simulated in your browser with "Simulated" badges, and the agent gives labelled canned answers (no Gemini or ElevenLabs keys on the hosted demo). The on-chain proof is in the devnet links below |
+| **Live on devnet** | **https://heirloom.tumoolo.tech** (also https://heirloom-devnet.vercel.app): the same app in **chain mode** on Solana devnet with Tether WDK wallets. Create a wallet or bring a recovery phrase; the demo family lives on the demo site |
+| **Android app** | A Solana Mobile build of the devnet site (package `tech.tumoolo.heirloom`), for the Solana dApp Store. Build notes: [`docs/android-build.md`](docs/android-build.md); store assets: [`docs/store`](docs/store) |
 | **Demo video (≤ 3 min)** | [Watch on YouTube](https://youtu.be/N67LrkpVAmw) (2:58) |
 | **Pitch deck** | [`docs/pitch.md`](docs/pitch.md) |
 | **Program on devnet** | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet) |
 | **Real WDK USD₮ transfer** | [`nNUMsVDq…D6DvBEpKSCj`](https://explorer.solana.com/tx/nNUMsVDqmAbHxKYqTVXz1kggi2wfYXJawGod7gsXFpsysXFxBpnKG1vdL7m26UCm7hxwLc7cnDxpD6DvBEpKSCj?cluster=devnet) |
-| **Tests** | 25/25 program tests (LiteSVM) · 230/230 app tests (Vitest) |
+| **Tests** | 25/25 program tests (LiteSVM) · 516 app tests (Vitest) |
 
 ---
 
@@ -49,15 +51,15 @@ person, collapses to an icon rail on desktop and becomes a drawer on phones.
 
 ## Screenshots
 
-Phone width (360px), pure black and white, light and dark (the public site in demo mode, 13 Nov 2026):
+Phone width (360px), night by default (pure black) with a pure-white day mode, the live demo site, November 2026:
 
-| Chat home | Estate dashboard | Payment review | Payment confirmed |
+| Landing | Chat home | Estate | Plan |
 |---|---|---|---|
-| <img src="docs/screenshots/chat-360-light.png" width="200" alt="Chat home with a 'payment is due' card and the composer"> | <img src="docs/screenshots/estate-360-light.png" width="200" alt="Estate dashboard with vault, rules and scheduled payments"> | <img src="docs/screenshots/pay-review-360-light.png" width="200" alt="Payment review: recipient, amount, network, fee, verified USD₮"> | <img src="docs/screenshots/pay-confirmed-360-light.png" width="200" alt="Payment confirmed with Explorer link"> |
+| <img src="docs/screenshots/landing-360-night.png" width="200" alt="Landing page: Plan for your family, now and after you're gone"> | <img src="docs/screenshots/chat-360-night.png" width="200" alt="Chat home with a 'payment is due today' card and the composer"> | <img src="docs/screenshots/estate-360-night.png" width="200" alt="Estate dashboard with the USD₮ vault"> | <img src="docs/screenshots/will-360-night.png" width="200" alt="Plan builder: the signed and locked rules"> |
 
-| Claims | Talk to Heirloom | Dark mode | Desktop |
+| Things to sell | Claims | Day mode | Desktop |
 |---|---|---|---|
-| <img src="docs/screenshots/claims-360-light.png" width="200" alt="Claim over the per-claim cap, blocked by the contract with a plain-language reason"> | <img src="docs/screenshots/agent-call-360-light.png" width="200" alt="Talk to Heirloom: voice call sheet"> | <img src="docs/screenshots/estate-360-dark.png" width="200" alt="Estate dashboard in dark mode"> | <img src="docs/screenshots/chat-1440-light.png" width="200" alt="Desktop: sidebar with grouped navigation and saved chats, chat home"> |
+| <img src="docs/screenshots/car-360-night.png" width="200" alt="Assets: a car and a motorbike held by the estate, with photos"> | <img src="docs/screenshots/claims-360-night.png" width="200" alt="Claims screen"> | <img src="docs/screenshots/estate-360-day.png" width="200" alt="Estate dashboard in day mode"> | <img src="docs/screenshots/chat-1440-night.png" width="200" alt="Desktop: sidebar and chat home"> |
 
 ### The whole story on Solana devnet, with proof
 
