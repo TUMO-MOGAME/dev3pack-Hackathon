@@ -91,7 +91,14 @@ function AuditBody({ address, copy }: { address: string; copy: Copy }) {
     return () => { alive = false; };
   }, [load]);
 
-  if (state.phase === "loading") return <LoadingCards label={copy.loading} />;
+  // The page keeps its heading while the record loads from the chain (devnet can take several seconds).
+  if (state.phase === "loading") return (
+    <>
+      <p className="eyebrow">{copy.eyebrow}</p>
+      <h1 className="mt-1 mb-4 text-h2">{copy.metaTitle}</h1>
+      <LoadingCards label={copy.loading} />
+    </>
+  );
   if (state.phase === "missing") {
     return <EmptyState level={1} icon={<ScrollText className="size-6" aria-hidden="true" />} title={copy.notFound.title} body={copy.notFound.body} action={<ButtonLink href="/" variant="secondary">{copy.openApp}</ButtonLink>} />;
   }
