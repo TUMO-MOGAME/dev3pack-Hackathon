@@ -8,6 +8,7 @@ import { guardians } from "@/content/guardians";
 import { site } from "@/content/site";
 import { SiteFooter, SiteHeader } from "@/components/site/site-chrome";
 import { LoadingCards } from "@/components/ui/primitives";
+import { disputes } from "@/content/disputes";
 import { AuditScreen } from "@/components/audit/audit-screen";
 
 /** A shared link to one family's record: never indexed or followed by search engines. */
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
 
 async function Record({ params }: { params: Promise<{ estate: string }> }) {
   const { estate } = await params;
-  return <AuditScreen address={decodeURIComponent(estate)} copy={screens.audit} shell={{ common, assistant, pay, guardians, siteName: site.name }} />;
+  return <AuditScreen address={decodeURIComponent(estate)} copy={screens.audit} shell={{ common, assistant, pay, guardians, disputes, siteName: site.name }} />;
 }
 
 export default function Page({ params }: PageProps<"/audit/[estate]">) {

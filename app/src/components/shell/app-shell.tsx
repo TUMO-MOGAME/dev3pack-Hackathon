@@ -9,6 +9,7 @@ import type { CommonCopy } from "@/content/common";
 import type { AssistantCopy } from "@/content/assistant";
 import type { PayCopy } from "@/content/pay";
 import type { GuardiansCopy } from "@/content/guardians";
+import type { DisputesCopy } from "@/content/disputes";
 import { ConnectionBars, PaymentProvider } from "@/components/pay/payment";
 import { EstateProvider, useEstate } from "@/lib/hooks/estate";
 import { useWallet } from "@/lib/hooks/wallet-source";
@@ -30,21 +31,23 @@ import { LanguageSwitcher } from "@/components/site/language-switcher";
 import { useLocalized } from "@/lib/i18n/client";
 import { useNow } from "@/lib/hooks/use-now";
 import { guardiansOf, guardianTodo } from "@/components/guardians/derive";
+import { disputesToDecide } from "@/components/disputes/disputes";
 
 export { Avatar } from "./avatar";
 
 const COLLAPSE_KEY = "heirloom.sidebar";
 
-export function AppShell({ common: commonEn, assistant: assistantEn, pay: payEn, guardians: guardiansEn, siteName, children }: { common: CommonCopy; assistant: AssistantCopy; pay: PayCopy; guardians: GuardiansCopy; siteName: string; children: ReactNode }) {
+export function AppShell({ common: commonEn, assistant: assistantEn, pay: payEn, guardians: guardiansEn, disputes: disputesEn, siteName, children }: { common: CommonCopy; assistant: AssistantCopy; pay: PayCopy; guardians: GuardiansCopy; disputes: DisputesCopy; siteName: string; children: ReactNode }) {
   // English is passed from the server; the visitor's language (if any) is laid over it in the browser.
   const common = useLocalized(commonEn, (t) => t.common);
   const assistant = useLocalized(assistantEn, (t) => t.assistant);
   const pay = useLocalized(payEn, (t) => t.pay);
   const guardians = useLocalized(guardiansEn, (t) => t.guardians);
-  // Contract errors from the guardians feature are explained in plain words like the rest.
-  const errors = useMemo(() => ({ ...guardians.errors, ...common.errors }), [guardians.errors, common.errors]);
+  const disputes = useLocalized(disputesEn, (t) => t.disputes);
+  // Contract errors from the guardians and disputes features are explained in plain words like the rest.
+  const errors = useMemo(() => ({ ...guardians.errors, ...disputes.errors, ...common.errors }), [guardians.errors, disputes.errors, common.errors]);
   return (
-    <CopyProvider value={{ common, assistant, pay, guardians, siteName }}>
+    <CopyProvider value={{ common, assistant, pay, guardians, disputes, siteName }}>
       <MotionConfig reducedMotion="user">
         <PinGate>
           <EstateProvider errors={errors}>
@@ -91,7 +94,7 @@ function Chrome({ children }: { children: ReactNode }) {
   const guardNow = useNow(15000);
   const hasInbox = role === "verifier" || role === "monitor";
   // Trusted people: their approvals plus objections to decide and passings to confirm; watchers: approvals they can still object to.
-  const inboxCount = hasInbox && snap ? pendingFor(snap, session?.address ?? "") + guardianTodo(guardiansOf(snap), snap, session?.address, guardNow) : 0;
+  const inboxCount = hasInbox && snap ? pendingFor(snap, session?.address ?? "") + guardianTodo(guardiansOf(snap), snap, session?.address, guardNow) + disputesToDecide(snap, session?.address, guardNow) : 0;
   const ownerCount = role === "owner" && snap ? ownerPending(snap) : 0;
 
   // Apply the saved appearance choice (system is the default and needs no attribute).

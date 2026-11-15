@@ -20,6 +20,7 @@ import { PausedNotice } from "@/components/guardians/parts";
 import { guardiansOf, isMonitor, objectionFor } from "@/components/guardians/derive";
 import { RaiseObjection } from "@/components/guardians/objections";
 import { SuccessionTimeline } from "@/components/guardians/section";
+import { DisputePanel } from "@/components/disputes/disputes";
 
 type Copy = ScreensCopy["family"];
 type StepState = "done" | "now" | "next";
@@ -96,6 +97,7 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
             </div>
           </div>
           <PausedNotice target={e.address} className="mt-3" />
+          <DisputePanel kind="Unlock" target={e.address} className="mt-3" />
           {isMonitor(guardiansOf(snap), session?.address) && !objectionFor(guardiansOf(snap), e.address) && (
             <div className="mt-3"><RaiseObjection kind="Unlock" target={e.address} seatIndex={null} /></div>
           )}

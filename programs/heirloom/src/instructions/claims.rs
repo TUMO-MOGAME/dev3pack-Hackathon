@@ -4,6 +4,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
+use super::caps::check_year_cap;
 use super::{account_exists, count_bits, now, objection_is_open, read_account, transfer_checked_cpi};
 use crate::errors::HeirloomError;
 use crate::events::*;
@@ -47,6 +48,10 @@ pub struct SubmitClaim<'info> {
     pub claim: Box<Account<'info, Claim>>,
 
     pub system_program: Program<'info, System>,
+
+    /// CHECK: the ["yearcap", rule] PDA; may not exist (the rule has no yearly cap).
+    #[account(seeds = [YEAR_CAP_SEED, rule.key().as_ref()], bump)]
+    pub year_cap: UncheckedAccount<'info>,
 }
 
 pub fn submit_claim_handler(ctx: Context<SubmitClaim>, amount: u64, evidence_hash: [u8; 32]) -> Result<()> {
@@ -73,6 +78,8 @@ pub fn submit_claim_handler(ctx: Context<SubmitClaim>, amount: u64, evidence_has
 
     let ts = now()?;
     require!(ts <= rule.valid_until, HeirloomError::RuleExpired);
+    // Yearly cap: checked now (so a claim that can't be paid this year is refused early), recorded at execution.
+    check_year_cap(&ctx.accounts.year_cap.to_account_info(), &rule.key(), amount, false)?;
 
     let id = rule.claim_count;
     let estate = ctx.accounts.estate.key();
@@ -283,6 +290,10 @@ pub struct ExecuteClaim<'info> {
     /// CHECK: the ["objection", claim] PDA; may not exist. Blocks while Open.
     #[account(seeds = [OBJECTION_SEED, claim.key().as_ref()], bump)]
     pub objection: UncheckedAccount<'info>,
+
+    /// CHECK: the ["yearcap", rule] PDA; may not exist (the rule has no yearly cap). Updated when it does.
+    #[account(mut, seeds = [YEAR_CAP_SEED, rule.key().as_ref()], bump)]
+    pub year_cap: UncheckedAccount<'info>,
 }
 
 pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
@@ -305,7 +316,7 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
     // Guardians: a monitor's open objection pauses the payment; with a Guard, a quorum approval
     // waits out the objection window (an owner approval while alive needs no window).
     require!(
-        !objection_is_open(&ctx.accounts.objection.to_account_info())?,
+        !objection_is_open(&ctx.accounts.objection.to_account_info(), &ctx.accounts.estate)?,
         HeirloomError::ObjectionOpen
     );
     let guard_info = ctx.accounts.guard.to_account_info();
@@ -331,6 +342,8 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
     require!(new_total <= rule.lifetime_cap, HeirloomError::ExceedsLifetimeCap);
     let ts = now()?;
     require!(ts <= rule.valid_until, HeirloomError::RuleExpired);
+    // Yearly cap: counted in the period the payment is made, and recorded.
+    check_year_cap(&ctx.accounts.year_cap.to_account_info(), &rule.key(), amount, true)?;
 
     let owner = estate.owner;
     let bump = [estate.bump];
@@ -448,6 +461,10 @@ pub struct ExecuteScheduled<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+
+    /// CHECK: the ["yearcap", rule] PDA; may not exist (the rule has no yearly cap). Updated when it does.
+    #[account(mut, seeds = [YEAR_CAP_SEED, rule.key().as_ref()], bump)]
+    pub year_cap: UncheckedAccount<'info>,
 }
 
 /// Pays one instalment of a recurring rule to its fixed payee once it is due.
@@ -467,6 +484,8 @@ pub fn execute_scheduled_handler(ctx: Context<ExecuteScheduled>) -> Result<()> {
         .checked_add(amount)
         .ok_or(HeirloomError::MathOverflow)?;
     require!(new_total <= rule.lifetime_cap, HeirloomError::ExceedsLifetimeCap);
+    // Yearly cap: an instalment over it waits (next_due unchanged) until the next period.
+    check_year_cap(&ctx.accounts.year_cap.to_account_info(), &rule.key(), amount, true)?;
     let next_due = rule
         .next_due
         .checked_add(rule.interval_secs)

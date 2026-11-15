@@ -12,7 +12,7 @@ use anchor_lang::{
 use heirloom::{
     AssetStatus, ClaimStatus, Estate, EstateStatus, HeirloomError, PayeeKind, Category, Rule, Claim,
     Asset, AssetKind, AssetMedia, ApprovalStamp, Guard, HardshipStatus, Hardship, Objection,
-    ObjectionStatus, Seat, TargetKind, Verdict,
+    ObjectionStatus, Seat, TargetKind, Verdict, YearCap,
 };
 use litesvm::LiteSVM;
 use solana_account::Account;
@@ -80,6 +80,9 @@ fn objection_pda(target: &Pubkey) -> Pubkey {
 }
 fn media_pda(asset: &Pubkey) -> Pubkey {
     pda(&[b"media", asset.as_ref()])
+}
+fn year_cap_pda(rule: &Pubkey) -> Pubkey {
+    pda(&[b"yearcap", rule.as_ref()])
 }
 fn ata(owner: &Pubkey, mint: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(
@@ -399,6 +402,7 @@ impl Env {
                 token_program: token_program(),
                 associated_token_program: ata_program(),
                 system_program: system_program(),
+                year_cap: year_cap_pda(&rule),
             },
             heirloom::instruction::ExecuteScheduled {},
         );
@@ -466,7 +470,7 @@ impl Env {
 
     fn finalize_unlock(&mut self) -> Result<(), String> {
         let i = ix(
-            heirloom::accounts::FinalizeUnlock { estate: self.estate, objection: objection_pda(&self.estate) },
+            heirloom::accounts::FinalizeUnlock { estate: self.estate, objection: objection_pda(&self.estate), caller: self.stranger.pubkey() },
             heirloom::instruction::FinalizeUnlock {},
         );
         send(&mut self.svm, i, &[&self.stranger])
@@ -518,6 +522,7 @@ impl Env {
                 payee: payee_pda(&self.estate, &payee_wallet),
                 claim,
                 system_program: system_program(),
+                year_cap: year_cap_pda(&rule),
             },
             heirloom::instruction::SubmitClaim { amount, evidence_hash: [1u8; 32] },
         );
@@ -565,6 +570,7 @@ impl Env {
                 guard: guard_pda(&self.estate),
                 approval_stamp: stamp_pda(&claim),
                 objection: objection_pda(&claim),
+                year_cap: year_cap_pda(&rule),
             },
             heirloom::instruction::ExecuteClaim {},
         );
@@ -1437,6 +1443,7 @@ impl Env {
                 guard: guard_pda(&self.estate),
                 seat,
                 objection: objection_pda(&seat),
+                caller: self.stranger.pubkey(),
             },
             heirloom::instruction::FinalizeSuccession { index },
         );
@@ -1578,6 +1585,7 @@ impl Env {
                 seat0: seat_pda(&e, 0),
                 seat1: seat_pda(&e, 1),
                 seat2: seat_pda(&e, 2),
+                caller: self.stranger.pubkey(),
             },
             heirloom::instruction::StartFallback {},
         );
@@ -1591,6 +1599,7 @@ impl Env {
                 estate: self.estate,
                 guard: guard_pda(&self.estate),
                 objection: objection_pda(&target),
+                caller: self.stranger.pubkey(),
             },
             heirloom::instruction::LapseObjection {},
         );
@@ -2341,4 +2350,421 @@ fn fallback_objection_upheld_before_lapse_resets_the_fallback() {
     expect_err(env.lapse_objection(guard), HeirloomError::BadStatus);
     expect_err(env.execute_fallback(k1), HeirloomError::FallbackNotReady);
     assert_eq!(balance(&env.svm, &env.vault()), 5_000 * USDT);
+}
+
+// =================================================================== disputes (U9, 2026-11-15)
+
+const YEAR: i64 = 365 * DAY;
+
+impl Env {
+    fn raise_dispute(&mut self, disputer: &Keypair, kind: TargetKind, target: Pubkey, as_beneficiary: bool, reason: [u8; 32]) -> Result<(), String> {
+        let target_account = (kind == TargetKind::Claim).then_some(target);
+        let i = ix(
+            heirloom::accounts::RaiseDispute {
+                disputer: disputer.pubkey(),
+                estate: self.estate,
+                beneficiary_account: as_beneficiary.then(|| beneficiary_pda(&self.estate, &disputer.pubkey())),
+                target_account,
+                objection: objection_pda(&target),
+                system_program: system_program(),
+            },
+            heirloom::instruction::RaiseDispute { kind, target, reason_hash: reason },
+        );
+        send(&mut self.svm, i, &[disputer])
+    }
+
+    /// kid2 (a beneficiary) disputes `target`.
+    fn kid_disputes(&mut self, kind: TargetKind, target: Pubkey) -> Result<(), String> {
+        let kid2 = self.kid2.insecure_clone();
+        self.raise_dispute(&kid2, kind, target, true, [5u8; 32])
+    }
+
+    fn resolve_dispute(&mut self, verifier: &Keypair, target: Pubkey, uphold: bool, is_claim: bool) -> Result<(), String> {
+        let i = ix(
+            heirloom::accounts::ResolveDispute {
+                verifier: verifier.pubkey(),
+                estate: self.estate,
+                objection: objection_pda(&target),
+                target_account: is_claim.then_some(target),
+            },
+            heirloom::instruction::ResolveDispute { uphold },
+        );
+        send(&mut self.svm, i, &[verifier])
+    }
+
+    fn set_yearly_cap(&mut self, rule: Pubkey, cap: u64, period_start: i64) -> Result<(), String> {
+        let i = ix(
+            heirloom::accounts::SetYearlyCap {
+                owner: self.owner.pubkey(),
+                estate: self.estate,
+                rule,
+                year_cap: year_cap_pda(&rule),
+                system_program: system_program(),
+            },
+            heirloom::instruction::SetYearlyCap { cap, period_start },
+        );
+        send(&mut self.svm, i, &[&self.owner])
+    }
+
+    fn year_cap(&self, rule: &Pubkey) -> YearCap {
+        fetch(&self.svm, &year_cap_pda(rule))
+    }
+
+    /// Death claim submitted, agent-approved and attested by 2 verifiers: DeathPending.
+    fn death_pending(&mut self) {
+        self.submit_death_claim(1).unwrap();
+        self.review_death(true).unwrap();
+        self.attest_death(0).unwrap();
+        self.attest_death(1).unwrap();
+        assert_eq!(self.estate_state().status, EstateStatus::DeathPending);
+    }
+}
+
+/// Unguarded estate, unlocked, with an agent- and verifier-approved 100 USD₮ claim on kid1's tuition rule.
+fn disputed_claim_env() -> (Env, Pubkey, Pubkey) {
+    let (mut env, rule) = claims_env();
+    env.unlock();
+    let claim = approved_claim(&mut env, rule);
+    (env, rule, claim)
+}
+
+#[test]
+fn beneficiary_dispute_freezes_claim_and_two_verifiers_uphold() {
+    let (mut env, rule, claim) = disputed_claim_env();
+    env.kid_disputes(TargetKind::Claim, claim).unwrap();
+    let o = env.objection(&claim);
+    assert_eq!((o.status, o.kind, o.seat_index, o.monitor), (ObjectionStatus::Open, TargetKind::Claim, 254, env.kid2.pubkey()));
+    assert_eq!(o.reason_hash, [5u8; 32]);
+    // Frozen: no Guard needed for a dispute to pause the payment.
+    expect_err(env.execute_claim(rule, claim), HeirloomError::ObjectionOpen);
+    expect_err(env.kid_disputes(TargetKind::Claim, claim), HeirloomError::ObjectionOpen);
+
+    let kid2 = env.kp(&env.kid2);
+    expect_err(env.resolve_dispute(&kid2, claim, true, true), HeirloomError::NotVerifier);
+    let (v0, v1) = (env.v(0), env.v(1));
+    env.resolve_dispute(&v0, claim, true, true).unwrap();
+    expect_err(env.resolve_dispute(&v0, claim, false, true), HeirloomError::AlreadyApproved);
+    assert_eq!(env.objection(&claim).status, ObjectionStatus::Open);
+    env.resolve_dispute(&v1, claim, true, true).unwrap();
+
+    assert_eq!(env.objection(&claim).status, ObjectionStatus::Upheld);
+    let c: Claim = fetch(&env.svm, &claim);
+    assert_eq!(c.status, ClaimStatus::Rejected);
+    expect_err(env.execute_claim(rule, claim), HeirloomError::BadStatus);
+    assert_eq!(balance(&env.svm, &env.vault()), 5_000 * USDT);
+}
+
+#[test]
+fn dismissed_dispute_lets_claim_pay_and_cannot_be_raised_again() {
+    let (mut env, rule, claim) = disputed_claim_env();
+    // A verifier disputes; they can't then vote on their own dispute.
+    let (v0, v1, v2) = (env.v(0), env.v(1), env.v(2));
+    env.raise_dispute(&v1, TargetKind::Claim, claim, false, [5u8; 32]).unwrap();
+    expect_err(env.resolve_dispute(&v1, claim, false, true), HeirloomError::NotVerifier);
+    env.resolve_dispute(&v0, claim, false, true).unwrap();
+    env.resolve_dispute(&v2, claim, false, true).unwrap();
+    assert_eq!(env.objection(&claim).status, ObjectionStatus::Dismissed);
+    expect_err(env.resolve_dispute(&v2, claim, true, true), HeirloomError::BadStatus);
+
+    // One challenge per claim: a dismissed dispute can't be raised again to freeze it anew.
+    expect_err(env.kid_disputes(TargetKind::Claim, claim), HeirloomError::BadStatus);
+    env.execute_claim(rule, claim).unwrap();
+    assert_eq!(balance(&env.svm, &ata(&env.university.pubkey(), &env.usdt_mint)), 100 * USDT);
+}
+
+#[test]
+fn dispute_lapses_so_funds_are_never_locked() {
+    let (mut env, rule, claim) = disputed_claim_env();
+    env.kid_disputes(TargetKind::Claim, claim).unwrap();
+    let v0 = env.v(0);
+    env.resolve_dispute(&v0, claim, true, true).unwrap(); // one vote only: no decision
+    warp(&mut env.svm, WAITING - 1);
+    expect_err(env.execute_claim(rule, claim), HeirloomError::ObjectionOpen);
+    warp(&mut env.svm, 1);
+    // Lapsed after the estate's waiting period: it counts as dismissed and can no longer be voted on.
+    let v1 = env.v(1);
+    expect_err(env.resolve_dispute(&v1, claim, true, true), HeirloomError::DisputeLapsed);
+    expect_err(env.kid_disputes(TargetKind::Claim, claim), HeirloomError::BadStatus);
+    env.execute_claim(rule, claim).unwrap();
+    let c: Claim = fetch(&env.svm, &claim);
+    assert_eq!(c.status, ClaimStatus::Paid);
+}
+
+#[test]
+fn only_beneficiaries_and_verifiers_can_dispute_pending_actions() {
+    let (mut env, rule, claim) = disputed_claim_env();
+    let stranger = env.kp(&env.stranger);
+    expect_err(env.raise_dispute(&stranger, TargetKind::Claim, claim, false, [5u8; 32]), HeirloomError::NotDisputer);
+    // A beneficiary must pass their Beneficiary PDA.
+    let kid2 = env.kp(&env.kid2);
+    expect_err(env.raise_dispute(&kid2, TargetKind::Claim, claim, false, [5u8; 32]), HeirloomError::NotDisputer);
+    // A reason is required (its hash).
+    expect_err(env.raise_dispute(&kid2, TargetKind::Claim, claim, true, [0u8; 32]), HeirloomError::InvalidAmount);
+    // Only claims and unlocks; the estate is Unlocked, so there is no pending unlock either.
+    let estate = env.estate;
+    expect_err(env.kid_disputes(TargetKind::Unlock, estate), HeirloomError::BadStatus);
+    // A paid claim is no longer pending.
+    env.execute_claim(rule, claim).unwrap();
+    expect_err(env.kid_disputes(TargetKind::Claim, claim), HeirloomError::BadStatus);
+}
+
+#[test]
+fn unlock_dispute_blocks_finalize_and_upheld_clears_death_claim() {
+    let mut env = Env::configured();
+    env.death_pending();
+    let estate = env.estate;
+    warp(&mut env.svm, WAITING / 2);
+    env.kid_disputes(TargetKind::Unlock, estate).unwrap();
+    warp(&mut env.svm, WAITING / 2);
+    expect_err(env.finalize_unlock(), HeirloomError::ObjectionOpen);
+
+    let (v0, v2) = (env.v(0), env.v(2));
+    env.resolve_dispute(&v0, estate, true, false).unwrap();
+    env.resolve_dispute(&v2, estate, true, false).unwrap();
+    let e = env.estate_state();
+    assert_eq!(e.status, EstateStatus::Active);
+    assert_eq!(e.death_cert_hash, [0u8; 32]);
+    expect_err(env.finalize_unlock(), HeirloomError::BadStatus);
+    // No pending unlock any more, so nothing to dispute.
+    expect_err(env.kid_disputes(TargetKind::Unlock, estate), HeirloomError::BadStatus);
+}
+
+#[test]
+fn unlock_dispute_once_per_waiting_period_and_dismissed_unlock_proceeds() {
+    let mut env = Env::configured();
+    env.death_pending();
+    let estate = env.estate;
+    env.kid_disputes(TargetKind::Unlock, estate).unwrap();
+    let (v0, v1) = (env.v(0), env.v(1));
+    env.resolve_dispute(&v0, estate, false, false).unwrap();
+    env.resolve_dispute(&v1, estate, false, false).unwrap();
+    assert_eq!(env.objection(&estate).status, ObjectionStatus::Dismissed);
+    let v2 = env.v(2);
+    expect_err(env.raise_dispute(&v2, TargetKind::Unlock, estate, false, [5u8; 32]), HeirloomError::BadStatus);
+    warp(&mut env.svm, WAITING);
+    env.finalize_unlock().unwrap();
+    assert_eq!(env.estate_state().status, EstateStatus::Unlocked);
+}
+
+#[test]
+fn new_waiting_period_can_be_disputed_again() {
+    let mut env = Env::configured();
+    env.death_pending();
+    let estate = env.estate;
+    env.kid_disputes(TargetKind::Unlock, estate).unwrap();
+    warp(&mut env.svm, WAITING); // lapses
+    env.veto_death().unwrap(); // the owner is alive after all
+    warp(&mut env.svm, 10);
+    env.death_pending(); // a later death claim starts a new waiting period
+    env.kid_disputes(TargetKind::Unlock, estate).unwrap();
+    expect_err(env.finalize_unlock(), HeirloomError::WaitingPeriodNotOver);
+}
+
+#[test]
+fn disputes_share_the_objection_pda_with_monitors() {
+    let (mut env, people, rule) = guarded_claims();
+    let claim = approved_claim(&mut env, rule);
+    env.kid_disputes(TargetKind::Claim, claim).unwrap();
+    assert_eq!(env.guard().open_objections, 0); // disputes are not monitor objections
+    // While the dispute is open, a monitor's objection would only duplicate the freeze.
+    expect_err(env.object(&people, TargetKind::Claim, claim, 0, Some(claim), None), HeirloomError::ObjectionOpen);
+    // Monitors' voting rules don't apply to disputes.
+    let v1 = env.v(1);
+    expect_err(env.vote_objection(&v1, claim, true, None, Some(claim), None), HeirloomError::BadStatus);
+    // After the lapse the claim has had its challenge: a monitor can't re-freeze it.
+    warp(&mut env.svm, WAITING);
+    expect_err(env.object(&people, TargetKind::Claim, claim, 0, Some(claim), None), HeirloomError::BadStatus);
+    env.execute_claim(rule, claim).unwrap();
+}
+
+// =================================================================== yearly caps (2026-11-15)
+
+/// kid1's tuition: 600 per claim, 3,000 lifetime, valid 3 years; a yearly cap of 800; unlocked.
+fn capped_env() -> (Env, Pubkey) {
+    let mut env = Env::configured();
+    let valid_until = now(&env.svm) + 3 * YEAR;
+    let kid1 = env.kid1.pubkey();
+    let rule = env.add_rule(0, kid1, PayeeKind::University, 600 * USDT, 3_000 * USDT, valid_until);
+    env.set_yearly_cap(rule, 800 * USDT, 0).unwrap();
+    env.unlock();
+    (env, rule)
+}
+
+#[test]
+fn yearly_cap_limits_claims_per_period_and_resets() {
+    let (mut env, rule) = capped_env();
+    let uni = env.university.pubkey();
+    let start = env.year_cap(&rule).period_start;
+    env.pay_claim(rule, uni, 600 * USDT);
+    assert_eq!(env.year_cap(&rule).period_spent, 600 * USDT);
+    // 600 + 300 > 800 for this year, though within the per-claim and lifetime caps.
+    expect_err(env.submit_claim(true, rule, uni, 300 * USDT), HeirloomError::ExceedsYearlyCap);
+    env.pay_claim(rule, uni, 200 * USDT);
+    assert_eq!(env.year_cap(&rule).period_spent, 800 * USDT);
+    expect_err(env.submit_claim(true, rule, uni, USDT), HeirloomError::ExceedsYearlyCap);
+
+    // The next 12-month period starts from zero.
+    warp(&mut env.svm, YEAR);
+    env.pay_claim(rule, uni, 600 * USDT);
+    let yc = env.year_cap(&rule);
+    assert_eq!((yc.period_start, yc.period_spent), (start + YEAR, 600 * USDT));
+    let r: Rule = fetch(&env.svm, &rule);
+    assert_eq!(r.spent_total, 1_400 * USDT);
+}
+
+#[test]
+fn yearly_cap_rechecked_at_execution() {
+    let (mut env, rule) = capped_env();
+    let uni = env.university.pubkey();
+    let a = env.submit_claim(true, rule, uni, 500 * USDT).unwrap();
+    let b = env.submit_claim(true, rule, uni, 500 * USDT).unwrap();
+    for c in [a, b] {
+        env.review_claim(c, true).unwrap();
+        env.approve_claim(c, 0).unwrap();
+    }
+    env.execute_claim(rule, a).unwrap();
+    expect_err(env.execute_claim(rule, b), HeirloomError::ExceedsYearlyCap);
+    warp(&mut env.svm, YEAR);
+    env.execute_claim(rule, b).unwrap();
+    assert_eq!(env.year_cap(&rule).period_spent, 500 * USDT);
+}
+
+#[test]
+fn yearly_cap_is_validated_and_set_only_while_active() {
+    let mut env = Env::configured();
+    warp(&mut env.svm, 200 * DAY); // so that "100 days ago" is a valid time
+    let valid_until = now(&env.svm) + 3 * YEAR;
+    let kid1 = env.kid1.pubkey();
+    let rule = env.add_rule(0, kid1, PayeeKind::University, 600 * USDT, 3_000 * USDT, valid_until);
+    expect_err(env.set_yearly_cap(rule, 0, 0), HeirloomError::InvalidAmount);
+    expect_err(env.set_yearly_cap(rule, 3_001 * USDT, 0), HeirloomError::InvalidAmount);
+    let future = now(&env.svm) + DAY;
+    expect_err(env.set_yearly_cap(rule, 800 * USDT, future), HeirloomError::InvalidAmount);
+
+    // A period can start in the past (e.g. 1 January); it rolls forward when used.
+    let jan = now(&env.svm) - 100 * DAY;
+    env.set_yearly_cap(rule, 800 * USDT, jan).unwrap();
+    assert_eq!(env.year_cap(&rule).period_start, jan);
+    // Update: new cap, period kept.
+    env.set_yearly_cap(rule, 900 * USDT, 0).unwrap();
+    let yc = env.year_cap(&rule);
+    assert_eq!((yc.cap, yc.period_start, yc.rule), (900 * USDT, jan, rule));
+
+    // Only the owner (another signer can't produce the owner's estate PDA).
+    let stranger = env.kp(&env.stranger);
+    let i = ix(
+        heirloom::accounts::SetYearlyCap {
+            owner: stranger.pubkey(),
+            estate: env.estate,
+            rule,
+            year_cap: year_cap_pda(&rule),
+            system_program: system_program(),
+        },
+        heirloom::instruction::SetYearlyCap { cap: 3_000 * USDT, period_start: 0 },
+    );
+    assert!(send(&mut env.svm, i, &[&stranger]).is_err());
+
+    env.unlock();
+    expect_err(env.set_yearly_cap(rule, 3_000 * USDT, 0), HeirloomError::BadStatus);
+}
+
+#[test]
+fn yearly_cap_applies_to_scheduled_payments() {
+    let mut env = Env::configured();
+    let (kid1, uni) = (env.kid1.pubkey(), env.university.pubkey());
+    let valid_until = now(&env.svm) + 3 * YEAR;
+    let first_due = now(&env.svm);
+    let month = 30 * DAY;
+    // Living plan: 100 a month to the university; at most 250 a year.
+    let i = env.add_rule_ix(0, kid1, PayeeKind::University, 600 * USDT, 3_000 * USDT, valid_until, true, 100 * USDT, month, first_due, Some(uni));
+    send(&mut env.svm, i, &[&env.owner]).unwrap();
+    let rule = rule_pda(&env.estate, 0);
+    // The cap must cover at least one instalment.
+    expect_err(env.set_yearly_cap(rule, 99 * USDT, 0), HeirloomError::InvalidAmount);
+    env.set_yearly_cap(rule, 250 * USDT, 0).unwrap();
+
+    env.execute_scheduled(rule).unwrap();
+    warp(&mut env.svm, month);
+    env.execute_scheduled(rule).unwrap();
+    warp(&mut env.svm, month);
+    expect_err(env.execute_scheduled(rule), HeirloomError::ExceedsYearlyCap);
+    let r: Rule = fetch(&env.svm, &rule);
+    assert_eq!(r.next_due, first_due + 2 * month); // the instalment waits
+    warp(&mut env.svm, YEAR - 2 * month);
+    env.execute_scheduled(rule).unwrap();
+    assert_eq!(balance(&env.svm, &ata(&uni, &env.usdt_mint)), 300 * USDT);
+    assert_eq!(env.year_cap(&rule).period_spent, 100 * USDT);
+}
+
+// =================================================================== fee sponsorship (2026-11-15)
+
+/// Permissionless calls (finalize_unlock, finalize_succession, start_fallback, lapse_objection) take any
+/// wallet as `caller`, so a sponsor can be the fee payer while a wallet with no SOL signs.
+#[test]
+fn permissionless_calls_can_be_sponsored() {
+    let mut env = Env::configured();
+    env.death_pending();
+    warp(&mut env.svm, WAITING);
+    let sponsor = funded(&mut env.svm);
+    let caller = Keypair::new(); // no SOL at all
+    let i = ix(
+        heirloom::accounts::FinalizeUnlock { estate: env.estate, objection: objection_pda(&env.estate), caller: caller.pubkey() },
+        heirloom::instruction::FinalizeUnlock {},
+    );
+    // The caller must sign.
+    let mut unsigned = i.clone();
+    unsigned.accounts.iter_mut().for_each(|m| m.is_signer = false);
+    expect_err_any(send(&mut env.svm, unsigned, &[&sponsor]));
+    send(&mut env.svm, i, &[&sponsor, &caller]).unwrap();
+    assert_eq!(env.estate_state().status, EstateStatus::Unlocked);
+}
+
+fn expect_err_any(res: Result<(), String>) {
+    assert!(res.is_err(), "expected the transaction to fail");
+}
+
+#[test]
+fn sponsored_finalize_succession_and_start_fallback() {
+    let (mut env, people) = guardian_env();
+    // Seat 2's holder dies; the first backup takes over, finalized by a no-SOL wallet with a sponsor paying.
+    let kid1 = env.kp(&env.kid1);
+    let v0 = env.v(0);
+    env.report_seat_death(&kid1, 2).unwrap();
+    env.review_seat_death(2, true).unwrap();
+    env.confirm_seat_death(&v0, 2).unwrap();
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    let sponsor = funded(&mut env.svm);
+    let caller = Keypair::new();
+    let seat = seat_pda(&env.estate, 2);
+    let i = ix(
+        heirloom::accounts::FinalizeSuccession {
+            estate: env.estate,
+            guard: guard_pda(&env.estate),
+            seat,
+            objection: objection_pda(&seat),
+            caller: caller.pubkey(),
+        },
+        heirloom::instruction::FinalizeSuccession { index: 2 },
+    );
+    send(&mut env.svm, i, &[&sponsor, &caller]).unwrap();
+    assert_eq!(env.seat(2).holder, people.backups[2][0].pubkey());
+
+    let (mut env, people) = fallback_env();
+    vacate_all(&mut env, &people);
+    let sponsor = funded(&mut env.svm);
+    let caller = Keypair::new();
+    let e = env.estate;
+    let i = ix(
+        heirloom::accounts::StartFallback {
+            estate: e,
+            guard: guard_pda(&e),
+            seat0: seat_pda(&e, 0),
+            seat1: seat_pda(&e, 1),
+            seat2: seat_pda(&e, 2),
+            caller: caller.pubkey(),
+        },
+        heirloom::instruction::StartFallback {},
+    );
+    send(&mut env.svm, i, &[&sponsor, &caller]).unwrap();
+    assert!(env.guard().fallback_started_at > 0);
 }

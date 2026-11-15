@@ -1,0 +1,161 @@
+/**
+ * Mock twin of the program's disputes (U9) and yearly caps (docs/program-spec.md, "Disputes and yearly caps"):
+ * the same checks and error names, so the demo and devnet sites behave the same.
+ *
+ * Disputes live in `snap.disputes` and rules carry `yearlyCap`, so both persist with the rest of the mock state.
+ * mock.ts calls the hooks (checkNotDisputed, checkYearly, checkObjectionAllowed) from its existing instructions.
+ */
+import type { Base58, Rule } from "../types";
+import type { EstateSnapshot, TxResult } from "./types";
+import type { ObjectionStatus, TargetKind } from "../guardians/types";
+import { currentPeriod, disputeLapsesAt, effectiveStatus, YEAR_SECS, type Dispute, type DisputeKind } from "../disputes/types";
+import { fail, need } from "./mock-errors";
+
+export interface DisputeDeps {
+  snap(): EstateSnapshot;
+  names(): Record<Base58, string>;
+  created(): boolean;
+  me(): Base58;
+  now(): number;
+  tx(): TxResult;
+  log(kind: string, text: string, t: TxResult, amount?: bigint): void;
+  usd(amount: bigint): string;
+  /** Monitors' objections (mock-guardians): a target has an objection or a dispute, never both at once. */
+  objections(): { target: Base58; kind: TargetKind; status: ObjectionStatus; raisedAt: number }[];
+  /** True if the address is an Open, not lapsed, monitor objection target. */
+  objectionOpen(target: Base58): boolean;
+}
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const fakeAddr = () => Array.from({ length: 44 }, () => B58[Math.floor(Math.random() * B58.length)]).join("");
+
+
+export function createMockDisputes(d: DisputeDeps) {
+  const est = () => d.snap().estate;
+  const list = (): Dispute[] => (d.snap().disputes ??= []);
+  const name = (a: Base58) => d.names()[a] ?? "Someone";
+  const first = (a: Base58) => name(a).replace(/^(Adv\.|Ms\.|Mr\.|Mrs\.|Dr\.|Uncle|Aunt|Cousin)\s+/i, "").split(" ")[0];
+  const needCreated = () => need(d.created(), "NoEstate", "There is no estate yet. The owner signs the will first.");
+  const latestOn = (target: Base58) => list().filter((x) => x.target === target).sort((a, b) => b.raisedAt - a.raisedAt)[0];
+  const isOpen = (x: Dispute | undefined) => !!x && effectiveStatus(x, d.now()) === "Open";
+
+  /** execute_claim / finalize_unlock: an open (not lapsed) dispute pauses the action. */
+  function checkNotDisputed(target: Base58) {
+    need(!isOpen(latestOn(target)), "ObjectionOpen", "A dispute is open, so this is paused until the trusted people decide.");
+  }
+
+  /** raise_objection on a target that has (or had) a dispute: same PDA, so one challenge per claim. */
+  function checkObjectionAllowed(kind: TargetKind, target: Base58) {
+    const x = latestOn(target);
+    if (!x) return;
+    need(!isOpen(x), "ObjectionOpen", "A dispute is already open on this.");
+    need(kind !== "Claim" && kind !== "Hardship", "BadStatus", "This payment has already been challenged once.");
+  }
+
+  function raiseDispute(kind: DisputeKind, target: Base58, reason: string, reasonHash: string): TxResult {
+    needCreated();
+    const me = d.me();
+    const e = est();
+    const isVerifier = e.verifiers.includes(me);
+    const isBeneficiary = d.snap().beneficiaries.some((b) => b.wallet === me && b.active);
+    need(isVerifier || isBeneficiary, "NotDisputer", "Only a family member or a trusted person can dispute.");
+    need(reason.trim().length > 0, "InvalidAmount", "Write a short reason.");
+    let what = "";
+    if (kind === "Claim") {
+      const c = d.snap().claims.find((x) => x.address === target) ?? fail("BadStatus", "That claim does not exist.");
+      need(c.status === "Open", "BadStatus", "This claim is no longer pending.");
+      what = `${d.usd(c.amount)} to ${name(c.payee)} for ${first(c.beneficiary)}`;
+    } else if (kind === "Unlock") {
+      need(target === e.address, "BadStatus", "That is not this estate.");
+      need(e.status === "DeathPending", "BadStatus", "Only a pending unlock (during the waiting period) can be disputed.");
+      what = `the unlock of ${first(e.owner)}'s estate`;
+    } else {
+      fail("BadStatus", "Only claims and the unlock can be disputed.");
+    }
+    // Same PDA as a monitor's objection.
+    need(!d.objectionOpen(target), "ObjectionOpen", "An objection is already open on this.");
+    const roundStart = e.death.pendingSince ?? 0;
+    const prevObjection = d.objections().filter((o) => o.target === target).sort((a, b) => b.raisedAt - a.raisedAt)[0];
+    const prev = latestOn(target);
+    const prevAt = Math.max(prev?.raisedAt ?? -1, prevObjection?.raisedAt ?? -1);
+    if (prevAt >= 0) {
+      const latest = prev && prev.raisedAt === prevAt ? effectiveStatus(prev, d.now()) : prevObjection!.status;
+      need(latest !== "Open", "ObjectionOpen", "A dispute is already open on this.");
+      if (kind === "Claim") fail("BadStatus", "This payment has already been challenged once.");
+      need(latest === "Upheld" || prevAt < roundStart, "BadStatus", "This waiting period has already been disputed once.");
+    }
+    const raisedAt = d.now();
+    list().unshift({
+      address: fakeAddr(), kind, target, disputer: me, disputerName: name(me), reason: reason.trim(), reasonHash,
+      raisedAt, lapsesAt: disputeLapsesAt(raisedAt, e.waitingPeriodSecs), status: "Open", votesUphold: 0, votesDismiss: 0, voted: [],
+    });
+    const t = d.tx();
+    d.log("DisputeRaised", `${name(me)} disputed ${what}. It is paused until two trusted people decide`, t);
+    return t;
+  }
+
+  function resolveDispute(address: Base58, uphold: boolean): TxResult {
+    needCreated();
+    const x = list().find((y) => y.address === address) ?? fail("BadStatus", "That dispute does not exist.");
+    need(x.status === "Open", "BadStatus", "This dispute has already been decided.");
+    need(d.now() < x.lapsesAt, "DisputeLapsed", "This dispute has lapsed: its time to resolve it is over.");
+    const me = d.me();
+    const i = est().verifiers.indexOf(me);
+    need(i >= 0, "NotVerifier", "Only one of the three trusted people can do this.");
+    need(me !== x.disputer, "NotVerifier", "The person who raised the dispute cannot decide it.");
+    need(!x.voted.includes(i), "AlreadyApproved", "You have already voted on this.");
+    x.voted.push(i);
+    if (uphold) x.votesUphold += 1; else x.votesDismiss += 1;
+    const t = d.tx();
+    d.log("DisputeVoted", `${name(me)} voted to ${uphold ? "uphold" : "dismiss"} the dispute`, t);
+    if (x.votesUphold < 2 && x.votesDismiss < 2) return t;
+    const upheld = x.votesUphold >= 2;
+    x.status = upheld ? "Upheld" : "Dismissed";
+    if (upheld && x.kind === "Claim") {
+      const c = d.snap().claims.find((y) => y.address === x.target);
+      if (c && c.status === "Open") c.status = "Rejected";
+    }
+    if (upheld && x.kind === "Unlock") {
+      const e = est();
+      if (e.status !== "Unlocked") {
+        e.status = "Active";
+        e.death = { certHash: null, submittedBy: null, verdict: "Pending", attestations: [false, false, false], pendingSince: null };
+      }
+    }
+    d.log("DisputeResolved", upheld
+      ? x.kind === "Claim" ? "Dispute upheld: the payment was cancelled" : "Dispute upheld: the unlock was stopped and the vault stays locked"
+      : "Dispute dismissed: the paused action can go ahead", d.tx());
+    return t;
+  }
+
+  /* ----- yearly caps ----- */
+
+  function setYearlyCap(ruleAddr: Base58, capUsdtBase: bigint, periodStart?: number): TxResult {
+    needCreated();
+    need(d.me() === est().owner, "NotOwner", "Only the estate owner can do this.");
+    need(est().status === "Active", "BadStatus", "Limits can only change while the estate is active.");
+    const r = d.snap().rules.find((x) => x.address === ruleAddr) ?? fail("BadStatus", "That rule does not exist.");
+    need(capUsdtBase > 0n && capUsdtBase <= r.lifetimeCap && capUsdtBase >= r.recurringAmount, "InvalidAmount",
+      "The yearly limit must be above zero, no more than the rule's total and at least one scheduled payment.");
+    const now = d.now();
+    need(periodStart === undefined || (periodStart >= 0 && periodStart <= now), "InvalidAmount", "The year cannot start in the future.");
+    const start = periodStart ?? (r.yearlyCap?.periodStart ?? now);
+    const spent = r.yearlyCap?.spent ?? 0n;
+    r.yearlyCap = { cap: capUsdtBase, periodStart: start, periodEnd: start + YEAR_SECS, spent };
+    const t = d.tx();
+    d.log("YearlyCapSet", `${first(d.me())} set a yearly limit of ${d.usd(capUsdtBase)} on this rule`, t);
+    return t;
+  }
+
+  /** submit_claim (record = false), execute_claim and execute_scheduled (record = true). */
+  function checkYearly(r: Rule, amount: bigint, record: boolean) {
+    const y = r.yearlyCap;
+    if (!y) return;
+    const p = currentPeriod(y.cap, y.periodStart, y.spent, d.now());
+    need(p.spent + amount <= p.cap, "ExceedsYearlyCap",
+      `This rule pays at most ${d.usd(p.cap)} a year; ${d.usd(p.cap > p.spent ? p.cap - p.spent : 0n)} is left this year.`);
+    if (record) r.yearlyCap = { ...p, spent: p.spent + amount };
+  }
+
+  return { raiseDispute, resolveDispute, checkNotDisputed, checkObjectionAllowed, setYearlyCap, checkYearly };
+}

@@ -353,3 +353,44 @@ pub struct AssetMediaSet {
     pub photo_count: u8,
     pub ts: i64,
 }
+
+// ---------------------------------------------------------------- disputes, yearly caps (2026-11-15)
+
+#[event]
+pub struct DisputeRaised {
+    pub estate: Pubkey,
+    pub objection: Pubkey,
+    pub target: Pubkey,
+    pub kind: TargetKind,
+    pub disputer: Pubkey,
+    pub reason_hash: [u8; 32],
+    pub lapses_at: i64,
+    pub ts: i64,
+}
+
+#[event]
+pub struct DisputeVoted {
+    pub objection: Pubkey,
+    pub verifier: Pubkey,
+    pub uphold: bool,
+    pub ts: i64,
+}
+
+#[event]
+pub struct DisputeResolved {
+    pub estate: Pubkey,
+    pub objection: Pubkey,
+    pub target: Pubkey,
+    pub kind: TargetKind,
+    pub upheld: bool,
+    pub ts: i64,
+}
+
+#[event]
+pub struct YearlyCapSet {
+    pub estate: Pubkey,
+    pub rule: Pubkey,
+    pub cap: u64,
+    pub period_start: i64,
+    pub ts: i64,
+}

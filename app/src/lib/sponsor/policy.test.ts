@@ -10,6 +10,8 @@ import { findInstruction, getIdl } from "../chain/idl";
 import { APPROVAL_STAMP_RENT, DEFAULT_LIMITS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, TOKEN_ACCOUNT_RENT, validateSponsoredTx, type RejectCode, type SponsorPolicy } from "./policy";
 import { SponsorLimiter } from "./limits";
 import { AGENT_ALLOWED } from "../agent/agent-wallet";
+import * as ix from "../chain/instructions";
+import { estatePda } from "../chain/pda";
 
 const sponsor = Keypair.generate();
 const user = Keypair.generate();
@@ -236,5 +238,51 @@ describe("sponsor as rent payer of the approval stamp (approve_claim)", () => {
   });
   it("needs no rent when the verifier pays", () => {
     expect(validateSponsoredTx(wire([approve(user.publicKey)]), withSlot()).rentLamports).toBe(0);
+  });
+});
+
+describe("permissionless instructions with a signing caller (finalize_succession, start_fallback, finalize_unlock, lapse_objection)", () => {
+  const ctx: ix.Ctx = { programId, usdtMint: mint };
+  const estate = estatePda(programId, Keypair.generate().publicKey);
+  const build = (caller: PublicKey) => [
+    ix.finalizeSuccession(ctx, estate, 2, caller), ix.startFallback(ctx, estate, caller),
+    ix.finalizeUnlock(estate, caller), ix.lapseObjection(ctx, estate, caller),
+  ];
+
+  it("are sponsored when any wallet signs as the caller (real IDL accounts)", () => {
+    for (const i of build(user.publicKey)) {
+      const d = validateSponsoredTx(wire([i]), policy());
+      expect(d.signers).toEqual([user.publicKey.toBase58()]);
+      expect(d.rentLamports).toBe(0);
+      expect(d.summary[0]).toMatch(/^heirloom (finalize_succession|start_fallback|finalize_unlock|lapse_objection)$/);
+    }
+  });
+
+  it("refuse the sponsor as the caller: it may only ever be the fee payer", () => {
+    for (const i of build(sponsor.publicKey)) rejects(wire([i], { signers: [] }), "missing_signature");
+    // Even with another signer present, the sponsor's key inside the instruction is refused.
+    for (const i of build(sponsor.publicKey)) rejects(wire([i, transfer()]), "sponsor_in_instruction");
+  });
+
+  it("refuse an unsigned call (the old account list): nobody to check or rate-limit", () => {
+    for (const i of build(user.publicKey)) {
+      i.keys.forEach((k) => { k.isSigner = false; });
+      rejects(wire([i], { signers: [] }), "missing_signature");
+    }
+  });
+});
+
+describe("disputes and yearly caps (15 Nov 2026)", () => {
+  const USER = ["raise_dispute", "resolve_dispute", "set_yearly_cap"];
+  it("are sponsored family / trusted-person / owner instructions, never signed by the agent", () => {
+    for (const n of USER) {
+      expect(SPONSORED_HEIRLOOM_IXS).toContain(n);
+      expect(AGENT_ALLOWED).not.toContain(n);
+      expect(names).toContain(n);
+      expect(validateSponsoredTx(wire([heirloomIx(n)]), policy()).summary).toEqual([`heirloom ${n}`]);
+    }
+  });
+  it("still refuse the sponsor inside them (no rent slot)", () => {
+    for (const n of USER) rejects(wire([heirloomIx(n, [user.publicKey, sponsor.publicKey])]), "sponsor_in_instruction");
   });
 });

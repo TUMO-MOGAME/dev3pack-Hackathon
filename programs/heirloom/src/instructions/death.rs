@@ -177,10 +177,13 @@ pub struct FinalizeUnlock<'info> {
     /// CHECK: the ["objection", estate] PDA; may not exist. Blocks while Open.
     #[account(seeds = [OBJECTION_SEED, estate.key().as_ref()], bump)]
     pub objection: UncheckedAccount<'info>,
+
+    /// Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer).
+    pub caller: Signer<'info>,
 }
 
 pub fn finalize_unlock_handler(ctx: Context<FinalizeUnlock>) -> Result<()> {
-    let objection_open = objection_is_open(&ctx.accounts.objection.to_account_info())?;
+    let objection_open = objection_is_open(&ctx.accounts.objection.to_account_info(), &ctx.accounts.estate)?;
     let estate = &mut ctx.accounts.estate;
     require!(estate.status == EstateStatus::DeathPending, HeirloomError::BadStatus);
 

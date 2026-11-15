@@ -1,11 +1,15 @@
+pub mod caps;
 pub mod claims;
 pub mod death;
+pub mod disputes;
 pub mod guardians;
 pub mod sale;
 pub mod setup;
 
+pub use caps::*;
 pub use claims::*;
 pub use death::*;
+pub use disputes::*;
 pub use guardians::*;
 pub use sale::*;
 pub use setup::*;
@@ -14,7 +18,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, CloseAccount, TransferChecked};
 
 use crate::errors::HeirloomError;
-use crate::state::{Objection, ObjectionStatus};
+use crate::state::{Estate, Objection};
 
 pub(crate) fn now() -> Result<i64> {
     Ok(Clock::get()?.unix_timestamp)
@@ -86,12 +90,13 @@ pub(crate) fn write_account<T: AccountSerialize>(info: &AccountInfo, value: &T) 
     value.try_serialize(&mut writer)
 }
 
-/// The `["objection", target]` PDA (address already checked by a seeds constraint) is Open.
-/// An account that doesn't exist yet counts as "no objection".
-pub(crate) fn objection_is_open(info: &AccountInfo) -> Result<bool> {
+/// The `["objection", target]` PDA (address already checked by a seeds constraint) is Open and binding.
+/// An account that does not exist yet counts as "no objection"; a dispute past its lapse time counts as
+/// dismissed (disputes never lock funds forever).
+pub(crate) fn objection_is_open(info: &AccountInfo, estate: &Estate) -> Result<bool> {
     if !account_exists(info) {
         return Ok(false);
     }
     let o: Objection = read_account(info)?;
-    Ok(o.status == ObjectionStatus::Open)
+    Ok(o.is_effectively_open(estate, now()?))
 }

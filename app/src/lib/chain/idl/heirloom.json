@@ -1331,6 +1331,30 @@
               }
             ]
           }
+        },
+        {
+          "name": "year_cap",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  97,
+                  114,
+                  99,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "rule"
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -1720,6 +1744,30 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "year_cap",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  97,
+                  114,
+                  99,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "rule"
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -1794,6 +1842,13 @@
               }
             ]
           }
+        },
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer)."
+          ],
+          "signer": true
         }
       ],
       "args": [
@@ -1844,6 +1899,13 @@
               }
             ]
           }
+        },
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer)."
+          ],
+          "signer": true
         }
       ],
       "args": []
@@ -2105,6 +2167,13 @@
               }
             ]
           }
+        },
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer)."
+          ],
+          "signer": true
         }
       ],
       "args": []
@@ -2405,6 +2474,96 @@
         {
           "name": "amount",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "raise_dispute",
+      "discriminator": [
+        41,
+        243,
+        1,
+        51,
+        150,
+        95,
+        246,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "disputer",
+          "docs": [
+            "An active beneficiary or one of the estate's verifiers. Pays the rent of a new Objection PDA."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "estate"
+        },
+        {
+          "name": "beneficiary_account",
+          "docs": [
+            "The disputer's Beneficiary PDA when a beneficiary disputes; None for a verifier."
+          ],
+          "optional": true
+        },
+        {
+          "name": "target_account",
+          "optional": true
+        },
+        {
+          "name": "objection",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "target"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "kind",
+          "type": {
+            "defined": {
+              "name": "TargetKind"
+            }
+          }
+        },
+        {
+          "name": "target",
+          "type": "pubkey"
+        },
+        {
+          "name": "reason_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -2826,6 +2985,73 @@
               32
             ]
           }
+        }
+      ]
+    },
+    {
+      "name": "resolve_dispute",
+      "discriminator": [
+        231,
+        6,
+        202,
+        6,
+        96,
+        103,
+        12,
+        230
+      ],
+      "accounts": [
+        {
+          "name": "verifier",
+          "docs": [
+            "A verifier other than the one who raised the dispute."
+          ],
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "writable": true,
+          "relations": [
+            "objection"
+          ]
+        },
+        {
+          "name": "objection",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "objection.target",
+                "account": "Objection"
+              }
+            ]
+          }
+        },
+        {
+          "name": "target_account",
+          "writable": true,
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "uphold",
+          "type": "bool"
         }
       ]
     },
@@ -3425,6 +3651,95 @@
       ]
     },
     {
+      "name": "set_yearly_cap",
+      "discriminator": [
+        97,
+        244,
+        179,
+        181,
+        141,
+        214,
+        207,
+        90
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          },
+          "relations": [
+            "rule"
+          ]
+        },
+        {
+          "name": "rule"
+        },
+        {
+          "name": "year_cap",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  97,
+                  114,
+                  99,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "rule"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "cap",
+          "type": "u64"
+        },
+        {
+          "name": "period_start",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "start_fallback",
       "discriminator": [
         125,
@@ -3473,6 +3788,13 @@
         },
         {
           "name": "seat2"
+        },
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer)."
+          ],
+          "signer": true
         }
       ],
       "args": []
@@ -3573,6 +3895,29 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "year_cap",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  97,
+                  114,
+                  99,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "rule"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -4371,6 +4716,19 @@
         173,
         26
       ]
+    },
+    {
+      "name": "YearCap",
+      "discriminator": [
+        252,
+        131,
+        4,
+        241,
+        105,
+        64,
+        177,
+        86
+      ]
     }
   ],
   "events": [
@@ -4541,6 +4899,45 @@
         108,
         159,
         116
+      ]
+    },
+    {
+      "name": "DisputeRaised",
+      "discriminator": [
+        246,
+        167,
+        109,
+        37,
+        142,
+        45,
+        38,
+        176
+      ]
+    },
+    {
+      "name": "DisputeResolved",
+      "discriminator": [
+        121,
+        64,
+        249,
+        153,
+        139,
+        128,
+        236,
+        187
+      ]
+    },
+    {
+      "name": "DisputeVoted",
+      "discriminator": [
+        246,
+        199,
+        201,
+        173,
+        194,
+        194,
+        97,
+        73
       ]
     },
     {
@@ -4880,6 +5277,19 @@
         234,
         79
       ]
+    },
+    {
+      "name": "YearlyCapSet",
+      "discriminator": [
+        3,
+        17,
+        66,
+        102,
+        120,
+        116,
+        137,
+        4
+      ]
     }
   ],
   "errors": [
@@ -5092,6 +5502,21 @@
       "code": 6041,
       "name": "ObjectionNotLapsed",
       "msg": "This objection cannot lapse yet"
+    },
+    {
+      "code": 6042,
+      "name": "NotDisputer",
+      "msg": "Only a beneficiary or a trusted person can dispute"
+    },
+    {
+      "code": 6043,
+      "name": "DisputeLapsed",
+      "msg": "This dispute has lapsed: its time to resolve it is over"
+    },
+    {
+      "code": 6044,
+      "name": "ExceedsYearlyCap",
+      "msg": "Payment would exceed the rule's cap for this year"
     }
   ],
   "types": [
@@ -5819,6 +6244,115 @@
           {
             "name": "estate",
             "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DisputeRaised",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "objection",
+            "type": "pubkey"
+          },
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "TargetKind"
+              }
+            }
+          },
+          {
+            "name": "disputer",
+            "type": "pubkey"
+          },
+          {
+            "name": "reason_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "lapses_at",
+            "type": "i64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DisputeResolved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "objection",
+            "type": "pubkey"
+          },
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "TargetKind"
+              }
+            }
+          },
+          {
+            "name": "upheld",
+            "type": "bool"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DisputeVoted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "objection",
+            "type": "pubkey"
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "uphold",
+            "type": "bool"
           },
           {
             "name": "ts",
@@ -7306,6 +7840,75 @@
                 32
               ]
             }
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "YearCap",
+      "docs": [
+        "Seeds: [\"yearcap\", rule]. Optional per-rule cap per 365-day period, on top of the per-claim and",
+        "lifetime caps. Claims and scheduled payments under the rule add to `period_spent`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "rule",
+            "type": "pubkey"
+          },
+          {
+            "name": "cap",
+            "docs": [
+              "Most that may be paid under the rule per period (base units)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "period_start",
+            "docs": [
+              "Start of the current period; rolls forward by whole periods."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "period_spent",
+            "docs": [
+              "Paid in the period that starts at `period_start`."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "YearlyCapSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "rule",
+            "type": "pubkey"
+          },
+          {
+            "name": "cap",
+            "type": "u64"
+          },
+          {
+            "name": "period_start",
+            "type": "i64"
           },
           {
             "name": "ts",

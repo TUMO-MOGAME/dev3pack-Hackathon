@@ -14,6 +14,7 @@ import type { Locale } from "../i18n/locales";
 import type { LegacyBook, LegacyChatReply, LegacySpeech, LegacyStatus, LegacyVoiceInfo } from "../legacy/schema";
 import type { LegacyVoiceUpload, SpeakInput } from "../legacy/client";
 import type { AssetKind, GuardiansService, GuardiansSnapshot } from "../guardians/types";
+import type { Dispute, DisputesService } from "../disputes/types";
 
 export interface TxResult { signature: string; explorerUrl: string }
 
@@ -29,9 +30,11 @@ export interface EstateSnapshot {
   activity: ActivityItem[];
   /** Guardians (seats, monitors, objections, fallback). Absent on older snapshots; `enabled: false` when no Guard exists. */
   guardians?: GuardiansSnapshot;
+  /** Disputes (U9) on claims and on the unlock, newest first. Absent on older snapshots. */
+  disputes?: Dispute[];
 }
 
-export interface HeirloomService extends GuardiansService {
+export interface HeirloomService extends GuardiansService, DisputesService {
   mode: "mock" | "chain";
 
   // Reads

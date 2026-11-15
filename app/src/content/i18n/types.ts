@@ -2,6 +2,7 @@ import type { AssetsCopy } from "../assets";
 import type { AssistantCopy } from "../assistant";
 import type { CommonCopy } from "../common";
 import type { GuardiansCopy } from "../guardians";
+import type { DisputesCopy } from "../disputes";
 import type { LandingCopy } from "../landing";
 import type { PayCopy } from "../pay";
 import type { ScreensCopy } from "../screens";
@@ -28,6 +29,8 @@ export interface Bundle {
   guardians: Widen<GuardiansCopy>;
   /** Assets of any kind: photos, labels, the gallery and the spec sheet. */
   assets: Widen<AssetsCopy>;
+  /** Disputes and yearly limits. */
+  disputes: Widen<DisputesCopy>;
   /** One line shown above the English-only legal pages. */
   legalNote: string;
 }

@@ -16,6 +16,7 @@ import { getConnection } from "./tx";
 const DEFAULT_KEY = "11111111111111111111111111111111";
 const ZERO_HASH = "0".repeat(64);
 const NO_SEAT = 255;
+const DISPUTE_SEAT = 254;
 const TARGET_KIND = ["Claim", "Unlock", "Sale", "Hardship", "Succession", "Fallback"] as const satisfies readonly TargetKind[];
 const OBJECTION_STATUS = ["Open", "Upheld", "Dismissed"] as const satisfies readonly ObjectionStatus[];
 const ASSET_KIND = ["Car", "Motorbike", "Furniture", "Jewellery", "Electronics", "Other"] as const satisfies readonly AssetKind[];
@@ -157,7 +158,8 @@ export function assembleGuardians(
       };
     });
 
-  const objections: Objection[] = raw.objections.map(({ address, raw: o }) => {
+  // Disputes (seat_index 254) share the Objection account but are read by chain/disputes.ts.
+  const objections: Objection[] = raw.objections.filter(({ raw: o }) => num(o, "seat_index") !== DISPUTE_SEAT).map(({ address, raw: o }) => {
     const seatIndex = num(o, "seat_index");
     const reasonHash = hex(o, "reason_hash");
     const monitor = key(o, "monitor");

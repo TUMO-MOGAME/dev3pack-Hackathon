@@ -14,7 +14,9 @@
  *  - Associated Token Account program: Create / CreateIdempotent of the USD₮ ATA (correct derivation) for an owner
  *    that is not the sponsor. The sponsor may be the rent payer only when `sponsorPaysRent` and the same tx sends
  *    USD₮ into that ATA; at most `maxAtaCreates` per tx.
- *  - Heirloom program: instructions whose 8-byte discriminator is on the allow-list.
+ *  - Heirloom program: instructions whose 8-byte discriminator is on the allow-list. The permissionless ones
+ *    (finalize_unlock, finalize_succession, start_fallback, lapse_objection) take any wallet as a signing `caller`,
+ *    so they too have a user signature to check and rate-limit; the sponsor can never be that caller.
  *  - The sponsor's key may appear in no instruction at all, except as the rent payer of an allowed ATA creation, or as
  *    the `payer` of approve_claim (rent for the claim's small ApprovalStamp, once per tx, only when `sponsorPaysRent`):
  *    so it is never a source, authority, owner, or account any program can debit beyond that rent.
@@ -41,6 +43,8 @@ export const SPONSORED_HEIRLOOM_IXS = [
   "report_seat_death", "confirm_seat_death", "veto_seat_death", "finalize_succession",
   "raise_objection", "vote_objection", "set_asset_media", "report_fallback_death", "start_fallback", "execute_fallback",
   "lapse_objection",
+  // Disputes and yearly caps (15 Nov 2026).
+  "raise_dispute", "resolve_dispute", "set_yearly_cap",
 ] as const;
 
 export interface SponsorPolicy {

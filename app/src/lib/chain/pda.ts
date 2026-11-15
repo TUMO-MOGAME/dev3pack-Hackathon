@@ -92,3 +92,7 @@ export const objectionPda = (programId: Key, target: Key) =>
 /** ["media", asset]: the asset's photo root. */
 export const mediaPda = (programId: Key, asset: Key) =>
   find(programId, [enc.encode("media"), pk(asset).toBytes()]);
+
+/** ["yearcap", rule]: the rule's optional cap per 365-day period (may not exist). Added 15 Nov 2026. */
+export const yearCapPda = (programId: Key, rule: Key) =>
+  find(programId, [enc.encode("yearcap"), pk(rule).toBytes()]);

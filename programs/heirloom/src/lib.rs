@@ -292,4 +292,23 @@ pub mod heirloom {
     pub fn lapse_objection(ctx: Context<LapseObjection>) -> Result<()> {
         instructions::guardians::lapse_objection_handler(ctx)
     }
+
+    // ------------------------------------------------------------------ disputes, yearly caps (2026-11-15)
+
+    pub fn raise_dispute(
+        ctx: Context<RaiseDispute>,
+        kind: TargetKind,
+        target: Pubkey,
+        reason_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::disputes::raise_dispute_handler(ctx, kind, target, reason_hash)
+    }
+
+    pub fn resolve_dispute(ctx: Context<ResolveDispute>, uphold: bool) -> Result<()> {
+        instructions::disputes::resolve_dispute_handler(ctx, uphold)
+    }
+
+    pub fn set_yearly_cap(ctx: Context<SetYearlyCap>, cap: u64, period_start: i64) -> Result<()> {
+        instructions::caps::set_yearly_cap_handler(ctx, cap, period_start)
+    }
 }

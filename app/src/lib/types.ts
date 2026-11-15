@@ -4,6 +4,7 @@
  * use helpers in lib/format.ts for display. Times are unix seconds.
  * Do not change shapes without updating docs/program-spec.md and both service implementations.
  */
+import type { YearlyCap } from "./disputes/types";
 
 export type Base58 = string;
 export type HexHash = string; // 64 hex chars, sha256
@@ -77,6 +78,8 @@ export interface Rule {
   intervalSecs: number;
   nextDue: number | null;
   fixedPayee: Base58 | null;
+  /** Optional cap per 12-month period (e.g. school fees up to N a year), on top of the per-claim and lifetime caps. */
+  yearlyCap?: YearlyCap | null;
 }
 
 export interface Claim {

@@ -65,6 +65,24 @@ fn fallback_objection_lapsed(o: &Objection, wait: i64, ts: i64) -> Result<bool> 
     Ok(ts >= lapses_at)
 }
 
+/// An upheld objection or dispute on a claim: an Open claim is cancelled (Rejected).
+pub(crate) fn uphold_on_claim(info: &AccountInfo) -> Result<()> {
+    let mut claim: Claim = read_account(info)?;
+    if claim.status == ClaimStatus::Open {
+        claim.status = ClaimStatus::Rejected;
+        write_account(info, &claim)?;
+    }
+    Ok(())
+}
+
+/// An upheld objection or dispute on an unlock: the death claim is cleared and the estate is Active again.
+pub(crate) fn uphold_on_unlock(estate: &mut Estate) {
+    if estate.status != EstateStatus::Unlocked {
+        estate.clear_death_claim();
+        estate.status = EstateStatus::Active;
+    }
+}
+
 fn emit_seat_configured(seat: &Seat) -> Result<()> {
     emit!(SeatConfigured {
         estate: seat.estate,
@@ -529,11 +547,14 @@ pub struct FinalizeSuccession<'info> {
     /// CHECK: the ["objection", seat] PDA; may not exist. Blocks while Open.
     #[account(seeds = [OBJECTION_SEED, seat.key().as_ref()], bump)]
     pub objection: UncheckedAccount<'info>,
+
+    /// Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer).
+    pub caller: Signer<'info>,
 }
 
 pub fn finalize_succession_handler(ctx: Context<FinalizeSuccession>, _index: u8) -> Result<()> {
     let wait = ctx.accounts.guard.succession_wait_secs;
-    let objection_open = objection_is_open(&ctx.accounts.objection.to_account_info())?;
+    let objection_open = objection_is_open(&ctx.accounts.objection.to_account_info(), &ctx.accounts.estate)?;
     let estate = &mut ctx.accounts.estate;
     let seat = &mut ctx.accounts.seat;
     let idx = seat.index as usize;
@@ -796,11 +817,18 @@ pub fn raise_objection_handler(
 
     // ---- one objection per target at a time; a resolved one may be re-raised (overwritten),
     // except a dismissed objection on a one-off claim or hardship.
+    let ts = now()?;
     let objection = &mut ctx.accounts.objection;
     if is_set(&objection.target) {
-        require!(objection.status != ObjectionStatus::Open, HeirloomError::ObjectionOpen);
+        require!(!objection.is_effectively_open(estate, ts), HeirloomError::ObjectionOpen);
+        // Still Open here means a lapsed dispute, which counts as dismissed.
+        let prev = if objection.status == ObjectionStatus::Open {
+            ObjectionStatus::Dismissed
+        } else {
+            objection.status
+        };
         require!(
-            !(objection.status == ObjectionStatus::Dismissed
+            !(prev == ObjectionStatus::Dismissed
                 && matches!(kind, TargetKind::Claim | TargetKind::Hardship)),
             HeirloomError::BadStatus
         );
@@ -808,13 +836,12 @@ pub fn raise_objection_handler(
         // countdown restarts (upheld objection, new recipient), or objections could delay it forever.
         require!(
             !(kind == TargetKind::Fallback
-                && objection.status == ObjectionStatus::Dismissed
+                && prev == ObjectionStatus::Dismissed
                 && objection.raised_at >= ctx.accounts.guard.fallback_started_at),
             HeirloomError::BadStatus
         );
     }
 
-    let ts = now()?;
     let bump = ctx.bumps.objection;
     objection.set_inner(Objection {
         estate: estate_key,
@@ -893,6 +920,8 @@ pub fn vote_objection_handler(ctx: Context<VoteObjection>, uphold: bool) -> Resu
     let estate_key = ctx.accounts.estate.key();
     let objection = &mut ctx.accounts.objection;
     require!(objection.status == ObjectionStatus::Open, HeirloomError::BadStatus);
+    // Disputes are resolved by the verifiers with resolve_dispute.
+    require!(!objection.is_dispute(), HeirloomError::BadStatus);
     let kind = objection.kind;
     require!(
         !fallback_objection_lapsed(objection, ctx.accounts.guard.fallback_wait_secs, now()?)?,
@@ -961,21 +990,8 @@ pub fn vote_objection_handler(ctx: Context<VoteObjection>, uphold: bool) -> Resu
     if upheld {
         let target_info = ctx.accounts.target_account.as_ref().map(|a| a.to_account_info());
         match kind {
-            TargetKind::Claim => {
-                let info = target_info.ok_or(HeirloomError::BadStatus)?;
-                let mut claim: Claim = read_account(&info)?;
-                if claim.status == ClaimStatus::Open {
-                    claim.status = ClaimStatus::Rejected;
-                    write_account(&info, &claim)?;
-                }
-            }
-            TargetKind::Unlock => {
-                let estate = &mut ctx.accounts.estate;
-                if estate.status != EstateStatus::Unlocked {
-                    estate.clear_death_claim();
-                    estate.status = EstateStatus::Active;
-                }
-            }
+            TargetKind::Claim => uphold_on_claim(&target_info.ok_or(HeirloomError::BadStatus)?)?,
+            TargetKind::Unlock => uphold_on_unlock(&mut ctx.accounts.estate),
             TargetKind::Sale => {
                 // The listing is cancelled; offers can only be accepted after a fresh list_asset.
                 let info = target_info.ok_or(HeirloomError::BadStatus)?;
@@ -1176,6 +1192,9 @@ pub struct StartFallback<'info> {
     pub seat1: Box<Account<'info, Seat>>,
     #[account(seeds = [SEAT_SEED, estate.key().as_ref(), &[2u8]], bump = seat2.bump)]
     pub seat2: Box<Account<'info, Seat>>,
+
+    /// Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer).
+    pub caller: Signer<'info>,
 }
 
 pub fn start_fallback_handler(ctx: Context<StartFallback>) -> Result<()> {
@@ -1363,6 +1382,9 @@ pub struct LapseObjection<'info> {
         has_one = estate
     )]
     pub objection: Account<'info, Objection>,
+
+    /// Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer).
+    pub caller: Signer<'info>,
 }
 
 /// Anyone: an Open Fallback objection not upheld within `fallback_wait_secs` of being raised is

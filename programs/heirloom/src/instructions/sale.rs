@@ -467,7 +467,7 @@ pub fn accept_offer_handler(ctx: Context<AcceptOffer>) -> Result<()> {
     let asset = &ctx.accounts.asset;
     require!(asset.status == AssetStatus::Listed, HeirloomError::BadStatus);
     require!(
-        !objection_is_open(&ctx.accounts.objection.to_account_info())?,
+        !objection_is_open(&ctx.accounts.objection.to_account_info(), &ctx.accounts.estate)?,
         HeirloomError::ObjectionOpen
     );
     if let Some(b) = asset.hardship_beneficiary {
@@ -477,7 +477,7 @@ pub fn accept_offer_handler(ctx: Context<AcceptOffer>) -> Result<()> {
         let (expected, _) = Pubkey::find_program_address(&[OBJECTION_SEED, hardship.as_ref()], &crate::ID);
         let info = ctx.accounts.hardship_objection.to_account_info();
         require_keys_eq!(info.key(), expected, HeirloomError::BadStatus);
-        require!(!objection_is_open(&info)?, HeirloomError::ObjectionOpen);
+        require!(!objection_is_open(&info, &ctx.accounts.estate)?, HeirloomError::ObjectionOpen);
     }
 
     let amount = ctx.accounts.offer.amount;

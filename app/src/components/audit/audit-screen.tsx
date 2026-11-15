@@ -12,6 +12,7 @@ import type { ScreensCopy } from "@/content/screens";
 import type { CommonCopy } from "@/content/common";
 import type { AssistantCopy } from "@/content/assistant";
 import type { PayCopy } from "@/content/pay";
+import type { DisputesCopy } from "@/content/disputes";
 import type { GuardiansCopy } from "@/content/guardians";
 import { useLocalized } from "@/lib/i18n/client";
 import { getService, type EstateSnapshot, type HeirloomService } from "@/lib/service";
@@ -32,7 +33,7 @@ const count = (a: boolean[]) => a.filter(Boolean).length;
 /** Same tones as the estate screen's status badge. */
 const statusTone: Record<EstateStatus, Tone> = { Active: "accent", DeathPending: "warn", Unlocked: "ok", Frozen: "danger" };
 
-export interface AuditShellCopy { common: CommonCopy; assistant: AssistantCopy; pay: PayCopy; guardians: GuardiansCopy; siteName: string }
+export interface AuditShellCopy { common: CommonCopy; assistant: AssistantCopy; pay: PayCopy; guardians: GuardiansCopy; disputes: DisputesCopy; siteName: string }
 
 /** Copy for the shared pieces (receipts, status names), localized like the app shell, without the wallet or PIN gate. */
 export function AuditScreen({ address, copy: english, shell }: { address: string; copy: Copy; shell: AuditShellCopy }) {
@@ -40,9 +41,10 @@ export function AuditScreen({ address, copy: english, shell }: { address: string
   const assistant = useLocalized(shell.assistant, (t) => t.assistant);
   const pay = useLocalized(shell.pay, (t) => t.pay);
   const guardians = useLocalized(shell.guardians, (t) => t.guardians);
+  const disputes = useLocalized(shell.disputes, (t) => t.disputes);
   const copy = useLocalized(english, (t) => t.screens.audit);
   return (
-    <CopyProvider value={{ common, assistant, pay, guardians, siteName: shell.siteName }}>
+    <CopyProvider value={{ common, assistant, pay, guardians, disputes, siteName: shell.siteName }}>
       <MotionConfig reducedMotion="user">
         <AuditBody address={address} copy={copy} />
       </MotionConfig>
