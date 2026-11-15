@@ -27,8 +27,10 @@ export const site = {
     linksTitle: "Heirloom",
     legalTitle: "Legal",
     links: [
+      { href: "/#purposes", label: "What it pays for" },
       { href: "/#how", label: "How it works" },
       { href: "/#safety", label: "Safety" },
+      { href: "/#proof", label: "Proof" },
       { href: "/start", label: "Try the demo" },
     ],
     legal: [
@@ -49,6 +51,8 @@ export const site = {
     programId: process.env.NEXT_PUBLIC_HEIRLOOM_PROGRAM_ID ?? "b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY",
     rights: "Heirloom. Hackathon prototype, W3Node Cape Town 2026.",
     // Flaticon free licence: attribution required wherever the icons appear.
+    /** Shown on the landing page, the only page with photos. */
+    photoCredit: "Photos: Unsplash",
     iconCredit: { label: "Icons: Uicons by Flaticon", linkText: "flaticon.com/uicons", href: "https://www.flaticon.com/uicons" },
   },
   notFound: {

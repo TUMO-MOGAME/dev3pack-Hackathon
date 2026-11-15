@@ -1,160 +1,368 @@
-"use client";
-import { ArrowDown, ArrowRight, Car, FileLock2, GraduationCap, HandHeart, HeartPulse, KeyRound, Landmark, MessageSquareHeart, PenLine, ShieldCheck, UsersRound } from "@/components/ui/icons";
-import type { CSSProperties } from "react";
-import type { LandingCopy } from "@/content/landing";
-import { Badge, ButtonLink, Eyebrow } from "@/components/ui/primitives";
+﻿"use client";
+import { Fragment, useEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
+import Link from "next/link";
+import {
+  ArrowRight, Banknote, Check, FileLock2, HeartPulse, KeyRound, Lock, PenLine, ShieldCheck, Smartphone, UsersRound, Zap,
+} from "@/components/ui/icons";
+import { receiptTxs, type LandingCopy } from "@/content/landing";
 import { useLocalized } from "@/lib/i18n/client";
 
-const stepIcons = [MessageSquareHeart, PenLine, GraduationCap];
-const safetyIcons = [ShieldCheck, UsersRound, HeartPulse, HandHeart, FileLock2, KeyRound];
-const rowIcons = [GraduationCap, GraduationCap, Car];
+const stripIcons = [Banknote, Smartphone, Zap, UsersRound];
+const safetyIcons = [Lock, UsersRound, HeartPulse, ShieldCheck, FileLock2, KeyRound];
+const purposePhotos: { name: string; w: number; h: number; large?: number; position?: string }[] = [
+  { name: "students", w: 800, h: 533 },
+  { name: "graduation", w: 800, h: 1200 },
+  { name: "walk", w: 800, h: 1200, position: "40% 60%" },
+  { name: "car", w: 800, h: 600, large: 1280 },
+];
+/** Which of the three plan rules start now in the "sign" mock-up (books, tuition) and which wait (the car). */
+const startsNow = [true, true, false];
+const receiptDots = [
+  { Icon: Check, tone: "lp-dot-ok" },
+  { Icon: UsersRound, tone: "lp-dot-amber" },
+  { Icon: ShieldCheck, tone: "" },
+  { Icon: PenLine, tone: "" },
+];
+
+const explorerTx = (sig: string) => `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
+const shortSig = (sig: string) => `${sig.slice(0, 4)}â€¦${sig.slice(-4)}`;
+const delay = (s: number) => ({ "--d": `${s}s` }) as CSSProperties;
+
+/** Copy with *marked* words: each marked phrase gets the hand-drawn underline. */
+function Marked({ text }: { text: string }) {
+  return text.split("*").map((part, i) => (i % 2 ? <span key={i} className="mark">{part}</span> : <Fragment key={i}>{part}</Fragment>));
+}
 
 /**
- * The landing page's sections. Prerendered in English (the first screen needs no
- * JavaScript: the entrance is CSS-only); after hydration the visitor's chosen language is laid over the same markup.
+ * A pre-optimised landing photo (public/landing/<name>-800.webp and -1600.webp, WebP q72 from the Unsplash
+ * originals). A plain img: next/image would re-encode files that are already sized and compressed.
+ */
+function Photo({ name, w, h, alt, sizes, large = 1600, widths, priority = false, style }: {
+  name: string; w: number; h: number; alt: string; sizes: string; large?: number; widths?: number[]; priority?: boolean; style?: CSSProperties;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- fixed-width WebPs made with sharp (see above)
+    <img
+      src={`/landing/${name}-800.webp`}
+      srcSet={(widths ?? [800, large]).map((x) => `/landing/${name}-${x}.webp ${x}w`).join(", ")}
+      sizes={sizes} width={w} height={h} alt={alt} style={style} decoding="async"
+      loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : undefined}
+    />
+  );
+}
+
+function Eyebrow({ children }: { children: ReactNode }) {
+  return <p className="lp-eyebrow" data-reveal>{children}</p>;
+}
+
+/**
+ * Below-the-fold reveals, as progressive enhancement: the page is complete without JavaScript. After hydration,
+ * only elements still below the screen are marked `data-pending` (hidden by landing.css) and shown as they
+ * scroll in. Skipped entirely with reduced motion. Set up when the browser is idle and without layout reads
+ * (the observer reports positions), so it adds nothing to hydration and never forces the skipped
+ * `content-visibility` sections to render.
+ */
+function useReveal(root: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = root.current;
+    if (!el || !("IntersectionObserver" in window) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const seen = new WeakSet<Element>();
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const node = e.target as HTMLElement;
+        if (!seen.has(node)) {
+          seen.add(node);
+          // First report: on screen or above it stays as it is; below the screen waits for its reveal.
+          if (!e.isIntersecting && e.rootBounds && e.boundingClientRect.top > e.rootBounds.bottom) node.dataset.pending = "";
+          else io.unobserve(node);
+        } else if (e.isIntersecting) {
+          delete node.dataset.pending;
+          io.unobserve(node);
+        }
+      }
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.12 });
+    const start = () => { for (const node of el.querySelectorAll("[data-reveal]")) io.observe(node); };
+    const idle = "requestIdleCallback" in window ? window.requestIdleCallback(start, { timeout: 2000 }) : window.setTimeout(start, 200);
+    return () => {
+      if ("cancelIdleCallback" in window) window.cancelIdleCallback(idle); else window.clearTimeout(idle);
+      io.disconnect();
+      for (const node of el.querySelectorAll<HTMLElement>("[data-pending]")) delete node.dataset.pending;
+    };
+  }, [root]);
+}
+
+/**
+ * The landing page's sections. Prerendered in English (the first screen needs no JavaScript: its entrance is
+ * CSS-only); after hydration the visitor's chosen language is laid over the same markup.
  */
 export function LandingBody({ copy: english }: Readonly<{ copy: LandingCopy }>) {
-  const { hero, problem, how, safety, proof, cta } = useLocalized(english, (t) => t.landing);
+  const { hero, strip, problem, purposes, how, safety, proof, cta } = useLocalized(english, (t) => t.landing);
+  const main = useRef<HTMLElement>(null);
+  useReveal(main);
+
   return (
-    <main id="main">
-      {/* Hero: CSS-only entrance, no JavaScript needed for the first screen */}
-      <section className="overflow-hidden border-b border-ink">
-        <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 pb-14 pt-10 *:min-w-0 md:grid-cols-[1.1fr_0.9fr] md:pb-20 md:pt-16">
-          <div>
-            <Eyebrow className="rise">{hero.eyebrow}</Eyebrow>
-            <h1 className="rise mt-3 text-display" style={{ "--i": 1 } as CSSProperties}>{hero.title}</h1>
-            <p className="rise mt-5 max-w-xl text-lead text-ink-2" style={{ "--i": 2 } as CSSProperties}>{hero.body}</p>
-            <div className="rise mt-7 flex flex-col gap-3 sm:flex-row" style={{ "--i": 3 } as CSSProperties}>
-              <ButtonLink href="/start" className="min-h-13! px-7">{hero.primary}<ArrowRight className="size-5" aria-hidden="true" /></ButtonLink>
-              <a href="#how" className="inline-flex min-h-13 items-center justify-center gap-2 rounded-full border border-ink bg-surface px-6 font-medium transition-colors hover:bg-surface-2">{hero.secondary}<ArrowDown className="size-4" aria-hidden="true" /></a>
+    <main id="main" ref={main} className="lp">
+      {/* Hero */}
+      <section className="lp-hero" aria-labelledby="hero-title">
+        <div className="lp-wrap">
+          <div className="lp-copy">
+            <p className="lp-eyebrow">{hero.eyebrow}</p>
+            <h1 id="hero-title" className="font-display"><Marked text={hero.title} /></h1>
+            <p className="lp-lede">{hero.body}</p>
+            <div className="lp-actions">
+              <Link href="/start" className="lp-btn lp-btn-primary">{hero.primary}<ArrowRight className="lp-ic" /></Link>
+              <a href="#how" className="lp-btn lp-btn-ghost">{hero.secondary}</a>
             </div>
-            <p className="rise mt-4 text-small text-ink-2" style={{ "--i": 4 } as CSSProperties}>{hero.note}</p>
+            <p className="lp-note"><Check className="lp-ic" />{hero.note}</p>
           </div>
 
-          <div className="rise relative mx-auto w-full max-w-md" style={{ "--i": 3 } as CSSProperties} role="img" aria-label={`${hero.card.title}. ${hero.card.vaultLabel}: ${hero.card.vault}. ${hero.card.foot}`}>
-            <div className="absolute inset-0 -z-10 translate-x-2.5 translate-y-2.5 rounded-xl bg-ink" aria-hidden="true" />
-            <div className="rounded-xl border border-ink bg-surface p-5" aria-hidden="true">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-display text-h3">{hero.card.title}</p>
-                <Badge tone="ok">{hero.card.status}</Badge>
+          <div className="lp-stage">
+            <div className="lp-arch">
+              <Photo name="dad-son" w={800} h={592} alt={hero.photoAlt} sizes="(min-width: 900px) 760px, 140vw" widths={[800, 1200, 1600]} priority />
+            </div>
+            <div className="lp-card lp-receipt" aria-hidden="true">
+              <span className="lp-tick"><Check className="lp-ic" /></span>
+              <div><b className="lp-num">{hero.receipt.title}</b><span>{hero.receipt.detail}</span></div>
+            </div>
+            <div className="lp-card lp-estate" role="img" aria-label={hero.card.label}>
+              <div className="lp-estate-head"><span>{hero.card.title}</span><span className="lp-pill">{hero.card.status}</span></div>
+              <div className="lp-vault">
+                <small>{hero.card.vaultLabel}</small>
+                <b className="font-display lp-num">{hero.card.vault}</b><span>{hero.card.vaultZar}</span>
               </div>
-              <div className="brand-panel mt-4 rounded-lg p-4">
-                <p className="flex items-center gap-2 text-small font-medium opacity-90"><Landmark className="size-4" />{hero.card.vaultLabel}</p>
-                <p className="mt-1 font-display text-h2">{hero.card.vault}</p>
-                <p className="text-small opacity-90">{hero.card.vaultZar}</p>
-              </div>
-              <ul className="mt-3 divide-y divide-line">
-                {hero.card.rows.map((row, i) => {
-                  const Icon = rowIcons[i];
-                  return (
-                    <li key={row.label} className="flex items-center gap-3 py-3">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-full border border-ink text-ink"><Icon className="size-4.5" /></span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-small font-semibold">{row.label}</span>
-                        <span className="block truncate text-small text-ink-2">{row.detail}</span>
-                      </span>
-                      <span className="shrink-0 text-right">
-                        <span className="block text-small font-semibold tabular-nums">{row.amount}</span>
-                        <span className="text-[0.75rem] font-semibold text-ink-2">{row.state}</span>
-                      </span>
-                    </li>
-                  );
-                })}
+              <ul className="lp-rows">
+                {hero.card.rows.map((row) => (
+                  <li key={row.label}>
+                    <span>{row.label}</span>
+                    <span className="lp-d">{row.detail}</span>
+                    <span className="lp-a lp-num">{row.amount}<small>{row.state}</small></span>
+                  </li>
+                ))}
               </ul>
-              <p className="mt-1 flex items-center gap-1.5 text-[0.8rem] text-ink-2"><ShieldCheck className="size-4 text-ink" />{hero.card.foot}</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Problem */}
-      <section className="mx-auto w-full max-w-6xl px-4 py-14 md:py-20">
-        <div className="max-w-3xl">
-          <Eyebrow>{problem.eyebrow}</Eyebrow>
-          <h2 className="mt-3 text-h1">{problem.title}</h2>
-          <p className="mt-4 text-lead text-ink-2">{problem.body}</p>
+      {/* The "built with" strip */}
+      <div className="lp-strip">
+        <ul className="lp-wrap" aria-label={strip.label}>
+          {strip.items.map((item, i) => {
+            const Icon = stripIcons[i];
+            return <li key={item.term}><Icon className="lp-ic" /><b>{item.term}</b> {item.detail}</li>;
+          })}
+        </ul>
+      </div>
+
+      {/* The problem */}
+      <section className="lp-section lp-problem" aria-labelledby="problem-title">
+        <div className="lp-wrap">
+          <figure className="lp-worry" data-reveal>
+            <Photo name="worry" w={800} h={1067} alt={problem.photoAlt} sizes="(min-width: 1160px) 440px, (min-width: 900px) 38vw, 92vw" />
+            <figcaption className="font-display">{problem.caption}</figcaption>
+          </figure>
+          <div>
+            <Eyebrow>{problem.eyebrow}</Eyebrow>
+            <h2 id="problem-title" className="font-display" data-reveal><Marked text={problem.title} /></h2>
+            <p className="lp-lede" data-reveal>{problem.body}</p>
+            <ul className="lp-facts">
+              {problem.facts.map((f, i) => (
+                <li key={f.value} data-reveal style={delay(i * 0.08)}>
+                  <b className="font-display lp-num" aria-hidden="true">{f.value}</b>
+                  <span aria-hidden="true"><strong>{f.lead}</strong>{f.rest ? ` ${f.rest}` : ""}</span>
+                  <span className="sr-only">{f.say}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="lp-source" data-reveal>
+              {problem.sourcesLabel}{" "}
+              {problem.sources.map((s, i) => (
+                <Fragment key={s.href}>
+                  {i > 0 && "; "}
+                  <a href={s.href} target="_blank" rel="noreferrer noopener">{s.label}</a>
+                </Fragment>
+              ))}.
+            </p>
+          </div>
         </div>
-        <dl className="mt-10 grid gap-8 md:grid-cols-3">
-          {problem.stats.map((s) => (
-            <div key={s.value} className="flex flex-col border-t-4 border-ink pt-5">
-              <dt className="order-2 mt-3 text-ink-2">{s.label}</dt>
-              <dd className="font-display text-display leading-none text-ink">{s.value}</dd>
-            </div>
-          ))}
-        </dl>
       </section>
 
-      {/* How it works */}
-      <section id="how" className="scroll-mt-20 border-y border-ink bg-surface-2">
-        <div className="mx-auto w-full max-w-6xl px-4 py-14 md:py-20">
-          <Eyebrow>{how.eyebrow}</Eyebrow>
-          <h2 className="mt-3 max-w-2xl text-h1">{how.title}</h2>
-          <ol className="mt-8 grid gap-4 md:grid-cols-3">
-            {how.steps.map((step, i) => {
-              const Icon = stepIcons[i];
+      {/* What it pays for */}
+      <section id="purposes" className="lp-section" aria-labelledby="purposes-title">
+        <div className="lp-wrap">
+          <div className="lp-head">
+            <div>
+              <Eyebrow>{purposes.eyebrow}</Eyebrow>
+              <h2 id="purposes-title" className="font-display" data-reveal><Marked text={purposes.title} /></h2>
+            </div>
+            <p className="lp-lede" data-reveal>{purposes.body}</p>
+          </div>
+          <ul className="lp-purposes">
+            {purposes.items.map((item, i) => {
+              const photo = purposePhotos[i];
               return (
-                <li key={step.title} className="relative rounded-lg border border-ink bg-surface p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="grid size-12 place-items-center rounded-full bg-ink text-bg"><Icon className="size-6" aria-hidden="true" /></span>
-                    <span className="font-display text-h1 leading-none text-ink" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+                <li key={photo.name} className="lp-purpose" data-reveal style={delay(i * 0.06)}>
+                  <div className="lp-ph">
+                    <Photo
+                      name={photo.name} w={photo.w} h={photo.h} alt={item.alt} large={photo.large}
+                      sizes="(min-width: 1160px) 280px, (min-width: 1040px) 24vw, (min-width: 640px) 46vw, 92vw"
+                      style={photo.position ? { objectPosition: photo.position } : undefined}
+                    />
                   </div>
-                  <h3 className="mt-4 text-h3">{step.title}</h3>
-                  <p className="mt-2 text-ink-2">{step.body}</p>
+                  <div className="lp-body">
+                    <span className="lp-tag">{item.tag}</span>
+                    <h3 className="font-display">{item.title}</h3>
+                    <p className="lp-amt font-display lp-num">{item.amount}</p>
+                    <p className="lp-desc">{item.body}</p>
+                    <p className="lp-to"><ArrowRight className="lp-ic" />{item.to}</p>
+                  </div>
                 </li>
               );
             })}
+          </ul>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section id="how" className="lp-section" aria-labelledby="how-title">
+        <div className="lp-wrap">
+          <div className="lp-head">
+            <div>
+              <Eyebrow>{how.eyebrow}</Eyebrow>
+              <h2 id="how-title" className="font-display" data-reveal><Marked text={how.title} /></h2>
+            </div>
+            <p className="lp-lede" data-reveal>{how.body}</p>
+          </div>
+          <ol className="lp-steps">
+            {how.steps.map((step, i) => (
+              <li key={step.title} className="lp-step">
+                <div data-reveal>
+                  <span className="lp-n font-display" aria-hidden="true">{i + 1}</span>
+                  <h3 className="font-display">{step.title}</h3>
+                  <p>{step.body}</p>
+                </div>
+                {i === 0 && (
+                  <div className="lp-visual" data-reveal style={delay(0.1)} role="img" aria-label={how.chat.label}>
+                    <span className="lp-who lp-r">{how.chat.me}</span>
+                    <div className="lp-bubble lp-me">{how.chat.ask}</div>
+                    <span className="lp-who">{how.chat.agent}</span>
+                    <div className="lp-bubble lp-ai">{how.chat.reply}<ul>{how.chat.plan.map((p) => <li key={p}>{p}</li>)}</ul></div>
+                  </div>
+                )}
+                {i === 1 && (
+                  <div className="lp-visual" data-reveal style={delay(0.1)} role="img" aria-label={how.sign.label}>
+                    <div className="lp-bal">
+                      <div><small>{how.sign.vaultLabel}</small><b className="font-display lp-num">{how.sign.vault}</b></div>
+                      <small>{how.sign.vaultZar}</small>
+                    </div>
+                    {how.sign.rows.map((row, r) => (
+                      <div key={row.title} className="lp-toggle">
+                        <div>{row.title}<small>{row.detail}</small></div>
+                        <span className="lp-seg">
+                          <span className={startsNow[r] ? "lp-on" : undefined}>{how.sign.now}</span>
+                          <span className={startsNow[r] ? undefined : "lp-on"}>{how.sign.after}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {i === 2 && (
+                  <div className="lp-visual lp-photo" data-reveal style={delay(0.1)}>
+                    <Photo name="sunset" w={800} h={1200} alt={how.timeline.alt} sizes="(min-width: 1160px) 560px, (min-width: 900px) 45vw, 92vw" />
+                    <div className="lp-card lp-over">
+                      <ul className="lp-timeline">
+                        {how.timeline.items.map((t, n) => <li key={t} className={n === 1 ? "lp-wait" : undefined}>{t}</li>)}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
           </ol>
         </div>
       </section>
 
-      {/* Safety */}
-      <section id="safety" className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 py-14 md:py-20">
-        <Eyebrow>{safety.eyebrow}</Eyebrow>
-        <h2 className="mt-3 max-w-3xl text-h1">{safety.title}</h2>
-        <ul className="mt-8 grid gap-x-8 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
-          {safety.items.map((item, i) => {
-            const Icon = safetyIcons[i];
-            return (
-              <li key={item.title} className="flex gap-3.5">
-                <span className="grid size-11 shrink-0 place-items-center rounded-full border border-ink text-ink"><Icon className="size-5" aria-hidden="true" /></span>
-                <div>
-                  <h3 className="font-sans text-lead font-semibold tracking-normal">{item.title}</h3>
-                  <p className="mt-1 text-ink-2">{item.body}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      {/* Proof */}
-      <section id="proof" className="brand-panel scroll-mt-20">
-        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-14 md:grid-cols-2 md:py-20">
-          <div>
-            <p className="text-small font-semibold uppercase tracking-[0.14em]">{proof.eyebrow}</p>
-            <h2 className="mt-3 text-h1">{proof.title}</h2>
-            <p className="mt-4 text-lead">{proof.body}</p>
-            <p className="mt-6 rounded-md border border-dashed border-ink p-4 text-small">{proof.honest}</p>
+      {/* Trust and safety */}
+      <section id="safety" className="lp-section" aria-labelledby="safety-title">
+        <div className="lp-wrap">
+          <div className="lp-head">
+            <div>
+              <Eyebrow>{safety.eyebrow}</Eyebrow>
+              <h2 id="safety-title" className="font-display" data-reveal><Marked text={safety.title} /></h2>
+            </div>
           </div>
-          <dl className="grid content-start gap-3">
-            {proof.points.map((p) => (
-              <div key={p.term} className="border-t border-ink pb-1 pt-4 text-ink">
-                <dt className="font-display text-h3">{p.term}</dt>
-                <dd className="mt-1 text-ink-2">{p.detail}</dd>
-              </div>
-            ))}
-          </dl>
+          <div className="lp-safety-grid">
+            <figure className="lp-hands" data-reveal>
+              <Photo name="hands" w={800} h={600} alt={safety.photoAlt} sizes="(min-width: 1160px) 460px, (min-width: 1000px) 40vw, 92vw" />
+              <blockquote className="font-display">{safety.quote}</blockquote>
+            </figure>
+            <ul className="lp-rules">
+              {safety.items.map((item, i) => {
+                const Icon = safetyIcons[i];
+                return (
+                  <li key={item.title} className="lp-rule" data-reveal style={delay(i * 0.05)}>
+                    <span className="lp-rule-ic"><Icon className="lp-ic" /></span>
+                    <h3 className="font-display">{item.title}</h3>
+                    <p>{item.body}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="border-t border-ink">
-        <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center md:py-24">
-          <h2 className="text-h1">{cta.title}</h2>
-          <p className="mx-auto mt-4 max-w-xl text-lead text-ink-2">{cta.body}</p>
-          <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-            <ButtonLink href="/start" className="min-h-13! px-7">{cta.primary}<ArrowRight className="size-5" aria-hidden="true" /></ButtonLink>
-            <ButtonLink href="/start?new=1" variant="secondary" className="min-h-13! px-7">{cta.secondary}</ButtonLink>
+      {/* Proof */}
+      <section id="proof" className="lp-section lp-proof" aria-labelledby="proof-title">
+        <div className="lp-wrap">
+          <div>
+            <Eyebrow>{proof.eyebrow}</Eyebrow>
+            <h2 id="proof-title" className="font-display" data-reveal><Marked text={proof.title} /></h2>
+            <p className="lp-lede" data-reveal>{proof.body}</p>
+            <dl className="lp-points">
+              {proof.points.map((p) => (
+                <div key={p.term} data-reveal><dt>{p.term}</dt><dd>{p.detail}</dd></div>
+              ))}
+            </dl>
+          </div>
+          <div className="lp-card lp-ledger" role="group" aria-labelledby="receipts-title" data-reveal style={delay(0.1)}>
+            <div className="lp-ledger-head"><p id="receipts-title">{proof.receipts.title}</p><span>{proof.receipts.network}</span></div>
+            <ol>
+              {proof.receipts.rows.map((row, i) => {
+                const { Icon, tone } = receiptDots[i];
+                const sig = receiptTxs[i];
+                return (
+                  <li key={sig}>
+                    <span className={`lp-dot ${tone}`}><Icon className="lp-ic" /></span>
+                    <span className="lp-t">{row.title}</span>
+                    <span className="lp-h">
+                      <a href={explorerTx(sig)} target="_blank" rel="noreferrer noopener">{shortSig(sig)}<span className="sr-only">, {proof.receipts.open}</span></a> Â· {row.detail}
+                    </span>
+                    <span className="lp-v lp-num">{row.amount}</span>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+          <p className="lp-honest" data-reveal>{proof.honest}</p>
+        </div>
+      </section>
+
+      {/* Closing call to action */}
+      <section id="cta" className="lp-section lp-cta" aria-labelledby="cta-title">
+        <div className="lp-cta-grid">
+          <div className="lp-cta-text">
+            <Eyebrow>{cta.eyebrow}</Eyebrow>
+            <h2 id="cta-title" className="font-display" data-reveal><Marked text={cta.title} /></h2>
+            <p data-reveal>{cta.body}</p>
+            <div className="lp-actions" data-reveal>
+              <Link href="/start" className="lp-btn lp-btn-primary">{cta.primary}<ArrowRight className="lp-ic" /></Link>
+              <Link href="/start?new=1" className="lp-btn lp-btn-ghost">{cta.secondary}</Link>
+            </div>
+          </div>
+          <div className="lp-cta-photo">
+            <Photo name="walk" w={800} h={1200} alt={cta.photoAlt} sizes="(min-width: 900px) 35vw, 100vw" />
+            <div className="lp-card"><b className="font-display">{cta.card.title}</b>{cta.card.body}</div>
           </div>
         </div>
       </section>
