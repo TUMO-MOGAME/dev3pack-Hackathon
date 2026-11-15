@@ -32,6 +32,8 @@ export const assets = {
     description: "Description (optional)",
     descriptionHint: "Condition, size, anything a buyer should know. Shown to buyers. No personal details, please.",
     vehicleNote: "For cars and motorbikes you can get an AI valuation first.",
+    /** The valuation form's starting values when the owner picks Motorbike (the car's are in screens.car.register.defaults). */
+    motorbikeDefaults: { make: "Big Boy", model: "Mustang 250", year: "2025", mileage: "199" },
     valueOptional: "Skip the valuation and set the prices yourself",
     pricesTitle: "Your prices",
     submit: "Add to the estate",

@@ -38,8 +38,9 @@ const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
  * owner, and the chosen asset's listing with its photo gallery, offers and the price floor. With a single asset
  * (the family car) it looks as it always did, with the photos added above the listing.
  */
-export function CarScreen({ copy: english, assets }: { copy: Copy; assets: AssetsCopy }) {
+export function CarScreen({ copy: english, assets: assetsEn }: { copy: Copy; assets: AssetsCopy }) {
   const copy = useLocalized(english, (t) => t.screens.car);
+  const assets = useLocalized(assetsEn, (t) => t.assets);
   return (
     <Gate>
       {({ snap, session, role }) => <Assets copy={copy} a={assets} snap={snap!} session={session} role={role} />}
