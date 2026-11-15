@@ -34,3 +34,6 @@ Thumbs.db
 
 # Stock photos used only for the demo video (kept locally, not in the repo)
 /*-unsplash.jpg
+
+# Redesign concept: stock photos stay local, like the originals
+/design/*/img/
