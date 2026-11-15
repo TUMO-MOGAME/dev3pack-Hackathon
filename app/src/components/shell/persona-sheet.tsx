@@ -80,6 +80,7 @@ export function PersonaSheet({ open, onClose }: { open: boolean; onClose: () => 
                           <span className="block truncate text-small text-ink-2">
                             <span className="font-mono">{shortAddress(s.address)}</span>
                             {(mock?.balanceOf(s.address) ?? s.usdtBalance) > BigInt(0) && <> · {formatUsdt(mock?.balanceOf(s.address) ?? s.usdtBalance, { decimals: 0 })}</>}
+                            {s.source === "phone" && <> · {s.simulated ? c.simulatedPhone : c.phoneWallet}</>}
                           </span>
                         </span>
                         {active && <span className="inline-flex shrink-0 items-center gap-1 text-small font-semibold text-ink"><Check className="size-4" strokeWidth={3} aria-hidden="true" />{c.current}</span>}
