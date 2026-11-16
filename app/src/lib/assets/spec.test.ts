@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { cleanSpec, EMPTY_MEDIA_ROOT, groupByLabel, hasSpec, isPhotoLabel, mediaRootHex, parseSpec, PHOTO_LABELS, foreignSpecKeys, SPEC_LAYOUTS, specHashHex, specKeysFor, specSchema, type AssetSpec } from "./spec";
+import { cleanSpec, EMPTY_MEDIA_ROOT, groupByLabel, hasSpec, isPhotoLabel, mediaRootHex, PHOTO_LABELS, foreignSpecKeys, SPEC_LAYOUTS, specHashHex, specKeysFor, type AssetSpec } from "./spec";
+import { parseSpec, specSchema } from "./spec-schema";
 import { DEMO_ASSETS } from "../service/demo-asset-photos";
 import { MAX_PHOTOS } from "../media/webp";
 

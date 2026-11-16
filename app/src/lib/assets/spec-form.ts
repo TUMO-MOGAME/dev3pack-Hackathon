@@ -4,9 +4,10 @@
  * one-decimal fields ("6,4").
  */
 import {
-  CONDITION_CATEGORIES, CONDITIONS, DRIVES, FUELS, SERVICE_HISTORIES, specInputSchema, specKeysFor, specSchema, TRANSMISSIONS,
+  CONDITION_CATEGORIES, CONDITIONS, DRIVES, FUELS, SERVICE_HISTORIES, specKeysFor, TRANSMISSIONS,
   type AssetSpec, type SpecKey,
 } from "./spec";
+import { specInputSchema, specSchema } from "./spec-schema";
 import type { AssetKind } from "../guardians/types";
 
 export type SpecDraft = Record<SpecKey, string>;

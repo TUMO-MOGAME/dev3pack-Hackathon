@@ -1,13 +1,15 @@
 "use client";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { CloudOff, ScrollText, UserRound, UsersRound } from "@/components/ui/icons";
 import type { EstateSnapshot } from "@/lib/service";
 import type { Role, WalletSession } from "@/lib/types";
 import { useWallet } from "@/lib/hooks/wallet-source";
 import { useEstate } from "@/lib/hooks/estate";
+import { chainConfig } from "@/lib/chain/config";
 import { Button, ButtonLink, EmptyState, LoadingCards, PageHeader, Skeleton } from "@/components/ui/primitives";
 import { fmt, useCopy } from "./copy";
 import { fullName, shortName } from "@/lib/names";
+import { endFreshVisit, firstDemoPersona } from "@/lib/service/fresh-visit";
 
 interface GateProps {
   /** Roles allowed on this screen. Omit for everyone. */
@@ -21,20 +23,44 @@ interface GateProps {
    * wallet or the estate stays out of it. Omit for the plain loading cards.
    */
   frame?: ReactNode;
+  /**
+   * What a first demo visit (Thabo, nothing saved) sees on a page where that is not the "no estate" screen (the plan
+   * builder). Server-rendered and shown by CSS before any JavaScript runs; see lib/service/fresh-visit.ts.
+   */
+  fresh?: ReactNode;
 }
 
 /** Handles the states every screen shares: wallet loading, no wallet, wrong person, loading, error, no estate. */
-export function Gate({ roles, allowEmpty = false, children, frame }: GateProps) {
+export function Gate({ roles, allowEmpty = false, children, frame, fresh }: GateProps) {
   const { common } = useCopy();
   const g = common.gate;
   const wallet = useWallet();
-  const { phase, snap, session, refresh, loadError, isMock, resetDemo } = useEstate();
+  const { phase, snap, session, refresh, loadError, isMock: mockService, service, resetDemo } = useEstate();
+  // On a first demo visit the "no estate" screen shows before the demo service has loaded (see EstateProvider).
+  const isMock = service ? mockService : chainConfig.dataMode === "mock";
 
   // The frame keeps the same place in the tree as the page, so a page that renders the same component in both
   // (the chat home) is not re-mounted when the wallet arrives.
-  const pending = (label: string) => frame
+  const loading = (label: string) => frame
     ? <>{frame}<span role="status" aria-live="polite" className="sr-only">{label}</span></>
     : <LoadingCards label={label} />;
+
+  // A first demo visit is Thabo with no estate yet, so its screen is known before the wallet and the estate load:
+  // render it beside the frame and let CSS pick (<html data-fresh>). Pages the owner can't open have none.
+  const ownerPage = !roles || roles.includes("owner");
+  const firstScreen = chainConfig.dataMode !== "mock" ? null
+    : fresh ?? (!allowEmpty && ownerPage ? <NoEstate session={firstDemoPersona()} isMock onDemo={() => void resetDemo("funded")} /> : null);
+  const pending = (label: string) => firstScreen
+    ? <><div className="fresh-only">{firstScreen}</div><div className="fresh-hide">{loading(label)}</div></>
+    : loading(label);
+  // The page itself goes in the first-visit block's place, so when it is the same screen (Thabo, no estate yet) React
+  // keeps what is already on screen instead of drawing it again.
+  const inPlace = (page: ReactNode) => firstScreen ? <div className="contents">{page}</div> : page;
+
+  // Once the page shows its own state, a later reload of the estate (a demo stage, another persona) shows the
+  // usual loading frame, not the first-visit screen.
+  const settled = wallet.ready && phase !== "loading";
+  useEffect(() => { if (settled) endFreshVisit(); }, [settled]);
 
   if (!wallet.ready) return pending(g.walletLoading);
   if (!session) {
@@ -65,24 +91,28 @@ export function Gate({ roles, allowEmpty = false, children, frame }: GateProps) 
       />
     );
   }
-  if (!snap && !allowEmpty) {
-    const owner = session.role === "owner";
-    return (
-      <EmptyState level={1}
-        icon={<ScrollText className="size-6" aria-hidden="true" />} title={g.noEstateTitle}
-        body={`${owner ? g.noEstateOwner : fmt(g.noEstateOther, { name: shortName(session.label) })}${isMock ? ` ${g.noEstateDemoHint}` : ""}`}
-        action={(owner || isMock) ? (
-          <>
-            {owner && <ButtonLink href="/will">{g.noEstateCta}</ButtonLink>}
-            {/* Demo only: jump to the "funded" stage, where Thabo's Corolla and motorbike are on the estate. */}
-            {isMock && <Button variant={owner ? "secondary" : "primary"} onClick={() => void resetDemo("funded")}>{g.noEstateDemo}</Button>}
-          </>
-        ) : undefined}
-      />
-    );
-  }
+  if (!snap && !allowEmpty) return inPlace(<NoEstate session={session} isMock={isMock} onDemo={() => void resetDemo("funded")} />);
   void loadError;
-  return <>{children({ snap, session, role: session.role })}</>;
+  return inPlace(<>{children({ snap, session, role: session.role })}</>);
+}
+
+/** No estate yet: the owner starts the plan; in the demo anyone can jump to Thabo's funded estate. */
+function NoEstate({ session, isMock, onDemo }: { session: WalletSession; isMock: boolean; onDemo: () => void }) {
+  const g = useCopy().common.gate;
+  const owner = session.role === "owner";
+  return (
+    <EmptyState level={1}
+      icon={<ScrollText className="size-6" aria-hidden="true" />} title={g.noEstateTitle}
+      body={`${owner ? g.noEstateOwner : fmt(g.noEstateOther, { name: shortName(session.label) })}${isMock ? ` ${g.noEstateDemoHint}` : ""}`}
+      action={(owner || isMock) ? (
+        <>
+          {owner && <ButtonLink href="/will">{g.noEstateCta}</ButtonLink>}
+          {/* Demo only: jump to the "funded" stage, where Thabo's Corolla and motorbike are on the estate. */}
+          {isMock && <Button variant={owner ? "secondary" : "primary"} onClick={onDemo}>{g.noEstateDemo}</Button>}
+        </>
+      ) : undefined}
+    />
+  );
 }
 
 /** A page's frame for <Gate frame>: its own heading (static copy) above empty boxes, in the page's column width. */

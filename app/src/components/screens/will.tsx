@@ -17,6 +17,7 @@ import { categoryIcon } from "./estate";
 import { FallbackPlanCard } from "@/components/guardians/fallback";
 import { GuardiansPlanLink } from "@/components/guardians/section";
 import { BillTemplates } from "@/components/everyday/bill-templates";
+import { FRESH_ATTR, firstDemoPersona } from "@/lib/service/fresh-visit";
 
 type Copy = ScreensCopy["will"];
 type BillsCopy = ScreensCopy["bills"];
@@ -38,18 +39,19 @@ export function WillScreen({ copy: english, bills: billsEnglish }: { copy: Copy;
   const copy = useLocalized(english, (t) => t.screens.will);
   const bills = useLocalized(billsEnglish, (t) => t.screens.bills);
   return (
-    <Gate roles={["owner"]} allowEmpty>
+    // A first demo visit is Thabo with no plan yet, so the conversation's opening screen is server-rendered.
+    <Gate roles={["owner"]} allowEmpty fresh={<WillFlow copy={copy} bills={bills} snap={null} session={firstDemoPersona()} firstVisit />}>
       {({ snap, session }) => <WillFlow copy={copy} bills={bills} snap={snap} session={session} />}
     </Gate>
   );
 }
 
-function WillFlow({ copy, bills, snap, session }: { copy: Copy; bills: BillsCopy; snap: EstateSnapshot | null; session: WalletSession }) {
+function WillFlow({ copy, bills, snap, session, firstVisit }: { copy: Copy; bills: BillsCopy; snap: EstateSnapshot | null; session: WalletSession; firstVisit?: boolean }) {
   // Kept here so the "locked in" moment survives the estate appearing underneath it.
   const [txs, setTxs] = useState<TxResult[] | null>(null);
   if (txs) return <Done copy={copy} txs={txs} />;
   if (snap) return <Locked copy={copy} bills={bills} snap={snap} />;
-  return <Writer copy={copy} bills={bills} session={session} onSigned={setTxs} />;
+  return <Writer copy={copy} bills={bills} session={session} onSigned={setTxs} firstVisit={firstVisit} />;
 }
 
 function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
@@ -77,12 +79,20 @@ function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
 
 /* ---------- Conversation + live preview + review + sign ---------- */
 
-function Writer({ copy, bills, session, onSigned }: { copy: Copy; bills: BillsCopy; session: WalletSession; onSigned: (txs: TxResult[]) => void }) {
+/** `firstVisit`: the server-rendered copy shown to a first demo visit before the app loads (see Gate `fresh`). */
+function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: Copy; bills: BillsCopy; session: WalletSession; onSigned: (txs: TxResult[]) => void; firstVisit?: boolean }) {
+  // The opening message fades in with CSS, so the server-rendered first visit shows it without JavaScript. When this
+  // writer replaces that copy, the message is already on screen and appears without a second fade.
+  const [greetingEnter] = useState<"css" | "none">(() => (!firstVisit && typeof document !== "undefined" && document.documentElement.hasAttribute(FRESH_ATTR) ? "none" : "css"));
   const locale = useLocale();
   const { common, assistant } = useCopy();
   const { service, run, busy, openAgent } = useEstate();
   const first = session.label.split(/[ (]/)[0];
-  const [messages, setMessages] = useState<Msg[]>([{ id: 0, role: "agent", text: fmt(copy.greeting, { name: first }) }]);
+  // The greeting (message 0) follows the current language and name: this writer can be the first-visit copy that was
+  // rendered before the visitor's language loaded.
+  const greeting = fmt(copy.greeting, { name: first });
+  const [messages, setMessages] = useState<Msg[]>([{ id: 0, role: "agent", text: greeting }]);
+  const textOf = (m: Msg) => (m.id === 0 ? greeting : m.text);
   const [rawDraft, setDraft] = useState<WillDraft | null>(null);
   // The owner's own Now / After-I'm-gone choices, kept when the agent sends a fresh draft.
   // Keyed by who + what (not row position), so a re-ordered or extended draft can't move a choice onto another rule.
@@ -149,7 +159,7 @@ function Writer({ copy, bills, session, onSigned }: { copy: Copy; bills: BillsCo
     const trimmed = text.trim();
     if (!trimmed || !service || pending) return;
     setFailed(null);
-    const history: WillChatMessage[] = [...base.map(({ role, text: t }) => ({ role, text: t })), { role: "user", text: trimmed }];
+    const history: WillChatMessage[] = [...base.map((m) => ({ role: m.role, text: textOf(m) })), { role: "user", text: trimmed }];
     setMessages([...base.map((x) => ({ ...x, fresh: false })), { id: ++id.current, role: "user", text: trimmed }]);
     setPending(true);
     try {
@@ -187,7 +197,7 @@ function Writer({ copy, bills, session, onSigned }: { copy: Copy; bills: BillsCo
             <div role="log" aria-live="polite" aria-relevant="additions">
               <ul className="flex flex-col gap-4">
                 {messages.map((m) => (
-                  <Bubble key={m.id} role={m.role} text={m.text} fresh={m.fresh} specialist={m.role === "agent" ? "WillWriter" : undefined} copy={assistant} onTick={scroll} onTyped={scroll} />
+                  <Bubble key={m.id} role={m.role} text={textOf(m)} fresh={m.fresh} enter={m.id === 0 ? greetingEnter : "motion"} specialist={m.role === "agent" ? "WillWriter" : undefined} copy={assistant} onTick={scroll} onTyped={scroll} />
                 ))}
                 {pending && <Thinking label={copy.thinking} />}
               </ul>

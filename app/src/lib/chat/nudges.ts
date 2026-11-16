@@ -37,8 +37,8 @@ export function useNudges(): NudgesApi {
   useEffect(() => {
     if (!wantsLegacy || !service || !estate) return;
     let alive = true;
-    // The Legacy Book schema module (zod) is only needed here, so it loads with the book rather than with every page.
-    Promise.all([service.legacyStatus(estate), import("@/lib/legacy/schema")]).then(([st, { milestonesFor }]) => {
+    // The Legacy Book helpers are only needed here, so they load with the book rather than with every page.
+    Promise.all([service.legacyStatus(estate), import("@/lib/legacy/rules")]).then(([st, { milestonesFor }]) => {
       if (!alive) return;
       const hint: LegacyHint | null = st.book
         ? { calledBy: st.book.calledBy, milestones: milestonesFor(st.book, st.childId).filter((m) => m.kind === "firstFees").map((m) => ({ id: m.id, title: m.title })) }

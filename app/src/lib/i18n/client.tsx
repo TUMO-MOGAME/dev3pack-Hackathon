@@ -6,10 +6,10 @@
  */
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { Bundle } from "@/content/i18n/types";
-import { DEFAULT_LOCALE, isLocale, LOCALE_TAGS, type Locale } from "./locales";
+import { DEFAULT_LOCALE, isLocale, LOCALE_STORAGE_KEY, LOCALE_TAGS, type Locale } from "./locales";
 import { mergeCopy, type DeepPartial } from "./merge";
 
-const STORAGE_KEY = "heirloom.lang";
+const STORAGE_KEY = LOCALE_STORAGE_KEY;
 const EVENT = "heirloom:locale";
 let current: Locale | null = null;
 

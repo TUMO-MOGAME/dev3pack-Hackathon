@@ -27,10 +27,15 @@ export function SpecialistChip({ name, copy }: { name: SpecialistName; copy: Ass
 }
 
 export function Bubble({
-  role, text, specialist, fresh = false, copy, children, onTick, onTyped,
+  role, text, specialist, fresh = false, copy, children, onTick, onTyped, enter = "motion",
 }: {
   role: "user" | "agent"; text: string; specialist?: SpecialistName; fresh?: boolean; copy: AssistantCopy;
   children?: ReactNode; onTick?: () => void; onTyped?: () => void;
+  /**
+   * How an agent message arrives: "motion" (default), "css" (the same fade as a CSS animation, so a server-rendered
+   * opening message shows before any JavaScript runs) or "none" (it is already on screen).
+   */
+  enter?: "motion" | "css" | "none";
 }) {
   const [typed, setTyped] = useState(!fresh);
   if (role === "user") {
@@ -42,8 +47,8 @@ export function Bubble({
       </motion.li>
     );
   }
-  return (
-    <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex items-start gap-2.5">
+  const body = (
+    <>
       <LogoMark className="mt-6 size-7 shrink-0" />
       <div className="min-w-0 max-w-[88%]">
         <div className="mb-1 flex items-center gap-2">
@@ -55,6 +60,12 @@ export function Bubble({
         </div>
         {typed && children}
       </div>
+    </>
+  );
+  if (enter !== "motion") return <li className={clsx("flex items-start gap-2.5", enter === "css" && "bubble-in")}>{body}</li>;
+  return (
+    <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex items-start gap-2.5">
+      {body}
     </motion.li>
   );
 }

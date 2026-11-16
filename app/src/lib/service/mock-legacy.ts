@@ -11,10 +11,8 @@ import type { EstateSnapshot } from "./types";
 import { bookReply } from "../legacy/companion";
 import { demoLegacyBook } from "../legacy/demo-book";
 import { legacyApi, type LegacySigner } from "../legacy/client";
-import {
-  consentLine, legacyBookSchema, matchChild, validateVoiceInput,
-  type LegacyBook, type LegacyStatus, type LegacyVoiceInfo,
-} from "../legacy/schema";
+import { consentLine, matchChild, validateVoiceInput, type LegacyStatus, type LegacyVoiceInfo } from "../legacy/rules";
+import type { LegacyBook } from "../legacy/schema";
 import type { HeirloomService } from "./types";
 
 type LegacyMethods = Pick<HeirloomService,
@@ -125,6 +123,8 @@ export function createMockLegacy(d: Deps): LegacyMethods & { resetLegacy(): void
 
     async saveLegacyBook(_e, book) {
       needOwner(); needAlive();
+      // The book's zod schema loads with the first save, not with the demo.
+      const { legacyBookSchema } = await import("../legacy/schema");
       const parsed = legacyBookSchema.parse(book);
       if (await isRemote()) { const b = await legacyApi.saveBook(signer("owner"), parsed); st.book = b; save(); return b; }
       await sleep(500);

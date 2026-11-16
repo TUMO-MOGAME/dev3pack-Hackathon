@@ -7,7 +7,8 @@
  * Pure and client-safe so the mock service and the server share it.
  */
 import { legacySafety } from "@/content/legacy";
-import { GUIDANCE_TOPICS, milestonesFor, type LegacyBook, type LegacyChild } from "./schema";
+import { GUIDANCE_TOPICS, milestonesFor } from "./rules";
+import type { LegacyBook, LegacyChild } from "./schema";
 
 export interface Pronouns { subject: string; object: string; possessive: string }
 export function pronouns(p: LegacyBook["pronoun"]): Pronouns {

@@ -14,7 +14,9 @@ export type StoredWallet = StoredWdkWallet | StoredPhoneWallet;
 export const isPhoneWallet = (w: StoredWallet): w is StoredPhoneWallet => w.kind === "phone";
 
 const KEY = "heirloom.wallets.v1";
-const ACTIVE = "heirloom.wallets.active";
+/** The wallet this device last acted as. */
+export const ACTIVE_WALLET_KEY = "heirloom.wallets.active";
+const ACTIVE = ACTIVE_WALLET_KEY;
 
 export function loadWallets(): StoredWallet[] {
   try {
