@@ -3,7 +3,8 @@ import { MAX_UPLOAD_BYTES, validateUpload } from "@/lib/storage";
 import { sha256Hex } from "@/lib/agent/hash";
 import { readInvoice } from "@/lib/agent/invoice";
 
-export const maxDuration = 60;
+// Room for one retry of a slow or malformed AI answer (two 25 s calls plus the upload); Vercel Pro allows it.
+export const maxDuration = 120;
 
 /**
  * POST /api/invoice (multipart: file). Pay a bill once (plan.md §13.2): the AI reads the invoice the owner is about to

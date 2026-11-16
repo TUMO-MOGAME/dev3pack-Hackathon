@@ -20,7 +20,8 @@ export async function readInvoice(input: { bytes: Uint8Array; mime: string; sha2
   const reading = await generateJson(invoiceReadingSchema, {
     system: INVOICE_READER,
     thinking: "low",
-    timeoutMs: 45_000,
+    // Short per call: a slow answer is retried (lib/agent/gemini) instead of running into the route's time limit.
+    timeoutMs: 25_000,
     contents: [{
       role: "user",
       parts: [
