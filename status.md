@@ -3,8 +3,17 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-15 (devnet re-seeded: guardians demo estate 2LXv…ymP7; see the first section)
-**Phase:** SUBMITTED (13 Nov 11:04 SAST); judging was Sat 14 Nov. Now: post-hackathon features on branch `feature/guardians`.
+**Last updated:** 2026-11-16 (everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
+**Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name). Both sites deploy from `main`.
+
+## 16 NOV 2026: EVERYDAY MONEY + POLISH, all merged to main (the per-branch sections below give the details)
+- Plan §13 items 1–4 merged: ask for money (agent/ask), pay a bill once (agent/bill), bill templates + monthly statement (agent/everyday). No program change.
+- Also merged: names on the devnet activity feed (agent/feed), af/st/zu heading underlines + a marks test (agent/marks), speed pass on /estate, /car, /will (agent/speed; local mobile LH 73–74 → 95–96).
+- Payment review label "Payment to institution" → "Paid by the plan" (a plan payout can go to the child's own wallet).
+- README: new night-mode screenshots, devnet + Android rows. `docs/store/`: dApp Store banner (1200×600, source banner.html), eight 1080×1920 screenshots, listing text.
+- Checks on the combined build: 655/655 vitest, tsc, eslint, contrast; the three feature browser suites (ask, bill, everyday) all pass on a production build at 360/1280 px with axe clean; a first visit to /will, /estate, /car, /chat has no console errors.
+- Devnet still to do: seed step 4b (`scripts/seed-guardians-assets.ts`: Lerato's own wallet as payee + the Everyday needs rule), then live checks listed in the ask/bill/everyday sections. Ask notes live in server memory on heirloom-devnet (Supabase off; needs migration 0005 when Supabase is turned on).
+- Tumo's side: ElevenLabs devnet agent + ELEVENLABS_TOOL_SECRET redo (voice on devnet); back up the APK keystore; dApp Store KYC.
 
 ## EVERYDAY MONEY 3 + 4: BILL TEMPLATES AND MONTHLY STATEMENT (branch agent/everyday, 15 Nov 2026): NOT merged, NOT deployed
 - Plan §13 items 3 and 4 (items 1 and 2 are other agents' branches). No program change.
