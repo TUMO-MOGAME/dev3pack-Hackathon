@@ -12,7 +12,17 @@
 - Payment review label "Payment to institution" → "Paid by the plan" (a plan payout can go to the child's own wallet).
 - README: new night-mode screenshots, devnet + Android rows. `docs/store/`: dApp Store banner (1200×600, source banner.html), eight 1080×1920 screenshots, listing text.
 - Checks on the combined build: 655/655 vitest, tsc, eslint, contrast; the three feature browser suites (ask, bill, everyday) all pass on a production build at 360/1280 px with axe clean; a first visit to /will, /estate, /car, /chat has no console errors.
-- Devnet still to do: seed step 4b (`scripts/seed-guardians-assets.ts`: Lerato's own wallet as payee + the Everyday needs rule), then live checks listed in the ask/bill/everyday sections. Ask notes live in server memory on heirloom-devnet (Supabase off; needs migration 0005 when Supabase is turned on).
+- Devnet seed step 4b DONE (16 Nov): Lerato's own wallet is a payee (tx 5yM8dN…LepUL) and rule 4 "Everyday needs" (General, 60/claim, 720 total, starts now; tx 23kd9m…LsFpz).
+- LIVE CHECKS ON DEVNET (heirloom.tumoolo.tech, real WDK wallets, Playwright; scripts in the session scratchpad `int/devnet-*.mjs`):
+  - Ask for money: Lerato asked R300 with no letter → Gemini accepted the request note → "Sent to Thabo"; Thabo's card → Approve and pay → on-chain ClaimPaid 17,59 USD₮ to Lerato's own wallet (public record shows it).
+  - Pay a bill: AI read invoice 6 correctly (Ndlovu Attorneys Inc., R2 500, NA-2026-114 → "Matches"); invoice 7 → "Check before you pay"; a real 2,93 USD₮ bill to a new payee (Priya's test wallet) paid, Heirloom paid the fee and the new token account; "Bills paid" shows it.
+  - The invoice reader timed out once (Gemini main model >60 s, then 2×25 s) → now uses the fast model (GEMINI_VOICE_MODEL, flash-lite), 20 s per call, route limit 120 s: 4/4 reads in seconds.
+  - Bill templates: "Add a bill" → Funeral cover with a new payee → addPayee + addRule on-chain → shows in the signed plan. NOTE: this added a TEST rule to the demo estate: "Avbob Funeral Cover (devnet test)", 25 USD₮ every minute (devnet demo interval) to Kagiso's test wallet, up to 3 000, for Lerato. There is no instruction to remove a rule; it only pays when someone runs the scheduled payment.
+  - Monthly statement: November shows the 350 school-fee claim and Lerato's 17,59 with names and Explorer receipts.
+- Live demo site: the ask, bill and everyday browser suites all pass against https://heirloom-one-iota.vercel.app.
+- Speed, honestly: local mobile Lighthouse said 95–96, but live (simulated slow 4G) /estate 84–85, /will 87–92, /car 82–87 (about as before). In a real throttled Chrome the first screen now paints at ~0.5 s (the server-rendered first visit works); Lighthouse's simulation still counts the ~230 KB React/Next runtime chunk as blocking (TBT 250–330 ms). Further gains would need less JavaScript on first load, not a quick fix.
+- Fixed while testing: "paid only to a other" → "paid only to an approved payee" (rule sentence for Other payees, English; will review copy isn't translated yet).
+- Ask notes live in server memory on heirloom-devnet (Supabase off; needs migration 0005 when Supabase is turned on).
 - Tumo's side: ElevenLabs devnet agent + ELEVENLABS_TOOL_SECRET redo (voice on devnet); back up the APK keystore; dApp Store KYC.
 
 ## EVERYDAY MONEY 3 + 4: BILL TEMPLATES AND MONTHLY STATEMENT (branch agent/everyday, 15 Nov 2026): NOT merged, NOT deployed
