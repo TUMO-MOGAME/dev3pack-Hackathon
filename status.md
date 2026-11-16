@@ -24,6 +24,7 @@
 - Fixed while testing: "paid only to a other" → "paid only to an approved payee" (rule sentence for Other payees, English; will review copy isn't translated yet).
 - Ask notes live in server memory on heirloom-devnet (Supabase off; needs migration 0005 when Supabase is turned on).
 - Tumo's side: ElevenLabs devnet agent + ELEVENLABS_TOOL_SECRET redo (voice on devnet); back up the APK keystore; dApp Store KYC.
+- INFISICAL (16 Nov): Claude Code is connected to Tumo's Infisical (US cloud) through the official MCP server, user scope (`~/.claude.json`, set up by `C:\Users\tumom\connect-infisical.ps1`, machine identity `claude-pc`, Universal Auth, client secret with unlimited uses). Secret values are MASKED for Claude; enabled tools: list-projects, list-folders, list-secrets, get-secret, create-project, create-environment, create-folder. Visible project: "W3Node Heirloom keys" (dev/staging/prod). Infisical CLI 0.45.8 installed; `infisical login` done. Next: move Heirloom's env files in (Tumo uploads the values), then remove the two INFISICAL_* lines from the root .env.local.
 
 ## EVERYDAY MONEY 3 + 4: BILL TEMPLATES AND MONTHLY STATEMENT (branch agent/everyday, 15 Nov 2026): NOT merged, NOT deployed
 - Plan §13 items 3 and 4 (items 1 and 2 are other agents' branches). No program change.
