@@ -239,6 +239,7 @@ export const screens = {
       noneNow: "No rules start now. You can switch any rule to \"Now\" in the conversation view.",
       recurringRule: "{name}: {amount} is paid to {payee} every {every} for {category}, up to {cap} in total, until {date}.",
       rule: "{name}: {category} is paid only to a {kind}, up to {max} at a time and {cap} in total, until {date}.",
+      ruleOther: "{name}: {category} is paid only to an approved payee, up to {max} at a time and {cap} in total, until {date}.",
       trustedTitle: "Who confirms your passing",
       trusted: "Any {need} of these three must confirm. Then a waiting period of {days} days runs, and you can cancel it with one tap.",
       carTitle: "The car",

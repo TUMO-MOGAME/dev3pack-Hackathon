@@ -400,7 +400,7 @@ function Review({ copy, draft, onBack, onSign, signing }: { copy: Copy; draft: W
                     <span className="grid size-9 shrink-0 place-items-center rounded-sm bg-surface-2 text-amber"><Icon className="size-5" aria-hidden="true" /></span>
                     <p>{rule.recurring
                       ? fmt(r.recurringRule, { ...base, amount: usd(rule.recurring.amountUsdt), payee: rule.recurring.payeeName, every: copy.preview.every[rule.recurring.every] })
-                      : fmt(r.rule, base)}</p>
+                      : fmt(rule.allowedPayeeKind === "Other" ? r.ruleOther : r.rule, base)}</p>
                   </li>
                 );
               })}
@@ -472,7 +472,7 @@ function Locked({ copy, bills, snap }: { copy: Copy; bills: BillsCopy; snap: Est
                 <Badge tone={rule.startsNow ? "gold" : "neutral"}>{rule.startsNow ? <Zap className="size-3.5" aria-hidden="true" /> : <Hourglass className="size-3.5" aria-hidden="true" />}{rule.startsNow ? copy.preview.now : copy.preview.later}</Badge>
                 <p className="mt-1.5">{recurring
                   ? fmt(copy.review.recurringRule, { ...base, amount: formatUsdt(rule.recurringAmount, { decimals: 0 }), payee: snap.payees.find((x) => x.wallet === rule.fixedPayee)?.name ?? "", every: copy.preview.every[everyKey(rule.intervalSecs)] })
-                  : fmt(copy.review.rule, base)}</p>
+                  : fmt(rule.allowedPayeeKind === "Other" ? copy.review.ruleOther : copy.review.rule, base)}</p>
               </div>
             </li>
           );
