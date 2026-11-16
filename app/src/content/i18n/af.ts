@@ -494,7 +494,7 @@ export const af: Bundle = {
         bill: "Betaal 'n rekening",
         "vault-deposit": "Kluisdeposito",
         offer: "Aanbod in trust",
-        "claim-payout": "Betaling aan instansie",
+        "claim-payout": "Betaal deur die plan",
         scheduled: "Geskeduleerde betaling",
         program: "Boedeltransaksie",
       },

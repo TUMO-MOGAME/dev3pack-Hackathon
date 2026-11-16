@@ -31,7 +31,7 @@ export const pay = {
       bill: "Pay a bill",
       "vault-deposit": "Vault deposit",
       offer: "Escrowed offer",
-      "claim-payout": "Payment to institution",
+      "claim-payout": "Paid by the plan",
       scheduled: "Scheduled payment",
       program: "Estate transaction",
     },

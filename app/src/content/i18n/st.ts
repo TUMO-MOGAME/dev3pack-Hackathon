@@ -494,7 +494,7 @@ export const st: Bundle = {
         bill: "Lefa akhaonto",
         "vault-deposit": "Depositi ya polokelo",
         offer: "Tlhahiso e ho escrow",
-        "claim-payout": "Tefo ho setheo",
+        "claim-payout": "E lefuwa ke moralo",
         scheduled: "Tefo e rerilweng",
         program: "Transaction ya lefa",
       },

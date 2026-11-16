@@ -494,7 +494,7 @@ export const zu: Bundle = {
         bill: "Khokha isikweletu",
         "vault-deposit": "Idiphozithi yesisefo",
         offer: "Isinikezo esiku-escrow",
-        "claim-payout": "Inkokhelo esikhungweni",
+        "claim-payout": "Ikhokhwa wuhlelo",
         scheduled: "Inkokhelo ehleliwe",
         program: "Okwenziwe kwefa",
       },
