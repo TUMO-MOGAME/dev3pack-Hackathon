@@ -6,6 +6,12 @@
 **Last updated:** 2026-11-16 (Infisical paused, keystore password rotated, plan §14; before that: everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
 
+## AF / ST / ZU TRANSLATIONS COMPLETE (branch agent/i18n2, 17 Nov 2026): NOT merged
+- Gap check: `lib/i18n/merge.test.ts` "translates every screen and agent line a user sees" lists every English key in screens, assistant and site with no af/st/zu value (`keptEnglish` names what stays English on purpose: suggested chat replies, voice preview, agent drafts, brand/metadata/URLs/colours/screenshots/icon link). Before: 459 gaps per language (will review/preview/done/locked, estate rules + schedules, vault, car, people, timeline, claims wizard, hardship, send, inbox, the on-device agent replies, voice, wallet assistant, footer ECTA labels). After: 0. The test fails if a key is added later without translations, so screens + assistant are now effectively "must be full"; the will review slices are also in `fullSlices` (brand/number checks).
+- Written by Claude, not a native speaker: worth a native read (doubtful phrases are listed in the agent hand-back).
+- Browser (mock dev, 360 px, af/st/zu): will chat → preview → review; owner (funded) /chat /estate /will /vault /car /people /family /claims /send /bill /statement /inbox + an agent car reply; Lerato (unlocked) incl. the claim wizard; executor; buyer; fresh estate. No sideways scroll, axe clean.
+- Still English, outside `content/` (follow-up): activity-feed lines built in `lib/service/mock.ts` and `lib/chain/events.ts` ("Scheduled payment …", "… is now held by the estate", "Waiting period over …"), and the demo agent's scripted will draft (summary, trusted people's roles, car proceeds/hardship policy, replies) in `lib/service/mock.ts`. The real agent writes in the visitor's language.
+
 ## 16 NOV 2026: EVERYDAY MONEY + POLISH, all merged to main (the per-branch sections below give the details)
 - Plan §13 items 1–4 merged: ask for money (agent/ask), pay a bill once (agent/bill), bill templates + monthly statement (agent/everyday). No program change.
 - Also merged: names on the devnet activity feed (agent/feed), af/st/zu heading underlines + a marks test (agent/marks), speed pass on /estate, /car, /will (agent/speed; local mobile LH 73–74 → 95–96).
