@@ -17,6 +17,8 @@ import { fail } from "./mock-errors";
 import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type MockGuardState, type Named } from "./mock-guardians";
 import { createMockDisputes } from "./mock-disputes";
 import { createMockAsk } from "./mock-ask";
+import type { MockTreeState } from "./mock-tree";
+import type { TreeService } from "../tree/types";
 import type { AskNote } from "../ask/types";
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, mediaRootHex } from "../assets/spec";
@@ -135,6 +137,8 @@ interface State {
   guard?: MockGuardState;
   /** "Ask for money" notes by claim (added after v5 shipped; created on first use). */
   asks?: Record<Base58, AskNote>;
+  /** Trust Tree: relationships the owner added or removed, hidden flags (added after v5 shipped; created on first use). */
+  tree?: MockTreeState;
 }
 
 const KEY = MOCK_STORE_KEY;
@@ -277,6 +281,20 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     submit: (input, hash, r, reviewed) => submitClaim(input, hash, r, reviewed),
     hashFile: (f) => hashFile(f), suspicious: (f) => suspicious(f), fakeHash, zar: (u) => zar(u), now: nowSecs, wait: async (ms) => { await wait(ms); }, save,
   });
+
+  // Trust Tree: the Mokoena family story around this demo estate (mock-tree.ts), loaded on first use so the tree's
+  // code stays out of every other page.
+  let treeService: Promise<TreeService> | null = null;
+  const Tr = () => (treeService ??= import("./mock-tree").then((m) => m.createMockTree({
+    cast: {
+      estate: ESTATE, thabo: s.bind.thabo, lerato: s.bind.lerato, sipho: s.bind.sipho, naledi: s.bind.naledi,
+      ndlovu: s.bind.nomsa, pillay: s.bind.david, bongani: s.bind.busi, zodwa: s.bind.zodwa,
+      kagiso: DEMO_GUARDIANS.kagiso.wallet, priya: DEMO_GUARDIANS.priya.wallet, charity: DEMO_GUARDIANS.charity.wallet,
+    },
+    snap: () => (s.created ? { ...s.snap, guardians: G.snapshot() } : null),
+    tree: () => (s.tree ??= { added: [], removed: [], hidden: {} }),
+    me, now: nowSecs, wait: async (ms) => { await wait(ms); }, save,
+  })));
 
   /* ----- synchronous "instructions" (shared by the async API and the stage seeder) ----- */
 
@@ -1199,6 +1217,10 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     executeScheduled: (_e, rule) => mutate(1000, () => executeScheduled(rule)),
     vetoDeath: () => mutate(800, vetoDeath),
     askForMoney: (e, input) => A.askForMoney(e, input),
+    getTree: async (e) => (await Tr()).getTree(e),
+    setRelationship: async (e, input) => (await Tr()).setRelationship(e, input),
+    removeRelationship: async (e, id) => (await Tr()).removeRelationship(e, id),
+    setHidden: async (e, hidden) => (await Tr()).setHidden(e, hidden),
     declineAsk: (e, claim) => A.declineAsk(e, claim),
 
     async submitDeathClaim(_e, certificate) {

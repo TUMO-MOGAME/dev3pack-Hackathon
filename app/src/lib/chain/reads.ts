@@ -131,6 +131,20 @@ export async function findEstateOf(owner: Base58, conn = getConnection()): Promi
 // Confirmed transactions never change, so each is fetched once and remembered.
 const txMemo = new Map<string, NonNullable<Awaited<ReturnType<Connection["getTransaction"]>>>>();
 const filling = new Map<string, Promise<void>>();
+/** Transactions being fetched right now, so the feed and the Trust Tree's history never ask for the same one twice. */
+const inflight = new Map<string, Promise<void>>();
+
+function fetchTx(sig: string, conn: Connection): Promise<void> {
+  if (txMemo.has(sig)) return Promise.resolve();
+  let p = inflight.get(sig);
+  if (!p) {
+    p = conn.getTransaction(sig, { maxSupportedTransactionVersion: 0, commitment: "confirmed" })
+      .then((tx) => { if (tx) txMemo.set(sig, tx); }, () => undefined)
+      .finally(() => inflight.delete(sig));
+    inflight.set(sig, p);
+  }
+  return p;
+}
 
 /**
  * Fetches the transactions not yet remembered, newest first, two at a time. Not one big batch: public devnet answers
@@ -142,12 +156,7 @@ function fill(key: string, signatures: string[], conn: Connection): Promise<void
   if (running) return running;
   const job = (async () => {
     const missing = signatures.filter((s) => !txMemo.has(s));
-    for (let i = 0; i < missing.length; i += 2) {
-      await Promise.all(missing.slice(i, i + 2).map(async (sig) => {
-        const tx = await conn.getTransaction(sig, { maxSupportedTransactionVersion: 0, commitment: "confirmed" }).catch(() => null);
-        if (tx) txMemo.set(sig, tx);
-      }));
-    }
+    for (let i = 0; i < missing.length; i += 2) await Promise.all(missing.slice(i, i + 2).map((sig) => fetchTx(sig, conn)));
   })().finally(() => filling.delete(key));
   filling.set(key, job);
   return job;
@@ -179,6 +188,69 @@ export async function fetchEvents(address: Base58, limit = 40, conn = getConnect
     }
   });
   return out.sort((a, b) => b.ts - a.ts);
+}
+
+/** The slice of a Connection that history reads use (tests pass a fake). */
+export type HistoryConn = Pick<Connection, "getSignaturesForAddress" | "getTransaction">;
+
+export interface HistoryOptions {
+  /** Signatures per page (the RPC allows up to 1000). */
+  pageSize?: number;
+  /** Most pages to read. */
+  maxPages?: number;
+  /** Total time budget for signatures and transactions, in ms. */
+  budgetMs?: number;
+  now?: () => number;
+}
+
+/**
+ * Every signature that touched `address`, newest first, paging back with `before` until the start of the history or the
+ * time budget. `complete` is false when the budget (or `maxPages`) cut it short.
+ */
+export async function historySignatures(address: Base58, conn: HistoryConn, opts: HistoryOptions = {}): Promise<{ signatures: { signature: string; blockTime?: number | null }[]; complete: boolean }> {
+  const pageSize = opts.pageSize ?? 100;
+  const maxPages = opts.maxPages ?? 50;
+  const now = opts.now ?? (() => Date.now());
+  const deadline = now() + (opts.budgetMs ?? 8_000);
+  const out: { signature: string; blockTime?: number | null }[] = [];
+  let before: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    if (now() >= deadline) return { signatures: out, complete: false };
+    const sigs = await conn.getSignaturesForAddress(new PublicKey(address), { limit: pageSize, ...(before ? { before } : {}) }, "confirmed");
+    for (const s of sigs) if (!s.err) out.push({ signature: s.signature, blockTime: s.blockTime });
+    if (sigs.length < pageSize) return { signatures: out, complete: true };
+    before = sigs[sigs.length - 1].signature;
+  }
+  return { signatures: out, complete: false };
+}
+
+/**
+ * The estate's full event history (newest first) for the Trust Tree: all signatures (paged beyond the feed's 40), then
+ * each transaction once (remembered with the feed's, two at a time, quiet 429 retries in tx.ts), all within one time
+ * budget. `partial` is true when older history could not be loaded in time; what was missing keeps loading in the
+ * background and appears on the next read.
+ */
+export async function fetchHistory(address: Base58, conn: HistoryConn = getConnection(), opts: HistoryOptions = {}): Promise<{ events: ChainEvent[]; partial: boolean }> {
+  const now = opts.now ?? (() => Date.now());
+  const start = now();
+  const budget = opts.budgetMs ?? 8_000;
+  const { signatures, complete } = await historySignatures(address, conn, { ...opts, now, budgetMs: budget });
+  const left = Math.max(0, budget - (now() - start));
+  if (signatures.length) await Promise.race([fill(`history:${address}`, signatures.map((s) => s.signature), conn as Connection), new Promise((r) => setTimeout(r, left))]);
+  const parser = new EventParser(programId(), getCoder());
+  const out: ChainEvent[] = [];
+  let missing = 0;
+  for (const s of signatures) {
+    const tx = txMemo.get(s.signature);
+    const logs = tx?.meta?.logMessages;
+    if (!tx) { missing++; continue; }
+    if (!logs) continue;
+    const ts = tx.blockTime ?? s.blockTime ?? 0;
+    try {
+      for (const ev of parser.parseLogs(logs)) out.push({ name: ev.name, data: ev.data as Raw, ts, signature: s.signature });
+    } catch { /* an undecodable log (older IDL) is skipped */ }
+  }
+  return { events: out.sort((a, b) => b.ts - a.ts), partial: !complete || missing > 0 };
 }
 
 /** Plain-language activity lines from the estate's recent events (newest first). */
