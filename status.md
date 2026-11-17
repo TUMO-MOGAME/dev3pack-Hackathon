@@ -6,6 +6,14 @@
 **Last updated:** 2026-11-17 (Trust Tree live on both sites; i18n2 + fixes merged; speed2 merged; Trust Tree agreed, plan §15; before that: Infisical paused, keystore password rotated, plan §14; before that: everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
 
+## TRUST TREE FIXES LIVE (17 Nov 2026, main 068dd6c, checked on both sites)
+- The Corolla is ONE journey: Thabo's plan → Lerato → registered in Lerato's own plan → Amahle (assetPaths keys by asset; an heir re-registering what they received continues the path).
+- Charities are organisations (`TreePerson.org`, from the fallback plan's `kind: "charity"` or declared): a rounded square on the map, "Organisation" under the name (en/af/st/zu).
+- Slider: "Today · year" hugs the edge when today is near one; decade labels make room by their place on the track (devnet's short history no longer collides).
+- Deflaked chain-ask "only the owner may decline" (two declines in the same ms had identical signatures → replay). 748/748 tests.
+- NEXT: fresh devnet demo estate. Needs a NEW owner wallet (estate PDA is per owner), so devnet's Thabo sign-in phrase changes; plus NEXT_PUBLIC_DEMO_WAITING_SECS → 300 on heirloom-devnet. Waiting on the user's go.
+- IDEA (user, 17 Nov): profile photos on the Trust Tree. Proposed design in the session reply; not planned yet.
+
 ## SPEED2 LIVE (17 Nov 2026, main 82292be)
 - Merged + deployed on both sites. Trust Tree given its own MotionScope (the global LazyMotion was removed by speed2; without it the tree's m.* lines would not draw). Live demo: tree plays (svg paths 19 -> 36), /tree /estate /will /claims /chat axe clean, 0 errors.
 - Live mobile Lighthouse from this PC (simulated slow 4G, 3 runs, median): /estate 88 (91/79/88), /will 92 (93/90/92), /car 81 (93/81/80). TBT swings 300-920 ms between runs of the same page, so this PC's load dominates; LCP is steady at ~1.1 s. Before speed2 (16 Nov, same method): /estate 84-85, /will 87-92, /car 82-87. Not a clear live win yet by this method; local (agent) runs went 98-99 -> 100 with TBT -70%.
