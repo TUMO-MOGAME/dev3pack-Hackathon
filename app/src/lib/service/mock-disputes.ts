@@ -10,6 +10,7 @@ import type { EstateSnapshot, TxResult } from "./types";
 import type { ObjectionStatus, TargetKind } from "../guardians/types";
 import { currentPeriod, disputeLapsesAt, effectiveStatus, YEAR_SECS, type Dispute, type DisputeKind } from "../disputes/types";
 import { fail, need } from "./mock-errors";
+import { shortName } from "../names";
 
 export interface DisputeDeps {
   snap(): EstateSnapshot;
@@ -34,7 +35,8 @@ export function createMockDisputes(d: DisputeDeps) {
   const est = () => d.snap().estate;
   const list = (): Dispute[] => (d.snap().disputes ??= []);
   const name = (a: Base58) => d.names()[a] ?? "Someone";
-  const first = (a: Base58) => name(a).replace(/^(Adv\.|Ms\.|Mr\.|Mrs\.|Dr\.|Uncle|Aunt|Cousin)\s+/i, "").split(" ")[0];
+  // The short form used in sentences everywhere (lib/names): "Lerato Mokoena" → "Lerato", "Adv. Thandi Ndlovu" → "Adv. Ndlovu".
+  const first = (a: Base58) => shortName(name(a));
   const needCreated = () => need(d.created(), "NoEstate", "There is no estate yet. The owner signs the will first.");
   const latestOn = (target: Base58) => list().filter((x) => x.target === target).sort((a, b) => b.raisedAt - a.raisedAt)[0];
   const isOpen = (x: Dispute | undefined) => !!x && effectiveStatus(x, d.now()) === "Open";

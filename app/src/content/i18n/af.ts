@@ -707,7 +707,7 @@ export const af: Bundle = {
       retry: "Probeer weer",
       preview: { title: "Jou plan tot dusver", now: "Nou", later: "Nadat ek weg is", live: "Verander soos jy praat", emptyHint: "Jou plan sal hier verskyn soos ons praat.", ready: "Gereed om na te gaan" },
       reviewCta: "Gaan na in eenvoudige taal",
-      review: { eyebrow: "Nagaan", title: "Hier is die plan wat jy teken", back: "Terug na die gesprek", summaryTitle: "Kortliks", sign: "Teken en sluit", signing: "Teken met jou wallet" },
+      review: { eyebrow: "Nagaan", title: "Hier is die plan wat jy teken", back: "Terug na die gesprek", summaryTitle: "Kortliks", summaryEdited: "Jy het verander wanneer sommige reëls begin, so hierdie opsomming is uit jou keuses geskryf.", summaryNow: "Begin nou, terwyl jy hier is: {list}.", summaryNoneNow: "Niks begin nou nie.", summaryLater: "Nadat jy weg is, sodra {need} vertroude mense jou afsterwe bevestig en {days} dae verbygaan: {list}.", summaryNoneLater: "Niks wag tot jy weg is nie: elke reël begin nou.", summaryItem: "{name} ({category})", summaryItemRecurring: "{name} ({category}, {amount} elke {every})", summaryEvery: { minute: "minuut", week: "week", month: "maand", term: "kwartaal", year: "jaar" }, summaryAsset: "{title} word verkoop vir minstens {floor}, of minstens {hardship} as 'n kind werklike nood bewys.", sign: "Teken en sluit", signing: "Teken met jou wallet" },
       done: { title: "Jou plan is vasgelê", body: "Die reëls is met jou wallet geteken. Vul die kluis en die reëls gemerk \"Nou\" begin vandag werk.", fund: "Vul die kluis", car: "Voeg die motor by", estate: "Sien my boedel" },
       locked: { title: "Jou plan is geteken en gesluit", estate: "Maak my boedel oop", ask: "Vra die agent oor my reëls" },
     },
@@ -1747,6 +1747,7 @@ export const af: Bundle = {
       uphold: "Handhaaf: kanselleer dit",
       dismiss: "Wys van die hand: laat dit voortgaan",
       voted: "Jy het gestem. Wag vir 'n ander vertroude persoon.",
+      payPaused: "Hierdie betaling is deur 'n dispuut gestop. Jy kan dit betaal sodra twee vertroude persone die dispuut van die hand wys of dit verval.",
       upheld: "Jou stem om te handhaaf is aangeteken.",
       dismissed: "Jou stem om van die hand te wys is aangeteken.",
       outcome: {

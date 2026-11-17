@@ -78,6 +78,8 @@ export const ask = {
       noDoc: "No letter attached, so it is your call.",
       approve: "Approve and pay",
       decline: "Decline",
+      paused: "{name} disputed this, so it is paused until two trusted people decide or the dispute lapses.",
+      pausedCta: "See the dispute",
     },
     asker: {
       waitingOwner: "Your request is with {owner}",

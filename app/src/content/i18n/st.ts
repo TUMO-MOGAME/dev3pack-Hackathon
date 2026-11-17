@@ -707,7 +707,7 @@ export const st: Bundle = {
       retry: "Leka hape",
       preview: { title: "Moralo wa hao ho fihlela jwale", now: "Jwale", later: "Ha ke se ke le siile", live: "E fetoha ha o ntse o bua", emptyHint: "Moralo wa hao o tla hlaha mona ha re ntse re bua.", ready: "E lokile ho hlahlojwa" },
       reviewCta: "Hlahloba ka puo e bonolo",
-      review: { eyebrow: "Hlahloba", title: "Ona ke moralo oo o o saenang", back: "Kgutlela moqoqong", summaryTitle: "Ka bokgutshwane", sign: "Saena mme o notlele", signing: "Ho saena ka wallet ya hao" },
+      review: { eyebrow: "Hlahloba", title: "Ona ke moralo oo o o saenang", back: "Kgutlela moqoqong", summaryTitle: "Ka bokgutshwane", summaryEdited: "O fetotse hore melao e meng e qala neng, kahoo kakaretso ena e ngotswe ho tswa dikgethong tsa hao.", summaryNow: "E qala hona jwale, o ntse o le teng: {list}.", summaryNoneNow: "Ha ho letho le qalang hona jwale.", summaryLater: "Ka mora hore o tsamaye, hang ha batho ba {need} ba tshepahalang ba netefatsa lefu la hao mme matsatsi a {days} a feta: {list}.", summaryNoneLater: "Ha ho letho le emetseng hore o tsamaye: molao o mong le o mong o qala hona jwale.", summaryItem: "{name} ({category})", summaryItemRecurring: "{name} ({category}, {amount} {every} e nngwe le e nngwe)", summaryEvery: { minute: "motsotso", week: "beke", month: "kgwedi", term: "kotara", year: "selemo" }, summaryAsset: "{title} e rekiswa bonyane ka {floor}, kapa bonyane ka {hardship} haeba ngwana a paka mathata a sebele.", sign: "Saena mme o notlele", signing: "Ho saena ka wallet ya hao" },
       done: { title: "Moralo wa hao o notletswe", body: "Melao e saennwe ka wallet ya hao. Kenya chelete polokelong mme e tshwailweng \"Jwale\" e qala ho sebetsa kajeno.", fund: "Kenya chelete polokelong", car: "Kenya koloi", estate: "Bona lefa la ka" },
       locked: { title: "Moralo wa hao o saennwe mme o notletswe", estate: "Bula lefa la ka", ask: "Botsa agent ka melao ya ka" },
     },
@@ -1749,6 +1749,7 @@ export const st: Bundle = {
       uphold: "Tshehetsa: e hlakole",
       dismiss: "Lahla: e tlohele e tswele pele",
       voted: "O voutile. Ho emetswe motho e mong ya tshepahalang.",
+      payPaused: "Tefo ena e emisitswe ke qabang. O ka e lefa hang ha batho ba babedi ba tshepahalang ba hana qabang kapa e fela.",
       upheld: "Voutu ya hao ya ho tshehetsa e ngotswe.",
       dismissed: "Voutu ya hao ya ho lahla e ngotswe.",
       outcome: {

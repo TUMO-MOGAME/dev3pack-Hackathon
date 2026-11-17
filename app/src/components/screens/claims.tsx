@@ -26,6 +26,8 @@ import { ask as askEnglish } from "@/content/ask";
 import { askStatus } from "@/lib/ask/logic";
 import { AskLauncher } from "@/components/ask/launcher";
 import { useAskActions } from "@/components/ask/use-ask-actions";
+import { useNow } from "@/lib/hooks/use-now";
+import { openDisputeOn } from "@/lib/disputes/types";
 
 type Copy = ScreensCopy["claims"];
 
@@ -378,7 +380,10 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
 /* ---------- Owner: approve a living-plan claim, then the vault pays the institution ---------- */
 
 function OwnerApproval({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; copy: Copy }) {
-  const { common } = useCopy();
+  const { common, disputes } = useCopy();
+  // An open dispute pauses the payment (execute_claim refuses), so the card shows the dispute instead of a failing pay.
+  const now = useNow();
+  const paused = !!openDisputeOn(snap.disputes, claim.address, now ?? 0);
   const { fx, busy } = useEstate();
   const { pay } = usePay();
   const { decline } = useAskActions();
@@ -395,8 +400,10 @@ function OwnerApproval({ claim, snap, copy }: { claim: Claim; snap: EstateSnapsh
       <p className="text-small text-ink-2">{fmt(copy.owner.forWho, { name: who, category: rule ? common.status.category[rule.category].toLowerCase() : "" })}</p>
       {note?.purpose && <p className="mt-1 font-medium">{fmt(askCopy.line.for, { purpose: note.purpose })}</p>}
       {claim.agentReport && <div className="mt-3"><ReportCard report={claim.agentReport} compact /></div>}
+      <DisputePanel kind="Claim" target={claim.address} className="mt-3" />
+      {paused && <p className="mt-3 text-small text-ink-2">{disputes.card.payPaused}</p>}
       <Button
-        className="mt-3" block disabled={!!busy}
+        className="mt-3" block disabled={!!busy || paused}
         onClick={() => {
           // Skip the approval if it already went through on an earlier attempt (the program rejects a second one).
           // Tracked here too, because "Try again" in the payment sheet re-runs this same function before the snapshot refreshes.
