@@ -28,7 +28,9 @@ import { loadEnv, loadOrCreateWallets, saveWallets, wdk, send, explorer, log, di
 
 loadEnv(); // before importing app modules: chain/config reads env at import time
 const DRY = process.argv.includes("--dry");
-const OWNER: PersonaId = "thabo";
+/** `--owner thabo2` seeds the same story for another owner wallet (a fresh estate: one estate per owner). */
+const ownerArg = process.argv.indexOf("--owner");
+const OWNER = (ownerArg > 0 ? process.argv[ownerArg + 1] : "thabo") as PersonaId;
 const USDT = 1_000_000n;
 /** SOL the owner needs for the accounts' rent and fees (~0.15 used); fund it from the deployer when below. */
 const OWNER_MIN_SOL = 0.25;
@@ -204,7 +206,9 @@ async function main() {
   ];
   for (const a of assets) {
     if (a.will.title !== a.demo.title) throw new Error(`DEMO_WILL asset "${a.will.title}" ≠ DEMO_ASSETS "${a.demo.title}"`);
-    if (!w[a.field]) {
+    // `thabo` keeps the original fields; other owners get their own title NFTs.
+    const titles = OWNER === "thabo" ? w : ((w.titlesByOwner ??= {})[OWNER] ??= {});
+    if (!titles[a.field]) {
       const mint = Keypair.generate();
       const ownerNft = getAssociatedTokenAddressSync(mint.publicKey, owner);
       const sig = await send(me, [
@@ -214,11 +218,11 @@ async function main() {
         createMintToCheckedInstruction(mint.publicKey, ownerNft, owner, 1, 0),
         createSetAuthorityInstruction(mint.publicKey, owner, AuthorityType.MintTokens, null),
       ], [mint]);
-      w[a.field] = mint.publicKey.toBase58();
+      titles[a.field] = mint.publicKey.toBase58();
       saveWallets(w);
-      log(`Title NFT for the ${a.demo.title}: ${w[a.field]} ${explorer(sig)}`);
+      log(`Title NFT for the ${a.demo.title}: ${titles[a.field]} ${explorer(sig)}`);
     }
-    const mint = new PublicKey(w[a.field]!);
+    const mint = new PublicKey(titles[a.field]!);
     const asset = assetPda(ctx.programId, estate, mint);
     if (!(await exists("Asset", asset))) {
       const docHash = await sha256Hex(`heirloom-demo:registration:${a.will.title}:${mint.toBase58()}`);
@@ -267,7 +271,7 @@ async function main() {
   } else log("Yearly cap already set");
 
   console.log(`\nGuardians demo estate ready: ${estate.toBase58()}\nhttps://explorer.solana.com/address/${estate.toBase58()}?cluster=devnet`);
-  for (const a of assets) console.log(`  ${a.demo.title}: title NFT ${w[a.field]}`);
+  for (const a of assets) console.log(`  ${a.demo.title}: title NFT ${(OWNER === "thabo" ? w : w.titlesByOwner?.[OWNER] ?? {})[a.field]}`);
   console.log(`Owner ${OWNER} left with ${(await sol(owner)).toFixed(3)} SOL`);
 }
 

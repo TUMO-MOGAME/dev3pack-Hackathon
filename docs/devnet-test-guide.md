@@ -27,7 +27,7 @@ Open it: "Success" / "Finalized" means the transaction really happened on-chain.
 
    | Name | "I am" | Seed in the file |
    |---|---|---|
-   | Thabo | Planning for my family | `thabo` (owner of the demo estate; `dad` owns the first, already unlocked one) |
+   | Thabo | Planning for my family | `thabo2` (owner of the demo estate since 17 Nov; `thabo` owns the previous one, `dad` the first, already unlocked one) |
    | Lerato | A family member | `lerato` |
    | Adv. Ndlovu | A trusted person | `ndlovu` |
    | Ms. Pillay | A trusted person | `pillay` |
@@ -44,7 +44,7 @@ Open it: "Success" / "Finalized" means the transaction really happened on-chain.
 
 ## The demo estate (since 15 Nov 2026)
 
-The app opens **Thabo's guardians demo estate** `2LXvcYbq…ymP7`, seeded by `scripts/seed-guardians-assets.ts`
+The app opens **Thabo's guardians demo estate** `J6WCQvgk…KMaj` (17 Nov 2026: 5-minute waiting period, so disputes have 5 minutes; no test rules), seeded by `scripts/seed-guardians-assets.ts --owner thabo2`
 (see `scripts/README.md`). It tells the same story as the demo site:
 - **Assets**: the 2017 Toyota Corolla 1.8 Exclusive CVT (asking 13,500, minimum 12,500, hardship floor 10,500 USD₮,
   16 photos + spec sheet) and the 2025 Big Boy Mustang 250 (2,000 / 1,800 / 1,500 USD₮, 9 photos + spec sheet). The
@@ -106,7 +106,7 @@ Still repeatable: A2 (Pay now, every 60 s), A4/A5 (Send to family), C1–C3 (mor
 ## D. Check it really happened
 
 - Each **Receipt** opens Solana Explorer: status **Success**, the program `b3PBVwkL…FY`, the token transfer amounts.
-- The demo estate: https://explorer.solana.com/address/2LXvcYbqbtZND3qrfKPex9N7Red3kvPAGDReXWdxymP7?cluster=devnet
+- The demo estate: https://explorer.solana.com/address/J6WCQvgkJmzYQXjo37GLktZnFB9nbpwCchkCVKbcKMaj?cluster=devnet
   (the first one: https://explorer.solana.com/address/JBdsDy67YBfpV8YAc2H1h7w95h8uJ2XUzTDh9vt34G9E?cluster=devnet)
 - The whole B + C story was rehearsed on 12 Nov 2026 on a throwaway estate (`scripts/rehearse-devnet.ts`,
   estate `9jn713f444XH5E9uywJ6oNJJDrWWDoEcho2gWUrPnE3d`): unlocked, claim paid, car sold, vault 20 → 26.
@@ -118,5 +118,5 @@ Still repeatable: A2 (Pay now, every 60 s), A4/A5 (Send to family), C1–C3 (mor
 | "Server responded with 429" in the dev overlay | The free devnet RPC is busy; the app retries by itself. Wait a few seconds |
 | Sponsor unavailable / fee not paid by Heirloom | The fee wallet `261pQ…sjNg` is low on SOL. Top it up at https://faucet.solana.com |
 | A step says "BadStatus" | That step belongs to another phase (e.g. a claim on an after-passing rule before unlock) |
-| Want to record B and C again | An estate can't be "un-passed". Seed a fresh one with a new owner persona (as `scripts/seed-guardians-assets.ts` did for `thabo`) |
+| Want to record B and C again | An estate can't be "un-passed". Seed a fresh one with a new owner persona (`scripts/seed-guardians-assets.ts --owner <persona>`, as done for `thabo2`) |
 | Voice call says it can't see the estate | Open the call from a page after the estate has loaded (the sidebar shows the person) |

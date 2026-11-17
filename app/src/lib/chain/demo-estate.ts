@@ -1,7 +1,8 @@
 /**
  * The seeded devnet demo estates: the Mokoena family, all fictional people.
  *
- * - DEVNET_DEMO_ESTATE (scripts/seed-guardians-assets.ts, 15 Nov 2026) is the one the app opens: Thabo's estate as on
+ * - DEVNET_DEMO_ESTATE (scripts/seed-guardians-assets.ts --owner thabo2, 17 Nov 2026) is the one the app opens: a fresh
+ *   estate with a 5-minute waiting period (so a dispute window is 5 minutes) and no test rules. Thabo's estate as on
  *   the demo site, Active, with his 2017 Corolla and his motorbike (photos + spec sheets bundled with the app, see
  *   lib/service/demo-media.ts), trusted people with backups and a monitor, the fallback plan and a yearly cap.
  * - DEVNET_FIRST_META (scripts/seed-demo.ts, 11 Nov 2026) is the first demo estate: Unlocked, its 2019 Corolla sold
@@ -17,9 +18,9 @@ import type { FallbackRecipient } from "../guardians/types";
 import type { DeclaredPerson } from "../tree/derive"; // type only
 import type { RelationshipKind } from "../tree/types";
 
-export const DEVNET_DEMO_ESTATE = "2LXvcYbqbtZND3qrfKPex9N7Red3kvPAGDReXWdxymP7";
-/** Thabo's devnet wallet, the demo estate's owner. */
-const OWNER = "HLbTQFbswmWRUg4ytvHsubKkvnP5fRc2JHZfsTkV7AN1";
+export const DEVNET_DEMO_ESTATE = "J6WCQvgkJmzYQXjo37GLktZnFB9nbpwCchkCVKbcKMaj";
+/** Thabo's devnet wallet (persona `thabo2`), the demo estate's owner. */
+const OWNER = "4uQxH9yp9bajHRuR2rNuiTedsJ9DcrDqCZzpXc6Fu96Y";
 
 /** The demo children's public wallets (for the demo Legacy Book and the fallback plan). */
 export const DEVNET_DEMO_CHILDREN = {
@@ -46,8 +47,8 @@ export const DEVNET_DEMO_META: EstateMeta = {
   verifierNames: VERIFIER_NAMES,
   // Keyed by title NFT mint.
   assetTitles: {
-    HQAM3uebocQvVWCgEUJrKiUexu3DTrexL68LrwtPE6jW: "2017 Toyota Corolla 1.8 Exclusive CVT",
-    GJ2tvFqYgPJz6j9PtK8Ri3C9X16hYw9DLvs5tFNT6qxP: "2025 Big Boy Mustang 250",
+    DqMKvrGcZbWhwPYG6iPuij3o365tWa18JEnBjjrTVo16: "2017 Toyota Corolla 1.8 Exclusive CVT",
+    F3dSMhHDzrTrimJ85KechpoTuWRaf6q8xHDdfLMoJF6J: "2025 Big Boy Mustang 250",
   },
   // Names by wallet (buyers, and the guardians view's people), as on the demo site.
   buyerNames: {
@@ -107,6 +108,17 @@ export const DEVNET_DEMO_FALLBACK_KINDS: Record<string, FallbackRecipient["kind"
   [DEVNET_DEMO_CHILDREN.sipho]: "family",
   [DEVNET_DEMO_CHILDREN.naledi]: "family",
   [DEVNET_DEMO_GUARDIANS.charity]: "charity",
+};
+
+/** The previous guardians demo estate (owner `thabo`, 15 Nov 2026): Active; it carries the Avbob test rule. */
+export const DEVNET_PREV_META: EstateMeta = {
+  ...DEVNET_DEMO_META,
+  estate: "2LXvcYbqbtZND3qrfKPex9N7Red3kvPAGDReXWdxymP7",
+  ownerWallet: "HLbTQFbswmWRUg4ytvHsubKkvnP5fRc2JHZfsTkV7AN1",
+  assetTitles: {
+    HQAM3uebocQvVWCgEUJrKiUexu3DTrexL68LrwtPE6jW: "2017 Toyota Corolla 1.8 Exclusive CVT",
+    GJ2tvFqYgPJz6j9PtK8Ri3C9X16hYw9DLvs5tFNT6qxP: "2025 Big Boy Mustang 250",
+  },
 };
 
 /** The first demo estate (owner `dad`): Unlocked, 2019 Corolla sold. */

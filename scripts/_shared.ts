@@ -43,6 +43,8 @@ export const PERSONAS = [
   { id: "kagiso", label: "Cousin Kagiso Mokoena (Uncle Bongani's first backup)", role: "backup" },
   { id: "priya", label: "Adv. Priya Naidoo (Uncle Bongani's second backup)", role: "backup" },
   { id: "charity", label: "Ithemba Children's Charity (last fallback recipient)", role: "payee" },
+  // Added 17 Nov 2026: a fresh demo estate (5-minute waiting period, no test rules). One estate per owner wallet.
+  { id: "thabo2", label: "Thabo Mokoena (owner of the fresh demo estate, 17 Nov)", role: "owner" },
 ] as const;
 export type PersonaId = (typeof PERSONAS)[number]["id"];
 
@@ -55,6 +57,8 @@ export interface WalletsFile {
   /** Title NFTs of the guardians demo estate (owner `thabo`): the 2017 Corolla and the motorbike. */
   corollaMint?: string;
   bikeMint?: string;
+  /** Title NFTs for other demo owners (e.g. `thabo2`), keyed by owner persona. */
+  titlesByOwner?: Record<string, { corollaMint?: string; bikeMint?: string }>;
 }
 
 export async function loadOrCreateWallets(): Promise<WalletsFile> {

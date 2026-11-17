@@ -8,7 +8,7 @@ import { getSupabase } from "./supabase";
 import type { AgentReport, WillDraft } from "./types";
 import type { SpecialistName } from "./voice/types";
 import { chainConfig } from "./chain/config";
-import { DEVNET_DEMO_META, DEVNET_FIRST_META } from "./chain/demo-estate";
+import { DEVNET_DEMO_META, DEVNET_FIRST_META, DEVNET_PREV_META } from "./chain/demo-estate";
 
 export interface EstateMeta {
   estate: string;
@@ -48,7 +48,7 @@ const mem = {
   evidence: new Map<string, { sha256: string; purpose: string; mime: string; size: number }>(),
 };
 // Devnet without Supabase: keep the seeded demo family's names across restarts (fictional people; see demo-estate.ts).
-if (chainConfig.cluster === "devnet") for (const m of [DEVNET_DEMO_META, DEVNET_FIRST_META]) mem.estates.set(m.estate, m);
+if (chainConfig.cluster === "devnet") for (const m of [DEVNET_DEMO_META, DEVNET_PREV_META, DEVNET_FIRST_META]) mem.estates.set(m.estate, m);
 
 function warn(what: string, err: { message: string } | null) {
   if (err) console.warn(`[db] ${what} failed: ${err.message}`);
