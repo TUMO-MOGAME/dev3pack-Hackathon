@@ -15,8 +15,7 @@ import { useEstate } from "@/lib/hooks/estate";
 import type { EstateSnapshot } from "@/lib/service";
 import type { Role } from "@/lib/types";
 import type { PersonId, Relationship, RelationshipInput, TreeSnapshot, TrustRole } from "@/lib/tree/types";
-// AT MERGE: import { treeAtYear } from "@/lib/tree/timeline";
-import { treeAtYear, yearOf } from "@/lib/tree/timeline-local";
+import { treeAtYear, yearOf } from "@/lib/tree/timeline";
 import { TreeMap, travellersAt } from "./map";
 import { TreeList } from "./list";
 import { TimelineSlider } from "./slider";
@@ -64,6 +63,8 @@ function Tree({ copy, t, role, reload, source }: {
   const at = useMemo(() => treeAtYear(t, year), [t, year]);
   const events = useMemo(() => eventYears(t), [t]);
   const mock = t.mode === "mock";
+  const [reloading, setReloading] = useState(false);
+  const again = async () => { setReloading(true); try { await reload(); } finally { setReloading(false); } };
 
   // Play: a year at a time, lingering on years where something happens; stops at the end.
   useEffect(() => {
@@ -107,7 +108,12 @@ function Tree({ copy, t, role, reload, source }: {
       <Notice tone={mock ? "warn" : "accent"} icon={<Info className="size-5" aria-hidden="true" />}>
         {mock ? fill(copy.demoNote, { today: t.today }) : copy.chainNote}
       </Notice>
-      {t.partial && <Notice icon={<Info className="size-5" aria-hidden="true" />}>{copy.partial}</Notice>}
+      {t.partial && (
+        <Notice icon={<Info className="size-5" aria-hidden="true" />}>
+          {copy.partial}{" "}
+          <Button variant="ghost" small className="-my-2 underline underline-offset-4" loading={reloading} onClick={() => void again()}>{copy.refresh}</Button>
+        </Notice>
+      )}
 
       <Card className="print-hide">
         <TimelineSlider

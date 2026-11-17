@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { fullName, shortName } from "./names";
 import { DEMO_PERSONAS } from "./wallet/personas";
 import { DEMO_PERSONAS as CAST, DEMO_GUARDIANS } from "./service/mock";
+import { CANNED_WILL, DEMO_WILL } from "./agent/canned";
+import { DEVNET_DEMO_META } from "./chain/demo-estate";
 
 describe("demo names", () => {
   it("shortens each title the same way everywhere", () => {
@@ -24,5 +26,14 @@ describe("demo names", () => {
   it("uses the short forms the guided chat already uses for the three trusted people", () => {
     expect(CAST.filter((c) => c.role === "verifier").map((c) => shortName(c.label))).toEqual(["Adv. Ndlovu", "Ms. Pillay", "Uncle Bongani"]);
     expect(shortName(DEMO_GUARDIANS.kagiso.name)).toBe("Cousin Kagiso");
+  });
+
+  it("names the trusted people in full in every list: mock cast, devnet estate names and the canned will", () => {
+    const full = CAST.filter((c) => c.role === "verifier").map((c) => c.label);
+    expect(full).toEqual(["Adv. Thandi Ndlovu", "Ms. Anita Pillay", "Uncle Bongani Mokoena"]);
+    expect(DEVNET_DEMO_META.verifierNames).toEqual(full);
+    expect(CANNED_WILL.verifiers.map((v) => v.name)).toEqual(full);
+    // The seeded devnet will keeps the text it was signed with (its hash is on-chain); only the shown copy changes.
+    expect(DEMO_WILL.verifiers.map((v) => v.name)).toEqual(full.map(shortName));
   });
 });

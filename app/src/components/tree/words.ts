@@ -5,7 +5,7 @@
 import type { TreeCopy } from "@/content/tree";
 import type { Widen } from "@/lib/i18n/merge";
 import type { AssetPath, AssetStep, KeptPromise, PersonId, TreeAtYear, TreePerson, TrustEdge } from "@/lib/tree/types";
-import { yearOf } from "@/lib/tree/timeline-local";
+import { yearOf } from "@/lib/tree/timeline";
 
 export type Copy = Widen<TreeCopy>;
 export type YearPerson = TreeAtYear["people"][number];

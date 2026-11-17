@@ -9,7 +9,7 @@ import { CarFront, ExternalLink, Eye, EyeOff, HandHeart, Info, Sparkles } from "
 import { Button } from "@/components/ui/primitives";
 import { explorerTx, shortAddress } from "@/lib/format";
 import type { PersonId, TreeAtYear } from "@/lib/tree/types";
-import { yearOf } from "@/lib/tree/timeline-local";
+import { yearOf } from "@/lib/tree/timeline";
 import {
   assetText, factsFor, factsLine, fullLabel, isMinorAt, keptText, lifeText, roleTermText, shortLabel, type Copy,
 } from "./words";

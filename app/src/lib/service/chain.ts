@@ -17,7 +17,7 @@ import * as ix from "../chain/instructions";
 import { ata, claimPda, estatePda, offerPda, hardshipPda } from "../chain/pda";
 import { demoEstateFirst } from "../chain/demo-estate";
 import { base64ToBytes, bytesToBase64, ChainTxError, getConnection } from "../chain/tx";
-import { activityFrom, fetchAccountRaw, fetchEstateRaw, fetchEvents, findEstateOf, invalidateProgramAccounts, scanAccounts } from "../chain/reads";
+import { activityFrom, fetchAccountRaw, fetchEstateRaw, fetchEvents, fetchHistory, findEstateOf, invalidateProgramAccounts, scanAccounts } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
 import { hex, key, num, type Raw } from "../chain/decoders";
 import { getActiveSigner, peekActiveSigner } from "../wallet/signer";
@@ -35,6 +35,7 @@ import { legacyApi, type LegacySigner } from "../legacy/client";
 import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-guardians";
 import { createChainDisputes, loadDisputes } from "./chain-disputes";
 import { createChainAsk } from "./chain-ask";
+import type { TreeService } from "../tree/types";
 import { disabledGuardians, SEAT_MONITOR_OFFSETS } from "../chain/guardians";
 import { SystemProgram } from "@solana/web3.js";
 import type { ActivityItem } from "../types";
@@ -145,7 +146,7 @@ async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel
   const r = first.status === "failed" ? first : await waitForFinal(receipts, chainOps(), id, 60_000, 800);
   if (!r || r.status === "failed") throw new ChainTxError(r?.signature ?? "", r?.error ?? "Transaction failed.");
   if (!r.signature) throw new Error("Transaction was not signed.");
-  forget("activity:"); forget("estates:"); invalidateProgramAccounts();
+  forget("activity:"); forget("estates:"); forget("history:"); forget("tree:"); invalidateProgramAccounts();
   return { signature: r.signature, explorerUrl: explorerTx(r.signature) };
 }
 
@@ -281,8 +282,29 @@ export function createChainService(): HeirloomService {
     fetchRaw: (type, address) => fetchAccountRaw(type, address),
     requireOwnerOf,
   });
+  // Trust Tree: the estate's full history, child plans and the family links (chain-tree.ts), loaded on first use so
+  // the tree's code stays out of every other page.
+  let treeService: Promise<TreeService> | null = null;
+  const tree = () => (treeService ??= import("./chain-tree").then((m) => m.createChainTree({
+    getEstate: (estate) => service.getEstate(estate),
+    history: (estate) => cached(`history:${estate}`, 30_000, () => fetchHistory(estate)),
+    findEstateOf: (wallet) => cached(`estateOf:${wallet}`, 60_000, () => findEstateOf(wallet)),
+    assetKinds: async (estate) => Object.fromEntries((await service.getAssetMedia(estate)).map((m) => [m.asset, m.kind])),
+    requireOwnerOf,
+    signer: () => getActiveSigner(),
+    deviceWallets: () => loadWallets().map((w) => ({ address: w.address, label: w.label })),
+  })));
   const service: HeirloomService = {
     mode: "chain",
+    getTree: (estate) => cached(`tree:${estate}`, 20_000, async () => {
+      const t = await (await tree()).getTree(estate);
+      // Older history still loading in the background: let the next read pick it up soon.
+      if (t.partial) setTimeout(() => { forget(`tree:${estate}`); forget(`history:${estate}`); }, 5_000);
+      return t;
+    }),
+    setRelationship: async (estate, input) => (await tree()).setRelationship(estate, input).finally(() => forget(`tree:${estate}`)),
+    removeRelationship: async (estate, id) => (await tree()).removeRelationship(estate, id).finally(() => forget(`tree:${estate}`)),
+    setHidden: async (estate, hidden) => (await tree()).setHidden(estate, hidden).finally(() => forget(`tree:${estate}`)),
     askForMoney: (estate, input) => asks.askForMoney(estate, input).finally(() => forget(`asks:${estate}`)),
     declineAsk: (estate, claim) => asks.declineAsk(estate, claim).finally(() => forget(`asks:${estate}`)),
     ...createChainGuardians({

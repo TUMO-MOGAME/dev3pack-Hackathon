@@ -40,6 +40,7 @@ export const disputes = {
     uphold: "Uphold: cancel it",
     dismiss: "Dismiss: let it go ahead",
     voted: "You have voted. Waiting for another trusted person.",
+    payPaused: "This payment is paused by a dispute. You can pay it once two trusted people dismiss the dispute or it lapses.",
     upheld: "Your vote to uphold is recorded.",
     dismissed: "Your vote to dismiss is recorded.",
     outcome: {

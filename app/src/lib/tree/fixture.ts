@@ -1,9 +1,7 @@
 /**
- * TEMPORARY (tree-ui, until tree-core's mock-tree lands): a realistic Trust Tree for the screen to be built against.
- * The Mokoena family over four generations, 1990 → 2086, "today" 2026; everything after 2026 is an imagined story
- * (`imagined: true`). Uses the demo personas' wallets, so "your own card" works for each demo persona.
- * No amounts, prices or balances anywhere (lib/tree/types.ts). Delete with lib/tree/source.ts's fallback at merge
- * (the tests in components/tree may keep using it as a fixture).
+ * Test fixture for the Trust Tree screen (components/tree/tree.test.ts, lib/tree/layout.test.ts): the Mokoena family
+ * over four generations, 1990 → 2086, "today" 2026, with an imagined story after it. The live screen reads the
+ * service (lib/service/mock-tree.ts on the demo); this is only for tests. No amounts anywhere.
  */
 import type { AssetPath, KeptPromise, Relationship, TreePerson, TreeSnapshot, TrustEdge, TrustRole } from "./types";
 import { DEMO_PERSONAS } from "../wallet/personas";

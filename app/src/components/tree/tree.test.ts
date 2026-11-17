@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { tree as copy } from "@/content/tree";
 import { treeAf } from "@/content/i18n/tree";
 import { treeFixture, yearTs, FIXTURE_IDS as ID } from "@/lib/tree/fixture";
-import { treeAtYear } from "@/lib/tree/timeline-local";
+import { treeAtYear } from "@/lib/tree/timeline";
 import type { KeptPromise } from "@/lib/tree/types";
 import { PersonCardBody, cardTitle } from "./card";
 import { TreeMap, travellersAt } from "./map";

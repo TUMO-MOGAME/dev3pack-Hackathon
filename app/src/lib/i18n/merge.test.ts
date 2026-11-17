@@ -30,7 +30,38 @@ const fullSlices = (t: Bundle) => ({
   "screens.statement": [screens.statement, t.screens.statement],
   "screens.estate.activity.statement": [screens.estate.activity.statement, t.screens.estate?.activity?.statement],
   "screens.estate.activity.tree": [screens.estate.activity.tree, t.screens.estate?.activity?.tree],
+  // The will review: the plan the owner reads and signs.
+  "screens.will.preview": [screens.will.preview, t.screens.will?.preview],
+  "screens.will.review": [screens.will.review, t.screens.will?.review],
+  "screens.will.done": [screens.will.done, t.screens.will?.done],
+  "screens.will.locked": [screens.will.locked, t.screens.will?.locked],
 } as Record<string, [unknown, unknown]>);
+
+/**
+ * English on purpose (see content/i18n/types.ts): the suggested chat replies the on-device demo agent
+ * matches in English, the scripted voice preview, the drafts sent to the agent, and the site's brand,
+ * metadata, colours, URLs, screenshots and icon credit link.
+ */
+const keptEnglish = /^(screens\.will\.suggestions|assistant\.suggestions|assistant\.voicePreview|assistant\.home\.composer\.(sendMoneyDraft|defaultMessage)|site\.(name|shortName|tagline|title|description|url|themeLight|themeDark|accent|ogAlt|screenshots|footer\.(linksTitle|programId|iconCredit\.(linkText|href))))(\.|\[|$)/;
+
+/** Every English key in the partial slices (screens, assistant, site) with no translation, as `path: English`. */
+const untranslated = (t: Bundle): string[] => {
+  const out: string[] = [];
+  const walk = (en: unknown, tr: unknown, path: string) => {
+    if (keptEnglish.test(path)) return;
+    if (typeof en === "string") { if (typeof tr !== "string" || !tr.trim()) out.push(`${path}: ${en}`); return; }
+    if (Array.isArray(en)) {
+      if (!Array.isArray(tr) || tr.length !== en.length) out.push(`${path}: ${JSON.stringify(en)}`);
+      else en.forEach((x, i) => walk(x, tr[i], `${path}[${i}]`));
+      return;
+    }
+    if (en && typeof en === "object") for (const k of Object.keys(en)) walk((en as Record<string, unknown>)[k], (tr as Record<string, unknown> | undefined)?.[k], `${path}.${k}`);
+  };
+  walk(screens, t.screens, "screens");
+  walk(assistant, t.assistant, "assistant");
+  walk(site, t.site, "site");
+  return out;
+};
 
 /** How many `*marks*` a string carries; -1 when an asterisk is left over (unbalanced). */
 const markCount = (s: string) => {
@@ -50,7 +81,9 @@ function* pairs(en: unknown, tr: unknown, path = ""): Generator<[string, string,
 
 describe("mergeCopy", () => {
   it("lays a partial translation over English and keeps untranslated slots", () => {
-    const out = mergeCopy(screens.estate, af.screens.estate);
+    // af is now complete, so leave two slots out by hand.
+    const partial = { ...af.screens.estate, rate: undefined, scheduled: undefined };
+    const out = mergeCopy(screens.estate, partial);
     expect(out.eyebrow).toBe("Boedel");
     expect(out.rate).toBe(screens.estate.rate);
     expect(out.scheduled.forWho).toBe(screens.estate.scheduled.forWho);
@@ -114,6 +147,11 @@ describe.each([["af", af], ["st", st], ["zu", zu]] as const)("%s translation", (
       const digits = (s: string) => (s.replace(/(\d),(\d)/g, "$1.$2").match(/\d+(?:\.\d+)?/g) ?? []).sort().join(",");
       expect(digits(tr), path).toBe(digits(en));
     }
+  });
+
+  it("translates every screen and agent line a user sees (lists any English key with no translation)", () => {
+    const missing = untranslated(t);
+    expect(missing, `${missing.length} untranslated:\n${missing.join("\n")}`).toEqual([]);
   });
 
   it("translates the whole sidebar and chat home (only the agent-read drafts stay English)", () => {

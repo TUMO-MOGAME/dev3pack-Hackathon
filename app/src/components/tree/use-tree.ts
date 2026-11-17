@@ -2,15 +2,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Base58 } from "@/lib/types";
 import type { TreeService, TreeSnapshot } from "@/lib/tree/types";
-import { treeSource } from "@/lib/tree/source";
 import { useEstate } from "@/lib/hooks/estate";
 
-/** The estate's Trust Tree, loaded through the service (or the fixture until tree-core lands; see lib/tree/source.ts). */
+/** The estate's Trust Tree from the service (mock or chain; lib/service/mock-tree.ts, chain-tree.ts). */
 export function useTree(estate: Base58) {
   const { service, session } = useEstate();
   const viewer = session?.address ?? null;
-  // AT MERGE: `service` itself (HeirloomService will implement TreeService).
-  const source: TreeService | null = useMemo(() => (service ? treeSource(service, () => viewer) : null), [service, viewer]);
+  // Re-read when the persona changes (their own card, hidden state).
+  const source: TreeService | null = useMemo(() => (service && viewer !== undefined ? service : null), [service, viewer]);
   const [state, setState] = useState<{ phase: "loading" | "ready" | "error"; snap: TreeSnapshot | null }>({ phase: "loading", snap: null });
 
   const load = useCallback(async () => {

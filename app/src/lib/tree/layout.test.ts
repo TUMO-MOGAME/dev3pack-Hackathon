@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NODE_R, familyLines, initials, layoutTree, pointOnCubic, strokeFor, trustCurves } from "./layout";
 import { treeFixture, FIXTURE_IDS as ID } from "./fixture";
-import { treeAtYear } from "./timeline-local";
+import { treeAtYear } from "./timeline";
 
 const t = treeFixture("EST");
 

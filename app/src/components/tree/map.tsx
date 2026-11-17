@@ -12,7 +12,7 @@ import type { PersonId, TreeAtYear } from "@/lib/tree/types";
 import {
   NODE_R, familyLines, initials, layoutTree, pointOnCubic, strokeFor, trustCurves, type TreeLayout,
 } from "@/lib/tree/layout";
-import { yearOf } from "@/lib/tree/timeline-local";
+import { yearOf } from "@/lib/tree/timeline";
 import { factsFor, factsLine, fill, holderBefore, isMinorAt, lifeText, shortLabel, type Copy } from "./words";
 
 const ease = [0.22, 1, 0.36, 1] as const;

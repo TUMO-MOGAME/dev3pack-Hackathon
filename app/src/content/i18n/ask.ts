@@ -82,6 +82,8 @@ export const askAf: T = {
       noDoc: "Geen brief aangeheg nie, so dis jou besluit.",
       approve: "Keur goed en betaal",
       decline: "Keur af",
+      paused: "{name} het dit betwis, so dit is gestop totdat twee vertroude persone besluit of die dispuut verval.",
+      pausedCta: "Sien die dispuut",
     },
     asker: {
       waitingOwner: "Jou versoek is by {owner}",
@@ -180,6 +182,8 @@ export const askSt: T = {
       noDoc: "Ha ho lengolo le kentsweng, kahoo qeto ke ya hao.",
       approve: "Dumella o lefe",
       decline: "Hana",
+      paused: "{name} o qabile sena, kahoo se emisitswe ho fihlela batho ba babedi ba tshepahalang ba etsa qeto kapa qabang e fela.",
+      pausedCta: "Bona qabang",
     },
     asker: {
       waitingOwner: "Kopo ya hao e ho {owner}",
@@ -278,6 +282,8 @@ export const askZu: T = {
       noDoc: "Ayikho incwadi enamathiselwe, ngakho isinqumo ngesakho.",
       approve: "Vuma ukhokhe",
       decline: "Yenqaba",
+      paused: "U-{name} uphikise lokhu, ngakho kumisiwe kuze kube abantu ababili abathembekile banquma noma ingxabano iphelelwa yisikhathi.",
+      pausedCta: "Bona ingxabano",
     },
     asker: {
       waitingOwner: "Isicelo sakho siku-{owner}",

@@ -14,8 +14,12 @@
  */
 import type { EstateMeta } from "../db"; // type only: erased, so no server code reaches the browser
 import type { FallbackRecipient } from "../guardians/types";
+import type { DeclaredPerson } from "../tree/derive"; // type only
+import type { RelationshipKind } from "../tree/types";
 
 export const DEVNET_DEMO_ESTATE = "2LXvcYbqbtZND3qrfKPex9N7Red3kvPAGDReXWdxymP7";
+/** Thabo's devnet wallet, the demo estate's owner. */
+const OWNER = "HLbTQFbswmWRUg4ytvHsubKkvnP5fRc2JHZfsTkV7AN1";
 
 /** The demo children's public wallets (for the demo Legacy Book and the fallback plan). */
 export const DEVNET_DEMO_CHILDREN = {
@@ -37,7 +41,7 @@ const BUYERS = { "12eMQwGSR57E2wKRt8Uwn18DWaN54GKY7HGJD8zTLaV8": "Pieter", "6n4d
 
 export const DEVNET_DEMO_META: EstateMeta = {
   estate: DEVNET_DEMO_ESTATE,
-  ownerWallet: "HLbTQFbswmWRUg4ytvHsubKkvnP5fRc2JHZfsTkV7AN1",
+  ownerWallet: OWNER,
   ownerName: "Thabo Mokoena",
   verifierNames: VERIFIER_NAMES,
   // Keyed by title NFT mint.
@@ -56,6 +60,45 @@ export const DEVNET_DEMO_META: EstateMeta = {
     [DEVNET_DEMO_GUARDIANS.priya]: "Adv. Priya Naidoo",
     [DEVNET_DEMO_GUARDIANS.charity]: "Ithemba Children's Charity",
   },
+};
+
+/** The demo estate's three trusted people on devnet (Adv. Ndlovu, Ms. Pillay, Uncle Bongani), as on the Estate account. */
+export const DEVNET_DEMO_VERIFIERS = {
+  ndlovu: "7bNTXFYv3ZGDu7H8JJBtarkzhrFUBLNpQ5PptctsYpoi",
+  pillay: "8NCbN1YkHje1m4twHXYhWoaaHjbNVwqqwePNyc6Ag21t",
+  bongani: "8HfJudydqE1FThWmuY2cPk9vqvfQd23E7DdaEsxwQpzM",
+};
+
+/**
+ * The Trust Tree's default family for the demo estate (plan.md §15.5), so the devnet tree is not flat: the same
+ * fictional Mokoena family as the demo site, with full names and birth years (off-chain only; never on-chain).
+ * Thabo's parents have no wallet (local ids). The owner can add or remove relationships on the tree.
+ */
+export const DEVNET_DEMO_FAMILY: { people: DeclaredPerson[]; relationships: { kind: RelationshipKind; from: string; to: string }[] } = {
+  people: [
+    { id: "local:mkhulu-joseph", name: "Mkhulu Joseph Mokoena", born: 1936, passed: 2003 },
+    { id: "local:gogo-martha", name: "Gogo Martha Mokoena", born: 1941, passed: 2019 },
+    { id: DEVNET_DEMO_VERIFIERS.bongani, name: "Uncle Bongani Mokoena", born: 1971 },
+    { id: OWNER, name: "Thabo Mokoena", born: 1976 },
+    { id: DEVNET_DEMO_GUARDIANS.zodwa, name: "Aunt Zodwa Mokoena", born: 1979 },
+    { id: DEVNET_DEMO_GUARDIANS.kagiso, name: "Cousin Kagiso Mokoena", born: 1998 },
+    { id: DEVNET_DEMO_CHILDREN.lerato, name: "Lerato Mokoena", born: 2006 },
+    { id: DEVNET_DEMO_CHILDREN.sipho, name: "Sipho Mokoena", born: 2008 },
+    { id: DEVNET_DEMO_CHILDREN.naledi, name: "Naledi Mokoena", born: 2011 },
+    { id: DEVNET_DEMO_VERIFIERS.ndlovu, name: "Adv. Thandi Ndlovu" },
+    { id: DEVNET_DEMO_VERIFIERS.pillay, name: "Ms. Anita Pillay" },
+    { id: DEVNET_DEMO_GUARDIANS.priya, name: "Adv. Priya Naidoo" },
+    { id: DEVNET_DEMO_GUARDIANS.charity, name: "Ithemba Children's Charity" },
+  ],
+  relationships: [
+    { kind: "spouseOf", from: "local:mkhulu-joseph", to: "local:gogo-martha" },
+    ...[DEVNET_DEMO_VERIFIERS.bongani, OWNER, DEVNET_DEMO_GUARDIANS.zodwa].flatMap((child) => [
+      { kind: "parentOf" as const, from: "local:mkhulu-joseph", to: child },
+      { kind: "parentOf" as const, from: "local:gogo-martha", to: child },
+    ]),
+    ...Object.values(DEVNET_DEMO_CHILDREN).map((child) => ({ kind: "parentOf" as const, from: OWNER, to: child })),
+    { kind: "parentOf", from: DEVNET_DEMO_VERIFIERS.bongani, to: DEVNET_DEMO_GUARDIANS.kagiso },
+  ],
 };
 
 /** What each fallback recipient is (on-chain only the wallets are kept): the three children, then the charity. */

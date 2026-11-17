@@ -102,6 +102,11 @@ export interface KeptPromise {
   /** Unix seconds of the first and last event grouped. */
   firstTs: number;
   lastTs: number;
+  /**
+   * Unix seconds of each grouped event, oldest first (added by tree-core), so the timeline can count what was kept by
+   * a year (lib/tree/timeline.ts). Optional: a promise without it counts in full from `firstTs`.
+   */
+  tss?: number[];
   /** Proof: transaction signatures (newest first, at most 5). Mock: simulated ids. */
   proofs: string[];
   /** True for events after "today" in the demo story (imagined future). Always false on chain. */
