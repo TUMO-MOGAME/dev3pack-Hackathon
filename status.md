@@ -25,6 +25,7 @@
 - Mock: illustrated SVG faces for the Mokoena family (sepia memorial ones for Mkhulu Joseph and Gogo Martha), charity logo; Kagiso and Adv. Naidoo show initials + "Add photo".
 - Chain: signed `/api/tree/photo` (413/415/403, 503 on the demo deployment), Supabase table `family_photos` via **migration 0007 (not applied yet: until then server memory + device copy)**.
 - Map, list, card (Add/Change/Remove, memorial "Added by"), print. Privacy policy §14 covers photos. 772 tests.
+- Devnet (f182783): the seeded demo family starts with the same drawings (chain-tree devnetDemoPhotos); a removal is stored as an empty photo so it hides a default on every device (migration 0007 allows data = ''). Live: 11 faces on devnet, axe clean.
 - TODO: user is collecting demo photos (AI-generated/stock) into `demo-people/<id>.jpg` to replace the drawings; check WebP encoding on a real iPhone (older Safari shows "This browser cannot prepare photos").
 
 ## SPEED2 LIVE (17 Nov 2026, main 82292be)
