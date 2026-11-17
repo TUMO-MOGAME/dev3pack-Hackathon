@@ -6,6 +6,11 @@
 **Last updated:** 2026-11-17 (Trust Tree live on both sites; i18n2 + fixes merged; speed2 merged; Trust Tree agreed, plan §15; before that: Infisical paused, keystore password rotated, plan §14; before that: everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
 
+## SPEED2 LIVE (17 Nov 2026, main 82292be)
+- Merged + deployed on both sites. Trust Tree given its own MotionScope (the global LazyMotion was removed by speed2; without it the tree's m.* lines would not draw). Live demo: tree plays (svg paths 19 -> 36), /tree /estate /will /claims /chat axe clean, 0 errors.
+- Live mobile Lighthouse from this PC (simulated slow 4G, 3 runs, median): /estate 88 (91/79/88), /will 92 (93/90/92), /car 81 (93/81/80). TBT swings 300-920 ms between runs of the same page, so this PC's load dominates; LCP is steady at ~1.1 s. Before speed2 (16 Nov, same method): /estate 84-85, /will 87-92, /car 82-87. Not a clear live win yet by this method; local (agent) runs went 98-99 -> 100 with TBT -70%.
+- Google PageSpeed API (keyless) hit its daily quota; re-measure tomorrow at https://pagespeed.web.dev (mobile) for /estate, /will, /car.
+
 ## TRUST TREE LIVE ON BOTH SITES (17 Nov 2026, main 3cd1556)
 - /tree merged (agent/tree-core + agent/tree-ui) and deployed. vitest 746/746, tsc, eslint, mock next build OK.
 - Live checks (Playwright): demo https://heirloom-one-iota.vercel.app/tree at 1280 + 360: axe clean, no sideways scroll, 0 errors. Devnet https://heirloom.tumoolo.tech/tree signed in as Thabo (WDK, read-only): tree drawn from chain, shows the partial-history note + Load again (public RPC), axe clean at 1280 + 360, 0 non-429 errors.
