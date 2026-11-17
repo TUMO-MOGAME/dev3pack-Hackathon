@@ -4,18 +4,24 @@ import "server-only";
  * when Supabase is not configured (then they last as long as the server instance; the browser that wrote them keeps
  * its own copy too, lib/tree/links.ts). The seeded devnet demo estate starts with default relationships; removing one
  * stores a tombstone (`removed`), so it stays removed.
+ * Photos (plan.md §15.11) live beside them (supabase/migrations/0007_family_photos.sql, or memory): one 256×256 WebP
+ * per person, at most 60 KB; removing one deletes the row.
  */
 import { getSupabase } from "@/lib/supabase";
 import type { Base58 } from "@/lib/types";
 import type { Relationship, RelationshipKind } from "../types";
 import { defaultRelationships, type FamilyLinks } from "../links";
+import type { FamilyPhotos, StoredPhoto } from "../photos";
 
 interface Row { estate: string; id: string; kind: string; from_id: string; to_id: string; created_by: string; created_at: number; removed: boolean }
 
 const mem = {
   links: new Map<string, Map<string, Row>>(),
   hidden: new Map<string, Map<Base58, boolean>>(),
+  photos: new Map<string, Map<string, StoredPhoto>>(),
 };
+/** Photos kept per estate (a family is far smaller; this bounds memory and the GET). */
+const MAX_PHOTOS = 200;
 const MAX_PER_ESTATE = 500;
 
 function warn(what: string, err: { message: string } | null) {
@@ -81,5 +87,41 @@ export async function setHiddenFlag(estate: Base58, wallet: Base58, hidden: bool
   if (error) throw new Error("Your choice could not be saved. Please try again.");
 }
 
+/* ---------- photos ---------- */
+
+interface PhotoRow { estate: string; person: string; data: string; created_by: string; created_at: number }
+
+export async function getPhotos(estate: Base58): Promise<FamilyPhotos> {
+  const sb = getSupabase();
+  if (!sb) return { photos: Object.fromEntries(mem.photos.get(estate) ?? new Map()) };
+  const { data, error } = await sb.from("family_photos").select("person, data, created_by, created_at").eq("estate", estate).limit(MAX_PHOTOS);
+  warn("getPhotos", error);
+  return { photos: Object.fromEntries(((data ?? []) as Omit<PhotoRow, "estate">[]).map((r) => [r.person, { src: r.data, by: r.created_by, at: Number(r.created_at) }])) };
+}
+
+export async function putPhoto(estate: Base58, person: string, photo: StoredPhoto): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) {
+    const m = mem.photos.get(estate) ?? new Map<string, StoredPhoto>();
+    m.delete(person);
+    m.set(person, photo);
+    if (m.size > MAX_PHOTOS) m.delete(m.keys().next().value!);
+    mem.photos.set(estate, m);
+    return;
+  }
+  const row: PhotoRow = { estate, person, data: photo.src, created_by: photo.by, created_at: photo.at };
+  const { error } = await sb.from("family_photos").upsert(row, { onConflict: "estate,person" });
+  warn("putPhoto", error);
+  if (error) throw new Error("The photo could not be saved. Please try again.");
+}
+
+export async function deletePhoto(estate: Base58, person: string): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) { mem.photos.get(estate)?.delete(person); return; }
+  const { error } = await sb.from("family_photos").delete().eq("estate", estate).eq("person", person);
+  warn("deletePhoto", error);
+  if (error) throw new Error("The photo could not be removed. Please try again.");
+}
+
 /** Tests only. */
-export function resetTreeMemory() { mem.links.clear(); mem.hidden.clear(); }
+export function resetTreeMemory() { mem.links.clear(); mem.hidden.clear(); mem.photos.clear(); }

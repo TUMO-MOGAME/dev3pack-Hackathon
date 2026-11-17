@@ -21,6 +21,7 @@ import type { GenerationLink, KeptPromise, PersonId, Relationship, TreePerson, T
 import { mergeEvents, snapshotFacts, type TreeEvent, type TreeEventKind } from "./events";
 import { assetPaths, keptPromises } from "./promises";
 import { treeFingerprint } from "./fingerprint";
+import { visiblePhoto, type StoredPhoto } from "./photos";
 
 /** Someone the family declared off-chain: a person without a wallet, or years and a full name for a wallet. */
 export interface DeclaredPerson {
@@ -63,6 +64,8 @@ export interface DeriveInput {
   /** Names this device knows (lib/people NameSources). */
   nameSources?: NameSources;
   partial?: boolean;
+  /** Photos by person (off-chain; never in the fingerprint). A hidden person's photo is dropped here. */
+  photos?: Record<PersonId, StoredPhoto>;
 }
 
 export const yearOf = (ts: number) => new Date(ts * 1000).getUTCFullYear();
@@ -303,13 +306,21 @@ export function deriveTreeBody(input: DeriveInput): Omit<TreeSnapshot, "fingerpr
     if (isHidden) { name = ""; short = ""; }
     const since0 = born ?? firstSeen.get(id) ?? input.today;
     const since = input.span?.from !== undefined ? Math.max(since0, input.span.from) : since0;
+    const org = !!(d?.org || orgs.has(id));
+    const ph = visiblePhoto({ hidden: isHidden }, input.photos?.[id]);
+    const photo = ph ? {
+      src: ph.src, addedBy: ph.by, year: yearOf(ph.at),
+      // Added by someone else for a person who has passed or has no wallet (not a child's, not a logo).
+      memorial: !org && !minor && !wallets.includes(ph.by) && ph.by !== id && (wallets.length === 0 || (passed !== undefined && passed <= input.today)),
+    } : null;
     return {
       id, name, short, wallets,
       ...(born !== undefined && !isHidden ? { born } : {}),
       ...(passed !== undefined ? { passed } : {}),
       hidden: isHidden, minor, since, generation: gens.get(id) ?? 0,
       ...(ownsEstate.has(id) ? { ownsEstate: ownsEstate.get(id) } : {}),
-      ...(d?.org || orgs.has(id) ? { org: true } : {}),
+      ...(org ? { org: true } : {}),
+      ...(photo ? { photo } : {}),
     };
   });
   const present = new Set(idList);
