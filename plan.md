@@ -413,3 +413,48 @@ works, and consider deleting `keys\KEYSTORE-PASSWORD.txt`.
 **Also after the hackathon:** the P2 list in §8 (ZAR off-ramp, ID/deceased check, valuations, encrypted documents,
 audit, mainnet, the full Tumoolo launch standard), Supabase on devnet (migration 0005), an Android phone wallet test,
 and the Solana dApp Store listing once there is real SOL.
+
+## 15. Trust Tree: the family's record of kept promises (proposed 17 Nov 2026, waiting on Tumo's review)
+
+**Idea (Tumo):** an animated family map that shows who trusted whom and whether they kept their word, across
+generations ("in 60 years we can see who died, who was trusted and who he trusted"). It also maps the family tree.
+It never shows amounts, balances or asset values, and it makes a false claim ("this was my brother's car") easy to
+disprove, because each asset's path to its heir links to the on-chain title record.
+
+**Principles**
+- Kept promises, not scores. Facts, mostly positive ("Confirmed Thabo's passing with 2 others", "Paid Naledi's school
+  fees for 9 years"). A failure shows only as a plain fact (an upheld challenge), never a label or percentage.
+- No personal data on-chain (POPIA: relationships, names and death dates are personal information; the chain cannot
+  forget). On-chain stays as today: wallets, roles, actions. Off-chain (Supabase, family-only by default): names,
+  relationships, birth/death years. A hash ties the off-chain tree to the chain.
+- Assets by kind only ("a car"), with holder, dates and a proof link; never a value. The app says that an executor and
+  the court still have the final legal word.
+
+**Data model**
+- Person (off-chain): id, display name, wallet(s), birth year (optional), passed year (from the estate's unlock),
+  hidden flag (a living adult can hide).
+- Relationship (off-chain, declared by an owner): parent/child, spouse, sibling. Later: confirmed by both wallets.
+- Trust edge (derived from chain): owner → verifier / guardian seat / heir / successor / beneficiary, with start and
+  end dates.
+- Promise (derived from chain events): unlock confirmed, claim approved/paid, check-in done, guardian term served,
+  scheduled payment made, dispute upheld/dismissed. Aggregated per person per edge.
+- Asset path (derived): kind, held by plan since, passed to whom and when, proof link.
+- Generations: a child's own Heirloom plan links below the parent's (off-chain link now; on-chain later).
+
+**Screens** (`/family`, "Trust Tree" in the menu; name still to confirm)
+- Map: generations as rows, people as circles; trust lines draw themselves (colour per role, thickness = promises
+  kept); a passed person becomes an outline with a small mark.
+- Timeline slider (e.g. 1990 → 2086): people join, lines appear, assets travel to heirs. Motion path drawing
+  (`pathLength`) and layout animations, adapted to our tokens.
+- Tap a person: "Trusted by 3 people · Kept 14 promises · Guardian of Naledi 2041–2049".
+- Reduced motion: a still tree with a year picker. 360 px: a vertical family list with the same cards. The tree's
+  code loads only on this page (next/dynamic), so other pages stay fast.
+
+**Hackathon scope (by 30 Nov):** `/family` on both sites (demo: the Mokoena family, three generations, a sped-up
+60-year story; devnet: built from the real estate's accounts and events); the promise record from existing events (no
+program change); owner-declared relationships, hide for living adults, children only through a parent's plan; en/af/st/zu;
+tests for the promise rules; axe + 360 px.
+**After the hackathon:** on-chain generation links (program change), relationship confirmation by both wallets.
+
+**Open for Tumo:** the name (Trust Tree / Family tree of trust / The Family Record), who can see it (family only vs a
+public roles-and-proofs view with names hidden), whether upheld challenges show at all.
