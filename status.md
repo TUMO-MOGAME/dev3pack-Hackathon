@@ -13,6 +13,15 @@
 - Held for Tumo: the devnet test rule "Avbob Funeral Cover (devnet test)" (re-seed a fresh demo estate vs a new end-rule instruction, which needs a program upgrade).
 - TRUST TREE AGREED (17 Nov): Tumo accepted the proposal. Decisions: name "Trust Tree" (line: "The family's record of kept promises"); family only (wallets with a role in the estate; not buyers, not /audit); no scores, the only negative fact is an upheld challenge; route `/tree` (`/family` is already the estate timeline). Full plan in plan.md §15 (data model, promise rules, services, screen, tests, build order). Starts after round 3 merges: the lead writes `lib/tree/types.ts` + the service interface, then agents tree-core and tree-ui in parallel; target live on both sites by 26 Nov.
 
+## TRUST TREE CORE (branch agent/tree-core, 17 Nov 2026): NOT merged, NOT deployed
+- Plan §15 logic and services (no program change, no devnet transactions). The screen is agent tree-ui's.
+- `lib/tree/`: `events.ts` (value-free facts from chain events or a snapshot), `promises.ts` (§15.4 rules + asset paths), `derive.ts` (people, edges, generations, hidden/minor), `timeline.ts` (`treeAtYear`), `fingerprint.ts` (SHA-256 of canonical ids/relationships/edges, Web Crypto), `links.ts` (signed messages, deterministic relationship ids, device copy, devnet defaults), `no-amounts.ts`, `server/{route,store}.ts`.
+- `types.ts` change: `KeptPromise.tss?: number[]` (each grouped event's time, so the slider counts what was kept by a year). Nothing else changed.
+- Service: `HeirloomService extends TreeService`. Mock `mock-tree.ts` (Mokoena family 1990–2086, imagined after today; Lerato's own plan 2041 as a generation link; edits and hidden flags in the demo state). Chain `chain-tree.ts` (full history paged past 40 sigs within 8 s, `partial` when cut short, child plans, `/api/tree`). Both lazy-loaded (only /tree pays for them).
+- `/api/tree` + `supabase/migrations/0006_family_links.sql` (family_links + family_hidden, RLS on, no policies). Supabase is off on devnet: server memory + this device's localStorage, merged; defaults for the seeded demo estate in `lib/chain/demo-estate.ts` (DEVNET_DEMO_FAMILY, DEVNET_DEMO_VERIFIERS).
+- Devnet note: the public RPC answers getTransaction slowly (a cold read got 9–13 of the estate's 38 events in 8 s), so the first tree is often `partial`; the rest keeps loading and the next read (5 s later) picks it up. The UI should say "older history may load slowly".
+- Checks: vitest 700/700 (new: promises 17, derive/timeline/fingerprint 9, mock story 9, chain 10), tsc, eslint, `next build` mock and chain.
+
 ## 16 NOV 2026: EVERYDAY MONEY + POLISH, all merged to main (the per-branch sections below give the details)
 - Plan §13 items 1–4 merged: ask for money (agent/ask), pay a bill once (agent/bill), bill templates + monthly statement (agent/everyday). No program change.
 - Also merged: names on the devnet activity feed (agent/feed), af/st/zu heading underlines + a marks test (agent/marks), speed pass on /estate, /car, /will (agent/speed; local mobile LH 73–74 → 95–96).
