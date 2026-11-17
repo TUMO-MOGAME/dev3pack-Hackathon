@@ -29,7 +29,6 @@ import { readOnly } from "../wallet/wdk";
 import { loadWallets } from "../wallet/store";
 import { explorerTx, fromBase, toBase } from "../format";
 import { hashJson, sha256Hex } from "../agent/hash";
-import { intervalSecs, willDraftSchema } from "../agent/schemas";
 import type { EstateMeta } from "../db";
 import { legacyApi, type LegacySigner } from "../legacy/client";
 import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-guardians";
@@ -366,6 +365,8 @@ export function createChainService(): HeirloomService {
 
     // ----- Owner -----
     async createEstateFromWill(input) {
+      // The will schema (zod) loads when a plan is signed, not with the service on every first visit.
+      const { intervalSecs, willDraftSchema } = await import("../agent/schemas");
       const draft = willDraftSchema.parse(input); // the exact shape the server re-hashes
       const ctx = chainCtx();
       const owner = pk(getActiveSigner().address);
