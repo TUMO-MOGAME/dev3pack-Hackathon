@@ -414,47 +414,124 @@ works, and consider deleting `keys\KEYSTORE-PASSWORD.txt`.
 audit, mainnet, the full Tumoolo launch standard), Supabase on devnet (migration 0005), an Android phone wallet test,
 and the Solana dApp Store listing once there is real SOL.
 
-## 15. Trust Tree: the family's record of kept promises (proposed 17 Nov 2026, waiting on Tumo's review)
+## 15. Trust Tree: the family's record of kept promises (agreed 17 Nov 2026; build after round 3 merges)
 
 **Idea (Tumo):** an animated family map that shows who trusted whom and whether they kept their word, across
 generations ("in 60 years we can see who died, who was trusted and who he trusted"). It also maps the family tree.
 It never shows amounts, balances or asset values, and it makes a false claim ("this was my brother's car") easy to
 disprove, because each asset's path to its heir links to the on-chain title record.
 
-**Principles**
-- Kept promises, not scores. Facts, mostly positive ("Confirmed Thabo's passing with 2 others", "Paid Naledi's school
-  fees for 9 years"). A failure shows only as a plain fact (an upheld challenge), never a label or percentage.
-- No personal data on-chain (POPIA: relationships, names and death dates are personal information; the chain cannot
-  forget). On-chain stays as today: wallets, roles, actions. Off-chain (Supabase, family-only by default): names,
-  relationships, birth/death years. A hash ties the off-chain tree to the chain.
-- Assets by kind only ("a car"), with holder, dates and a proof link; never a value. The app says that an executor and
-  the court still have the final legal word.
+### 15.1 Decisions (Tumo, 17 Nov)
+- **Name:** "Trust Tree" in the menu; the line under the title: "The family's record of kept promises".
+- **Who can see it:** family only: wallets with a role in the estate (owner, beneficiaries, trusted people, guardian
+  seats, monitors, fallback recipients). Not buyers, not the public record (/audit stays as it is). noindex, disallowed
+  in robots, not in the sitemap.
+- **No scores.** Facts, mostly positive. The only negative fact shown is an upheld challenge, in plain words ("A
+  challenge against this claim was upheld"). Vetoed or dismissed things are not shown against anyone.
+- **Route:** `/tree` (`/family` is already the estate's journey timeline).
 
-**Data model**
-- Person (off-chain): id, display name, wallet(s), birth year (optional), passed year (from the estate's unlock),
-  hidden flag (a living adult can hide).
-- Relationship (off-chain, declared by an owner): parent/child, spouse, sibling. Later: confirmed by both wallets.
-- Trust edge (derived from chain): owner → verifier / guardian seat / heir / successor / beneficiary, with start and
-  end dates.
-- Promise (derived from chain events): unlock confirmed, claim approved/paid, check-in done, guardian term served,
-  scheduled payment made, dispute upheld/dismissed. Aggregated per person per edge.
-- Asset path (derived): kind, held by plan since, passed to whom and when, proof link.
-- Generations: a child's own Heirloom plan links below the parent's (off-chain link now; on-chain later).
+### 15.2 Principles
+- **No personal data on-chain** (POPIA: relationships, names and birth/passed years are personal information, and the
+  chain cannot forget). On-chain stays as today: wallets, roles, actions. Off-chain: names, relationships, years.
+- **Assets by kind only** ("a car"), with holder, dates and a proof link; never a value, balance or sale price. The page
+  says that an executor and the court still have the final legal word.
+- **Tree fingerprint:** a SHA-256 of the canonical tree (wallets, relationships, edges; no names) is shown, so a printed
+  or shared tree can be checked later. Anchoring it on-chain (e.g. a memo transaction, hash only) is after the hackathon.
+- **Honest demo:** in the demo, years after today are an imagined future and the page says so ("Demo story: the years
+  after 2026 are imagined"). On devnet, the history is real and only days long.
 
-**Screens** (`/family`, "Trust Tree" in the menu; name still to confirm)
-- Map: generations as rows, people as circles; trust lines draw themselves (colour per role, thickness = promises
-  kept); a passed person becomes an outline with a small mark.
-- Timeline slider (e.g. 1990 → 2086): people join, lines appear, assets travel to heirs. Motion path drawing
-  (`pathLength`) and layout animations, adapted to our tokens.
-- Tap a person: "Trusted by 3 people · Kept 14 promises · Guardian of Naledi 2041–2049".
-- Reduced motion: a still tree with a year picker. 360 px: a vertical family list with the same cards. The tree's
-  code loads only on this page (next/dynamic), so other pages stay fast.
+### 15.3 Data model (`app/src/lib/tree/`)
+- `Person`: id (wallet, or a local id for people without a wallet, e.g. grandparents), display name, short name,
+  wallets, birth year?, passed year? (from the estate's unlock or a declared year), `hidden` (a living adult hid
+  themselves: shown as "A family member", no name, edges kept), `minor` (first name only, no card details).
+- `Relationship` (off-chain, declared by an owner): parent of, spouse of, sibling of. Later: confirmed by both wallets.
+- `TrustEdge` (derived from the chain): from owner to person, role (trusted person / guardian seat / heir /
+  beneficiary / successor / monitor / fallback), estate, from-ts, to-ts?.
+- `Kept` promise (derived from events): who, kind, ts, estate, tx signature, plus the people it was for. Grouped per
+  person per edge for the cards ("Approved 12 school-fee payments for Naledi, 2041–2049").
+- `AssetPath`: asset kind + short title, held by whose plan since, passed to / sold under the plan's rules (when), proof
+  links (registration, media root, sale or transfer). No amounts.
+- `GenerationLink`: child estate → parent estate (off-chain now; Lerato's own plan attaches under Thabo's).
+- `TreeSnapshot`: people, relationships, edges, kept, assets, generation links, span (first/last year), fingerprint.
 
-**Hackathon scope (by 30 Nov):** `/family` on both sites (demo: the Mokoena family, three generations, a sped-up
-60-year story; devnet: built from the real estate's accounts and events); the promise record from existing events (no
-program change); owner-declared relationships, hide for living adults, children only through a parent's plan; en/af/st/zu;
-tests for the promise rules; axe + 360 px.
-**After the hackathon:** on-chain generation links (program change), relationship confirmation by both wallets.
+### 15.4 Promise rules (pure functions, `lib/tree/promises.ts`, one test per rule)
+| Event(s) | Kept promise (for whom) |
+|---|---|
+| DeathAttested, SeatDeathConfirmed, then EstateUnlocked | "Confirmed {owner}'s passing, with {n} others" (trusted person / seat); only once the unlock went through |
+| ClaimApproved, SeatApproval | "Approved {n} payments for {person}" (trusted person / guardian) |
+| ClaimOwnerApproved | "Answered {n} requests from {person}" (owner, while alive) |
+| ClaimPaid, ScheduledPaid | "{rule purpose} for {person}, {years}" (the plan kept its word; credited to the owner) |
+| HardshipApproved | "Helped {person} through a hard time" (approvers) |
+| SuccessionFinalized, SeatConfigured / SeatVacated | "Guardian of {person}, {from}–{to}" (seat holder's term) |
+| FallbackExecuted | "Carried out {owner}'s fallback plan" |
+| DisputeResolved (upheld) | for the raiser: "Raised a challenge that was upheld"; on the claim: "A challenge against this claim was upheld" (the only negative fact) |
+| AssetRegistered, then AssetSold / estate unlock | asset path entries (no price) |
 
-**Open for Tumo:** the name (Trust Tree / Family tree of trust / The Family Record), who can see it (family only vs a
-public roles-and-proofs view with names hidden), whether upheld challenges show at all.
+Not shown: DeathVetoed, dismissed or lapsed disputes, withdrawn offers, anything with an amount.
+
+### 15.5 Services (both modes, same interface)
+- `getTree(estate): Promise<TreeSnapshot>`, plus `setRelationship` / `removeRelationship` and `setHidden(wallet,
+  hidden)`, added to `HeirloomService`.
+- **Mock** (`lib/service/mock-tree.ts`): the Mokoena family over four generations, using the existing demo personas
+  and names: Thabo's parents (before Heirloom, people only), Thabo and his siblings, his children, and Lerato's own
+  plan in 2041 with her child. A scripted 1990 → 2086 story built from the demo estate's real mock events up to today
+  plus imagined later events, on the existing demo clock.
+- **Chain** (`lib/service/chain-tree.ts`): the estate's full event history (paginate `getSignaturesForAddress` beyond
+  the feed's 40, with the same rate-limit budget and a short server cache), decoded with the existing decoders; names
+  from the name book (`lib/people.ts`, estate meta, names this device gave). Relationships: Supabase table
+  `family_links` (migration 0006: estate, from, to, kind, created_by, hidden flags; RLS like the others) when Supabase
+  is on; otherwise this device's storage, plus defaults for the seeded devnet demo estate in `lib/chain/demo-estate.ts`.
+- The relationships API route checks that the caller's wallet has a role in the estate (the hackathon version trusts
+  the connected persona like the other routes; signed-message auth is after the hackathon).
+
+### 15.6 Screen (`/tree`, `components/tree/*`, loaded with next/dynamic only on this page)
+- **Map (≥ 768 px):** generations as rows (oldest at the top), siblings ordered by birth year, spouses side by side;
+  people as soft circles with initials; relationship lines thin and quiet; trust lines as curves, colour per role
+  (tokens, contrast-checked in day and night), thickness grows with kept promises; a passed person becomes an outline
+  with a small mark and their years.
+- **Timeline slider** (an accessible range input with year labels, a Play button, keyboard steps): people join, trust
+  lines draw themselves (Motion `pathLength`), circles move with layout animations, assets travel along the line to
+  their heir. A "today" marker; in the demo, the future part is visibly labelled as imagined.
+- **Person card** (tap, click or Enter): "Trusted by 3 people · Kept 14 promises · Guardian of Naledi 2041–2049", the
+  grouped kept promises with proof links (Explorer on devnet, "simulated" in the demo), and the assets they received
+  (kind only). "Hide me from the tree" for a living adult viewing their own card.
+- **Owner tools:** an "Add a relationship" sheet (person, relationship, person), with a note: only add what you are
+  entitled to share; living adults can hide themselves.
+- **Fingerprint and legal line** at the bottom; Print (a print sheet like the statement's).
+- **360 px:** a vertical, scrollable family list by generation with the same cards and the same slider. **Reduced
+  motion:** no drawing or travel animations; the slider still changes the year instantly.
+- Menu: "Trust Tree" in the Family group (hidden for buyers); links from the estate page and the Proof drawer.
+- Inspiration (adapt to tokens, never paste): motion.dev examples (SVG path drawing, layout animation), the GSAP
+  showcase for the timeline feel. Motion 14 is already a dependency; no new animation library.
+
+### 15.7 Copy, privacy and tests
+- All copy in `app/src/content/tree.ts` with af/st/zu (a full, enforced slice from the start).
+- The privacy policy (template) gains: family relationships and birth/passed years (purpose, who sees them, retention,
+  deletion on request, hiding); the consent note on the relationship sheet links to it.
+- Tests: every promise rule; derive (edges, grouping, hidden and minor handling, no amounts anywhere in the snapshot);
+  timeline state at a year; fingerprint stability; the mock story; chain decoding from recorded events; history
+  pagination.
+- Checks: tsc, eslint, vitest; Playwright at 360 and 1280 px, day and night, af/st/zu at 360; axe clean; no sideways
+  scroll; Lighthouse on /tree ≥ 90 desktop, and /estate and /will unchanged.
+
+### 15.8 Build order (after round 3 is merged)
+1. **Lead (half a day):** write `lib/tree/types.ts` and the service interface first, so two agents can work in parallel.
+2. **Agent "tree-core":** promise rules, derive, timeline, fingerprint, mock story, chain history + chain-tree,
+   relationship storage (mock / device / Supabase 0006), API route, tests.
+3. **Agent "tree-ui":** the /tree page, map, slider, cards, list view, owner sheet, menu links, copy en + af/st/zu,
+   reduced motion, print; built against the types with a fixture until tree-core lands.
+4. **Lead:** integrate, a demo guide step ("See the Mokoena Trust Tree"), a README section, the privacy policy, merge,
+   check both live sites, record a short clip for the pitch.
+
+Target: working on both sites by **26 Nov**, leaving buffer before the **30 Nov** end.
+
+### 15.9 Risks
+- Devnet history is short and RPC-limited: paginate within a time budget, cache, and show "older history may load
+  slowly". The devnet demo estate also holds a test rule ("Avbob Funeral Cover (devnet test)") that would appear in
+  the tree until it is cleared (see status.md).
+- Family sensitivity: no scores, family only, a hide option, kind-only assets, the legal line.
+- Page weight: tree code only on /tree; check the /estate and /will scores after merging.
+
+### 15.10 After the hackathon
+On-chain generation links (program change), relationship confirmation by both wallets, anchoring the fingerprint
+on-chain, signed-message auth for the relationship API, photos on people.

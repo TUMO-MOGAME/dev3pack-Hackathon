@@ -3,7 +3,7 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-16 (Infisical paused, keystore password rotated, plan §14; before that: everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
+**Last updated:** 2026-11-17 (round 3 agents running; Trust Tree agreed, plan §15; before that: Infisical paused, keystore password rotated, plan §14; before that: everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
 
 ## 17 NOV 2026: ROUND 3 IN PROGRESS (3 agents, worktrees in ../heirloom-agents/*, NOT merged)
@@ -11,7 +11,7 @@
 - agent/i18n2 (worktree marks): af/st/zu for every English-only key in the DeepPartial slices, will review first; enforce full slices in tests.
 - agent/fixes (worktree feed): disputes checked on both live sites (devnet: only its own test claim, no upholds on demo data); review summary vs Now/After toggles; "Adv. Ndlovu" vs "Adv. Thandi Ndlovu".
 - Held for Tumo: the devnet test rule "Avbob Funeral Cover (devnet test)" (re-seed a fresh demo estate vs a new end-rule instruction, which needs a program upgrade).
-- Trust Tree proposed in plan.md §15; waiting on Tumo's answers (name, who can see it, whether upheld challenges show).
+- TRUST TREE AGREED (17 Nov): Tumo accepted the proposal. Decisions: name "Trust Tree" (line: "The family's record of kept promises"); family only (wallets with a role in the estate; not buyers, not /audit); no scores, the only negative fact is an upheld challenge; route `/tree` (`/family` is already the estate timeline). Full plan in plan.md §15 (data model, promise rules, services, screen, tests, build order). Starts after round 3 merges: the lead writes `lib/tree/types.ts` + the service interface, then agents tree-core and tree-ui in parallel; target live on both sites by 26 Nov.
 
 ## 16 NOV 2026: EVERYDAY MONEY + POLISH, all merged to main (the per-branch sections below give the details)
 - Plan §13 items 1–4 merged: ask for money (agent/ask), pay a bill once (agent/bill), bill templates + monthly statement (agent/everyday). No program change.
@@ -353,6 +353,7 @@
 | 2026-11-11 | **Supabase** for off-chain data + evidence files (with an in-memory fallback) | Tumo's choice; POPIA: only hashes on-chain |
 | 2026-11-11 | Mock mode + persona switcher in the UI | Demo always works offline; one browser can act as dad, child, verifier and buyer |
 | 2026-11-11 | Car title = SPL NFT (Metaplex Core later) | 2-day deadline |
+| 2026-11-17 | Trust Tree: kept promises, never scores; family only; relationships and names off-chain; assets by kind only; route /tree | Tumo's idea; the no-score, POPIA and privacy refinements agreed |
 | 2026-11-11 | Death = AI review + 2-of-3 verifiers + waiting period + owner veto | No public Home Affairs API |
 | 2026-11-11 | Payouts only to approved institution wallets; ZAR settlement simulated and labelled | The "strict" requirement; honest demo |
 | 2026-11-11 | Pitch as a "programmable estate trust" next to a legal will | SA Wills Act requires a signed paper will |
