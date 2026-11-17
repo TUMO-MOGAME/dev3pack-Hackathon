@@ -85,6 +85,26 @@ export const tree = {
     shown: "You are shown on the tree again",
   },
 
+  /** Photos (plan.md §15.11): off-chain, family only, never in the fingerprint. */
+  photo: {
+    add: "Add photo",
+    change: "Change photo",
+    remove: "Remove photo",
+    choose: "Choose a photo for {name}",
+    working: "Preparing the photo",
+    saved: "Photo saved",
+    removed: "Photo removed",
+    memorial: "Added by {name}, {year}",
+    ownNote: "Only you can add or change your photo. It is kept off-chain, only the family sees it, and you can remove it at any time.",
+    ownerNote: "As the estate owner you may add a photo for a child, someone who has passed or an organisation. Only add a photo you are entitled to share.",
+    errors: {
+      notImage: "That file is not a photo. Choose a JPEG, PNG, WebP or HEIC image.",
+      unreadable: "That photo could not be opened. Try another one.",
+      tooLarge: "That photo is too detailed to fit in 60 KB. Try a simpler or closer photo.",
+      noWebp: "This browser cannot prepare photos. Try a current Chrome, Edge, Firefox or Safari.",
+    },
+  },
+
   /** "{role} in {owner}'s plan, {years}". */
   roleTerm: "{role} in {owner}'s plan, {years}",
   since: "since {year}",
