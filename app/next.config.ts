@@ -57,6 +57,12 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  experimental: {
+    // motion/react is a barrel (`export * from "framer-motion"`). Without this, importing `m` or AnimatePresence also
+    // pulled the full `motion` proxy and its feature bundle (drag, layout projection) into every page's first load,
+    // so <LazyMotion> deferred nothing. Resolving named imports to their own modules keeps domMax in its lazy chunk.
+    optimizePackageImports: ["motion", "framer-motion", "motion-dom"],
+  },
   // 75 is the default; the asset gallery and handover cover ask for 80.
   images: { qualities: [75, 80] },
   // WDK's server-side agent wallet loads the sodium-native addon; keep these out of the server bundle.

@@ -1,6 +1,7 @@
 "use client";
 import { useState, type ReactNode } from "react";
 import { AnimatePresence, m as motion } from "motion/react";
+import { MotionScope } from "@/components/ui/motion-provider";
 import { Banknote, Check, FileHeart, HandHeart, Inbox as InboxIcon, Undo2 } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
@@ -42,7 +43,12 @@ interface Item {
   act: () => Promise<void>;
 }
 
-export function InboxScreen({ copy: english }: { copy: Copy }) {
+/** Animated with motion, so it brings its own <MotionScope> (the first pages never load the library). */
+export function InboxScreen(props: Parameters<typeof InboxScreenBody>[0]) {
+  return <MotionScope><InboxScreenBody {...props} /></MotionScope>;
+}
+
+function InboxScreenBody({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.inbox);
   return <Gate roles={["verifier", "monitor"]} frame={<HeaderFrame width="max-w-2xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, session }) => <Inbox copy={copy} snap={snap!} session={session} />}</Gate>;
 }

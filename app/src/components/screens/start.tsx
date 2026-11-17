@@ -2,6 +2,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, m as motion } from "motion/react";
+import { MotionScope } from "@/components/ui/motion-provider";
 import { ArrowLeft, ArrowRight, Check, Copy, KeyRound, ShieldCheck, Smartphone, TriangleAlert, UsersRound, Wallet } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
@@ -18,7 +19,12 @@ type Step = "choose" | "about" | "pin" | "seed" | "phone";
 type SignWith = "wdk" | "phone";
 const ROLES: Exclude<Role, "agent">[] = ["owner", "beneficiary", "verifier", "monitor", "buyer"];
 
-export function StartScreen({ copy: english }: { copy: ScreensCopy["start"] }) {
+/** Animated with motion, so it brings its own <MotionScope> (the first pages never load the library). */
+export function StartScreen(props: Parameters<typeof StartScreenBody>[0]) {
+  return <MotionScope><StartScreenBody {...props} /></MotionScope>;
+}
+
+function StartScreenBody({ copy: english }: { copy: ScreensCopy["start"] }) {
   const copy = useLocalized(english, (t) => t.screens.start);
   const { common } = useCopy();
   const router = useRouter();

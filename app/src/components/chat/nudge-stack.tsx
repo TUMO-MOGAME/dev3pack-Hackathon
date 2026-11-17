@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { m as motion, useReducedMotion } from "motion/react";
+import { useReducedMotion } from "@/lib/hooks/use-reduced-motion";
 import { BellRing, ChevronLeft, ChevronRight, Clock, Info, Pause, Play, X } from "@/components/ui/icons";
 import type { Nudge, NudgeRun } from "@/lib/chat/types";
 import { useEstate } from "@/lib/hooks/estate";
@@ -79,11 +79,10 @@ export function NudgeStack({ className }: { className?: string }) {
       onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}
       onFocus={() => setHeld(true)} onBlur={() => setHeld(false)}
     >
-      <motion.div
+      <div
         key={n.id} role="group" aria-roledescription="slide" aria-label={total > 1 ? fmt(c.position, { n: at + 1, total }) : undefined}
-        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
         // Urgency is carried by the rule style, the icon and the word: heavy for now, dashed for soon, hairline otherwise.
-        className={clsx("rounded-xl bg-surface p-4 shadow-raised", n.urgency === "now" ? "border-2 border-ink" : n.urgency === "soon" ? "border-[1.5px] border-dashed border-ink" : "border border-line-strong")}
+        className={clsx("enter rounded-xl bg-surface p-4 shadow-raised", n.urgency === "now" ? "border-2 border-ink" : n.urgency === "soon" ? "border-[1.5px] border-dashed border-ink" : "border border-line-strong")}
       >
         <div className="flex items-start gap-3">
           <span aria-hidden="true" className={clsx("grid size-10 shrink-0 place-items-center rounded-full", n.urgency === "now" ? "bg-ink text-bg" : "border border-ink text-ink")}>
@@ -102,7 +101,7 @@ export function NudgeStack({ className }: { className?: string }) {
           <Button small disabled={!!busy} onClick={() => primary(n)}>{n.primary.label}</Button>
           {n.secondary && <Button small variant="secondary" disabled={!("dismiss" in n.secondary) && !!busy} onClick={() => secondary(n)}>{n.secondary.label}</Button>}
         </div>
-      </motion.div>
+      </div>
 
       {total > 1 && (
         <div className="mt-1 flex items-center justify-center gap-1">

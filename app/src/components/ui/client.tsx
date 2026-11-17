@@ -1,10 +1,14 @@
 "use client";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import clsx from "clsx";
-import { AnimatePresence, m as motion, useReducedMotion } from "motion/react";
-import { Check, CircleAlert, FileCheck2, FileUp, Info, X } from "@/components/ui/icons";
+import { Check, FileCheck2, FileUp, X } from "@/components/ui/icons";
 import { useEstate } from "@/lib/hooks/estate";
 import { useBackClose } from "@/lib/hooks/use-back-close";
+import { useChangedSinceMount, useReducedMotion } from "@/lib/hooks/use-reduced-motion";
+
+// The toasts animate out with motion, so their code (and the library) loads only once a first toast exists.
+const ToastStack = dynamic(() => import("./toast-stack").then((m) => m.ToastStack), { ssr: false });
 
 /* ---------- Sheet: bottom sheet on phones, side panel on desktop (native <dialog>) ---------- */
 
@@ -56,33 +60,12 @@ export function Sheet({
 
 export function Toaster({ dismissLabel }: { dismissLabel: string }) {
   const { toasts, dismiss } = useEstate();
+  // Once a toast has been shown the stack stays mounted, so later toasts (and every exit) animate as before.
+  const [used, setUsed] = useState(false);
+  if (toasts.length > 0 && !used) setUsed(true);
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--tabbar-h)+var(--safe-b)+0.75rem)] z-[70] flex flex-col items-center gap-2 px-4" aria-live="polite" aria-atomic="false">
-      <AnimatePresence>
-        {toasts.map((t) => (
-          <motion.div
-            key={t.id}
-            role={t.tone === "error" ? "alert" : "status"}
-            initial={{ opacity: 0, y: 16, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.22 }}
-            className={clsx(
-              "pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-md p-3 pr-1.5 text-small shadow-raised",
-              // error: heavy rule and warning icon; ok: solid inverted block and tick; info: hairline outline
-              t.tone === "error" ? "border-2 border-l-8 border-ink bg-surface text-ink" : t.tone === "ok" ? "brand-panel border border-ink" : "border border-ink bg-surface text-ink",
-            )}
-          >
-            <span className="mt-0.5 shrink-0">
-              {t.tone === "error" ? <CircleAlert className="size-5" aria-hidden="true" /> : t.tone === "ok" ? <Check className="size-5" aria-hidden="true" /> : <Info className="size-5" aria-hidden="true" />}
-            </span>
-            <p className="min-w-0 flex-1 py-0.5 font-medium">{t.text}</p>
-            <button type="button" onClick={() => dismiss(t.id)} aria-label={dismissLabel} className="grid size-11 shrink-0 place-items-center rounded-full text-ink hover:bg-surface-2">
-              <X className="size-4" aria-hidden="true" />
-            </button>
-          </motion.div>
-        ))}
-      </AnimatePresence>
+      {used && <ToastStack toasts={toasts} dismiss={dismiss} dismissLabel={dismissLabel} />}
     </div>
   );
 }
@@ -94,22 +77,24 @@ export function Quorum({ approvals, needed, names, label }: { approvals: boolean
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5" role="group" aria-label={label}>
       <div className="flex items-center gap-1.5" aria-hidden="true">
-        {approvals.map((on, i) => (
-          <motion.span
-            key={i}
-            initial={false}
-            animate={{ scale: on ? [1, 1.25, 1] : 1 }}
-            transition={{ duration: 0.45 }}
-            title={names?.[i]}
-            className={clsx("grid size-7 place-items-center rounded-full border-2 text-[0.7rem] font-bold", on ? "border-ink bg-ink text-bg" : "border-dashed border-line-strong bg-surface text-ink-2")}
-          >
-            {on ? <Check className="size-4" /> : (names?.[i]?.replace(/^(Adv\.|Ms\.|Mr\.|Uncle|Aunt|Pastor)\s+/i, "")[0] ?? i + 1)}
-          </motion.span>
-        ))}
+        {approvals.map((on, i) => <QuorumDot key={i} on={on} name={names?.[i]} n={i + 1} />)}
       </div>
       <span className="text-small font-semibold tabular-nums">{label}</span>
       {got >= needed && <span className="sr-only">✓</span>}
     </div>
+  );
+}
+
+/** One approval: beats once when it fills (not when the page opens with it already filled). */
+function QuorumDot({ on, name, n }: { on: boolean; name?: string; n: number }) {
+  const changed = useChangedSinceMount(on);
+  return (
+    <span
+      title={name}
+      className={clsx("grid size-7 place-items-center rounded-full border-2 text-[0.7rem] font-bold", on ? "border-ink bg-ink text-bg" : "border-dashed border-line-strong bg-surface text-ink-2", on && changed && "beat")}
+    >
+      {on ? <Check className="size-4" /> : (name?.replace(/^(Adv\.|Ms\.|Mr\.|Uncle|Aunt|Pastor)\s+/i, "")[0] ?? n)}
+    </span>
   );
 }
 

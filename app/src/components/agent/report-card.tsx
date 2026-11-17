@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { m as motion } from "motion/react";
 import { Check, Loader2, ScanSearch, TriangleAlert } from "@/components/ui/icons";
 import type { AgentReport } from "@/lib/types";
 import { shortAddress } from "@/lib/format";
@@ -15,10 +14,9 @@ export function ReportCard({ report, compact = false }: { report: AgentReport; c
   const tone = report.verdict === "approve" ? "ok" : report.verdict === "reject" ? "danger" : "warn";
   const pct = Math.round(report.confidence * 100);
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+    <section
       aria-label={c.title}
-      className={clsx("rounded-lg bg-surface p-4", tone === "ok" ? "border-[1.5px] border-ink" : tone === "danger" ? "border-2 border-l-8 border-ink" : "border-[1.5px] border-dashed border-ink")}
+      className={clsx("enter rounded-lg bg-surface p-4 [--enter-dur:0.3s] [--from-y:10px]",tone === "ok" ? "border-[1.5px] border-ink" : tone === "danger" ? "border-2 border-l-8 border-ink" : "border-[1.5px] border-dashed border-ink")}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-bg"><ScanSearch className="size-5" aria-hidden="true" /></span>
@@ -36,10 +34,7 @@ export function ReportCard({ report, compact = false }: { report: AgentReport; c
       <div className="mt-3 flex items-center gap-3">
         <span className="shrink-0 text-small text-ink-2">{c.confidence}</span>
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-line" role="progressbar" aria-label={c.confidence} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
-          <motion.div
-            className="h-full rounded-full bg-ink"
-            initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          />
+          <div className="fill-in h-full rounded-full bg-ink transition-[width] duration-700" style={{ width: `${pct}%` }} />
         </div>
         <span className="shrink-0 text-small font-semibold tabular-nums">{pct}%</span>
       </div>
@@ -65,7 +60,7 @@ export function ReportCard({ report, compact = false }: { report: AgentReport; c
       <p className="mt-3 text-[0.75rem] text-ink-2">
         {c.advisory} · {c.hash}: <span className="font-mono">{shortAddress(report.reportHash, 6)}</span>
       </p>
-    </motion.section>
+    </section>
   );
 }
 

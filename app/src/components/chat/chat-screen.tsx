@@ -4,7 +4,6 @@
  * suggested questions. With messages: the conversation scrolls and the composer stays pinned below it.
  */
 import { useEffect, useState } from "react";
-import { m as motion } from "motion/react";
 import { FileText, ShieldCheck } from "@/components/ui/icons";
 import type { ChatThreadMessage } from "@/lib/chat/types";
 import { Gate } from "@/components/shell/gate";
@@ -80,7 +79,7 @@ function Message({ m, fresh }: { m: ChatThreadMessage; fresh: boolean }) {
 
   if (m.role === "user") {
     return (
-      <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex flex-col items-end gap-1.5">
+      <li className="bubble-in flex flex-col items-end gap-1.5">
         {m.attachment && (
           <span className="inline-flex max-w-[85%] items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3 py-1.5 text-small font-medium">
             <FileText className="size-4 shrink-0" aria-hidden="true" />
@@ -90,12 +89,12 @@ function Message({ m, fresh }: { m: ChatThreadMessage; fresh: boolean }) {
         <p className="max-w-[85%] whitespace-pre-line break-words rounded-[1.25rem] rounded-br-md bg-ink px-4 py-2.5 text-bg">
           <span className="sr-only">{copy.chat.you}: </span>{m.text}
         </p>
-      </motion.li>
+      </li>
     );
   }
 
   return (
-    <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex items-start gap-3">
+    <li className="bubble-in flex items-start gap-3">
       <LogoMark className="size-8 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="flex min-h-8 flex-wrap items-center gap-2">
@@ -107,6 +106,6 @@ function Message({ m, fresh }: { m: ChatThreadMessage; fresh: boolean }) {
         </div>
         {typed && m.actions && m.actions.length > 0 && <ActionButtons actions={m.actions} copy={copy} />}
       </div>
-    </motion.li>
+    </li>
   );
 }

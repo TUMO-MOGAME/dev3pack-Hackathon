@@ -2,34 +2,32 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { m as motion } from "motion/react";
-import { ArrowRight, BookOpen, CalendarClock, CarFront, CircleDot, FileCheck2, GraduationCap, Hourglass, House, Landmark, Milestone, Plus, Send, Stethoscope, UsersRound, Zap, type LucideIcon } from "@/components/ui/icons";
+import { ArrowRight, CalendarClock, CarFront, FileCheck2, Hourglass, Landmark, Milestone, Plus, Send, UsersRound, Zap } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
-import type { Category, EstateStatus, Role, Rule, WalletSession } from "@/lib/types";
+import type { EstateStatus, Role, Rule, WalletSession } from "@/lib/types";
 import { formatUsdt, formatZar } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Badge, Button, ButtonLink, Card, Eyebrow, ExplorerLink, Meter, type Tone } from "@/components/ui/primitives";
 import { ownerPending, pendingFor } from "@/components/shell/app-shell";
 import { usePay } from "@/components/pay/payment";
-import { clock } from "./family";
 import { fmt, timeAgo, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { InstallBanner } from "@/components/shell/install";
 import { LegacyEntry } from "@/components/legacy/lazy";
 import { CheckInCard, CheckInWatch } from "./check-in";
+import { categoryIcon } from "./category-icon";
 import { FallbackStatus } from "@/components/guardians/fallback";
 import { ObjectionList } from "@/components/guardians/objections";
 import { YearlyCapEditor, YearlyUsage } from "@/components/disputes/yearly";
 import { Marked } from "@/components/ui/marked";
 import { ActivityText, useNameBook } from "@/components/shell/activity-text";
-import { guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
+import { clock, guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
 
 type Copy = ScreensCopy["estate"];
 export const statusTone: Record<EstateStatus, Tone> = { Active: "accent", DeathPending: "warn", Unlocked: "ok", Frozen: "danger" };
-export const categoryIcon: Record<Category, LucideIcon> = { Tuition: GraduationCap, Accommodation: House, Books: BookOpen, Medical: Stethoscope, General: CircleDot };
 
 export function EstateScreen({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.estate);
@@ -67,9 +65,9 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
             </div>
             <p className="mt-5 flex items-center gap-2 text-small font-medium opacity-90"><Landmark className="size-4" aria-hidden="true" />{copy.vault}</p>
             {/* A new balance slides in without fading: a half-faded figure fails contrast while it animates. */}
-            <motion.p key={e.vaultBalance.toString()} initial={{ y: 6 }} animate={{ y: 0 }} transition={{ duration: 0.4 }} className="font-display text-display leading-none tabular-nums">
+            <p key={e.vaultBalance.toString()} className="enter font-display text-display leading-none tabular-nums [--enter-dur:0.4s] [--from-o:1] [--from-y:6px]">
               {formatUsdt(e.vaultBalance).replace(" USD₮", "")}<span className="ml-2 text-h3">USD₮</span>
-            </motion.p>
+            </p>
             <p className="mt-1.5 min-h-6 text-lead opacity-95 tabular-nums">{rate ? `≈ ${formatZar(e.vaultBalance, rate)}` : ""}</p>
             <p className="mt-1 min-h-5 text-small opacity-80">{fx ? fmt(copy.rate, { rate: fx.usdtZar.toFixed(2), source: fx.source }) : ""}</p>
             <p className="mt-3 text-small opacity-90">{common.status.estateHint[e.status]}</p>
@@ -156,13 +154,13 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
             <>
               <ol className="mt-2">
                 {snap.activity.slice(0, 6).map((a, i) => (
-                  <motion.li key={`${a.txSignature}-${a.ts}-${i}`} layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="border-b border-line/70 py-2 last:border-0">
+                  <li key={`${a.txSignature}-${a.ts}-${i}`} className="enter border-b border-line/70 py-2 last:border-0 [--from-y:-6px]">
                     <p className="text-small font-medium"><ActivityText item={a} book={book} /></p>
                     <div className="flex flex-wrap items-center justify-between gap-x-3">
                       <span className="text-[0.75rem] text-ink-2">{timeAgo(a.ts, now, common.time)}</span>
                       {a.txSignature && <ExplorerLink signature={a.txSignature} label={copy.activity.receipt} srLabel={copy.activity.receiptSr} className="min-h-9!" />}
                     </div>
-                  </motion.li>
+                  </li>
                 ))}
               </ol>
               <Button variant="quiet" small block className="mt-3" onClick={() => setProofOpen(true)}>{copy.activity.all}</Button>

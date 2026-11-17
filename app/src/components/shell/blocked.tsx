@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef, type ReactNode } from "react";
-import { m as motion } from "motion/react";
 import { ShieldX } from "@/components/ui/icons";
 import { useCopy } from "./copy";
 
@@ -12,11 +11,10 @@ export function Blocked({ code, message, children }: { code: string; message: st
   // A refusal must never be missed below the fold.
   useEffect(() => { ref.current?.scrollIntoView({ block: "center", behavior: "smooth" }); }, [code, message]);
   return (
-    <motion.div
+    <div
       ref={ref}
       role="alert"
-      initial={{ opacity: 0, x: 0 }} animate={{ opacity: 1, x: [0, -6, 6, -4, 4, 0] }} transition={{ duration: 0.45 }}
-      className="rounded-lg border-2 border-l-[10px] border-ink bg-surface p-4"
+      className="refuse rounded-lg border-2 border-l-[10px] border-ink bg-surface p-4"
     >
       <div className="flex items-start gap-3">
         <span className="grid size-11 shrink-0 place-items-center rounded-[3px] bg-ink text-bg"><ShieldX className="size-6" aria-hidden="true" /></span>
@@ -28,6 +26,6 @@ export function Blocked({ code, message, children }: { code: string; message: st
           {children && <div className="mt-3 flex flex-wrap gap-2">{children}</div>}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
