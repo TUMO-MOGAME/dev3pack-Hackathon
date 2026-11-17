@@ -212,7 +212,9 @@ export function mockStory(c: MockTreeCast, snap: EstateSnapshot | null, nowTs: n
   LE({ kind: "EstateCreated", owner: c.lerato, ts: L0 });
   LE({ kind: "VerifiersSet", verifiers: [c.sipho, c.naledi, c.priya], ts: L0 });
   LE({ kind: "BeneficiaryAdded", wallet: STORY_AMAHLE, ts: L0 });
-  LE({ kind: "AssetRegistered", asset: STORY_CAR, title: carTitle, assetKind: "Car", ts: at(2041, 7, 1) });
+  // The Corolla she received carries on in her plan as one journey (a stand-in car if the visitor sold Thabo's).
+  const lCar = carSold || carListed ? STORY_CAR : car;
+  LE({ kind: "AssetRegistered", asset: lCar, title: carTitle, assetKind: "Car", ts: Math.max(at(2041, 7, 1), carTo + 86_400) });
   const lUni = "story-rule-lerato-amahle-uni", lDay = "story-rule-lerato-amahle-everyday";
   LE({ kind: "RuleSet", rule: lUni, category: "Tuition", beneficiary: STORY_AMAHLE, ts: L0 });
   LE({ kind: "RuleSet", rule: lDay, category: "General", beneficiary: STORY_AMAHLE, ts: L0 });
@@ -230,7 +232,7 @@ export function mockStory(c: MockTreeCast, snap: EstateSnapshot | null, nowTs: n
   LE({ kind: "DeathAttested", verifier: c.sipho, ts: at(2086, 2, 5) });
   LE({ kind: "DeathAttested", verifier: c.naledi, ts: at(2086, 2, 6) });
   LE({ kind: "EstateUnlocked", ts: at(2086, 3, 8) });
-  LE({ kind: "AssetPassed", asset: STORY_CAR, to: STORY_AMAHLE, ts: at(2086, 5, 1) });
+  LE({ kind: "AssetPassed", asset: lCar, to: STORY_AMAHLE, ts: at(2086, 5, 1) });
 
   const people: DeclaredPerson[] = [
     { id: MKHULU, name: "Mkhulu Joseph Mokoena", born: 1936, passed: 2003 },
@@ -246,7 +248,7 @@ export function mockStory(c: MockTreeCast, snap: EstateSnapshot | null, nowTs: n
     { id: c.ndlovu, name: "Adv. Thandi Ndlovu" },
     { id: c.pillay, name: "Ms. Anita Pillay" },
     { id: c.priya, name: "Adv. Priya Naidoo" },
-    { id: c.charity, name: "Ithemba Children's Charity" },
+    { id: c.charity, name: "Ithemba Children's Charity", org: true },
   ];
   const declaredAt = signed ? startTs : nowTs;
   const rel = (kind: RelationshipKind, from: PersonId, to: PersonId, by: Base58 = c.thabo, ts = declaredAt): Relationship =>

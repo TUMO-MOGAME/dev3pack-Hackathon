@@ -20,7 +20,12 @@ export function TimelineSlider({
 }) {
   const span = Math.max(1, to - from);
   // The thumb is about 16 px wide, so its centre runs from 8 px to (100% - 8 px).
-  const at = (y: number) => `calc(8px + ${((y - from) / span) * 100}% - ${((y - from) / span) * 16}px)`;
+  const share = (y: number) => (y - from) / span;
+  const at = (y: number) => `calc(8px + ${share(y) * 100}% - ${share(y) * 16}px)`;
+  // Near either end, "Today · 2026" hugs that edge instead of hanging off it; decade labels make room for it by
+  // their place on the track (a short chain history spans only a few years, so years apart can still collide).
+  const todayEdge = share(today) > 0.88 ? "end" : share(today) < 0.12 ? "start" : null;
+  const nearToday = (d: number) => Math.abs(share(d) - share(today)) < (todayEdge ? 0.24 : 0.14);
   const isImagined = imagined && year > today;
   const decades = [];
   for (let d = Math.ceil(from / 10) * 10; d <= to; d += 10) decades.push(d);
@@ -58,11 +63,16 @@ export function TimelineSlider({
           aria-describedby="tree-year-hint"
           className="tree-range relative block h-6 w-full cursor-pointer"
         />
-        {/* Today marker under the track. */}
-        <div className="pointer-events-none absolute bottom-0 -translate-x-1/2 text-center" style={{ left: at(today) }} aria-hidden="true">
-          <span className="mx-auto block h-2.5 w-0.5 bg-ink" />
-          <span className="block whitespace-nowrap text-[0.6875rem] font-semibold text-ink">{copy.timeline.today} · {today}</span>
-        </div>
+        {/* Today marker under the track: the tick sits on the year; the label hugs an edge when today is near one. */}
+        <span className="pointer-events-none absolute bottom-4 block h-2.5 w-0.5 -translate-x-1/2 bg-ink" style={{ left: at(today) }} aria-hidden="true" />
+        <span
+          className={clsx(
+            "pointer-events-none absolute bottom-0 whitespace-nowrap text-[0.6875rem] font-semibold text-ink",
+            todayEdge === "end" ? "right-0" : todayEdge === "start" ? "left-0" : "-translate-x-1/2",
+          )}
+          style={todayEdge ? undefined : { left: at(today) }}
+          aria-hidden="true"
+        >{copy.timeline.today} · {today}</span>
       </div>
       <div className="relative -mt-3 h-4 text-[0.6875rem] text-ink-2 tabular-nums" aria-hidden="true">
         {decades.map((d, i) => {
@@ -70,7 +80,7 @@ export function TimelineSlider({
           return (
             <span
               key={d}
-              className={clsx("absolute", !edge && "-translate-x-1/2 max-sm:hidden", Math.abs(d - today) < 5 && "invisible")}
+              className={clsx("absolute", !edge && "-translate-x-1/2 max-sm:hidden", (Math.abs(d - today) < 5 || nearToday(d)) && "invisible")}
               style={edge === "start" ? { left: 0 } : edge === "end" ? { right: 0 } : { left: at(d) }}
             >{d}</span>
           );

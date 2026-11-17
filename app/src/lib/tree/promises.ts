@@ -252,29 +252,40 @@ export function keptPromises(events: TreeEvent[], ctx: PromiseContext): KeptProm
 
 /**
  * Rule 9: asset paths. Registered → held by the plan (from the owner's passing) → passed to an heir, or sold under the
- * rules (to whom the proceeds went when that is a person; never the buyer or the price).
+ * rules (to whom the proceeds went when that is a person; never the buyer or the price). An heir who registers the
+ * asset they received in their own plan continues the same path (one journey across generations, not two).
  */
 export function assetPaths(events: TreeEvent[], ctx: PromiseContext): AssetPath[] {
   const paths = new Map<Base58, AssetPath>();
+  /** The plan that holds each asset now, and where its current stretch starts in `steps`. */
+  const holder = new Map<Base58, { estate: Base58; from: number }>();
   const sorted = [...events].sort((a, b) => a.ts - b.ts);
-  const step = (p: AssetPath, s: AssetStep) => { p.steps.push(s); };
+  const stretch = (p: AssetPath, asset: Base58) => p.steps.slice(holder.get(asset)!.from);
   for (const e of sorted) {
     if (e.kind === "AssetRegistered") {
-      if (paths.has(`${e.estate}:${e.asset}`)) continue;
-      paths.set(`${e.estate}:${e.asset}`, {
-        id: `asset:${e.estate}:${e.asset}`, kind: e.assetKind, title: e.title, owner: ctx.owners[e.estate] ?? "", estate: e.estate,
-        steps: [{ kind: "registered", ts: e.ts, ...(e.sig ? { proof: e.sig } : {}), imagined: imag(e) }],
-      });
+      const p = paths.get(e.asset);
+      const reg: AssetStep = { kind: "registered", ts: e.ts, ...(e.sig ? { proof: e.sig } : {}), imagined: imag(e) };
+      if (!p) {
+        paths.set(e.asset, { id: `asset:${e.estate}:${e.asset}`, kind: e.assetKind, title: e.title, owner: ctx.owners[e.estate] ?? "", estate: e.estate, steps: [reg] });
+        holder.set(e.asset, { estate: e.estate, from: 0 });
+        continue;
+      }
+      // Re-registered by the heir it passed to: the path carries on in their plan.
+      const last = p.steps[p.steps.length - 1];
+      if (holder.get(e.asset)!.estate !== e.estate && last.kind === "passedTo" && last.to && last.to === ctx.owners[e.estate]) {
+        holder.set(e.asset, { estate: e.estate, from: p.steps.length });
+        p.steps.push(reg);
+      }
     } else if (e.kind === "EstateUnlocked") {
-      for (const p of paths.values()) {
-        if (p.estate !== e.estate || p.steps.some((s) => s.kind !== "registered")) continue;
-        step(p, { kind: "heldByPlan", ts: e.ts, ...(e.sig ? { proof: e.sig } : {}), imagined: imag(e) });
+      for (const [asset, p] of paths) {
+        if (holder.get(asset)!.estate !== e.estate || stretch(p, asset).some((s) => s.kind !== "registered")) continue;
+        p.steps.push({ kind: "heldByPlan", ts: e.ts, ...(e.sig ? { proof: e.sig } : {}), imagined: imag(e) });
       }
     } else if (e.kind === "AssetSold" || e.kind === "AssetPassed") {
-      const p = paths.get(`${e.estate}:${e.asset}`);
-      if (!p || p.steps.some((s) => s.kind === "soldUnderRules" || s.kind === "passedTo")) continue;
+      const p = paths.get(e.asset);
+      if (!p || holder.get(e.asset)!.estate !== e.estate || stretch(p, e.asset).some((s) => s.kind === "soldUnderRules" || s.kind === "passedTo")) continue;
       const to = e.kind === "AssetPassed" ? e.to : e.recipient && e.recipient !== e.estate ? e.recipient : undefined;
-      step(p, { kind: e.kind === "AssetSold" ? "soldUnderRules" : "passedTo", ts: e.ts, ...(to ? { to } : {}), ...(e.sig ? { proof: e.sig } : {}), imagined: imag(e) });
+      p.steps.push({ kind: e.kind === "AssetSold" ? "soldUnderRules" : "passedTo", ts: e.ts, ...(to ? { to } : {}), ...(e.sig ? { proof: e.sig } : {}), imagined: imag(e) });
     }
   }
   return [...paths.values()];

@@ -29,6 +29,8 @@ export interface DeclaredPerson {
   wallets?: Base58[];
   born?: number;
   passed?: number;
+  /** An organisation (e.g. a charity), not a person. */
+  org?: boolean;
 }
 
 export interface TreeEstateInput {
@@ -283,6 +285,9 @@ export function deriveTreeBody(input: DeriveInput): Omit<TreeSnapshot, "fingerpr
   for (const k of kept) see(k.by, k.firstTs);
   for (const r of input.relationships) { see(r.from, r.declaredAt); see(r.to, r.declaredAt); }
 
+  // Charities in a fallback plan are organisations, not people.
+  const orgs = new Set<PersonId>(perEstate.flatMap((p) => (p.input.snapshot?.guardians?.fallback.recipients ?? []).filter((r) => r.kind === "charity").map((r) => r.wallet)));
+
   const people: TreePerson[] = idList.map((id) => {
     const d = declared.get(id);
     const book = known(id);
@@ -304,6 +309,7 @@ export function deriveTreeBody(input: DeriveInput): Omit<TreeSnapshot, "fingerpr
       ...(passed !== undefined ? { passed } : {}),
       hidden: isHidden, minor, since, generation: gens.get(id) ?? 0,
       ...(ownsEstate.has(id) ? { ownsEstate: ownsEstate.get(id) } : {}),
+      ...(d?.org || orgs.has(id) ? { org: true } : {}),
     };
   });
   const present = new Set(idList);

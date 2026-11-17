@@ -43,8 +43,9 @@ export function namesList(names: string[], and: string): string {
 }
 
 /** Life years under a name: "1972–2034", "Born 2006", or "" when unknown. */
-export function lifeText(copy: Copy, p: Pick<YearPerson, "born" | "passed" | "hidden">): string {
+export function lifeText(copy: Copy, p: Pick<YearPerson, "born" | "passed" | "hidden" | "org">): string {
   if (p.hidden) return "";
+  if (p.org) return copy.map.org;
   if (p.born !== undefined && p.passed !== undefined) return fill(copy.person.years, { from: p.born, to: p.passed });
   if (p.passed !== undefined) return fill(copy.person.passed, { year: p.passed });
   if (p.born !== undefined) return fill(copy.person.born, { year: p.born });

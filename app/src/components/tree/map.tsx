@@ -139,8 +139,10 @@ export function TreeMap({
               onFocus={() => setFocus(p.id)}
               onBlur={() => setFocus(null)}
             >
-              <circle r={NODE_R + 5} className="tree-focus" />
-              <Person alive={p.alive} hidden={p.hidden} me={me} />
+              {p.org
+                ? <rect x={-NODE_R - 5} y={-NODE_R - 5} width={2 * NODE_R + 10} height={2 * NODE_R + 10} rx={14} className="tree-focus" />
+                : <circle r={NODE_R + 5} className="tree-focus" />}
+              <Person alive={p.alive} hidden={p.hidden} me={me} org={!!p.org} />
             </g>
             <g aria-hidden="true" className="cursor-pointer" onClick={() => onOpen(p.id)}>
               {!p.hidden && <text dy="0.35em" textAnchor="middle" className={`pointer-events-none ${p.alive ? "fill-ink" : "fill-ink-2"} text-[0.9375rem] font-semibold`}>{initials(name)}</text>}
@@ -175,17 +177,17 @@ function Rows({ layout, copy }: { layout: TreeLayout; copy: Copy }) {
   );
 }
 
-/** A soft circle with initials; someone who has passed becomes an outline with a small mark. */
-function Person({ alive, hidden, me }: { alive: boolean; hidden: boolean; me: boolean }) {
+/** A soft circle with initials (an organisation: a rounded square); someone who has passed becomes an outline with a small mark. */
+function Person({ alive, hidden, me, org }: { alive: boolean; hidden: boolean; me: boolean; org: boolean }) {
+  const look = {
+    fill: alive ? "var(--surface-2)" : "var(--bg)",
+    stroke: me ? "var(--amber)" : alive ? "var(--line-strong)" : "var(--ink-2)",
+    strokeWidth: me ? 2.5 : 1.5,
+    strokeDasharray: hidden ? "4 4" : undefined,
+  };
   return (
     <>
-      <circle
-        r={NODE_R}
-        fill={alive ? "var(--surface-2)" : "var(--bg)"}
-        stroke={me ? "var(--amber)" : alive ? "var(--line-strong)" : "var(--ink-2)"}
-        strokeWidth={me ? 2.5 : 1.5}
-        strokeDasharray={hidden ? "4 4" : undefined}
-      />
+      {org ? <rect x={-NODE_R} y={-NODE_R} width={2 * NODE_R} height={2 * NODE_R} rx={10} {...look} /> : <circle r={NODE_R} {...look} />}
       {hidden && (
         <g stroke="var(--ink-2)" strokeWidth={1.5} fill="none" aria-hidden="true">
           <circle cy={-6} r={6} />

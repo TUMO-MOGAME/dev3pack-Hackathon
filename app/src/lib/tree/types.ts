@@ -37,6 +37,8 @@ export interface TreePerson {
   generation: number;
   /** The estate this person owns, if they have their own Heirloom plan. */
   ownsEstate?: Base58;
+  /** An organisation (a charity named in the fallback plan), not a person: drawn as a square, no years. */
+  org?: boolean;
 }
 
 export type RelationshipKind = "parentOf" | "spouseOf" | "siblingOf";

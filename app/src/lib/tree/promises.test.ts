@@ -178,6 +178,30 @@ describe("rule 9: asset paths", () => {
     expect(p.steps[1]).toEqual(expect.objectContaining({ kind: "soldUnderRules" }));
     expect(p.steps[1].to).toBeUndefined();
   });
+  it("an heir who registers what they received in their own plan continues the same path, across generations", () => {
+    const E2 = "Estate2222222222222222222222222222222222222";
+    const GRAND = "Grand111111111111111111111111111111111111111";
+    const ctx2 = { owners: { [E]: OWNER, [E2]: KID } };
+    const paths = assetPaths([...base(),
+      ev({ kind: "AssetRegistered", asset: "car", title: "2017 Toyota Corolla", assetKind: "Car", ts: Y(2026) }),
+      ev({ kind: "EstateUnlocked", ts: Y(2041) }),
+      ev({ kind: "AssetPassed", asset: "car", to: KID, ts: Y(2041, 6) }),
+      ev({ estate: E2, kind: "AssetRegistered", asset: "car", title: "2017 Toyota Corolla", assetKind: "Car", ts: Y(2041, 7) }),
+      ev({ estate: E2, kind: "EstateUnlocked", ts: Y(2086) }),
+      ev({ estate: E2, kind: "AssetPassed", asset: "car", to: GRAND, ts: Y(2086, 5) })], ctx2);
+    expect(paths).toHaveLength(1);
+    expect(paths[0].owner).toBe(OWNER);
+    expect(paths[0].steps.map((s) => `${s.kind}${s.to ? `>${s.to}` : ""}`)).toEqual(
+      ["registered", "heldByPlan", `passedTo>${KID}`, "registered", "heldByPlan", `passedTo>${GRAND}`]);
+  });
+  it("someone else registering the same asset id does not take over its path", () => {
+    const E2 = "Estate2222222222222222222222222222222222222";
+    const paths = assetPaths([...base(),
+      ev({ kind: "AssetRegistered", asset: "car", title: "Car", assetKind: "Car", ts: Y(2026) }),
+      ev({ estate: E2, kind: "AssetRegistered", asset: "car", title: "Car", assetKind: "Car", ts: Y(2027) }),
+      ev({ estate: E2, kind: "AssetPassed", asset: "car", to: KID2, ts: Y(2028) })], { owners: { [E]: OWNER, [E2]: KID2 } });
+    expect(paths[0].steps.map((s) => s.kind)).toEqual(["registered"]);
+  });
 });
 
 describe("keptPromises", () => {

@@ -147,8 +147,10 @@ describe("/api/asks refusals", () => {
     const sig = await who.signMessage(askMessage("note", estate, claim, who.address, ts, await sha256Hex(noteBody(n))));
     return { action: "note", estate, claim, wallet: who.address, ts, sig, ...n };
   };
+  // Each decline gets its own millisecond: two signed in the same one are byte-identical and the route rightly calls the second a replay.
+  let tick = 0;
   const signedDecline = async (who: ReturnType<typeof wallet>) => {
-    const ts = Date.now();
+    const ts = Date.now() + tick++;
     return { action: "decline", estate, claim, wallet: who.address, ts, sig: await who.signMessage(askMessage("decline", estate, claim, who.address, ts, await sha256Hex(""))) };
   };
 

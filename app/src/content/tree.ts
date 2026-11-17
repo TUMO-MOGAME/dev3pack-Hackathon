@@ -43,6 +43,7 @@ export const tree = {
     legendNote: "A line grows thicker with each promise kept.",
     relationships: "Family lines",
     passedMark: "Passed",
+    org: "Organisation",
     open: "Open {name}'s card",
     empty: "Nobody is on the tree in {year} yet. Move the slider forward.",
     travel: "{asset} passes to {name}",

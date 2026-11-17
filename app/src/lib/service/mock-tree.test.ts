@@ -74,8 +74,9 @@ describe("the demo story", () => {
     expect(k("helpedHardship", P.nomsa.address)[0].for).toEqual([P.sipho.address]);
     expect(k("answeredRequests", P.lerato.address)[0].for).toEqual([STORY_AMAHLE]);
     const cars = t.assets.filter((a) => a.kind === "Car");
-    expect(cars.map((a) => a.steps.map((s) => s.kind))).toEqual([["registered", "heldByPlan", "passedTo"], ["registered", "heldByPlan", "passedTo"]]);
-    expect(cars.map((a) => a.steps.at(-1)!.to)).toEqual([P.lerato.address, STORY_AMAHLE]);
+    // One journey across three generations: Thabo's plan → Lerato → her own plan → Amahle.
+    expect(cars.map((a) => a.steps.map((s) => s.kind))).toEqual([["registered", "heldByPlan", "passedTo", "registered", "heldByPlan", "passedTo"]]);
+    expect(cars[0].steps.filter((s) => s.kind === "passedTo").map((s) => s.to)).toEqual([P.lerato.address, STORY_AMAHLE]);
     expect(t.assets.find((a) => a.kind === "Motorbike")!.steps.at(-1)).toMatchObject({ kind: "soldUnderRules", to: P.sipho.address });
   });
 

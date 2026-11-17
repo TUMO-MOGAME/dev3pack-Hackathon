@@ -50,7 +50,8 @@ export function TreeList({ at, copy, reduced, viewer, onOpen }: {
                       >
                         <span
                           className={clsx(
-                            "grid size-11 shrink-0 place-items-center rounded-full border-[1.5px] text-small font-semibold",
+                            "grid size-11 shrink-0 place-items-center border-[1.5px] text-small font-semibold",
+                            p.org ? "rounded-lg" : "rounded-full",
                             p.alive ? "bg-surface-2 text-ink" : "bg-bg text-ink-2",
                             me ? "border-amber" : p.alive ? "border-line-strong" : "border-ink-2",
                             p.hidden && "border-dashed",
