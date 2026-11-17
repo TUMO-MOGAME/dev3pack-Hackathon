@@ -26,7 +26,8 @@
 - Chain: signed `/api/tree/photo` (413/415/403, 503 on the demo deployment), Supabase table `family_photos` via **migration 0007 (not applied yet: until then server memory + device copy)**.
 - Map, list, card (Add/Change/Remove, memorial "Added by"), print. Privacy policy §14 covers photos. 772 tests.
 - Devnet (f182783): the seeded demo family starts with the same drawings (chain-tree devnetDemoPhotos); a removal is stored as an empty photo so it hides a default on every device (migration 0007 allows data = ''). Live: 11 faces on devnet, axe clean.
-- TODO: user is collecting demo photos (AI-generated/stock) into `demo-people/<id>.jpg` to replace the drawings; check WebP encoding on a real iPhone (older Safari shows "This browser cannot prepare photos").
+- Real demo faces (18 Nov 2026): Tumo's Unsplash stock photos replace the drawings on both sites (demoPhotos -> `/demo/people/<id>.webp`, 256 px, made by `scripts/demo-people-photos.mjs`; grandparents in black and white; Amahle's added by Lerato; Adv. Naidoo now has one; Kagiso still shows initials; charity keeps the drawn logo). A face that fails to load falls back to initials. Originals moved out of the repo root into git-ignored `media/` (people/ with SOURCES.md, people/spare/, vehicles/ = the dealer's .avif originals, video-stock/). 773 tests.
+- TODO: check WebP encoding on a real iPhone (older Safari shows "This browser cannot prepare photos").
 
 ## SPEED2 LIVE (17 Nov 2026, main 82292be)
 - Merged + deployed on both sites. Trust Tree given its own MotionScope (the global LazyMotion was removed by speed2; without it the tree's m.* lines would not draw). Live demo: tree plays (svg paths 19 -> 36), /tree /estate /will /claims /chat axe clean, 0 errors.

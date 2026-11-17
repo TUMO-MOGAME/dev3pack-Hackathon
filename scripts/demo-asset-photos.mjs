@@ -2,7 +2,7 @@
 // metadata) and writes:
 //   app/public/demo/assets/<slug>/<nn>-<label>.webp      the photos, served from our own origin
 //   app/src/lib/service/demo-asset-photos.ts             sha256 / size / label of each, for the mock seed
-// Usage (from app/, so sharp resolves): node ../scripts/demo-asset-photos.mjs "<folder with the .avif files>"
+// Usage (from app/, so sharp resolves): node ../scripts/demo-asset-photos.mjs ../media/vehicles   (the .avif originals, kept locally)
 // Tumo confirmed on 15 Nov 2026 that these photos may be published.
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";

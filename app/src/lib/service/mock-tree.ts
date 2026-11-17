@@ -24,7 +24,7 @@ import { deriveTree, deriveTreeBody, type DeclaredPerson, type DeriveInput, type
 import type { TreeEvent } from "../tree/events";
 import { relationshipId } from "../tree/links";
 import { checkPhoto, photoConsent, type StoredPhoto } from "../tree/photos";
-import { AVATAR_COLORS as C, AVATAR_SKIN as S, avatarSvg, logoSvg, svgDataUrl, type AvatarLook } from "../tree/avatars";
+import { logoSvg, svgDataUrl } from "../tree/avatars";
 import type { GenerationLink, PersonId, Relationship, RelationshipInput, RelationshipKind, TreeService, TreeSnapshot } from "../tree/types";
 
 /** The demo cast's wallets (mock.ts passes the bound persona wallets). */
@@ -278,29 +278,33 @@ export function mockStory(c: MockTreeCast, snap: EstateSnapshot | null, nowTs: n
   };
 }
 
-/** When the demo's illustrations were "added" (the year shows in the memorial label). */
+/** When the demo's photos were "added" (the year shows in the memorial label). */
 const ILLUSTRATED_AT = Date.UTC(2026, 10, 17, 10) / 1000;
 
+/** A bundled demo face (Unsplash stock, 256 px WebP made by scripts/demo-people-photos.mjs), served from our origin. */
+const face = (id: string) => `/demo/people/${id}.webp`;
+
 /**
- * The demo family's illustrated avatars: each living adult's is their own; the owner added the memorial drawings of
- * his parents, his young daughter's and the charity's logo. Adv. Priya Naidoo and Cousin Kagiso have none, so the
- * demo also shows initials and "Add photo".
+ * The demo family's photos: each living adult's is their own; the owner added the black-and-white memorial photos of
+ * his parents, his young daughter's and the charity's (drawn) logo; Lerato added her baby Amahle's. Cousin Kagiso has
+ * none, so the demo also shows initials and "Add photo". A face that fails to load shows initials (components/tree/photo.tsx).
  */
 export function demoPhotos(c: MockTreeCast): Record<PersonId, StoredPhoto> {
-  const look = (l: AvatarLook) => svgDataUrl(avatarSvg(l));
   const own = (id: PersonId, src: string) => [id, { src, by: id, at: ILLUSTRATED_AT }] as const;
   const owners = (id: PersonId, src: string) => [id, { src, by: c.thabo, at: ILLUSTRATED_AT }] as const;
   return Object.fromEntries([
-    owners(MKHULU, look({ skin: S.d, hair: "bald", hairColor: "#d8d8d8", bg: C.surface2, shirt: C.ink2, beard: true, glasses: true, memorial: true })),
-    owners(GOGO, look({ skin: S.b, hair: "wrap", hairColor: C.accent, bg: C.surface2, shirt: C.accent, glasses: true, memorial: true })),
-    own(c.bongani, look({ skin: S.d, hair: "crop", hairColor: "#9a9a9a", bg: C.okSoft, shirt: C.okDeep, beard: true })),
-    own(c.thabo, look({ skin: S.a, hair: "crop", hairColor: "#1f1410", bg: C.amber, shirt: C.okDeep })),
-    own(c.zodwa, look({ skin: S.b, hair: "wrap", hairColor: C.okDeep, bg: C.okSoft, shirt: C.amberDeep })),
-    own(c.lerato, look({ skin: S.c, hair: "bun", hairColor: "#1f1410", bg: C.ok, shirt: C.accent })),
-    own(c.sipho, look({ skin: S.a, hair: "curls", hairColor: "#1f1410", bg: C.amber, shirt: C.ink })),
-    owners(c.naledi, look({ skin: S.c, hair: "long", hairColor: "#2b1d14", bg: C.okSoft, shirt: C.amber })),
-    own(c.ndlovu, look({ skin: S.d, hair: "short", hairColor: "#1f1410", bg: C.surface2, shirt: C.ink, glasses: true })),
-    own(c.pillay, look({ skin: S.e, hair: "long", hairColor: "#1f1410", bg: C.surface2, shirt: C.okDeep })),
+    owners(MKHULU, face("mkhulu-joseph")),
+    owners(GOGO, face("gogo-martha")),
+    own(c.bongani, face("bongani")),
+    own(c.thabo, face("thabo")),
+    own(c.zodwa, face("zodwa")),
+    own(c.lerato, face("lerato")),
+    own(c.sipho, face("sipho")),
+    owners(c.naledi, face("naledi")),
+    [STORY_AMAHLE, { src: face("amahle"), by: c.lerato, at: ILLUSTRATED_AT }] as const,
+    own(c.ndlovu, face("ndlovu")),
+    own(c.pillay, face("pillay")),
+    own(c.priya, face("priya")),
     owners(c.charity, svgDataUrl(logoSvg())),
   ]);
 }

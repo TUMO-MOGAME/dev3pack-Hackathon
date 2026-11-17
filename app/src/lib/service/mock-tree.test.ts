@@ -2,6 +2,8 @@
  * The demo's Trust Tree: the Mokoena family 1990 → 2086 around the live demo estate, imagined after today, Lerato's
  * own plan linked under Thabo's; relationships and hidden flags editable and kept with the demo state.
  */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createMockService, DEMO_GUARDIANS, DEMO_PERSONAS, type MockService } from "./mock";
 import { STORY_AMAHLE, STORY_ESTATE_LERATO } from "./mock-tree";
@@ -156,18 +158,21 @@ describe("editing the tree in the demo", () => {
 describe("photos in the demo (plan.md §15.11)", () => {
   const estateOf = async (s: MockService) => (await s.listEstatesFor(P.thabo.address))[0].estate;
 
-  it("starts with illustrated avatars (drawings, bundled, never fetched): memorial ones for Thabo's parents, a logo for the charity", async () => {
+  it("starts with the bundled demo faces (served from our own origin): memorial ones for Thabo's parents, a logo for the charity", async () => {
     const t = await tree(service());
-    expect(person(t, P.thabo.address).photo).toMatchObject({ addedBy: P.thabo.address, memorial: false });
+    expect(person(t, P.thabo.address).photo).toMatchObject({ src: "/demo/people/thabo.webp", addedBy: P.thabo.address, memorial: false });
     expect(person(t, "local:mkhulu-joseph").photo).toMatchObject({ addedBy: P.thabo.address, memorial: true });
     expect(person(t, "local:gogo-martha").photo).toMatchObject({ addedBy: P.thabo.address, memorial: true });
-    expect(person(t, DEMO_GUARDIANS.charity.wallet).photo).toMatchObject({ memorial: false });
+    expect(person(t, DEMO_GUARDIANS.charity.wallet).photo?.src).toMatch(/^data:image\/svg\+xml/);
     expect(person(t, DEMO_GUARDIANS.kagiso.wallet).photo).toBeUndefined(); // initials, and "Add photo" for Kagiso
     const srcs = t.people.flatMap((p) => (p.photo ? [p.photo.src] : []));
-    expect(srcs.length).toBeGreaterThanOrEqual(10);
-    expect(srcs.every((s) => s.startsWith("data:image/svg+xml"))).toBe(true);
-    // Drawn shapes only: no embedded image and nothing linked (the SVG namespace aside).
-    const svg = srcs.map((s) => decodeURIComponent(s.split(",")[1]).replace('xmlns="http://www.w3.org/2000/svg"', "")).join("");
+    expect(srcs.length).toBeGreaterThanOrEqual(11);
+    // Faces are same-origin files that exist; nothing is linked from elsewhere (the CSP allows img-src 'self' only).
+    for (const s of srcs.filter((x) => !x.startsWith("data:"))) {
+      expect(s).toMatch(/^\/demo\/people\/[a-z-]+\.webp$/);
+      expect(existsSync(join(process.cwd(), "public", s))).toBe(true);
+    }
+    const svg = srcs.filter((x) => x.startsWith("data:")).map((s) => decodeURIComponent(s.split(",")[1]).replace('xmlns="http://www.w3.org/2000/svg"', "")).join("");
     expect(svg).not.toMatch(/https?:|<image|href/);
   });
 

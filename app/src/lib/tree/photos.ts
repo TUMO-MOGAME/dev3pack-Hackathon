@@ -24,7 +24,7 @@ const WEBP_URL = /^data:image\/webp;base64,([A-Za-z0-9+/]+={0,2})$/;
 
 /** A photo as stored: the image, who added it and when. */
 export interface StoredPhoto {
-  /** data:image/webp;base64,… (or, in the demo, a bundled illustration). */
+  /** data:image/webp;base64,… (or, in the demo, a bundled face under /demo/people/ or a drawn logo). */
   src: string;
   /** The wallet that added it. */
   by: Base58;

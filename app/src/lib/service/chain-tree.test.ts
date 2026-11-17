@@ -290,10 +290,10 @@ describe("photos (plan.md §15.11): /api/tree/photo, Supabase off (server memory
   const routesFor = (owner: W, chain = true) => photoRoutes({ fetchRaw: async (_t, a) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => chain });
   const code = async (res: Response) => ((await res.json()) as { code?: string }).code;
 
-  it("the seeded devnet demo family starts with the demo site's illustrated faces (Kagiso has none)", async () => {
+  it("the seeded devnet demo family starts with the demo site's faces (Kagiso has none)", async () => {
     const t = await world().svc.getTree(E);
     const p = (id: string) => t.people.find((x) => x.id === id)!;
-    expect(p(DEVNET_DEMO_CHILDREN.lerato).photo?.src).toMatch(/^data:image\/svg\+xml/);
+    expect(p(DEVNET_DEMO_CHILDREN.lerato).photo?.src).toBe("/demo/people/lerato.webp");
     expect(p("local:mkhulu-joseph").photo).toMatchObject({ memorial: true });
     expect(p(DEVNET_DEMO_GUARDIANS.kagiso).photo).toBeUndefined();
   });

@@ -18,7 +18,9 @@ type AvatarPerson = Pick<TreePerson, "hidden" | "org" | "photo"> & { alive: bool
 
 /** The photo, or initials (a dot for a hidden person). Sizes and borders come from `className`. */
 export function Avatar({ p, name, me, className }: { p: AvatarPerson; name: string; me?: boolean; className?: string }) {
-  const src = !p.hidden ? p.photo?.src : undefined;
+  // A photo that fails to load (e.g. a bundled demo face offline) falls back to initials.
+  const [broken, setBroken] = useState<string | null>(null);
+  const src = !p.hidden && p.photo?.src !== broken ? p.photo?.src : undefined;
   return (
     <span
       className={clsx(
@@ -32,9 +34,9 @@ export function Avatar({ p, name, me, className }: { p: AvatarPerson; name: stri
       aria-hidden="true"
     >
       {src
-        // A data: URL made on the device (or a bundled illustration): next/image has nothing to optimise here.
+        // A 256 px data: URL made on the device, or a bundled demo face: next/image has nothing to optimise here.
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={src} alt="" width={256} height={256} decoding="async" className="size-full object-cover" />
+        ? <img src={src} alt="" width={256} height={256} decoding="async" onError={() => setBroken(src)} className="size-full object-cover" />
         : p.hidden ? "·" : initials(name)}
     </span>
   );

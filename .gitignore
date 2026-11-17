@@ -32,8 +32,10 @@ Thumbs.db
 # Agent worktrees
 .claude/worktrees/
 
-# Stock photos used only for the demo video (kept locally, not in the repo)
+# Original photos kept locally, not in the repo: stock photos (demo video, Trust Tree faces) and the dealer's
+# vehicle photos. The site uses converted copies (scripts/demo-people-photos.mjs, scripts/demo-asset-photos.mjs).
 /*-unsplash.jpg
+/media/
 
 # Redesign concept: stock photos stay local, like the originals
 /design/*/img/
