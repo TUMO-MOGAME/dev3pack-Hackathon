@@ -23,7 +23,7 @@ import { Marked } from "@/components/ui/marked";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { ActivityText, useNameBook } from "@/components/shell/activity-text";
-import { categoryIcon } from "./estate";
+import { categoryIcon } from "./category-icon";
 
 type Copy = ScreensCopy["statement"];
 

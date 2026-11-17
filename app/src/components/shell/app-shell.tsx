@@ -4,7 +4,6 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
-import { MotionConfig } from "motion/react";
 import { FileCheck2, HandCoins, House, Inbox, Menu, MessageCircle, PanelLeftClose, PanelLeftOpen } from "@/components/ui/icons";
 import type { CommonCopy } from "@/content/common";
 import type { AssistantCopy } from "@/content/assistant";
@@ -69,13 +68,11 @@ export function AppShell({ common: commonEn, assistant: assistantEn, pay: payEn,
   const errors = useMemo(() => ({ ...guardians.errors, ...disputes.errors, ...common.errors }), [guardians.errors, disputes.errors, common.errors]);
   return (
     <CopyProvider value={{ common, assistant, pay, guardians, disputes, siteName }}>
-      <MotionConfig reducedMotion="user">
         <PinGate>
           <EstateProvider errors={errors}>
             <PaymentProvider><ChatProvider><Chrome>{children}</Chrome></ChatProvider></PaymentProvider>
           </EstateProvider>
         </PinGate>
-      </MotionConfig>
     </CopyProvider>
   );
 }

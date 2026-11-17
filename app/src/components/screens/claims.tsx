@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { AnimatePresence, m as motion } from "motion/react";
+import { MotionScope } from "@/components/ui/motion-provider";
 import { ArrowLeft, ArrowRight, Banknote, Check, CircleX, Clock, HandCoins, Plus, Zap } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
@@ -17,7 +18,7 @@ import { usePay } from "@/components/pay/payment";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { MilestoneMoment } from "@/components/legacy/lazy";
-import { categoryIcon } from "./estate";
+import { categoryIcon } from "./category-icon";
 import { PausedNotice } from "@/components/guardians/parts";
 import { ClaimWindow } from "@/components/guardians/claim-window";
 import { DisputePanel } from "@/components/disputes/disputes";
@@ -31,7 +32,12 @@ import { openDisputeOn } from "@/lib/disputes/types";
 
 type Copy = ScreensCopy["claims"];
 
-export function ClaimsScreen({ copy: english }: { copy: Copy }) {
+/** Animated with motion, so it brings its own <MotionScope> (the first pages never load the library). */
+export function ClaimsScreen(props: Parameters<typeof ClaimsScreenBody>[0]) {
+  return <MotionScope><ClaimsScreenBody {...props} /></MotionScope>;
+}
+
+function ClaimsScreenBody({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.claims);
   return <Gate>{({ snap, session, role }) => <Claims copy={copy} snap={snap!} session={session} role={role} />}</Gate>;
 }

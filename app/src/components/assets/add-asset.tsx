@@ -8,6 +8,7 @@
 import { useState, type FormEvent } from "react";
 import clsx from "clsx";
 import { m as motion, useReducedMotion } from "motion/react";
+import { MotionScope } from "@/components/ui/motion-provider";
 import { Lock, Sparkles } from "@/components/ui/icons";
 import { Button, Card, Consent, Eyebrow, Field, inputClass, Money, PageHeader } from "@/components/ui/primitives";
 import { FilePicker } from "@/components/ui/client";
@@ -29,7 +30,12 @@ import { savePhotos } from "./media";
 
 const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
 
-export function AddAsset({ car, copy, snap, session, role, onCancel, onAdded }: {
+/** Animated with motion, so it brings its own <MotionScope> (the first pages never load the library). */
+export function AddAsset(props: Parameters<typeof AddAssetBody>[0]) {
+  return <MotionScope><AddAssetBody {...props} /></MotionScope>;
+}
+
+function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
   car: ScreensCopy["car"]; copy: AssetsCopy; snap: EstateSnapshot; session: WalletSession; role: Role;
   onCancel?: () => void; onAdded?: (asset: string) => void;
 }) {

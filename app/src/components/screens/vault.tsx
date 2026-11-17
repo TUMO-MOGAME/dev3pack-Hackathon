@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from "react";
 import clsx from "clsx";
 import { m as motion } from "motion/react";
+import { MotionScope } from "@/components/ui/motion-provider";
 import { ArrowDownToLine, ArrowUpFromLine, HeartPulse, Landmark, Lock, ShieldCheck, Wallet } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
@@ -16,7 +17,12 @@ import { usePay } from "@/components/pay/payment";
 
 type Copy = ScreensCopy["vault"];
 
-export function VaultScreen({ copy: english }: { copy: Copy }) {
+/** Animated with motion, so it brings its own <MotionScope> (the first pages never load the library). */
+export function VaultScreen(props: Parameters<typeof VaultScreenBody>[0]) {
+  return <MotionScope><VaultScreenBody {...props} /></MotionScope>;
+}
+
+function VaultScreenBody({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.vault);
   return <Gate roles={["owner"]} frame={<HeaderFrame width="max-w-3xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap }) => <Vault copy={copy} snap={snap!} />}</Gate>;
 }

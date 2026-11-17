@@ -11,13 +11,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // Type only: the SDK itself (~600 KB with LiveKit) is fetched when a call starts, not with every page.
 import type { VoiceConversation } from "@elevenlabs/react";
 import type { HeirloomVoice, SpecialistName, VoiceContext, VoiceStatus, VoiceTranscriptLine } from "./types";
-import { dispatchAgentAction, uiActionSchema, type UiAction } from "../agent/actions";
+import { dispatchAgentAction } from "../agent/action-events";
+import type { UiAction, uiActionSchema as UiActionSchema } from "../agent/actions";
 import { stripVoiceTags } from "./tags";
 
 const SPECIALISTS: SpecialistName[] = ["Orchestrator", "WillWriter", "DocumentReviewer", "ClaimsGuide", "CarBroker", "EstateGuide", "Compliance", "LegacyCompanion"];
 
 /** Client tools the ElevenLabs agent may call (names must match scripts/elevenlabs-agent.md). */
-function clientTools(emit: (a: UiAction) => void) {
+function clientTools(emit: (a: UiAction) => void, uiActionSchema: typeof UiActionSchema) {
   const run = (raw: unknown) => {
     const p = uiActionSchema.safeParse(raw);
     if (!p.success) return `Invalid parameters: ${p.error.issues[0]?.message ?? "unknown"}`;
@@ -100,13 +101,14 @@ export function useHeirloomVoice(): HeirloomVoice {
       }
       const legacy = Boolean(ctx.signedUrl);
 
-      const { VoiceConversation } = await import("@elevenlabs/react");
+      // The action schema (zod) loads with the call, not with the agent sheet that every page mounts.
+      const [{ VoiceConversation }, { uiActionSchema }] = await Promise.all([import("@elevenlabs/react"), import("../agent/actions")]);
       conv.current = await VoiceConversation.startSession({
         signedUrl,
         // The legacy agent gets nothing from the client: no tools (no navigation, no claims), no variables.
         ...(legacy ? {} : {
           dynamicVariables: { persona: ctx.persona, persona_name: ctx.persona.split(":")[1]?.split(" ")[0] || "there", estate: ctx.estate ?? "none", page: ctx.page ?? "/", facts: ctx.facts ?? "none" },
-          clientTools: clientTools(emit),
+          clientTools: clientTools(emit, uiActionSchema),
         }),
         onConnect: () => { setStatus("connected"); startMeter(); },
         onDisconnect: () => { stopMeter(); conv.current = null; setSpeaking(false); setStatus((s) => (s === "error" ? s : "ended")); },

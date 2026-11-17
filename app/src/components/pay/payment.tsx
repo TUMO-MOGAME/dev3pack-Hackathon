@@ -7,7 +7,6 @@
  */
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
-import { m as motion, useReducedMotion } from "motion/react";
 import { BadgeCheck, Check, CircleAlert, Loader2, RefreshCw, ShieldAlert, WifiOff } from "@/components/ui/icons";
 import type { HeirloomService } from "@/lib/service";
 import type { PaymentReview } from "@/lib/types";
@@ -70,7 +69,6 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   const { pay: copy } = useCopy();
   const { service, snap, session, walletUsdt, isMock, run, refresh, notify, explain, fx } = useEstate();
   const online = useOnline();
-  const reduced = useReducedMotion();
   const [req, setReq] = useState<PayRequest | null>(null);
   const [review, setReview] = useState<PaymentReview | null>(null);
   const [phase, setPhase] = useState<Phase>("review");
@@ -290,7 +288,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
 
             {phase === "confirmed" && (
               <div role="status" aria-live="polite" className="flex flex-col items-center gap-3 py-2 text-center">
-                <motion.span initial={reduced ? false : { scale: 0.4 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 320, damping: 18 }} className="relative my-2 grid size-20 place-items-center rounded-full bg-ink text-bg"><span className="confirm-ring absolute inset-0" aria-hidden="true" /><Check className="size-10" strokeWidth={3} aria-hidden="true" /></motion.span>
+                <span className="spring-pop relative my-2 grid size-20 place-items-center rounded-full bg-ink text-bg"><span className="confirm-ring absolute inset-0" aria-hidden="true" /><Check className="size-10" strokeWidth={3} aria-hidden="true" /></span>
                 <p className="text-small text-ink-2">{copy.confirmed.body}</p>
                 {signature && <ExplorerLink signature={signature} label={copy.confirmed.receipt} srLabel={copy.confirmed.receiptSr} />}
                 <Button block onClick={close}>{copy.confirmed.done}</Button>

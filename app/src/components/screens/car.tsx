@@ -1,8 +1,7 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import Image from "next/image";
 import clsx from "clsx";
-import { m as motion } from "motion/react";
 import { ArrowRight, CarFront, FileText, Gavel, HandHeart, Loader2, Lock, Pencil, ShieldCheck, Store } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import type { AssetsCopy } from "@/content/assets";
@@ -27,7 +26,7 @@ import { SpecSheet } from "@/components/assets/spec-sheet";
 import { hasSpec } from "@/lib/assets/spec";
 import { isSellerSide, saleOf } from "@/lib/assets/handover";
 import type { AssetMediaView } from "@/lib/media/api";
-import { clock } from "./family";
+import { clock } from "@/components/guardians/derive";
 import { PausedNotice } from "@/components/guardians/parts";
 
 type Copy = ScreensCopy["car"];
@@ -188,7 +187,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
         {editing !== "spec" && <SpecSheet spec={media?.spec} kind={kind} copy={a.spec} />}
 
         {car.status === "Sold" && sale && (
-          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
+          <div className="enter [--enter-dur:0.3s] [--from-s:0.97] [--from-y:0]">
             <Card className="border-2 border-ink">
               <p className="flex items-center gap-2 text-h3 font-display"><TickDisc className="size-7" />{copy.sold.title}</p>
               <p className="mt-2 font-medium"><ActivityText item={sale} book={book} /></p>
@@ -209,7 +208,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
               )}
               {offers.length > 0 && <p className="mt-3 text-small text-ink-2">{copy.sold.refund}</p>}
             </Card>
-          </motion.div>
+          </div>
         )}
 
         <Protect copy={copy} car={car} offers={offers.map((o) => ({ amount: o.amount, name: buyerName(o) ?? "", mine: o.buyer === session.address }))} owner={e.ownerName.split(" ")[0]} rate={rate} hardshipName={hardshipName} />
@@ -267,14 +266,14 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
                   const st = statusOf(o.address, o.amount);
                   const reason = reasonOf(o.address);
                   return (
-                    <motion.li key={o.address} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="border-b border-line/70 py-3 last:border-0">
+                    <li key={o.address} className="enter border-b border-line/70 py-3 last:border-0 [--from-y:6px]">
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                         <p className="min-w-0 font-semibold">{buyerName(o) ?? common.roles.buyer}{o.buyer === session.address && <span className="ml-2 text-small font-medium text-accent">({copy.offers.you})</span>}</p>
                         <Badge tone={st.tone}>{st.text}</Badge>
                       </div>
                       <p className="tabular-nums">{formatUsdt(o.amount)}{rate ? <span className="ml-2 text-small text-ink-2">≈ {formatZar(o.amount, rate)}</span> : null}</p>
                       {reason && <p className="mt-0.5 text-small text-ink-2">{reason}</p>}
-                    </motion.li>
+                    </li>
                   );
                 })}
               </ul>
@@ -350,13 +349,13 @@ function Protect({ copy, car, offers, owner, rate, hardshipName }: {
             const v = fromBase(o.amount);
             const ok = v >= (relaxed ? h : f);
             return (
-              <motion.span
-                key={`${o.name}-${i}`} initial={{ y: -14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 300, damping: 18, delay: i * 0.06 }}
-                className={clsx("absolute bottom-full mb-1.5 grid size-7 -translate-x-1/2 place-items-center border-2 border-ink text-[0.7rem] font-bold", ok ? "rounded-full bg-surface text-ink" : "rounded-[3px] bg-ink text-bg", o.mine && "ring-2 ring-ink ring-offset-2 ring-offset-surface")}
-                style={{ left: pos(v) }} title={`${o.name}: ${v.toLocaleString("en-ZA")} USD₮`}
+              <span
+                key={`${o.name}-${i}`}
+                className={clsx("enter absolute bottom-full mb-1.5 grid size-7 -translate-x-1/2 place-items-center border-2 border-ink text-[0.7rem] font-bold [--enter-dur:0.4s] [--from-y:-14px]", ok ? "rounded-full bg-surface text-ink" : "rounded-[3px] bg-ink text-bg", o.mine && "ring-2 ring-ink ring-offset-2 ring-offset-surface")}
+                style={{ left: pos(v), "--enter-delay": `${i * 0.06}s` } as CSSProperties} title={`${o.name}: ${v.toLocaleString("en-ZA")} USD₮`}
               >
                 {o.name[0] ?? "?"}
-              </motion.span>
+              </span>
             );
           })}
         </div>

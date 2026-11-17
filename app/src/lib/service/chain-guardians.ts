@@ -22,7 +22,6 @@ import { enumOf, key, num } from "../chain/decoders";
 import { getActiveSigner } from "../wallet/signer";
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, foreignSpecKeys, mediaRootHex } from "../assets/spec";
-import { parseSpec } from "../assets/spec-schema";
 import { MAX_PHOTOS } from "../media/webp";
 import { photosApi } from "../media/client";
 
@@ -256,6 +255,8 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
 
     async setAssetMedia(estate, asset, input) {
       if (input.photos.length > MAX_PHOTOS) throw new Error(`Add at most ${MAX_PHOTOS} photos.`);
+      // The spec schema (zod) loads when photos or a spec sheet are saved, not with the service on every first visit.
+      const { parseSpec } = await import("../assets/spec-schema");
       if (foreignSpecKeys(input.kind, parseSpec(input.spec)).length) throw new Error("Some details do not belong on this kind of asset.");
       const root = await mediaRootHex(input.photos, parseSpec(input.spec));
       return d.send([ix.setAssetMedia(chainCtx(), {

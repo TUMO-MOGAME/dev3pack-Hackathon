@@ -27,7 +27,9 @@ import { shortName } from "../names";
 import { DEMO_FX, estimateValuation } from "./mock-valuation";
 import { checkInPlan, heartbeatFor } from "../checkin";
 import type { BillDetails, BillPayee } from "../bills/types";
-import { billActivityText, billDetailsSchema, DEMO_BILL_PAYEES, upsertPayee } from "../bills/payees";
+import { billActivityText, DEMO_BILL_PAYEES } from "../bills/book";
+// Bill validation (zod) loads only when a bill is paid or a payee saved, not with the demo service on a first visit.
+const billSchemas = () => import("../bills/payees");
 import { demoInvoiceReading } from "../bills/demo";
 
 export interface MockActor { address: Base58; role: Role; label: string }
@@ -970,7 +972,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       need(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(dest), "InvalidAddress", "That is not a valid Solana address.");
       const amount = toBase(amountUsdt);
       need(amount > 0n, "InvalidAmount", "Enter an amount above zero.");
-      const details = bill ? billDetailsSchema.parse(bill) : undefined;
+      const details = bill ? (await billSchemas()).billDetailsSchema.parse(bill) : undefined;
       const balance = s.balances[from] ?? 0n;
       const known = dest in s.names || payeesOf(from).some((p) => p.wallet === dest);
       const warnings: string[] = [];
@@ -992,12 +994,14 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       const existing = s.sends[review.id];
       if (existing) return { ...existing.receipt }; // idempotent: a retry never pays twice
       await wait(1200); // signing with the WDK wallet
+      // Checked before the balance moves, so nothing waits between paying and recording the payment.
+      const bill = review.bill ? (await billSchemas()).billDetailsSchema.parse(review.bill) : undefined;
       need(me() === review.from, "NotOwner", "This payment was prepared by a different wallet.");
       need((s.balances[review.from] ?? 0n) >= review.amount, "InsufficientFunds", "Your wallet does not hold that much USD₮.");
       s.balances[review.from] -= review.amount;
       const t = tx();
       const receipt: PaymentReceipt = { id: review.id, status: "pending", signature: t.signature, explorerUrl: t.explorerUrl, confirmations: 0, updatedAt: nowSecs() };
-      s.sends[review.id] = { receipt, from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount, confirmAt: Date.now() + 2000 + Math.floor(Math.random() * 2000), ts: nowSecs(), ...(review.bill ? { bill: billDetailsSchema.parse(review.bill) } : {}) };
+      s.sends[review.id] = { receipt, from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount, confirmAt: Date.now() + 2000 + Math.floor(Math.random() * 2000), ts: nowSecs(), ...(bill ? { bill } : {}) };
       save();
       return { ...receipt };
     },
@@ -1030,7 +1034,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     async saveBillPayee(input) {
       await wait(300);
       const owner = me();
-      const { list, payee } = upsertPayee(payeesOf(owner), input);
+      const { list, payee } = (await billSchemas()).upsertPayee(payeesOf(owner), input);
       (s.billPayees ??= {})[owner] = list;
       if (!(payee.wallet in s.names)) s.names[payee.wallet] = payee.name;
       save();

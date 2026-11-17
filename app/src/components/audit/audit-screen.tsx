@@ -6,7 +6,7 @@
  * Receipts reuse the Proof drawer's pieces (ActivityList, CopyValue, ExplorerLink): simulated in demo mode.
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { MotionConfig } from "motion/react";
+import { MotionScope } from "@/components/ui/motion-provider";
 import { CloudOff, FileCheck2, Info, Landmark, ScrollText, UsersRound } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import type { CommonCopy } from "@/content/common";
@@ -47,9 +47,9 @@ export function AuditScreen({ address, copy: english, shell }: { address: string
   const copy = useLocalized(english, (t) => t.screens.audit);
   return (
     <CopyProvider value={{ common, assistant, pay, guardians, disputes, siteName: shell.siteName }}>
-      <MotionConfig reducedMotion="user">
+      <MotionScope>
         <AuditBody address={address} copy={copy} />
-      </MotionConfig>
+      </MotionScope>
     </CopyProvider>
   );
 }

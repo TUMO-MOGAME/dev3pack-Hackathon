@@ -10,7 +10,7 @@ import type { SavedRecipient } from "@/lib/types";
 import { formatUsdt, toBase } from "@/lib/format";
 import { parseIntentFallback, planSend, walletIntentSchema, type IntentEngine, type SendPlan, type WalletIntent } from "./intent";
 import type { BillDetails, BillPayee } from "@/lib/bills/types";
-import { payeesAsRecipients } from "@/lib/bills/payees";
+import { payeesAsRecipients } from "@/lib/bills/book";
 
 export interface AssistantResult {
   plan: SendPlan; intent: WalletIntent; engine: IntentEngine; note: string; recipients: SavedRecipient[]; rate: number | null;

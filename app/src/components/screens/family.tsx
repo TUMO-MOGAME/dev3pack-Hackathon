@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import clsx from "clsx";
 import { m as motion } from "motion/react";
+import { MotionScope } from "@/components/ui/motion-provider";
 import { ArrowRight, Check, FileHeart, HeartPulse, LockOpen, TriangleAlert } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
@@ -32,7 +33,12 @@ export function clock(secs: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function FamilyScreen({ copy: english }: { copy: Copy }) {
+/** Animated with motion, so it brings its own <MotionScope> (the first pages never load the library). */
+export function FamilyScreen(props: Parameters<typeof FamilyScreenBody>[0]) {
+  return <MotionScope><FamilyScreenBody {...props} /></MotionScope>;
+}
+
+function FamilyScreenBody({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.family);
   return <Gate frame={<HeaderFrame width="max-w-2xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, role }) => <Timeline copy={copy} snap={snap!} role={role} />}</Gate>;
 }

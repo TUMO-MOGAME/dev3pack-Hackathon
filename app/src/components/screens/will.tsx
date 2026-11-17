@@ -1,7 +1,6 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import clsx from "clsx";
-import { AnimatePresence, m as motion } from "motion/react";
 import { ArrowLeft, ArrowRight, CalendarClock, CarFront, Check, Clock, GraduationCap, Hourglass, Lock, PenLine, Phone, ShieldCheck, Sparkles, UsersRound, X, Zap } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocale, useLocalized } from "@/lib/i18n/client";
@@ -13,7 +12,7 @@ import { Badge, Button, ButtonLink, Card, Consent, Eyebrow, ExplorerLink, Notice
 import { Bubble, Chips, Composer, Thinking } from "@/components/agent/chat-parts";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
-import { categoryIcon } from "./estate";
+import { categoryIcon } from "./category-icon";
 import { FallbackPlanCard } from "@/components/guardians/fallback";
 import { GuardiansPlanLink } from "@/components/guardians/section";
 import { BillTemplates } from "@/components/everyday/bill-templates";
@@ -56,10 +55,10 @@ function WillFlow({ copy, bills, snap, session, firstVisit }: { copy: Copy; bill
 
 function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
   return (
-    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.35 }} className="mx-auto max-w-xl text-center">
-      <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 260, damping: 16, delay: 0.1 }} className="mx-auto grid size-20 place-items-center rounded-full bg-accent text-accent-ink">
+    <div className="enter mx-auto max-w-xl text-center [--enter-dur:0.35s] [--from-s:0.97] [--from-y:0]">
+      <span className="spring-pop mx-auto grid size-20 place-items-center rounded-full bg-accent text-accent-ink [--enter-delay:0.1s] [--from-s:0]">
         <Lock className="size-9" aria-hidden="true" />
-      </motion.span>
+      </span>
       <h1 className="mt-5 text-h1" role="status">{copy.done.title}</h1>
       <p className="mt-3 text-lead text-ink-2">{copy.done.body}</p>
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
@@ -73,7 +72,7 @@ function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
           {txs.map((t, i) => <ExplorerLink key={t.signature} signature={t.signature} label={fmt(copy.done.receipt, { n: i + 1 })} srLabel={copy.done.receiptSr} />)}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -237,15 +236,11 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
             copy={copy} draft={draft} onStart={(i, now) => { const r = draft?.rules[i]; if (r) setStarts((prev) => ({ ...prev, [ruleKey(r)]: now })); }}
             bills={bills} extraFrom={rawDraft?.rules.length ?? 0} onAddBill={addBill}
             onRemoveBill={(i) => setExtra((x) => x.filter((_, j) => j !== i))}
-            footer={
-              <AnimatePresence>
-                {complete && (
-                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-3 shrink-0 border-t border-line pt-3">
-                    <Button block onClick={() => setView("review")}><PenLine className="size-5" aria-hidden="true" />{copy.reviewCta}</Button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            }
+            footer={complete && (
+              <div className="enter mt-3 shrink-0 border-t border-line pt-3 [--from-y:10px]">
+                <Button block onClick={() => setView("review")}><PenLine className="size-5" aria-hidden="true" />{copy.reviewCta}</Button>
+              </div>
+            )}
           />
         </div>
       </div>
@@ -275,7 +270,6 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
   const p = copy.preview;
   const parts = [!!draft?.beneficiaries.length, !!draft?.rules.length, (draft?.verifiers.length ?? 0) >= 3, !!draft?.assets.length];
   const done = parts.filter(Boolean).length;
-  const item = { initial: { opacity: 0, x: -8 }, animate: { opacity: 1, x: 0 } };
   return (
     <Card aria-label={p.title} className="flex min-h-0 flex-1 flex-col bg-surface-2/50">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
@@ -287,7 +281,7 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
         <Slot icon={<UsersRound className="size-4" aria-hidden="true" />} title={p.family} filled={parts[0]} pending={p.pending}>
           <ul className="flex flex-wrap gap-1.5">
             {draft?.beneficiaries.map((b) => (
-              <motion.li key={b.label} {...item} className="rounded-full border border-ink px-2.5 py-1 font-medium text-ink">{b.label.split(" ")[0]} · {b.relationship}</motion.li>
+              <li key={b.label} className="enter [--from-x:-8px] [--from-y:0] rounded-full border border-ink px-2.5 py-1 font-medium text-ink">{b.label.split(" ")[0]} · {b.relationship}</li>
             ))}
           </ul>
         </Slot>
@@ -298,7 +292,7 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
               const Icon = categoryIcon[r.category];
               const cat = common.status.category[r.category];
               return (
-                <motion.li key={`${r.beneficiaryLabel}-${r.category}-${i}`} {...item} transition={{ delay: i * 0.08 }} className="rounded-md border border-line bg-surface-2/50 p-2.5">
+                <li key={`${r.beneficiaryLabel}-${r.category}-${i}`} style={{ "--enter-delay": `${i * 0.08}s` } as CSSProperties} className="enter [--from-x:-8px] [--from-y:0] rounded-md border border-line bg-surface-2/50 p-2.5">
                   <div className="flex items-start gap-2">
                     <Icon className="mt-0.5 size-4 shrink-0 text-amber" aria-hidden="true" />
                     <div className="min-w-0 flex-1">
@@ -331,7 +325,7 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
                       ))}
                     </div>
                   </fieldset>
-                </motion.li>
+                </li>
               );
             })}
           </ul>
@@ -347,16 +341,16 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
         <Slot icon={<ShieldCheck className="size-4" aria-hidden="true" />} title={p.trusted} filled={parts[2]} pending={p.pending}>
           <ul className="flex flex-col gap-1">
             {draft?.verifiers.map((v, i) => (
-              <motion.li key={v.name} {...item} transition={{ delay: i * 0.08 }}><span className="font-semibold">{v.name}</span> · <span className="text-ink-2">{v.role}</span></motion.li>
+              <li key={v.name} style={{ "--enter-delay": `${i * 0.08}s` } as CSSProperties} className="enter [--from-x:-8px] [--from-y:0]"><span className="font-semibold">{v.name}</span> · <span className="text-ink-2">{v.role}</span></li>
             ))}
           </ul>
         </Slot>
         <Slot icon={<CarFront className="size-4" aria-hidden="true" />} title={p.car} filled={parts[3]} pending={p.pending}>
           {draft?.assets.map((a) => (
-            <motion.div key={a.title} {...item}>
+            <div key={a.title} className="enter [--from-x:-8px] [--from-y:0]">
               <p className="font-semibold">{a.title}</p>
               <p>{fmt(p.carFloor, { floor: usd(a.floorPriceUsdt) })} · {fmt(p.carHardship, { floor: usd(a.hardshipFloorUsdt) })}</p>
-            </motion.div>
+            </div>
           ))}
         </Slot>
         {draft && (
@@ -375,7 +369,7 @@ function Review({ copy, draft, edited, onBack, onSign, signing }: { copy: Copy; 
   const r = copy.review;
   const need = 2;
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mx-auto max-w-2xl">
+    <div className="enter mx-auto max-w-2xl [--enter-dur:0.3s] [--from-y:12px]">
       <button type="button" onClick={onBack} className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-full pr-3 text-small font-semibold text-accent"><ArrowLeft className="size-4" aria-hidden="true" />{r.back}</button>
       <Eyebrow>{r.eyebrow}</Eyebrow>
       <h1 className="mt-1.5 text-h1">{r.title}</h1>
@@ -450,7 +444,7 @@ function Review({ copy, draft, edited, onBack, onSign, signing }: { copy: Copy; 
         </Button>
         <p className="mt-2 text-center text-small text-ink-2">{r.signNote}</p>
       </div>
-    </motion.div>
+    </div>
   );
 }
 

@@ -438,6 +438,39 @@ button:disabled { cursor: not-allowed; }
 }
 .bubble-in { animation: bubble-in 0.25s var(--ease-out) both; }
 
+/* Entrances and small flourishes in CSS rather than the motion library, so the pages people open first never download
+   or run it (~150 KB of first-load script). Each plays when its element mounts (a new `key` replays it). Set the
+   starting point with --from-x / --from-y / --from-s / --from-o, the length with --enter-dur, the wait with --enter-delay.
+   Reduced motion: the global rule at the end cuts every animation to a blink. */
+@keyframes enter {
+  from { opacity: var(--from-o, 0); transform: translate(var(--from-x, 0), var(--from-y, 8px)) scale(var(--from-s, 1)); }
+}
+.enter { animation: enter var(--enter-dur, 0.25s) var(--ease-out) var(--enter-delay, 0s) both; }
+/* A springy pop (a tick or lock disc arriving). */
+@keyframes spring-pop {
+  0% { transform: scale(var(--from-s, 0.4)); }
+  55% { transform: scale(1.08); }
+  80% { transform: scale(0.98); }
+  100% { transform: none; }
+}
+.spring-pop { animation: spring-pop 0.5s var(--ease-out) var(--enter-delay, 0s) both; }
+/* One beat when something changes state (a quorum dot filling, the timeline's current step). */
+@keyframes beat { 50% { transform: scale(var(--beat-s, 1.25)); } }
+.beat { animation: beat 0.45s ease-in-out; }
+/* A refusal arriving: fade in with a short shake. */
+@keyframes refuse {
+  0% { opacity: 0; transform: none; }
+  20% { opacity: 1; transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+  100% { opacity: 1; transform: none; }
+}
+.refuse { animation: refuse 0.45s ease-out both; }
+/* A bar filling to its width (set inline) from empty. */
+@keyframes fill-from-0 { from { width: 0; } }
+.fill-in { animation: fill-from-0 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
 .skeleton {
   border-radius: var(--r-sm);
   background: var(--surface-2);

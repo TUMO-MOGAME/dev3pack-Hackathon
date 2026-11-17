@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { m as motion } from "motion/react";
 import { ArrowRight, ArrowUp, Sparkles } from "@/components/ui/icons";
 import type { AssistantCopy } from "@/content/assistant";
 import type { SpecialistName } from "@/lib/voice/types";
@@ -32,19 +31,19 @@ export function Bubble({
   role: "user" | "agent"; text: string; specialist?: SpecialistName; fresh?: boolean; copy: AssistantCopy;
   children?: ReactNode; onTick?: () => void; onTyped?: () => void;
   /**
-   * How an agent message arrives: "motion" (default), "css" (the same fade as a CSS animation, so a server-rendered
-   * opening message shows before any JavaScript runs) or "none" (it is already on screen).
+   * How an agent message arrives: "motion" (default) and "css" both fade in with the CSS `bubble-in` (no animation
+   * library, so a server-rendered opening message shows before any JavaScript runs); "none": it is already on screen.
    */
   enter?: "motion" | "css" | "none";
 }) {
   const [typed, setTyped] = useState(!fresh);
   if (role === "user") {
     return (
-      <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex justify-end">
+      <li className="bubble-in flex justify-end">
         <p className="max-w-[85%] whitespace-pre-line rounded-[1.25rem] rounded-br-md bg-ink px-4 py-2.5 text-bg">
           <span className="sr-only">{copy.chat.you}: </span>{text}
         </p>
-      </motion.li>
+      </li>
     );
   }
   const body = (
@@ -62,12 +61,7 @@ export function Bubble({
       </div>
     </>
   );
-  if (enter !== "motion") return <li className={clsx("flex items-start gap-2.5", enter === "css" && "bubble-in")}>{body}</li>;
-  return (
-    <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="flex items-start gap-2.5">
-      {body}
-    </motion.li>
-  );
+  return <li className={clsx("flex items-start gap-2.5", enter !== "none" && "bubble-in")}>{body}</li>;
 }
 
 export function Thinking({ label }: { label: string }) {

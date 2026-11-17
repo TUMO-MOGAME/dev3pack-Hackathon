@@ -3,7 +3,8 @@ import { z } from "zod";
 import { handler, HttpError, isChainMode, json, parseJson, rateLimit } from "@/lib/api/http";
 import { chatMessageSchema, localeSchema } from "@/lib/agent/schemas";
 import { orchestrate, ROUTABLE } from "@/lib/agent/orchestrator";
-import { estateFactsSchema, toEstateFacts, type EstateFacts } from "@/lib/agent/facts";
+import { toEstateFacts, type EstateFacts } from "@/lib/agent/facts";
+import { estateFactsSchema } from "@/lib/agent/facts-schema";
 import { loadSnapshot } from "@/lib/server/estate";
 import { saveTranscript } from "@/lib/db";
 

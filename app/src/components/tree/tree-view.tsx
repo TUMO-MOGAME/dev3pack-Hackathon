@@ -10,6 +10,7 @@ import { CloudOff, Fingerprint, Info, Printer, UserRoundPlus } from "@/component
 import { Button, Card, EmptyState, Notice } from "@/components/ui/primitives";
 import { TreeSkeleton } from "./skeleton";
 import { Sheet } from "@/components/ui/client";
+import { MotionScope } from "@/components/ui/motion-provider";
 import { CopyValue } from "@/components/shell/proof-drawer";
 import { useEstate } from "@/lib/hooks/estate";
 import type { EstateSnapshot } from "@/lib/service";
@@ -35,7 +36,12 @@ function eventYears(t: TreeSnapshot): Set<number> {
   return s;
 }
 
-export default function TreeView({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role: Role }) {
+/** The map and list animate with `m.*` components, which need a LazyMotion scope (there is no global one). */
+export default function TreeView(props: { copy: Copy; snap: EstateSnapshot; role: Role }) {
+  return <MotionScope><TreeViewInner {...props} /></MotionScope>;
+}
+
+function TreeViewInner({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role: Role }) {
   const tree = useTree(snap.estate.address);
   if (tree.phase === "loading" || !tree.snap) {
     if (tree.phase === "error") {

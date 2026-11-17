@@ -5,8 +5,9 @@
  */
 import { z } from "zod";
 import type { Base58 } from "../types";
-import { BILL_KINDS, type BillDetails, type BillPayee, type BillPayeeInput } from "./types";
-import type { RecipientLike } from "../assistant/intent";
+import { BILL_KINDS, type BillPayee, type BillPayeeInput } from "./types";
+// The zod-free pieces live in ./book so the services (loaded on every first visit) need zod only when a bill is paid.
+export { billActivityText, DEMO_BILL_PAYEES, payeesAsRecipients } from "./book";
 
 const base58 = z.string().trim().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, "That is not a valid Solana address.");
 
@@ -37,17 +38,6 @@ export function upsertPayee(list: BillPayee[], input: BillPayeeInput): { list: B
   return { list: existing ? list.map((p) => (p.id === existing.id ? payee : p)) : [...list, payee], payee };
 }
 
-/** Bill payees as the wallet assistant's recipients: "Pay Ndlovu Attorneys R2 500" finds them by name or by kind. */
-export function payeesAsRecipients(list: BillPayee[]): RecipientLike[] {
-  return list.map((p) => ({ label: p.name, address: p.wallet, relationship: p.kind }));
-}
-
-/** One activity line, the same in both modes. */
-export function billActivityText(payer: string, bill: BillDetails, amount: string): string {
-  const what = [bill.note, bill.reference ? `ref ${bill.reference}` : null].filter(Boolean).join(", ");
-  return `${payer} paid a bill: ${amount} to ${bill.payee}${what ? ` (${what})` : ""}`;
-}
-
 /* ---------- device store (chain mode) ---------- */
 
 const KEY = "heirloom.billPayees.v1";
@@ -73,10 +63,3 @@ export function billPayeeStore(storage: Storage | null = typeof window === "unde
     },
   };
 }
-
-/** Thabo's saved payees in the demo: his lawyer (the will), his plumber and Naledi's school. */
-export const DEMO_BILL_PAYEES: BillPayee[] = [
-  { id: "bp_ndlovu", name: "Ndlovu Attorneys", wallet: "NdLoVuAtToRnEyS2wiLLdRaFtiNg8uE6rAoPaYbiLL1", kind: "lawyer" },
-  { id: "bp_plumber", name: "Soweto Plumbing", wallet: "SoWeToPLuMbiNg3PiPeSaNdGeYsERs8uE6rAoPaYbiL2", kind: "plumber" },
-  { id: "bp_school", name: "Westerford High School", wallet: "WeSTeRFoRdHiGhSchooLTRiPs4uE6rAoPaYbiLL3xyz", kind: "school", reference: "NALEDI-M" },
-];
