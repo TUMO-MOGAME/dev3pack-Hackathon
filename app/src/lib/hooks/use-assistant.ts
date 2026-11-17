@@ -4,8 +4,11 @@ import type { AssistantCopy } from "@/content/assistant";
 import { useEstate } from "./estate";
 import type { AssistantMessage } from "./agent-types";
 import { useLocale } from "@/lib/i18n/client";
-import { runAssistantTurn, turnText } from "../chat/pipeline";
 import { shortName } from "../names";
+
+// The chat pipeline (intent parsing, its zod schemas, the mock orchestrator) loads on the first message, not with the
+// agent sheet, which every page mounts (closed) once it has settled.
+const pipeline = () => import("../chat/pipeline");
 
 /** General assistant chat. Mock mode answers on-device; chain mode calls the orchestrator and falls back on-device. */
 export function useAssistant(copy: AssistantCopy, page: string) {
@@ -36,6 +39,7 @@ export function useAssistant(copy: AssistantCopy, page: string) {
     setMessages((m) => [...m.map((x) => ({ ...x, fresh: false })), { id: ++id.current, role: "user", text: trimmed }]);
     setPending(true);
     const c = ctx.current;
+    const { runAssistantTurn, turnText } = await pipeline();
     const result = await runAssistantTurn(trimmed, history, c, copy);
     const final = result.reply;
     setMessages((m) => [...m, {

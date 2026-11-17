@@ -39,8 +39,8 @@ import { disabledGuardians, SEAT_MONITOR_OFFSETS } from "../chain/guardians";
 import { SystemProgram } from "@solana/web3.js";
 import type { ActivityItem } from "../types";
 import type { PaidBill } from "../bills/types";
-import { billActivityText, billDetailsSchema, billPayeeStore } from "../bills/payees";
-import { invoiceReadSchema, type InvoiceRead } from "../bills/invoice";
+import { billActivityText } from "../bills/book";
+import type { InvoiceRead } from "../bills/invoice";
 import {
   AuthorityType, MINT_SIZE, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction as createAtaIx,
   createInitializeMint2Instruction, createMintToInstruction, createSetAuthorityInstruction,
@@ -59,7 +59,10 @@ const pk = (a: string) => new PublicKey(a);
 const receipts = defaultReceiptStore();
 
 // ---------- pay a bill once (lib/bills): the owner's own wallet, never the vault ----------
-const billBook = billPayeeStore();
+// The store validates with zod, so it (and the schemas) load the first time bills are used, not on every first visit.
+const billSchemas = () => import("../bills/payees");
+let billStore: ReturnType<Awaited<ReturnType<typeof billSchemas>>["billPayeeStore"]> | null = null;
+const billBook = async () => (billStore ??= (await billSchemas()).billPayeeStore());
 
 /** Bills this device paid from `wallet` (kept with the receipts), newest first. */
 function billsFrom(wallet: Base58): PaidBill[] {
@@ -553,7 +556,7 @@ export function createChainService(): HeirloomService {
     // ----- P2P USD₮ (Tether track flow: review → approve → WDK sign → pending → confirmed) -----
     async reviewSend({ to, toLabel, amountUsdt, bill: billInput }): Promise<PaymentReview> {
       const from = getActiveSigner().address;
-      const bill = billInput ? billDetailsSchema.parse(billInput) : undefined;
+      const bill = billInput ? (await billSchemas()).billDetailsSchema.parse(billInput) : undefined;
       let toKey: PublicKey;
       try { toKey = pk(to); } catch { throw new Error("That is not a valid Solana address."); }
       if (to === from) throw new Error("You cannot send to your own wallet.");
@@ -619,7 +622,7 @@ export function createChainService(): HeirloomService {
         ...(needsAta ? [createAssociatedTokenAccountIdempotentInstruction(!feePayer.equals(from) && sponsorPaysRent ? feePayer : from, ata(mint, to), to, mint)] : []),
         createTransferCheckedInstruction(ata(mint, from), mint, ata(mint, to), from, review.amount, 6),
       ];
-      const bill = review.bill ? billDetailsSchema.parse(review.bill) : undefined;
+      const bill = review.bill ? (await billSchemas()).billDetailsSchema.parse(review.bill) : undefined;
       return pay(review.id, ixs, { kind: bill ? "bill" : "p2p", from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount.toString(), ...(bill ? { bill } : {}) });
     },
 
@@ -642,11 +645,12 @@ export function createChainService(): HeirloomService {
     },
 
     // ----- Pay a bill once: same WDK transfer as a send, with the bill's details on the receipt -----
-    async billPayees() { return billBook.list(getActiveSigner().address); },
-    async saveBillPayee(input) { return billBook.save(getActiveSigner().address, input); },
+    async billPayees() { return (await billBook()).list(getActiveSigner().address); },
+    async saveBillPayee(input) { return (await billBook()).save(getActiveSigner().address, input); },
     async readInvoice(file): Promise<InvoiceRead> {
       const form = new FormData();
       form.set("file", file);
+      const { invoiceReadSchema } = await import("../bills/invoice");
       return invoiceReadSchema.parse(await api<unknown>("/api/invoice", { method: "POST", body: form }));
     },
     async paidBills() {
