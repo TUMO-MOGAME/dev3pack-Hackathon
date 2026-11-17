@@ -19,7 +19,13 @@
 - The previous estate (`thabo`, 2LXvc…) is kept as DEVNET_PREV_META; `seed-guardians-assets.ts --owner <persona>` seeds another.
 - Still needed: a dedicated devnet RPC (public RPC 429s; tree shows "partial history").
 
-## TRUST TREE PHOTOS (plan §15.11, agreed 17 Nov): agent/photos building in ../heirloom-agents/bill, NOT merged
+## TRUST TREE PHOTOS (plan §15.11, 17 Nov 2026): MERGED to main 31eae7d, deployed
+- Consent rule `photoConsent` (lib/tree/photos.ts) shared by mock, chain, route and card: own photo only; the owner for children, people who passed, `local:` people and organisations; never for hidden people (derive drops it).
+- Browser: 256×256 centre-crop WebP via canvas (strips EXIF), ≤60 KB. Not in the fingerprint, never on-chain.
+- Mock: illustrated SVG faces for the Mokoena family (sepia memorial ones for Mkhulu Joseph and Gogo Martha), charity logo; Kagiso and Adv. Naidoo show initials + "Add photo".
+- Chain: signed `/api/tree/photo` (413/415/403, 503 on the demo deployment), Supabase table `family_photos` via **migration 0007 (not applied yet: until then server memory + device copy)**.
+- Map, list, card (Add/Change/Remove, memorial "Added by"), print. Privacy policy §14 covers photos. 772 tests.
+- TODO: user is collecting demo photos (AI-generated/stock) into `demo-people/<id>.jpg` to replace the drawings; check WebP encoding on a real iPhone (older Safari shows "This browser cannot prepare photos").
 
 ## SPEED2 LIVE (17 Nov 2026, main 82292be)
 - Merged + deployed on both sites. Trust Tree given its own MotionScope (the global LazyMotion was removed by speed2; without it the tree's m.* lines would not draw). Live demo: tree plays (svg paths 19 -> 36), /tree /estate /will /claims /chat axe clean, 0 errors.
