@@ -139,7 +139,7 @@ interface State {
   guard?: MockGuardState;
   /** "Ask for money" notes by claim (added after v5 shipped; created on first use). */
   asks?: Record<Base58, AskNote>;
-  /** Trust Tree: relationships the owner added or removed, hidden flags (added after v5 shipped; created on first use). */
+  /** Trust Tree: relationships the owner added or removed, hidden flags, photos (added after v5 shipped; created on first use). */
   tree?: MockTreeState;
 }
 
@@ -1225,6 +1225,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     setRelationship: async (e, input) => (await Tr()).setRelationship(e, input),
     removeRelationship: async (e, id) => (await Tr()).removeRelationship(e, id),
     setHidden: async (e, hidden) => (await Tr()).setHidden(e, hidden),
+    setPhoto: async (e, person, src) => (await Tr()).setPhoto(e, person, src),
+    removePhoto: async (e, person) => (await Tr()).removePhoto(e, person),
     declineAsk: (e, claim) => A.declineAsk(e, claim),
 
     async submitDeathClaim(_e, certificate) {

@@ -119,7 +119,7 @@ export const privacy = {
       ],
     },
     {
-      heading: "14. Trust Tree (family relationships and years)",
+      heading: "14. Trust Tree (family relationships, years and photos)",
       paragraphs: [
         "The Trust Tree is a family map: who is related to whom, who trusted whom in an estate plan, and the promises they kept. This section is part of the template for legal review.",
       ],
@@ -131,7 +131,8 @@ export const privacy = {
         "Hiding: a living adult can hide themselves at any time from their own card. They then show as \"A family member\" with no name or details; their roles stay, because roles are public on the ledger.",
         "How long we keep it: for as long as the estate is active and for 5 years after its last payment, unless deleted sooner. [Placeholder: the responsible party must confirm this with its legal adviser.]",
         "Deletion and correction: the owner can remove a relationship at any time, and anyone on the tree may ask the information officer (section 2) to correct or delete information about them, as section 10 describes.",
-        "Operators and transfers: relationships and names are stored by Supabase Inc. (or, in the prototype, on the owner's device) under sections 7 and 8.",
+        "Photos: a small photo may be shown beside a person's name on the tree (on the map, the family list, their card and a printed copy), so the family recognises faces in years to come. What we keep is one 256 by 256 pixel image of at most 60 KB per person, prepared on the person's own device: it is cropped, shrunk and re-encoded there, which removes the camera details and location (EXIF) before anything is sent. Photos are never written to the public ledger and are not part of the tree's fingerprint. Who sees them: the same people who can see the tree. Consent: a living adult adds, changes or removes only their own photo (trusted people and lawyers included). The estate owner decides for a child, and may add a memorial photo of someone who has passed or who has no wallet (shown as \"Added by\" with their name and the year), and an organisation's logo. A person who chose to hide never shows a photo. Deletion: the person (or, for a child, someone who has passed or an organisation, the owner) can remove a photo at any time from the card, and anyone may ask the information officer (section 2) to delete a photo of them. In the demo, photos stay on this device, and the demo family's pictures are drawn illustrations, not real people.",
+        "Operators and transfers: relationships, names and photos are stored by Supabase Inc. (or, in the prototype, on the owner's device) under sections 7 and 8.",
       ],
     },
   ] satisfies LegalSection[],

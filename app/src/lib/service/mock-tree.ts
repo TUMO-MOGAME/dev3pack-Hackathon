@@ -12,14 +12,19 @@
  *   generation link under Thabo's) and, when she passes in 2086, the Corolla passes on to Amahle.
  *   If the visitor already played Thabo's passing, the future follows from that year instead.
  * - Before Heirloom: Thabo's parents, Mkhulu Joseph and Gogo Martha, are people only (no trust lines).
- * Relationships the owner adds or removes, and hidden flags, are kept with the rest of the demo state.
+ * Relationships the owner adds or removes, hidden flags and photos are kept with the rest of the demo state.
+ * Photos (plan.md §15.11): the cast starts with illustrated avatars bundled with the app (lib/tree/avatars.ts, never
+ * real people's faces), memorial ones for Mkhulu Joseph and Gogo Martha, and the charity's logo; the same consent
+ * rules as on chain (lib/tree/photos.ts) decide who may change them.
  */
 import type { Base58, Category } from "../types";
 import type { EstateSnapshot } from "./types";
 import { fail } from "./mock-errors";
-import { deriveTree, type DeclaredPerson, type TreeEstateInput } from "../tree/derive";
+import { deriveTree, deriveTreeBody, type DeclaredPerson, type DeriveInput, type TreeEstateInput } from "../tree/derive";
 import type { TreeEvent } from "../tree/events";
 import { relationshipId } from "../tree/links";
+import { checkPhoto, photoConsent, type StoredPhoto } from "../tree/photos";
+import { AVATAR_COLORS as C, AVATAR_SKIN as S, avatarSvg, logoSvg, svgDataUrl, type AvatarLook } from "../tree/avatars";
 import type { GenerationLink, PersonId, Relationship, RelationshipInput, RelationshipKind, TreeService, TreeSnapshot } from "../tree/types";
 
 /** The demo cast's wallets (mock.ts passes the bound persona wallets). */
@@ -45,8 +50,10 @@ export interface MockTreeState {
   /** Ids of default relationships the owner removed. */
   removed: string[];
   hidden: Record<PersonId, boolean>;
+  /** Photos set on this device, by person; null = the bundled illustration was removed. Added after the tree shipped. */
+  photos?: Record<PersonId, StoredPhoto | null>;
 }
-export const blankTreeState = (): MockTreeState => ({ added: [], removed: [], hidden: {} });
+export const blankTreeState = (): MockTreeState => ({ added: [], removed: [], hidden: {}, photos: {} });
 
 const at = (year: number, month = 6, day = 15) => Date.UTC(year, month - 1, day, 10) / 1000;
 
@@ -271,6 +278,33 @@ export function mockStory(c: MockTreeCast, snap: EstateSnapshot | null, nowTs: n
   };
 }
 
+/** When the demo's illustrations were "added" (the year shows in the memorial label). */
+const ILLUSTRATED_AT = Date.UTC(2026, 10, 17, 10) / 1000;
+
+/**
+ * The demo family's illustrated avatars: each living adult's is their own; the owner added the memorial drawings of
+ * his parents, his young daughter's and the charity's logo. Adv. Priya Naidoo and Cousin Kagiso have none, so the
+ * demo also shows initials and "Add photo".
+ */
+export function demoPhotos(c: MockTreeCast): Record<PersonId, StoredPhoto> {
+  const look = (l: AvatarLook) => svgDataUrl(avatarSvg(l));
+  const own = (id: PersonId, src: string) => [id, { src, by: id, at: ILLUSTRATED_AT }] as const;
+  const owners = (id: PersonId, src: string) => [id, { src, by: c.thabo, at: ILLUSTRATED_AT }] as const;
+  return Object.fromEntries([
+    owners(MKHULU, look({ skin: S.d, hair: "bald", hairColor: "#d8d8d8", bg: C.surface2, shirt: C.ink2, beard: true, glasses: true, memorial: true })),
+    owners(GOGO, look({ skin: S.b, hair: "wrap", hairColor: C.accent, bg: C.surface2, shirt: C.accent, glasses: true, memorial: true })),
+    own(c.bongani, look({ skin: S.d, hair: "crop", hairColor: "#9a9a9a", bg: C.okSoft, shirt: C.okDeep, beard: true })),
+    own(c.thabo, look({ skin: S.a, hair: "crop", hairColor: "#1f1410", bg: C.amber, shirt: C.okDeep })),
+    own(c.zodwa, look({ skin: S.b, hair: "wrap", hairColor: C.okDeep, bg: C.okSoft, shirt: C.amberDeep })),
+    own(c.lerato, look({ skin: S.c, hair: "bun", hairColor: "#1f1410", bg: C.ok, shirt: C.accent })),
+    own(c.sipho, look({ skin: S.a, hair: "curls", hairColor: "#1f1410", bg: C.amber, shirt: C.ink })),
+    owners(c.naledi, look({ skin: S.c, hair: "long", hairColor: "#2b1d14", bg: C.okSoft, shirt: C.amber })),
+    own(c.ndlovu, look({ skin: S.d, hair: "short", hairColor: "#1f1410", bg: C.surface2, shirt: C.ink, glasses: true })),
+    own(c.pillay, look({ skin: S.e, hair: "long", hairColor: "#1f1410", bg: C.surface2, shirt: C.okDeep })),
+    owners(c.charity, svgDataUrl(logoSvg())),
+  ]);
+}
+
 export interface MockTreeDeps {
   cast: MockTreeCast;
   /** The live demo estate, or null before a plan is signed. */
@@ -300,23 +334,45 @@ export function createMockTree(d: MockTreeDeps): TreeService {
     return [...out.values()];
   }
 
+  /** Bundled illustrations, then what was set or removed on this device. */
+  function photos(): Record<PersonId, StoredPhoto> {
+    const out: Record<PersonId, StoredPhoto> = demoPhotos(cast());
+    for (const [id, p] of Object.entries(d.tree().photos ?? {})) { if (p) out[id] = p; else delete out[id]; }
+    return out;
+  }
+
+  function input(estate: Base58): DeriveInput {
+    const now = d.now();
+    const story = mockStory(cast(), d.snap(), now);
+    const st = d.tree();
+    return {
+      estate: estate === STORY_ESTATE_LERATO ? estate : d.cast.estate,
+      mode: "mock",
+      estates: story.estates,
+      relationships: relationships(story),
+      hidden: Object.entries(st.hidden).filter(([, h]) => h).map(([id]) => id),
+      generations: story.generations,
+      people: story.people,
+      today: new Date(now * 1000).getUTCFullYear(),
+      span: { ...STORY_SPAN },
+      photos: photos(),
+    };
+  }
+
+  /** Throws unless the signed-in persona may change this person's photo. */
+  function needPhotoConsent(estate: Base58, person: PersonId) {
+    const t = input(estate);
+    const p = deriveTreeBody(t).people.find((x) => x.id === person);
+    if (!p) fail("BadStatus", "That person is not on the tree.");
+    if (!photoConsent(p!, d.me(), d.me() === ownerOf(estate), t.today)) {
+      fail("NotOwner", p!.hidden ? "This person chose to hide from the tree." : "Only they can change their own photo, or the estate owner for a child, someone who has passed or an organisation.");
+    }
+  }
+
   return {
     async getTree(estate): Promise<TreeSnapshot> {
       await d.wait(150);
-      const now = d.now();
-      const story = mockStory(cast(), d.snap(), now);
-      const st = d.tree();
-      return deriveTree({
-        estate: estate === STORY_ESTATE_LERATO ? estate : d.cast.estate,
-        mode: "mock",
-        estates: story.estates,
-        relationships: relationships(story),
-        hidden: Object.entries(st.hidden).filter(([, h]) => h).map(([id]) => id),
-        generations: story.generations,
-        people: story.people,
-        today: new Date(now * 1000).getUTCFullYear(),
-        span: { ...STORY_SPAN },
-      });
+      return deriveTree(input(estate));
     },
 
     async setRelationship(estate, input: RelationshipInput) {
@@ -355,6 +411,24 @@ export function createMockTree(d: MockTreeDeps): TreeService {
       await d.wait(300);
       const me = d.me();
       d.tree().hidden[me] = hidden;
+      d.save();
+    },
+
+    async setPhoto(estate, person, src) {
+      await d.wait(300);
+      const why = checkPhoto(src);
+      if (why) fail("BadStatus", why === "size" ? "The photo is larger than 60 KB." : "The photo must be a WebP image.");
+      needPhotoConsent(estate, person);
+      const st = d.tree();
+      st.photos = { ...(st.photos ?? {}), [person]: { src, by: d.me(), at: d.now() } };
+      d.save();
+    },
+
+    async removePhoto(estate, person) {
+      await d.wait(200);
+      needPhotoConsent(estate, person);
+      const st = d.tree();
+      st.photos = { ...(st.photos ?? {}), [person]: null };
       d.save();
     },
   };

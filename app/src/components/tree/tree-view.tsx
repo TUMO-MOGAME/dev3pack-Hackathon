@@ -2,7 +2,7 @@
 /**
  * The Trust Tree itself (loaded with next/dynamic only on /tree): the timeline, the map (wide screens) or the family
  * list (phones), the person cards, the owner's relationship sheet, what passed through the family, and the
- * fingerprint, legal line and Print. Nothing animates until this chunk has loaded after the page's first paint.
+ * fingerprint, legal line and Print (photos included: the family's own copy). Nothing animates until this chunk has loaded after the page's first paint.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useReducedMotion } from "motion/react";
@@ -17,6 +17,7 @@ import type { EstateSnapshot } from "@/lib/service";
 import type { Role } from "@/lib/types";
 import type { PersonId, Relationship, RelationshipInput, TreeSnapshot, TrustRole } from "@/lib/tree/types";
 import { treeAtYear, yearOf } from "@/lib/tree/timeline";
+import { photoConsent } from "@/lib/tree/photos";
 import { TreeMap, travellersAt } from "./map";
 import { TreeList } from "./list";
 import { TimelineSlider } from "./slider";
@@ -104,6 +105,16 @@ function Tree({ copy, t, role, reload, source }: {
     const r = await run(`tree.remove.${rel.id}`, (_svc, estate) => source.removeRelationship(estate, rel.id), copy.owner.removed);
     if (r.ok) await reload();
   };
+  const savePhoto = async (person: PersonId, src: string | null) => {
+    const r = await run("tree.photo", (_svc, estate) => (src ? source.setPhoto(estate, person, src) : source.removePhoto(estate, person)), src ? copy.photo.saved : copy.photo.removed);
+    if (r.ok) await reload();
+    return r.ok;
+  };
+  // Photo consent is judged on the person as they are today, not at the slider's year.
+  const open = openId ? t.people.find((p) => p.id === openId) : undefined;
+  const photoRight = open ? photoConsent(open, viewer, owner, t.today) : null;
+  const addedBy = open?.photo ? shortLabel(copy, t.people.find((p) => p.id === open.photo!.addedBy || p.wallets.includes(open.photo!.addedBy)), t.today) : "";
+
   const hide = async (hidden: boolean) => {
     const r = await run("tree.hide", (_svc, estate) => source.setHidden(estate, hidden), hidden ? copy.card.hidden : copy.card.shown);
     if (r.ok) await reload();
@@ -202,7 +213,12 @@ function Tree({ copy, t, role, reload, source }: {
       </footer>
 
       <Sheet open={openId !== null} onClose={() => setOpenId(null)} title={openId ? cardTitle(at, openId, copy) : ""} closeLabel={copy.card.close}>
-        {openId && <PersonCardBody at={at} id={openId} copy={copy} mock={mock} viewer={viewer} busy={busy === "tree.hide"} onHide={(h) => void hide(h)} />}
+        {openId && (
+          <PersonCardBody
+            at={at} id={openId} copy={copy} mock={mock} viewer={viewer} busy={busy === "tree.hide"} onHide={(h) => void hide(h)}
+            photoRight={photoRight} photoBusy={busy === "tree.photo"} addedByName={addedBy} onPhoto={(src) => savePhoto(openId, src)}
+          />
+        )}
       </Sheet>
       {owner && (
         <RelationshipSheet

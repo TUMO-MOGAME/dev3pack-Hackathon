@@ -14,7 +14,7 @@ import type { PersonId, Relationship, RelationshipKind } from "./types";
 import { DEVNET_DEMO_ESTATE, DEVNET_DEMO_FAMILY, DEVNET_DEMO_META } from "../chain/demo-estate";
 
 export const TREE_MAX_SKEW_MS = 5 * 60 * 1000;
-export type TreeAction = "relate" | "unrelate" | "hide";
+export type TreeAction = "relate" | "unrelate" | "hide" | "photo";
 export const RELATIONSHIP_KINDS: readonly RelationshipKind[] = ["parentOf", "spouseOf", "siblingOf"];
 /** A wallet, or a local id for someone without one ("local:gogo-martha"). */
 export const PERSON_ID = /^(local:[a-z0-9-]{1,40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/;
@@ -30,9 +30,13 @@ export function treeMessage(action: TreeAction, estate: Base58, wallet: Base58, 
 }
 
 /** The signed part of each action, in a fixed key order. */
-export function treeBody(b: { action: "relate"; kind: RelationshipKind; from: PersonId; to: PersonId } | { action: "unrelate"; id: string } | { action: "hide"; hidden: boolean }): string {
+export function treeBody(
+  b: { action: "relate"; kind: RelationshipKind; from: PersonId; to: PersonId } | { action: "unrelate"; id: string } | { action: "hide"; hidden: boolean }
+    | { action: "photo"; person: PersonId; photo: string | null },
+): string {
   if (b.action === "relate") return JSON.stringify({ kind: b.kind, from: b.from, to: b.to });
   if (b.action === "unrelate") return JSON.stringify({ id: b.id });
+  if (b.action === "photo") return JSON.stringify({ person: b.person, photo: b.photo });
   return JSON.stringify({ hidden: b.hidden });
 }
 

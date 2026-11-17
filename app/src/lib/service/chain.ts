@@ -307,6 +307,8 @@ export function createChainService(): HeirloomService {
     setRelationship: async (estate, input) => (await tree()).setRelationship(estate, input).finally(() => forget(`tree:${estate}`)),
     removeRelationship: async (estate, id) => (await tree()).removeRelationship(estate, id).finally(() => forget(`tree:${estate}`)),
     setHidden: async (estate, hidden) => (await tree()).setHidden(estate, hidden).finally(() => forget(`tree:${estate}`)),
+    setPhoto: async (estate, person, src) => (await tree()).setPhoto(estate, person, src).finally(() => forget(`tree:${estate}`)),
+    removePhoto: async (estate, person) => (await tree()).removePhoto(estate, person).finally(() => forget(`tree:${estate}`)),
     askForMoney: (estate, input) => asks.askForMoney(estate, input).finally(() => forget(`asks:${estate}`)),
     declineAsk: (estate, claim) => asks.declineAsk(estate, claim).finally(() => forget(`asks:${estate}`)),
     ...createChainGuardians({

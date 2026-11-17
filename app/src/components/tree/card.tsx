@@ -3,28 +3,43 @@
  * A person's card: who trusted them and how many promises they kept, their roles with years, the kept promises in
  * plain words with proof (Solana Explorer on devnet, "simulated" in the demo) and what they received (kind and title
  * only). No amounts and no scores, ever. Hidden people and children show no details. A living adult viewing their
- * own card can hide themselves.
+ * own card can hide themselves. The photo sits at the top, with "Add / Change / Remove photo" for whoever may change
+ * it (components/tree/photo.tsx); a memorial photo says who added it and when.
  */
 import { CarFront, ExternalLink, Eye, EyeOff, HandHeart, Info, Sparkles } from "@/components/ui/icons";
 import { Button } from "@/components/ui/primitives";
 import { explorerTx, shortAddress } from "@/lib/format";
 import type { PersonId, TreeAtYear } from "@/lib/tree/types";
 import { yearOf } from "@/lib/tree/timeline";
+import { PhotoPanel } from "./photo";
 import {
   assetText, factsFor, factsLine, fullLabel, isMinorAt, keptText, lifeText, roleTermText, shortLabel, type Copy,
 } from "./words";
 
 export function PersonCardBody({
-  at, id, copy, mock, viewer, busy, onHide,
+  at, id, copy, mock, viewer, busy, onHide, photoRight = null, photoBusy = false, addedByName = "", onPhoto,
 }: {
   at: TreeAtYear; id: PersonId; copy: Copy; mock: boolean; viewer: string | null; busy?: boolean;
   /** Present when hiding is possible on this screen. */
   onHide?: (hidden: boolean) => void;
+  /** Who may change this person's photo here (lib/tree/photos.ts photoConsent), or null. */
+  photoRight?: "own" | "owner" | null;
+  photoBusy?: boolean;
+  /** The short name of whoever added the photo (for a memorial photo's label). */
+  addedByName?: string;
+  /** Saves a prepared photo (or null to remove it); resolves true when saved. */
+  onPhoto?: (src: string | null) => Promise<boolean>;
 }) {
   const p = at.people.find((x) => x.id === id);
   if (!p) return null;
   const nameOf = (pid: PersonId) => shortLabel(copy, at.people.find((x) => x.id === pid), at.year);
   const me = !!viewer && p.wallets.includes(viewer);
+  const photo = (
+    <PhotoPanel
+      p={p} name={shortLabel(copy, p, at.year)} me={me} copy={copy} right={p.hidden ? null : photoRight}
+      addedByName={addedByName} busy={photoBusy} onSave={onPhoto}
+    />
+  );
   // Hiding is for a living adult on their own card (and showing again, once hidden).
   const canHide = me && p.alive && !isMinorAt(p, at.year) && !!onHide;
   const hideButton = canHide && (
@@ -40,6 +55,7 @@ export function PersonCardBody({
   if (p.hidden || isMinorAt(p, at.year)) {
     return (
       <div className="grid gap-4">
+        {photo}
         <p className="flex items-start gap-2 text-ink-2"><Info className="mt-1 size-4 shrink-0" aria-hidden="true" />{p.hidden ? copy.person.hiddenBody : copy.person.minorBody}</p>
         {hideButton}
       </div>
@@ -50,6 +66,7 @@ export function PersonCardBody({
   const life = lifeText(copy, p);
   return (
     <div className="grid gap-5">
+      {photo}
       <div>
         {life && <p className="text-small text-ink-2 tabular-nums">{life}{me ? ` · ${copy.person.you}` : ""}</p>}
         <p className="mt-1 font-semibold" data-facts>{factsLine(copy, f)}</p>

@@ -7,7 +7,7 @@
  *    (server memory) plus this device's copy, and what happens when the server is down or refuses.
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { generateKeyPairSync, sign as edSign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign as edSign } from "node:crypto";
 import bs58 from "bs58";
 import { BN } from "@anchor-lang/core";
 import { Keypair, PublicKey } from "@solana/web3.js";
@@ -17,8 +17,10 @@ import { treeEventsFromChain, type RawChainEvent } from "../tree/events";
 import { createChainTree } from "./chain-tree";
 import { treeRoutes } from "../tree/server/route";
 import { resetTreeMemory } from "../tree/server/store";
+import { photoRoutes } from "../tree/server/photo-route";
+import { webpOf } from "../tree/photo-fixture";
 import { DEVNET_DEMO_CHILDREN, DEVNET_DEMO_ESTATE, DEVNET_DEMO_GUARDIANS, DEVNET_DEMO_META, DEVNET_DEMO_VERIFIERS } from "../chain/demo-estate";
-import { relationshipId } from "../tree/links";
+import { relationshipId, treeBody, treeMessage } from "../tree/links";
 import { findAmounts } from "../tree/no-amounts";
 import type { EstateSnapshot } from "./types";
 import type { Raw } from "../chain/decoders";
@@ -148,12 +150,15 @@ class Mem { data = new Map<string, string>(); getItem(k: string) { return this.d
 function world(opts: { chainMode?: boolean; serverDown?: boolean; owner?: ReturnType<typeof wallet>; child?: boolean } = {}) {
   const owner = opts.owner ?? wallet();
   let acting = owner;
-  const routes = treeRoutes({ fetchRaw: async (_t, a) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => opts.chainMode ?? true });
+  const deps = { fetchRaw: async (_t: "Estate", a: string) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => opts.chainMode ?? true };
+  const routes = treeRoutes(deps);
+  const photos = photoRoutes(deps);
   const calls: { method: string; status: number }[] = [];
   const fakeFetch = (async (url: string, init?: RequestInit) => {
     if (opts.serverDown) throw new TypeError("fetch failed");
     const req = new Request(`http://local${url}`, init);
-    const res = await (init?.method === "POST" ? routes.POST(req) : routes.GET(req));
+    const r = url.startsWith("/api/tree/photo") ? photos : routes;
+    const res = await (init?.method === "POST" ? r.POST(req) : r.GET(req));
     calls.push({ method: init?.method ?? "GET", status: res.status });
     return res;
   }) as unknown as typeof fetch;
@@ -270,5 +275,116 @@ describe("relationships and hidden flags (Supabase off: server memory + this dev
   it("does not let a parent become their own child's child", async () => {
     const { svc } = world();
     await expect(svc.setRelationship(E, { kind: "parentOf", from: DEVNET_DEMO_CHILDREN.lerato, to: OWNER })).rejects.toThrow(/own grandparent/);
+  });
+});
+
+describe("photos (plan.md §15.11): /api/tree/photo, Supabase off (server memory) plus this device", () => {
+  type W = ReturnType<typeof wallet>;
+  const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+  async function signed(w: W, person: string, photo: string | null, over: { ts?: number; wallet?: string } = {}) {
+    const ts = over.ts ?? Date.now();
+    const sig = await w.signMessage(treeMessage("photo", E, w.address, ts, sha(treeBody({ action: "photo", person, photo }))));
+    return { action: "photo", estate: E, wallet: over.wallet ?? w.address, ts, sig, person, photo };
+  }
+  const post = (routes: ReturnType<typeof photoRoutes>, body: unknown) => routes.POST(new Request("http://local/api/tree/photo", { method: "POST", body: JSON.stringify(body) }));
+  const routesFor = (owner: W, chain = true) => photoRoutes({ fetchRaw: async (_t, a) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => chain });
+  const code = async (res: Response) => ((await res.json()) as { code?: string }).code;
+
+  it("the owner adds a memorial photo and a child's photo; another device sees them; the fingerprint does not change", async () => {
+    const w = world();
+    const before = await w.svc.getTree(E);
+    const gogo = webpOf(3_000), naledi = webpOf(2_000);
+    await w.svc.setPhoto(E, "local:gogo-martha", gogo);
+    await w.svc.setPhoto(E, DEVNET_DEMO_CHILDREN.naledi, naledi);
+    expect(w.calls.at(-1)).toEqual({ method: "POST", status: 200 });
+    const fresh = await world({ owner: w.owner }).svc.getTree(E);
+    const p = (id: string) => fresh.people.find((x) => x.id === id)!;
+    expect(p("local:gogo-martha").photo).toMatchObject({ src: gogo, addedBy: w.owner.address, memorial: true });
+    expect(p(DEVNET_DEMO_CHILDREN.naledi).photo).toMatchObject({ src: naledi, memorial: false });
+    expect(fresh.fingerprint).toBe(before.fingerprint);
+    await w.svc.removePhoto(E, "local:gogo-martha");
+    expect((await world({ owner: w.owner }).svc.getTree(E)).people.find((x) => x.id === "local:gogo-martha")!.photo).toBeUndefined();
+  });
+
+  it("a living adult sets only their own photo; the owner cannot set a living adult's", async () => {
+    const w = world();
+    const zodwaLike = wallet();
+    w.actAs(zodwaLike);
+    const mine = webpOf(1_500);
+    await w.svc.setPhoto(E, zodwaLike.address, mine);
+    expect((await (await routesFor(w.owner).GET(new Request(`http://local/api/tree/photo?estate=${E}`))).json() as { photos: Record<string, { src: string }> }).photos[zodwaLike.address].src).toBe(mine);
+    // Someone else's photo, or the owner's part (a child's): refused on the device.
+    await expect(w.svc.setPhoto(E, OWNER, mine)).rejects.toThrow(/their own photo/);
+    await expect(w.svc.setPhoto(E, DEVNET_DEMO_CHILDREN.naledi, mine)).rejects.toThrow(/their own photo/);
+    w.actAs(w.owner);
+    await expect(w.svc.setPhoto(E, ndlovu, mine)).rejects.toThrow(/their own photo/);
+    // And at the server, with valid signatures.
+    const routes = routesFor(w.owner);
+    const res = await post(routes, await signed(w.owner, ndlovu, mine));
+    expect(res.status).toBe(403);
+    expect(await code(res)).toBe("forbidden");
+    expect((await post(routes, await signed(zodwaLike, DEVNET_DEMO_CHILDREN.naledi, mine))).status).toBe(403);
+    expect((await post(routes, await signed(zodwaLike, "local:mkhulu-joseph", null))).status).toBe(403);
+  });
+
+  it("refuses a stale request, a replayed one and a forged signer", async () => {
+    const owner = wallet();
+    const routes = routesFor(owner);
+    const pic = webpOf(800);
+    const stale = await post(routes, await signed(owner, "local:gogo-martha", pic, { ts: Date.now() - 6 * 60_000 }));
+    expect(stale.status).toBe(401);
+    expect(await code(stale)).toBe("stale");
+    const body = await signed(owner, "local:gogo-martha", pic);
+    expect((await post(routes, body)).status).toBe(200);
+    const again = await post(routes, body);
+    expect(again.status).toBe(401);
+    expect(await code(again)).toBe("replay");
+    // A stranger signs, but claims to be the owner's wallet.
+    const stranger = wallet();
+    const forged = await post(routes, await signed(stranger, "local:gogo-martha", pic, { wallet: owner.address }));
+    expect(forged.status).toBe(401);
+    expect(await code(forged)).toBe("unauthorized");
+    // The signature covers the photo: swapping in another image breaks it.
+    const swapped = { ...(await signed(owner, "local:gogo-martha", pic)), photo: webpOf(900) };
+    expect((await post(routes, swapped)).status).toBe(401);
+  });
+
+  it("refuses a photo over 60 KB (413) or not WebP (415), on the device and at the server", async () => {
+    const owner = wallet();
+    const routes = routesFor(owner);
+    const big = await post(routes, await signed(owner, "local:gogo-martha", webpOf(61 * 1024)));
+    expect(big.status).toBe(413);
+    const png = `data:image/png;base64,${Buffer.from("\x89PNG\r\n\x1a\n00000000", "latin1").toString("base64")}`;
+    const wrong = await post(routes, await signed(owner, "local:gogo-martha", png));
+    expect(wrong.status).toBe(415);
+    const disguised = await post(routes, await signed(owner, "local:gogo-martha", png.replace("image/png", "image/webp")));
+    expect(disguised.status).toBe(415);
+    // A body far past the limit never reaches the parser.
+    expect((await post(routes, { ...(await signed(owner, "local:gogo-martha", null)), photo: "A".repeat(200_000) })).status).toBe(413);
+    const w = world({ owner });
+    await expect(w.svc.setPhoto(E, "local:gogo-martha", webpOf(61 * 1024))).rejects.toThrow(/60 KB/);
+    await expect(w.svc.setPhoto(E, "local:gogo-martha", png)).rejects.toThrow(/WebP/);
+  });
+
+  it("never stores or shows a photo for a hidden person", async () => {
+    const w = world();
+    const hider = wallet();
+    w.actAs(hider);
+    await w.svc.setPhoto(E, hider.address, webpOf(500));
+    await w.svc.setHidden(E, true);
+    await expect(w.svc.setPhoto(E, hider.address, webpOf(600))).rejects.toThrow(/hide/);
+    const res = await post(routesFor(w.owner), await signed(hider, hider.address, webpOf(600)));
+    expect(res.status).toBe(403);
+  });
+
+  it("on the demo deployment the route answers 503 and the photo is kept on this device", async () => {
+    const owner = wallet();
+    expect((await post(routesFor(owner, false), await signed(owner, "local:gogo-martha", webpOf(500)))).status).toBe(503);
+    const mockSite = world({ chainMode: false, owner });
+    const pic = webpOf(700);
+    await mockSite.svc.setPhoto(E, "local:gogo-martha", pic);
+    expect(mockSite.calls.at(-1)).toEqual({ method: "POST", status: 503 });
+    expect((await mockSite.svc.getTree(E)).people.find((x) => x.id === "local:gogo-martha")!.photo?.src).toBe(pic);
+    expect(mockSite.storage.getItem("heirloom.tree.photos.v1")).toContain("local:gogo-martha");
   });
 });

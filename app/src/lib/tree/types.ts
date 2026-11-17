@@ -39,6 +39,22 @@ export interface TreePerson {
   ownsEstate?: Base58;
   /** An organisation (a charity named in the fallback plan), not a person: drawn as a square, no years. */
   org?: boolean;
+  /** Their photo (plan.md §15.11): off-chain, never in the fingerprint, never for a hidden person. */
+  photo?: TreePhoto;
+}
+
+/** A photo on the tree: a 256×256 WebP (or, in the demo, a bundled illustration). */
+export interface TreePhoto {
+  src: string;
+  /** Who added it (a person id; the UI words it). */
+  addedBy: PersonId;
+  /** The year it was added. */
+  year: number;
+  /**
+   * Added by someone else for a person who has passed or has no wallet: shown with "Added by {name}, {year}".
+   * Not set for a living adult's own photo, a child's (the parent decides) or an organisation's logo.
+   */
+  memorial: boolean;
 }
 
 export type RelationshipKind = "parentOf" | "spouseOf" | "siblingOf";
@@ -198,6 +214,13 @@ export interface TreeService {
   removeRelationship(estate: Base58, id: string): Promise<void>;
   /** A living adult hides or shows themselves on the tree (the signed-in wallet only). */
   setHidden(estate: Base58, hidden: boolean): Promise<void>;
+  /**
+   * Add or replace a photo (lib/tree/photos.ts photoConsent: a living adult their own; the owner for a child, someone
+   * who has passed, someone without a wallet or an organisation). `src` is a WebP data URL of at most 60 KB.
+   */
+  setPhoto(estate: Base58, person: PersonId, src: string): Promise<void>;
+  /** Remove a photo (same consent as setPhoto). */
+  removePhoto(estate: Base58, person: PersonId): Promise<void>;
 }
 
 /** Re-exported so tree modules don't reach into the service folder for it. */

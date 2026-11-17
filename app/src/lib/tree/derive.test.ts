@@ -11,6 +11,7 @@ import { treeAtYear } from "./timeline";
 import { canonicalTree, treeFingerprint } from "./fingerprint";
 import { findAmounts } from "./no-amounts";
 import { relationshipId } from "./links";
+import { webpOf } from "./photo-fixture";
 
 const E = "Estate1111111111111111111111111111111111111";
 const OWNER = "Owner11111111111111111111111111111111111111";
@@ -184,5 +185,44 @@ describe("fingerprint", () => {
     expect((await deriveTree(input({ relationships: RELS.slice(1) }))).fingerprint).not.toBe(a.fingerprint);
     expect(JSON.stringify(canonicalTree(a))).not.toMatch(/Mokoena|Lerato|Ndlovu/);
     expect(await treeFingerprint(a)).toBe(a.fingerprint);
+  });
+});
+
+describe("photos on the tree (plan.md §15.11)", () => {
+  const photos = {
+    [V[0]]: { src: webpOf(100), by: V[0], at: Y(2026) },
+    [GRAN]: { src: webpOf(200), by: OWNER, at: Y(2026, 11) },
+    [BABY]: { src: webpOf(300), by: OWNER, at: Y(2026) },
+    [KID]: { src: webpOf(400), by: KID, at: Y(2026) },
+  };
+
+  it("puts each photo on its person; a memorial photo (passed or no wallet, added by someone else) says who added it", () => {
+    const t = deriveTreeBody(input({ photos }));
+    const p = (id: string) => t.people.find((x) => x.id === id)!;
+    expect(p(GRAN).photo).toEqual({ src: photos[GRAN].src, addedBy: OWNER, year: 2026, memorial: true });
+    expect(p(V[0]).photo).toMatchObject({ addedBy: V[0], memorial: false });
+    // A child's photo is the parent's choice, not a memorial.
+    expect(p(BABY).photo).toMatchObject({ addedBy: OWNER, memorial: false });
+    expect(p(OWNER).photo).toBeUndefined();
+  });
+
+  it("never shows a hidden person's photo, at any year on the slider", () => {
+    const t = deriveTreeBody(input({ photos, hidden: [V[0], KID] }));
+    expect(t.people.find((x) => x.id === V[0])).toMatchObject({ hidden: true });
+    expect(t.people.find((x) => x.id === V[0])!.photo).toBeUndefined();
+    expect(t.people.find((x) => x.id === KID)!.photo).toBeUndefined();
+    // Hiding is for living adults: the child's photo stays.
+    expect(t.people.find((x) => x.id === BABY)!.photo).toBeDefined();
+    for (const y of [2026, 2040, 2060]) expect(treeAtYear({ ...t, fingerprint: "x" }, y).people.find((x) => x.id === V[0])?.photo).toBeUndefined();
+  });
+
+  it("leaves the fingerprint unchanged when a photo is added, changed or removed", async () => {
+    const none = await deriveTree(input());
+    const some = await deriveTree(input({ photos }));
+    const changed = await deriveTree(input({ photos: { ...photos, [GRAN]: { src: webpOf(999), by: OWNER, at: Y(2030) } } }));
+    expect(some.fingerprint).toBe(none.fingerprint);
+    expect(changed.fingerprint).toBe(none.fingerprint);
+    expect(JSON.stringify(canonicalTree(some))).not.toContain("data:image");
+    expect(findAmounts(some)).toEqual([]);
   });
 });

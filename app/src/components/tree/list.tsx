@@ -2,14 +2,13 @@
 /**
  * The Trust Tree on a phone (and narrow panes): the family by generation, one row per person, with the same facts and
  * the same cards as the map. Rows slide into place as people join (Motion layout), or appear at once with reduced
- * motion. Vertical only: nothing scrolls sideways at 360 px.
+ * motion. Each row shows the person's photo, or their initials. Vertical only: nothing scrolls sideways at 360 px.
  */
-import clsx from "clsx";
 import { AnimatePresence, m as motion } from "motion/react";
 import { ChevronRight } from "@/components/ui/icons";
 import type { PersonId, TreeAtYear } from "@/lib/tree/types";
-import { initials } from "@/lib/tree/layout";
 import { RoleSwatch } from "./card";
+import { Avatar } from "./photo";
 import { factsFor, factsLine, fill, isMinorAt, lifeText, shortLabel, type Copy } from "./words";
 
 export function TreeList({ at, copy, reduced, viewer, onOpen }: {
@@ -48,16 +47,7 @@ export function TreeList({ at, copy, reduced, viewer, onOpen }: {
                         data-person={p.id}
                         className="flex w-full min-w-0 items-center gap-3 rounded-lg border border-line bg-surface p-3 text-left hover:border-line-strong"
                       >
-                        <span
-                          className={clsx(
-                            "grid size-11 shrink-0 place-items-center border-[1.5px] text-small font-semibold",
-                            p.org ? "rounded-lg" : "rounded-full",
-                            p.alive ? "bg-surface-2 text-ink" : "bg-bg text-ink-2",
-                            me ? "border-amber" : p.alive ? "border-line-strong" : "border-ink-2",
-                            p.hidden && "border-dashed",
-                          )}
-                          aria-hidden="true"
-                        >{p.hidden ? "·" : initials(name)}</span>
+                        <Avatar p={p} name={name} me={me} className="size-11 text-small" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-semibold">{name}{me ? ` · ${copy.person.you}` : ""}</span>
                           {(life || !p.alive) && (

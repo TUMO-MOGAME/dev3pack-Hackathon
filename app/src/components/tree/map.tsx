@@ -1,8 +1,8 @@
 "use client";
 /**
  * The Trust Tree map (screens 720 px and wider): an SVG with generations as rows, quiet family lines, trust lines
- * as curves per role, and people as soft circles. Motion: trust lines draw themselves (a `pathLength` mask, so
- * dashed roles draw too), people glide to their new place as the family grows, and an asset travels along the line
+ * as curves per role, and people as soft circles (their photo clipped inside, or initials). Motion: trust lines
+ * draw themselves (a `pathLength` mask, so dashed roles draw too), people glide to their new place as the family grows, and an asset travels along the line
  * to its heir in the year it passes. With `reduced` nothing draws or travels: every change is instant.
  * Idea adapted from motion.dev's SVG path-drawing and layout examples, rebuilt on our tokens.
  */
@@ -142,10 +142,10 @@ export function TreeMap({
               {p.org
                 ? <rect x={-NODE_R - 5} y={-NODE_R - 5} width={2 * NODE_R + 10} height={2 * NODE_R + 10} rx={14} className="tree-focus" />
                 : <circle r={NODE_R + 5} className="tree-focus" />}
-              <Person alive={p.alive} hidden={p.hidden} me={me} org={!!p.org} />
+              <Person alive={p.alive} hidden={p.hidden} me={me} org={!!p.org} photo={p.hidden ? undefined : p.photo?.src} clipId={`tp-${p.id.replace(/[^A-Za-z0-9_-]/g, "_")}`} />
             </g>
             <g aria-hidden="true" className="cursor-pointer" onClick={() => onOpen(p.id)}>
-              {!p.hidden && <text dy="0.35em" textAnchor="middle" className={`pointer-events-none ${p.alive ? "fill-ink" : "fill-ink-2"} text-[0.9375rem] font-semibold`}>{initials(name)}</text>}
+              {!p.hidden && !p.photo && <text dy="0.35em" textAnchor="middle" className={`pointer-events-none ${p.alive ? "fill-ink" : "fill-ink-2"} text-[0.9375rem] font-semibold`}>{initials(name)}</text>}
               <text y={NODE_R + 18} textAnchor="middle" className="tree-halo fill-ink text-[0.8125rem] font-semibold">{name}</text>
               {life && <text y={NODE_R + 33} textAnchor="middle" className="tree-halo fill-ink-2 text-[0.75rem] tabular-nums">{life}</text>}
             </g>
@@ -177,17 +177,34 @@ function Rows({ layout, copy }: { layout: TreeLayout; copy: Copy }) {
   );
 }
 
-/** A soft circle with initials (an organisation: a rounded square); someone who has passed becomes an outline with a small mark. */
-function Person({ alive, hidden, me, org }: { alive: boolean; hidden: boolean; me: boolean; org: boolean }) {
+/**
+ * A soft circle with initials, or the person's photo clipped to it (an organisation: a rounded square); someone who
+ * has passed becomes an outline with a small mark. The outline is drawn over the photo, so the edge stays crisp.
+ */
+function Person({ alive, hidden, me, org, photo, clipId }: { alive: boolean; hidden: boolean; me: boolean; org: boolean; photo?: string; clipId: string }) {
   const look = {
     fill: alive ? "var(--surface-2)" : "var(--bg)",
     stroke: me ? "var(--amber)" : alive ? "var(--line-strong)" : "var(--ink-2)",
     strokeWidth: me ? 2.5 : 1.5,
     strokeDasharray: hidden ? "4 4" : undefined,
   };
+  const shape = (props: Record<string, unknown>) => (org
+    ? <rect x={-NODE_R} y={-NODE_R} width={2 * NODE_R} height={2 * NODE_R} rx={10} {...props} />
+    : <circle r={NODE_R} {...props} />);
+  const pic = photo && !hidden;
   return (
     <>
-      {org ? <rect x={-NODE_R} y={-NODE_R} width={2 * NODE_R} height={2 * NODE_R} rx={10} {...look} /> : <circle r={NODE_R} {...look} />}
+      {shape(look)}
+      {pic && (
+        <>
+          <clipPath id={clipId}>{shape({})}</clipPath>
+          <image
+            href={photo} x={-NODE_R} y={-NODE_R} width={2 * NODE_R} height={2 * NODE_R}
+            preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} aria-hidden="true"
+          />
+          {shape({ ...look, fill: "none" })}
+        </>
+      )}
       {hidden && (
         <g stroke="var(--ink-2)" strokeWidth={1.5} fill="none" aria-hidden="true">
           <circle cy={-6} r={6} />

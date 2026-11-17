@@ -8,6 +8,7 @@ import { STORY_AMAHLE, STORY_ESTATE_LERATO } from "./mock-tree";
 import { findAmounts } from "../tree/no-amounts";
 import { treeAtYear } from "../tree/timeline";
 import { relationshipId } from "../tree/links";
+import { webpOf } from "../tree/photo-fixture";
 import type { TreeSnapshot } from "../tree/types";
 
 const P = Object.fromEntries(DEMO_PERSONAS.map((p) => [p.key, p]));
@@ -149,5 +150,83 @@ describe("editing the tree in the demo", () => {
     expect(after.fingerprint).toBe(before.fingerprint);
     await s.setHidden(estate, false);
     expect(person(await s.getTree(estate), P.zodwa.address)).toMatchObject({ hidden: false, name: "Aunt Zodwa Mokoena" });
+  });
+});
+
+describe("photos in the demo (plan.md §15.11)", () => {
+  const estateOf = async (s: MockService) => (await s.listEstatesFor(P.thabo.address))[0].estate;
+
+  it("starts with illustrated avatars (drawings, bundled, never fetched): memorial ones for Thabo's parents, a logo for the charity", async () => {
+    const t = await tree(service());
+    expect(person(t, P.thabo.address).photo).toMatchObject({ addedBy: P.thabo.address, memorial: false });
+    expect(person(t, "local:mkhulu-joseph").photo).toMatchObject({ addedBy: P.thabo.address, memorial: true });
+    expect(person(t, "local:gogo-martha").photo).toMatchObject({ addedBy: P.thabo.address, memorial: true });
+    expect(person(t, DEMO_GUARDIANS.charity.wallet).photo).toMatchObject({ memorial: false });
+    expect(person(t, DEMO_GUARDIANS.kagiso.wallet).photo).toBeUndefined(); // initials, and "Add photo" for Kagiso
+    const srcs = t.people.flatMap((p) => (p.photo ? [p.photo.src] : []));
+    expect(srcs.length).toBeGreaterThanOrEqual(10);
+    expect(srcs.every((s) => s.startsWith("data:image/svg+xml"))).toBe(true);
+    // Drawn shapes only: no embedded image and nothing linked (the SVG namespace aside).
+    const svg = srcs.map((s) => decodeURIComponent(s.split(",")[1]).replace('xmlns="http://www.w3.org/2000/svg"', "")).join("");
+    expect(svg).not.toMatch(/https?:|<image|href/);
+  });
+
+  it("lets a living adult set and remove only their own photo; kept with the demo state; fingerprint unchanged", async () => {
+    const s = service();
+    const estate = await estateOf(s);
+    const before = await s.getTree(estate);
+    act(s, "zodwa");
+    const mine = webpOf(5_000);
+    await s.setPhoto(estate, P.zodwa.address, mine);
+    const after = await s.getTree(estate);
+    expect(person(after, P.zodwa.address).photo).toMatchObject({ src: mine, addedBy: P.zodwa.address, memorial: false });
+    expect(after.fingerprint).toBe(before.fingerprint);
+    expect(person(await createMockService({ instant: true }).getTree(estate), P.zodwa.address).photo?.src).toBe(mine);
+    // Not someone else's, not even a relative's.
+    await expect(s.setPhoto(estate, P.lerato.address, mine)).rejects.toThrow(/NotOwner/);
+    await expect(s.removePhoto(estate, P.thabo.address)).rejects.toThrow(/NotOwner/);
+    // The owner cannot change a living adult's photo either.
+    act(s, "thabo");
+    await expect(s.setPhoto(estate, P.zodwa.address, webpOf(100))).rejects.toThrow(/NotOwner/);
+    act(s, "zodwa");
+    await s.removePhoto(estate, P.zodwa.address);
+    expect(person(await s.getTree(estate), P.zodwa.address).photo).toBeUndefined();
+  });
+
+  it("lets only the owner decide for a child, someone who has passed and the charity", async () => {
+    const s = service();
+    const estate = await estateOf(s);
+    act(s, "lerato");
+    await expect(s.setPhoto(estate, P.naledi.address, webpOf(100))).rejects.toThrow(/NotOwner/);
+    await expect(s.removePhoto(estate, "local:gogo-martha")).rejects.toThrow(/NotOwner/);
+    act(s, "naledi");
+    await expect(s.setPhoto(estate, P.naledi.address, webpOf(100))).rejects.toThrow(/NotOwner/);
+    act(s, "thabo");
+    const pic = webpOf(800);
+    await s.setPhoto(estate, P.naledi.address, pic);
+    await s.setPhoto(estate, DEMO_GUARDIANS.charity.wallet, pic);
+    await s.removePhoto(estate, "local:mkhulu-joseph");
+    const t = await s.getTree(estate);
+    expect(person(t, P.naledi.address).photo).toMatchObject({ src: pic, memorial: false });
+    expect(person(t, DEMO_GUARDIANS.charity.wallet).photo?.src).toBe(pic);
+    expect(person(t, "local:mkhulu-joseph").photo).toBeUndefined();
+  });
+
+  it("never shows a hidden person's photo, and nobody can set one for them", async () => {
+    const s = service();
+    const estate = await estateOf(s);
+    act(s, "zodwa");
+    await s.setPhoto(estate, P.zodwa.address, webpOf(300));
+    await s.setHidden(estate, true);
+    expect(person(await s.getTree(estate), P.zodwa.address).photo).toBeUndefined();
+    await expect(s.setPhoto(estate, P.zodwa.address, webpOf(300))).rejects.toThrow(/hide/);
+  });
+
+  it("refuses a photo over 60 KB or not WebP", async () => {
+    const s = service();
+    const estate = await estateOf(s);
+    act(s, "zodwa");
+    await expect(s.setPhoto(estate, P.zodwa.address, webpOf(61 * 1024))).rejects.toThrow(/60 KB/);
+    await expect(s.setPhoto(estate, P.zodwa.address, "data:image/png;base64,iVBORw0KGgo=")).rejects.toThrow(/WebP/);
   });
 });
