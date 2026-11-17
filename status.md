@@ -19,6 +19,9 @@
 - The previous estate (`thabo`, 2LXvc…) is kept as DEVNET_PREV_META; `seed-guardians-assets.ts --owner <persona>` seeds another.
 - Still needed: a dedicated devnet RPC (public RPC 429s; tree shows "partial history").
 
+## ASSET PAGE LAYOUT (18 Nov 2026)
+- Car/asset page: the spec sheet moved from under the photos into the right column, under the sale notice (and the spec editor with it). Columns now ~1260/1265 px at 1468 wide instead of 2443/81; page ~40% shorter. On phones the order is photos, price protection, notice, spec sheet. axe clean, no sideways scroll at 1468 and 360.
+
 ## TRUST TREE PHOTOS (plan §15.11, 17 Nov 2026): MERGED to main 31eae7d, deployed
 - Consent rule `photoConsent` (lib/tree/photos.ts) shared by mock, chain, route and card: own photo only; the owner for children, people who passed, `local:` people and organisations; never for hidden people (derive drops it).
 - Browser: 256×256 centre-crop WebP via canvas (strips EXIF), ≤60 KB. Not in the fingerprint, never on-chain.

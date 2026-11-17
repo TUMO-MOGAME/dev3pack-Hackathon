@@ -183,8 +183,6 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
         </Card>
 
         {canEdit && editing === "photos" && <PhotoEditor copy={a} asset={car} media={media} session={session} role={role} onClose={() => setEditing(null)} />}
-        {canEdit && editing === "spec" && <SpecEditor copy={a} asset={car} media={media} session={session} role={role} onClose={() => setEditing(null)} />}
-        {editing !== "spec" && <SpecSheet spec={media?.spec} kind={kind} copy={a.spec} />}
 
         {car.status === "Sold" && sale && (
           <div className="enter [--enter-dur:0.3s] [--from-s:0.97] [--from-y:0]">
@@ -227,6 +225,10 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
             <Notice icon={<Lock className="size-5" aria-hidden="true" />}><p className="text-body">{e.status === "Unlocked" ? copy.offers.emptyHeld : copy.list.wait}</p></Notice>
           )
         )}
+
+        {/* The spec sheet sits in this column, beside the photos, so the page is not one long scroll on wide screens. */}
+        {canEdit && editing === "spec" && <SpecEditor copy={a} asset={car} media={media} session={session} role={role} onClose={() => setEditing(null)} />}
+        {editing !== "spec" && <SpecSheet spec={media?.spec} kind={kind} copy={a.spec} />}
 
         {car.status === "Listed" && role === "buyer" && <OfferForm copy={copy} car={car} mine={mine?.amount ?? null} />}
         {car.status === "Listed" && role !== "buyer" && !isFamily && !isVerifier && <p className="text-small text-ink-2">{copy.offer.onlyBuyers}</p>}
