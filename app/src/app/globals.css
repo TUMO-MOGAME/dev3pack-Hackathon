@@ -605,6 +605,29 @@ dialog.drawer::backdrop {
 }
 
 /* ------------------------------------------------------------------
+   Trust Tree (/tree, components/tree). Each trust role has a stroke and its own dash pattern, so a role never
+   relies on colour alone (the legend and the cards also name it). The strokes are existing tokens only (amber,
+   ok green, ink, ink-2), which scripts/contrast.mjs already checks at 3:1 or more against the page in the night
+   and day themes; set on the element itself, so the inverted panel and print pick up their own values.
+------------------------------------------------------------------- */
+.tree-role-trustedPerson { --role: var(--amber); --role-dash: none; }
+.tree-role-guardian { --role: var(--ok); --role-dash: none; }
+.tree-role-heir { --role: var(--ink); --role-dash: none; }
+.tree-role-beneficiary { --role: var(--amber); --role-dash: 7 5; }
+.tree-role-successor { --role: var(--ok); --role-dash: 7 5; }
+.tree-role-monitor { --role: var(--ink-2); --role-dash: 1.5 5; }
+.tree-role-fallback { --role: var(--ink-2); --role-dash: 10 4 2 4; }
+.tree-trust { fill: none; stroke: var(--role); stroke-dasharray: var(--role-dash); stroke-linecap: round; }
+.tree-swatch { stroke: var(--role); stroke-dasharray: var(--role-dash); stroke-linecap: round; }
+.tree-node { cursor: pointer; outline: none; }
+.tree-node .tree-focus { fill: none; stroke: transparent; stroke-width: 3; }
+.tree-node:focus-visible .tree-focus, .tree-node:hover .tree-focus { stroke: var(--line-strong); }
+.tree-node:focus-visible .tree-focus { stroke: var(--focus); }
+/* The imagined years on the slider: a dashed band, not a tint. */
+.tree-imagined { border-top: 2px dashed var(--line-strong); }
+.tree-range { accent-color: var(--ink); }
+
+/* ------------------------------------------------------------------
    Print: a page holding a .print-sheet (the handover pack) prints only
    that sheet, black on white, without the app's frame (sidebar, top
    bar, demo guide, chat button, toasts). .print-hide drops on-screen

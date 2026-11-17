@@ -8,9 +8,11 @@
  */
 import type { Bundle } from "./types";
 import { askSt } from "./ask";
+import { treeSt } from "./tree";
 
 export const st: Bundle = {
   ask: askSt,
+  tree: treeSt,
   legalNote: "Leqephe lena le fumaneha ka Senyesemane feela. Ke mohlala o tlamehang ho hlahlojwa ke moeletsi wa molao.",
 
   site: {
@@ -383,6 +385,8 @@ export const st: Bundle = {
       close: "Kwala",
       statement: "Setatemente sa kgwedi",
       statementHint: "Seo moralo o se lefileng kgwedi le kgwedi, ho hatisa kapa ho arolelana le lelapa.",
+      tree: "Sefate sa Tshepo",
+      treeHint: "Rekoto ya lelapa ya ditshepiso tse bolokilweng, ho pholletsa le meloko.",
     },
     report: {
       title: "Tlaleho ya agent",
@@ -691,7 +695,7 @@ export const st: Bundle = {
       },
       car: { title: "Koloi ya lelapa", floor: "Theko e tlase", none: "Ha ho koloi e kentsweng hajwale.", add: "Kenya koloi", view: "Sheba" },
       people: { title: "Batho ba tshepahalang", body: "{need} ho ba 3 ba tlameha ho netefatsa lefu.", view: "Bona bohle" },
-      activity: { title: "Diketso tsa morao-rao", empty: "Ha ho letho le etsahetseng hajwale. Diketso di hlaha mona ha lefa le ntse le sebediswa.", all: "Bona rasiti e nngwe le e nngwe", receipt: "Rasiti", statement: "Setatemente sa kgwedi" },
+      activity: { title: "Diketso tsa morao-rao", empty: "Ha ho letho le etsahetseng hajwale. Diketso di hlaha mona ha lefa le ntse le sebediswa.", all: "Bona rasiti e nngwe le e nngwe", receipt: "Rasiti", statement: "Setatemente sa kgwedi", tree: "Bula Sefate sa Tshepo" },
     },
     will: {
       eyebrow: "Moetsi wa moralo",
@@ -1179,6 +1183,7 @@ export const st: Bundle = {
         send: "Romela ho lelapa",
         statement: "Setatemente sa kgwedi",
         bill: "Lefa akhaonto",
+        tree: "Sefate sa Tshepo",
         call: "Bua le Heirloom",
         demo: "Mokgwa wa demo",
         darkMode: "Mokgwa o lefifi",

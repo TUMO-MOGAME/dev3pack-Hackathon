@@ -44,6 +44,7 @@
  *               PanelLeft sidebar, LogOut sign-out-alt, ChevronRight angle-small-right,
  *               ChevronLeft angle-small-left, ChevronUp angle-small-up, Mail envelope,
  *               BellRing bell-ring, Paperclip paperclip-vertical,
+ *   Trust Tree  TreeDeciduous tree-deciduous, Fingerprint fingerprint, Eye eye, EyeOff eye-crossed, Printer print
  *               PanelLeftOpen / PanelLeftClose sidebar (the button label carries the state)
  */
 import type { CSSProperties, HTMLAttributes, ReactElement } from "react";
@@ -159,6 +160,11 @@ export const GLYPHS = {
   PanelLeftClose: "sidebar",
   PanelLeftOpen: "sidebar",
   Paperclip: "paperclip-vertical",
+  TreeDeciduous: "tree-deciduous",
+  Fingerprint: "fingerprint",
+  Eye: "eye",
+  EyeOff: "eye-crossed",
+  Printer: "print",
 } as const;
 
 export type IconName = keyof typeof GLYPHS;
@@ -309,3 +315,8 @@ export const BellRing = make("BellRing");
 export const PanelLeftClose = make("PanelLeftClose");
 export const PanelLeftOpen = make("PanelLeftOpen");
 export const Paperclip = make("Paperclip");
+export const TreeDeciduous = make("TreeDeciduous");
+export const Fingerprint = make("Fingerprint");
+export const Eye = make("Eye");
+export const EyeOff = make("EyeOff");
+export const Printer = make("Printer");

@@ -162,6 +162,8 @@ export const common = {
     close: "Close",
     statement: "Monthly statement",
     statementHint: "What the plan paid each month, to print or share with the family.",
+    tree: "Trust Tree",
+    treeHint: "The family's record of kept promises, across the generations.",
   },
   report: {
     title: "Agent's report",

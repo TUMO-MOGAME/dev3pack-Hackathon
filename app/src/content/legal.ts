@@ -9,7 +9,7 @@ export const privacy = {
   title: "*Privacy* policy",
   templateNotice:
     "Template for legal review. This policy was drafted for a hackathon prototype and must be reviewed by the responsible party's legal adviser before Heirloom is offered to the public.",
-  updated: "Last updated: 11 November 2026",
+  updated: "Last updated: 17 November 2026",
   intro:
     "Heirloom helps a person record estate instructions and helps their family act on them. That involves sensitive personal information, so we collect as little as we can, keep documents off the public ledger and explain every use below. This policy follows the Protection of Personal Information Act 4 of 2013 (POPIA).",
   sections: [
@@ -116,6 +116,22 @@ export const privacy = {
         "How long we keep it: until the owner deletes the voice or the Legacy Book, which they can do at any time in the app (the voice copy is then also deleted at ElevenLabs), or [N] years after the estate's final payment, whichever comes first. [Placeholder: the responsible party must set N with its legal adviser.]",
         "Nothing about the legacy voice is written on the public ledger. If a record is ever anchored on-chain, it is only a SHA-256 fingerprint.",
         "Your rights in section 10 apply. A child can switch the legacy voice off at any time, and the owner's executor may ask us to delete it.",
+      ],
+    },
+    {
+      heading: "14. Trust Tree (family relationships and years)",
+      paragraphs: [
+        "The Trust Tree is a family map: who is related to whom, who trusted whom in an estate plan, and the promises they kept. This section is part of the template for legal review.",
+      ],
+      list: [
+        "What we collect: family relationships an estate owner adds (parent of, spouse of, sibling of), people's names as the family gives them, the year each person was born and the year they passed, and whether a person chose to hide from the tree. Roles, approvals and payments come from the public ledger, as in section 5; the tree never shows amounts, balances, prices or scores.",
+        "Why: to show the family a lasting, checkable record of who was trusted and whether they kept their word, and to make a false claim about an asset easy to disprove.",
+        "Who sees it: only wallets with a role in that estate (the owner, family members, trusted people, guardians and watchers). Buyers and the public record do not see it. For children only a first name is shown.",
+        "Who may add it: the estate owner, who confirms with an unticked box that they are entitled to share it. Relationships, names and years are kept off-chain and are never written to the public ledger; only a SHA-256 fingerprint of the tree (wallets, relationships and trust lines, never names) is shown.",
+        "Hiding: a living adult can hide themselves at any time from their own card. They then show as \"A family member\" with no name or details; their roles stay, because roles are public on the ledger.",
+        "How long we keep it: for as long as the estate is active and for 5 years after its last payment, unless deleted sooner. [Placeholder: the responsible party must confirm this with its legal adviser.]",
+        "Deletion and correction: the owner can remove a relationship at any time, and anyone on the tree may ask the information officer (section 2) to correct or delete information about them, as section 10 describes.",
+        "Operators and transfers: relationships and names are stored by Supabase Inc. (or, in the prototype, on the owner's device) under sections 7 and 8.",
       ],
     },
   ] satisfies LegalSection[],

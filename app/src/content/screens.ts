@@ -179,7 +179,7 @@ export const screens = {
     },
     car: { title: "Family car", floor: "Minimum price", none: "No car has been added yet.", add: "Add the car", view: "View" },
     people: { title: "Trusted people", body: "{need} of 3 must confirm a passing.", view: "See everyone" },
-    activity: { title: "Recent activity", empty: "Nothing has happened yet. Activity appears here as the estate is used.", all: "See every receipt", receipt: "Receipt", receiptSr: "Opens Solana Explorer in a new tab", statement: "Monthly statement" },
+    activity: { title: "Recent activity", empty: "Nothing has happened yet. Activity appears here as the estate is used.", all: "See every receipt", receipt: "Receipt", receiptSr: "Opens Solana Explorer in a new tab", statement: "Monthly statement", tree: "Open the Trust Tree" },
   },
 
   will: {

@@ -8,9 +8,11 @@
  */
 import type { Bundle } from "./types";
 import { askAf } from "./ask";
+import { treeAf } from "./tree";
 
 export const af: Bundle = {
   ask: askAf,
+  tree: treeAf,
   legalNote: "Hierdie bladsy is net in Engels beskikbaar. Dit is 'n sjabloon wat 'n regsadviseur moet nagaan.",
 
   site: {
@@ -383,6 +385,8 @@ export const af: Bundle = {
       close: "Maak toe",
       statement: "Maandstaat",
       statementHint: "Wat die plan elke maand betaal het, om te druk of met die familie te deel.",
+      tree: "Vertrouensboom",
+      treeHint: "Die familie se rekord van beloftes wat nagekom is, oor die geslagte heen.",
     },
     report: {
       title: "Agent se verslag",
@@ -691,7 +695,7 @@ export const af: Bundle = {
       },
       car: { title: "Gesinsmotor", floor: "Minimum prys", none: "Nog geen motor is bygevoeg nie.", add: "Voeg die motor by", view: "Kyk" },
       people: { title: "Vertroude persone", body: "{need} van 3 moet 'n afsterwe bevestig.", view: "Sien almal" },
-      activity: { title: "Onlangse aktiwiteit", empty: "Nog niks het gebeur nie. Aktiwiteit verskyn hier soos die boedel gebruik word.", all: "Sien elke kwitansie", receipt: "Kwitansie", statement: "Maandstaat" },
+      activity: { title: "Onlangse aktiwiteit", empty: "Nog niks het gebeur nie. Aktiwiteit verskyn hier soos die boedel gebruik word.", all: "Sien elke kwitansie", receipt: "Kwitansie", statement: "Maandstaat", tree: "Maak die Vertrouensboom oop" },
     },
     will: {
       eyebrow: "Planbouer",
@@ -1179,6 +1183,7 @@ export const af: Bundle = {
         send: "Stuur aan familie",
         statement: "Maandstaat",
         bill: "Betaal 'n rekening",
+        tree: "Vertrouensboom",
         call: "Praat met Heirloom",
         demo: "Demomodus",
         darkMode: "Donker modus",

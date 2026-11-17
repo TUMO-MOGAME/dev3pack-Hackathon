@@ -8,9 +8,11 @@
  */
 import type { Bundle } from "./types";
 import { askZu } from "./ask";
+import { treeZu } from "./tree";
 
 export const zu: Bundle = {
   ask: askZu,
+  tree: treeZu,
   legalNote: "Leli khasi litholakala ngesiNgisi kuphela. Liyisifanekiso okumele sihlolwe ngumeluleki wezomthetho.",
 
   site: {
@@ -383,6 +385,8 @@ export const zu: Bundle = {
       close: "Vala",
       statement: "Isitatimende senyanga",
       statementHint: "Lokho uhlelo olukukhokhile inyanga ngayinye, ukuze uphrinte noma wabelane nomndeni.",
+      tree: "Isihlahla Sokwethemba",
+      treeHint: "Irekhodi lomndeni lezithembiso ezigcinwe, kuzo zonke izizukulwane.",
     },
     report: {
       title: "Umbiko we-agent",
@@ -691,7 +695,7 @@ export const zu: Bundle = {
       },
       car: { title: "Imoto yomndeni", floor: "Intengo ephansi", none: "Ayikengezwa imoto.", add: "Engeza imoto", view: "Buka" },
       people: { title: "Abantu abathembekile", body: "Abangu-{need} kwabangu-3 kumele baqinisekise ukudlula emhlabeni.", view: "Bona bonke" },
-      activity: { title: "Okwenzeke muva nje", empty: "Akukakwenzeki lutho. Okwenzekayo kuzovela lapha njengoba ifa lisetshenziswa.", all: "Bona wonke amarisidi", receipt: "Irisidi", statement: "Isitatimende senyanga" },
+      activity: { title: "Okwenzeke muva nje", empty: "Akukakwenzeki lutho. Okwenzekayo kuzovela lapha njengoba ifa lisetshenziswa.", all: "Bona wonke amarisidi", receipt: "Irisidi", statement: "Isitatimende senyanga", tree: "Vula Isihlahla Sokwethemba" },
     },
     will: {
       eyebrow: "Umakhi wohlelo",
@@ -1183,6 +1187,7 @@ export const zu: Bundle = {
         send: "Thumela emndenini",
         statement: "Isitatimende senyanga",
         bill: "Khokha isikweletu",
+        tree: "Isihlahla Sokwethemba",
         call: "Khuluma ne-Heirloom",
         demo: "Imodi ye-demo",
         darkMode: "Imodi emnyama",

@@ -169,6 +169,7 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
               <ButtonLink href="/statement" variant="ghost" small block className="mt-1.5">{copy.activity.statement}</ButtonLink>
             </>
           )}
+          {role !== "buyer" && <ButtonLink href="/tree" variant="ghost" small block className="mt-1.5">{copy.activity.tree}</ButtonLink>}
         </Card>
       </div>
     </div>
