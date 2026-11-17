@@ -7,6 +7,11 @@ import type { ModelReport } from "./schemas";
 
 export const CANNED_PREFIX = "[Demo answer: AI not configured] ";
 
+/**
+ * The will seeded on devnet (scripts/seed-demo.ts, scripts/seed-guardians-assets.ts hash it into will_hash), so its
+ * text must stay as it was signed: short names included. The app shows `CANNED_WILL`, the same will with the trusted
+ * people's full names, as on every other screen (lib/names: full name in lists, short form in sentences).
+ */
 export const DEMO_WILL: WillDraft = {
   ownerName: "Thabo Mokoena",
   beneficiaries: [
@@ -39,11 +44,14 @@ export const DEMO_WILL: WillDraft = {
     "The Corolla is sold for at least 12,500 USD₮, or at least 10,500 USD₮ if a child proves real hardship.",
 };
 
+const FULL_NAMES: Record<string, string> = { "Adv. Ndlovu": "Adv. Thandi Ndlovu", "Ms. Pillay": "Ms. Anita Pillay", "Uncle Bongani": "Uncle Bongani Mokoena" };
+export const CANNED_WILL: WillDraft = { ...DEMO_WILL, verifiers: DEMO_WILL.verifiers.map((v) => ({ ...v, name: FULL_NAMES[v.name] ?? v.name })) };
+
 export function cannedWillTurn(turns: number): { reply: string; draft: WillDraft | null } {
   if (turns <= 1) {
     return { reply: `${CANNED_PREFIX}Thanks, Thabo. Who should benefit, and what should the money be used for? For example: university fees paid straight to the university, up to a yearly amount.`, draft: null };
   }
-  return { reply: `${CANNED_PREFIX}Here is a draft based on what you told me. Please check each rule before you sign.`, draft: DEMO_WILL };
+  return { reply: `${CANNED_PREFIX}Here is a draft based on what you told me. Please check each rule before you sign.`, draft: CANNED_WILL };
 }
 
 export function cannedReport(purpose: "death" | "claim" | "hardship" | "seat-death" | "fallback-death"): ModelReport {

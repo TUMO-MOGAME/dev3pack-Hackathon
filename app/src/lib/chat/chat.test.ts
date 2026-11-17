@@ -105,6 +105,21 @@ describe("deriveNudges", () => {
     expect(kinds(deriveNudges(snapshot({ rules: [rule({ startsNow: true })], claims: [claim({ ownerApproved: true })] }), "owner", NOW))).not.toContain("claim-to-approve");
   });
 
+  it("claim-to-approve: an open dispute pauses the owner's card (no pay button) until it is decided or lapses", () => {
+    const dispute = {
+      address: "Dispute1", kind: "Claim" as const, target: "Claim1", disputer: V[1], disputerName: "Adv. Thandi Ndlovu", reason: "", reasonHash: "00",
+      raisedAt: NOW - 10, lapsesAt: NOW + 50, status: "Open" as const, votesUphold: 0, votesDismiss: 0, voted: [],
+    };
+    const snap = { ...snapshot({ rules: [rule({ startsNow: true })], claims: [claim()] }), disputes: [dispute] };
+    const n = deriveNudges(snap, "owner", NOW).find((x) => x.kind === "claim-to-approve")!;
+    expect(n.primary.action).toEqual({ type: "navigate", to: "/claims" });
+    expect(n.body).toContain("Adv. Ndlovu disputed this, so it is paused");
+    // Lapsed (past lapsesAt) or dismissed: the payment can go ahead again.
+    expect(deriveNudges(snap, "owner", NOW + 60).find((x) => x.kind === "claim-to-approve")!.primary.action).toMatchObject({ op: "approveAsk" });
+    const dismissed = { ...snap, disputes: [{ ...dispute, status: "Dismissed" as const }] };
+    expect(deriveNudges(dismissed, "owner", NOW).find((x) => x.kind === "claim-to-approve")!.primary.action).toMatchObject({ op: "approveAsk" });
+  });
+
   it("claim-to-approve: verifier after unlock until the threshold is met", () => {
     const base = { estate: { status: "Unlocked" as const }, claims: [claim()] };
     expect(kinds(deriveNudges(snapshot(base), "verifier", NOW, { address: V[1] }))).toContain("claim-to-approve");

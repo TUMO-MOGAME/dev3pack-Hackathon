@@ -788,6 +788,15 @@ export const zu: Bundle = {
         sign: "Sayina futhi uvale",
         signing: "Kusayinwa nge-wallet yakho",
         signNote: "Ukusayina kurekhoda izigxivizo zale mithetho ku-Solana. Amazwi akho ahlala eyimfihlo.",
+        summaryEdited: "Ushintshe ukuthi eminye imithetho iqala nini, ngakho lesi sifinyezo sibhalwe ngokwezinqumo zakho.",
+        summaryNow: "Kuqala manje, usekhona: {list}.",
+        summaryNoneNow: "Akukho okuqala manje.",
+        summaryLater: "Ngemva kokuba ungasekho, uma abantu abathembekile abangu-{need} beqinisekisa ukudlula kwakho emhlabeni futhi kudlule izinsuku ezingu-{days}: {list}.",
+        summaryNoneLater: "Akukho okulinda uze ungabi bikho: yonke imithetho iqala manje.",
+        summaryItem: "{name} ({category})",
+        summaryItemRecurring: "{name} ({category}, {amount} njalo ngo-{every})",
+        summaryEvery: { minute: "mzuzu", week: "sonto", month: "nyanga", term: "themu", year: "nyaka" },
+        summaryAsset: "{title} izothengiswa okungenani nge-{floor}, noma okungenani nge-{hardship} uma ingane ifakazela ubunzima bangempela.",
       },
       done: {
         title: "Uhlelo lwakho seluqinisiwe",
@@ -2263,6 +2272,7 @@ export const zu: Bundle = {
       uphold: "Sekela: kukhansele",
       dismiss: "Chitha: kuyeke kuqhubeke",
       voted: "Usuvotile. Kulindwe omunye umuntu othembekile.",
+      payPaused: "Le nkokhelo imisiwe ngenxa yengxabano. Ungayikhokha uma abantu ababili abathembekile beyichitha ingxabano noma iphelelwa yisikhathi.",
       upheld: "Ivoti lakho lokusekela lirekhodiwe.",
       dismissed: "Ivoti lakho lokuchitha lirekhodiwe.",
       outcome: {

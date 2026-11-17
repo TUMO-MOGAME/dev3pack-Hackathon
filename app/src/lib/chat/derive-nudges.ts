@@ -10,6 +10,8 @@ import type { Locale } from "@/lib/i18n/locales";
 import { chatCopy, fill } from "./nudge-copy";
 import { ask as askEnglish, type AskCopy } from "@/content/ask";
 import { askStatus, decider } from "@/lib/ask/logic";
+import { openDisputeOn } from "@/lib/disputes/types";
+import { shortName } from "@/lib/names";
 import type { Nudge, NudgeKind } from "./types";
 
 export const DAY = 86400;
@@ -133,10 +135,15 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
       const noDoc = note ? !note.attachment : cl.agentReport?.documentType === "request_note";
       const check = noDoc ? a.owner.noDoc : cl.agentReport?.verdict === "approve" ? a.owner.checked : "";
       const v = { ...vars, amount: usdCents(cl.amount), zar: askZar(cl), purpose: note?.purpose ?? "" };
+      // A family member or trusted person disputed it: execute_claim refuses until it is dismissed or lapses, so the
+      // card says why and leads to the dispute instead of offering a payment that would fail.
+      const disputed = openDisputeOn(snap.disputes, cl.address, now);
       push({
         id: `claim:${cl.address}`, kind: "claim-to-approve", urgency: "now", title: fill(a.owner.title, v),
-        body: [fill(note?.purpose ? a.owner.body : a.owner.bodyNoPurpose, v), check].filter(Boolean).join(" "),
-        primary: { label: a.owner.approve, action: { type: "run", op: "approveAsk", target: cl.address } },
+        body: [fill(note?.purpose ? a.owner.body : a.owner.bodyNoPurpose, v), disputed ? fill(a.owner.paused, { name: shortName(disputed.disputerName) || c.someone }) : check].filter(Boolean).join(" "),
+        primary: disputed
+          ? { label: a.owner.pausedCta, action: { type: "navigate", to: "/claims" } }
+          : { label: a.owner.approve, action: { type: "run", op: "approveAsk", target: cl.address } },
       });
       out[out.length - 1].secondary = { label: a.owner.decline, action: { type: "run", op: "declineAsk", target: cl.address } };
     } else if (isVerifier && e.status === "Unlocked" && !cl.approvals[vIndex] && count(cl.approvals) < e.claimThreshold) {

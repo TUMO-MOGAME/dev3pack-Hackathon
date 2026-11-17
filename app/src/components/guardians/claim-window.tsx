@@ -7,6 +7,7 @@
 import { Banknote, Hourglass } from "@/components/ui/icons";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
+import { openDisputeOn } from "@/lib/disputes/types";
 import { Button } from "@/components/ui/primitives";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { usePay } from "@/components/pay/payment";
@@ -15,12 +16,13 @@ import { CountdownRing, useGuardians } from "./parts";
 
 export function ClaimWindow({ claim, payee, payeeName, amount, successText }: { claim: string; payee: string; payeeName: string; amount: bigint; successText: string }) {
   const { guardians: c } = useCopy();
-  const { busy } = useEstate();
+  const { busy, snap } = useEstate();
   const { pay } = usePay();
   const g = useGuardians();
   const now = useNow();
   if (!g) return null;
   if (pausedBy(g, claim)) return null; // the PausedNotice above says why
+  if (snap && openDisputeOn(snap.disputes, claim, now ?? 0)) return null; // the dispute card above says why
   const deadline = g.feed.find((f) => f.target === claim)?.objectionDeadline ?? null;
   const left = secondsLeft(deadline, now);
   const waiting = deadline !== null && (left === null || left > 0);

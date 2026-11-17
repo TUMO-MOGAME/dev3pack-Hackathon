@@ -18,12 +18,12 @@ import { FallbackPlanCard } from "@/components/guardians/fallback";
 import { GuardiansPlanLink } from "@/components/guardians/section";
 import { BillTemplates } from "@/components/everyday/bill-templates";
 import { FRESH_ATTR, firstDemoPersona } from "@/lib/service/fresh-visit";
+import { ruleKey, withOwnerSummary } from "@/lib/will-summary";
 
 type Copy = ScreensCopy["will"];
 type BillsCopy = ScreensCopy["bills"];
 interface Msg extends WillChatMessage { id: number; fresh?: boolean }
 const usd = (n: number) => formatUsdt(toBase(n), { decimals: 0 });
-const ruleKey = (r: WillDraft["rules"][number]) => `${r.beneficiaryLabel}|${r.category}|${r.recurring ? "recurring" : "claim"}`;
 const longDate =(iso: string | number) => new Date(typeof iso === "number" ? iso * 1000 : iso).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
 
 /** The schedule's interval as a preview word (the demo clock repeats every 60 seconds, shown as "minute"). */
@@ -99,10 +99,16 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
   const [starts, setStarts] = useState<Record<string, boolean>>({});
   // Rules the owner added from a bill template: kept beside the agent's draft, so a fresh draft doesn't drop them.
   const [extra, setExtra] = useState<WillDraft["rules"]>([]);
-  const draft = useMemo<WillDraft | null>(
-    () => (rawDraft ? { ...rawDraft, rules: [...rawDraft.rules, ...extra].map((r) => { const k = ruleKey(r); return k in starts ? { ...r, startsNow: starts[k] } : r; }) } : null),
-    [rawDraft, extra, starts],
-  );
+  // When the owner's Now / After choices (or a ready-made bill) change the timing, the agent's summary no longer fits:
+  // the summary shown on the review and hashed into the signed will is then written from the rules (lib/will-summary).
+  const owned = useMemo(() => {
+    if (!rawDraft) return null;
+    const rules = [...rawDraft.rules, ...extra].map((r) => { const k = ruleKey(r); return k in starts ? { ...r, startsNow: starts[k] } : r; });
+    return withOwnerSummary(rawDraft, rules, copy.review, {
+      category: (c) => common.status.category[c], every: (e) => copy.review.summaryEvery[e], usd, need: 2,
+    });
+  }, [rawDraft, extra, starts, copy, common]);
+  const draft: WillDraft | null = owned?.draft ?? null;
   const addBill = (rule: WillDraft["rules"][number]) => {
     setExtra((x) => [...x, rule]);
     // The form's own Now / After choice wins over an older toggle on a rule with the same key.
@@ -180,7 +186,7 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
   };
 
   if (view === "review" && draft) {
-    return <Review copy={copy} draft={draft} onBack={() => setView("chat")} onSign={sign} signing={busy === "sign"} />;
+    return <Review copy={copy} draft={draft} edited={owned?.edited ?? false} onBack={() => setView("chat")} onSign={sign} signing={busy === "sign"} />;
   }
 
   const chips = turns < copy.suggestions.length ? copy.suggestions[turns] : copy.suggestions[copy.suggestions.length - 1];
@@ -364,7 +370,7 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
 
 /* ---------- Plain-language review ---------- */
 
-function Review({ copy, draft, onBack, onSign, signing }: { copy: Copy; draft: WillDraft; onBack: () => void; onSign: () => void; signing: boolean }) {
+function Review({ copy, draft, edited, onBack, onSign, signing }: { copy: Copy; draft: WillDraft; edited: boolean; onBack: () => void; onSign: () => void; signing: boolean }) {
   const { common } = useCopy();
   const r = copy.review;
   const need = 2;
@@ -377,6 +383,7 @@ function Review({ copy, draft, onBack, onSign, signing }: { copy: Copy; draft: W
       <Card className="mt-5">
         <h2 className="text-h3">{r.summaryTitle}</h2>
         <p className="mt-2 text-lead">{draft.plainLanguageSummary}</p>
+        {edited && <p className="mt-2 text-small text-ink-2">{r.summaryEdited}</p>}
       </Card>
 
       {([true, false] as const).map((now) => {
