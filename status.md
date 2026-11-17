@@ -3,8 +3,13 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-17 (i18n2 + fixes merged; speed2, tree-core, tree-ui running; Trust Tree agreed, plan §15; before that: Infisical paused, keystore password rotated, plan §14; before that: everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
+**Last updated:** 2026-11-17 (Trust Tree live on both sites; i18n2 + fixes merged; speed2 running; Trust Tree agreed, plan §15; before that: Infisical paused, keystore password rotated, plan §14; before that: everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
+
+## TRUST TREE LIVE ON BOTH SITES (17 Nov 2026, main 3cd1556)
+- /tree merged (agent/tree-core + agent/tree-ui) and deployed. vitest 746/746, tsc, eslint, mock next build OK.
+- Live checks (Playwright): demo https://heirloom-one-iota.vercel.app/tree at 1280 + 360: axe clean, no sideways scroll, 0 errors. Devnet https://heirloom.tumoolo.tech/tree signed in as Thabo (WDK, read-only): tree drawn from chain, shows the partial-history note + Load again (public RPC), axe clean at 1280 + 360, 0 non-429 errors.
+- Follow-ups: the Corolla shows as two asset paths (one per estate) instead of one continuous path; Ithemba (charity) drawn as a person under "Trusted outside the family"; on devnet the slider's "Today · 2026" label overlaps the "2020" tick. Then: re-seed a fresh devnet demo estate (removes the Avbob test rule; waiting period ~5 min so disputes fit). Tumo: dedicated devnet RPC (NEXT_PUBLIC_SOLANA_RPC_URL) for the 429s.
 
 ## 17 NOV 2026: ROUND 3 IN PROGRESS (3 agents, worktrees in ../heirloom-agents/*, NOT merged)
 - agent/speed2 (worktree speed): mobile first-load JavaScript for /estate, /will, /car (live mobile LH 82-92, target 90).
