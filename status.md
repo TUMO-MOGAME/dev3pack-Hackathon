@@ -6,6 +6,13 @@
 **Last updated:** 2026-11-16 (Infisical paused, keystore password rotated, plan §14; before that: everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
 
+## 17 NOV 2026: ROUND 3 IN PROGRESS (3 agents, worktrees in ../heirloom-agents/*, NOT merged)
+- agent/speed2 (worktree speed): mobile first-load JavaScript for /estate, /will, /car (live mobile LH 82-92, target 90).
+- agent/i18n2 (worktree marks): af/st/zu for every English-only key in the DeepPartial slices, will review first; enforce full slices in tests.
+- agent/fixes (worktree feed): disputes checked on both live sites (devnet: only its own test claim, no upholds on demo data); review summary vs Now/After toggles; "Adv. Ndlovu" vs "Adv. Thandi Ndlovu".
+- Held for Tumo: the devnet test rule "Avbob Funeral Cover (devnet test)" (re-seed a fresh demo estate vs a new end-rule instruction, which needs a program upgrade).
+- Trust Tree proposed in plan.md §15; waiting on Tumo's answers (name, who can see it, whether upheld challenges show).
+
 ## 16 NOV 2026: EVERYDAY MONEY + POLISH, all merged to main (the per-branch sections below give the details)
 - Plan §13 items 1–4 merged: ask for money (agent/ask), pay a bill once (agent/bill), bill templates + monthly statement (agent/everyday). No program change.
 - Also merged: names on the devnet activity feed (agent/feed), af/st/zu heading underlines + a marks test (agent/marks), speed pass on /estate, /car, /will (agent/speed; local mobile LH 73–74 → 95–96).
