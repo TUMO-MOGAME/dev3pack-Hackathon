@@ -534,4 +534,23 @@ Target: working on both sites by **26 Nov**, leaving buffer before the **30 Nov*
 
 ### 15.10 After the hackathon
 On-chain generation links (program change), relationship confirmation by both wallets, anchoring the fingerprint
-on-chain, signed-message auth for the relationship API, photos on people.
+on-chain, signed-message auth for the relationship API, long-term encrypted photo storage (e.g. Arweave, encrypted).
+
+### 15.11 Photos on the tree (agreed 17 Nov 2026, Tumo: "we can do it")
+So a great-grandchild in 2090 sees Mkhulu Joseph's face, not just initials. Build in both modes.
+- **Never on-chain.** Photos live off-chain, family-only. The fingerprint does NOT include photos (adding or changing one
+  never changes a printed tree's fingerprint). No photo hash on-chain either.
+- **Consent.** A living adult adds, replaces or removes only their own photo (trusted people and lawyers included: a
+  professional headshot). A parent (the estate owner) decides for a minor. A hidden person shows no photo, ever.
+  The owner may add a **memorial photo** for someone who has passed (or a person without a wallet, e.g. grandparents),
+  labelled "Added by {name}, {year}". Organisations may show a logo, added by the owner.
+- **Small and clean.** Resized in the browser to 256×256 WebP (centre crop), EXIF/location stripped by re-encoding on
+  a canvas; max 60 KB stored. Initials (or the org square) when there is no photo. Decorative alt="" next to the name.
+- **Where.** Mock: kept with the demo state on the device; the demo's people get **illustrated avatars** bundled with
+  the app (never real people's faces). Chain: `/api/tree/photo` (signed ed25519 like the tree route), stored with the
+  tree's server store (Supabase when set; otherwise in memory with the same "kept on this device" note pattern).
+- **Shown** on the map (clipped in the circle/square), the phone list, the person card, and in Print (the family's own
+  copy, the only way a photo really lasts 100 years until 15.10).
+- **Privacy policy** section 14 (Trust Tree) gains photos: what, why, who can see, consent, deletion on request.
+- **Tests:** consent rules (own photo only; owner for minors, passed people and orgs; hidden never shown), fingerprint
+  unchanged by photos, size/format checks on the route, i18n keys in af/st/zu.
