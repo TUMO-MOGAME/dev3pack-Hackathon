@@ -11,8 +11,15 @@
 - Charities are organisations (`TreePerson.org`, from the fallback plan's `kind: "charity"` or declared): a rounded square on the map, "Organisation" under the name (en/af/st/zu).
 - Slider: "Today · year" hugs the edge when today is near one; decade labels make room by their place on the track (devnet's short history no longer collides).
 - Deflaked chain-ask "only the owner may decline" (two declines in the same ms had identical signatures → replay). 748/748 tests.
-- NEXT: fresh devnet demo estate. Needs a NEW owner wallet (estate PDA is per owner), so devnet's Thabo sign-in phrase changes; plus NEXT_PUBLIC_DEMO_WAITING_SECS → 300 on heirloom-devnet. Waiting on the user's go.
-- IDEA (user, 17 Nov): profile photos on the Trust Tree. Proposed design in the session reply; not planned yet.
+
+## FRESH DEVNET DEMO ESTATE (17 Nov 2026, main 0e91b18, live and checked)
+- Estate `J6WCQvgkJmzYQXjo37GLktZnFB9nbpwCchkCVKbcKMaj`, owner persona **`thabo2`** (`4uQxH9yp…Fu96Y`); sign in as Thabo on devnet with the `thabo2` phrase from `scripts/.demo-wallets.json`.
+- Waiting period 300 s, so a dispute window is 5 minutes (program: max(waiting, 60 s)). No Avbob test rule. Same story: will, 3 children, trusted people, Corolla + Mustang (new title NFTs, media roots), Guard, seats, fallback, yearly cap; history: scheduled payment, Naledi's paid school claim, top-up, send to Lerato.
+- `NEXT_PUBLIC_DEMO_WAITING_SECS=300` on heirloom-devnet (Production) and in scripts/.env.devnet. Funded 0.6 SOL from the deployer (~7.5 SOL left).
+- The previous estate (`thabo`, 2LXvc…) is kept as DEVNET_PREV_META; `seed-guardians-assets.ts --owner <persona>` seeds another.
+- Still needed: a dedicated devnet RPC (public RPC 429s; tree shows "partial history").
+
+## TRUST TREE PHOTOS (plan §15.11, agreed 17 Nov): agent/photos building in ../heirloom-agents/bill, NOT merged
 
 ## SPEED2 LIVE (17 Nov 2026, main 82292be)
 - Merged + deployed on both sites. Trust Tree given its own MotionScope (the global LazyMotion was removed by speed2; without it the tree's m.* lines would not draw). Live demo: tree plays (svg paths 19 -> 36), /tree /estate /will /claims /chat axe clean, 0 errors.
