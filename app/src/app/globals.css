@@ -626,6 +626,8 @@ dialog.drawer::backdrop {
 /* The imagined years on the slider: a dashed band, not a tint. */
 .tree-imagined { border-top: 2px dashed var(--line-strong); }
 .tree-range { accent-color: var(--ink); }
+/* Map text keeps a ring of the card colour, so lines pass behind a name instead of through it. */
+.tree-halo { paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
 
 /* ------------------------------------------------------------------
    Print: a page holding a .print-sheet (the handover pack) prints only

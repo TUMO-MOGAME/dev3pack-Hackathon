@@ -11,7 +11,7 @@ import { explorerTx, shortAddress } from "@/lib/format";
 import type { PersonId, TreeAtYear } from "@/lib/tree/types";
 import { yearOf } from "@/lib/tree/timeline-local";
 import {
-  assetText, factsFor, fullLabel, isMinorAt, keptCountText, keptText, lifeText, roleTermText, shortLabel, trustedText, type Copy,
+  assetText, factsFor, factsLine, fullLabel, isMinorAt, keptText, lifeText, roleTermText, shortLabel, type Copy,
 } from "./words";
 
 export function PersonCardBody({
@@ -52,7 +52,7 @@ export function PersonCardBody({
     <div className="grid gap-5">
       <div>
         {life && <p className="text-small text-ink-2 tabular-nums">{life}{me ? ` · ${copy.person.you}` : ""}</p>}
-        <p className="mt-1 font-semibold" data-facts>{trustedText(copy, f.trustedBy)} · {keptCountText(copy, f.keptCount)}</p>
+        <p className="mt-1 font-semibold" data-facts>{factsLine(copy, f)}</p>
         {p.ownsEstate && <p className="mt-1 text-small text-ink-2">{copy.person.ownPlan}</p>}
       </div>
 

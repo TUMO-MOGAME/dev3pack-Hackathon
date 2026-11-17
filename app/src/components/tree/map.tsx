@@ -13,7 +13,7 @@ import {
   NODE_R, familyLines, initials, layoutTree, pointOnCubic, strokeFor, trustCurves, type TreeLayout,
 } from "@/lib/tree/layout";
 import { yearOf } from "@/lib/tree/timeline-local";
-import { fill, holderBefore, isMinorAt, keptCountText, lifeText, shortLabel, trustedText, type Copy, factsFor } from "./words";
+import { factsFor, factsLine, fill, holderBefore, isMinorAt, lifeText, shortLabel, type Copy } from "./words";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -64,8 +64,6 @@ export function TreeMap({
         ))}
       </defs>
 
-      <Rows layout={layout} copy={copy} />
-
       {/* Family lines: quiet, drawn first. */}
       <g aria-hidden="true" fill="none" stroke="var(--line-strong)" strokeWidth={1.25} strokeLinecap="round">
         {lines.map((l) => (
@@ -92,6 +90,8 @@ export function TreeMap({
         })}
       </g>
 
+      <Rows layout={layout} copy={copy} />
+
       {/* An asset travelling to its heir this year. */}
       {!reduced && travellers.map((t) => {
         const curve = curves.find((c) => c.edge.from === t.from && c.edge.to === t.to);
@@ -110,35 +110,43 @@ export function TreeMap({
         const restricted = p.hidden || isMinorAt(p, at.year);
         const life = restricted ? "" : lifeText(copy, p);
         const me = !!viewer && p.wallets.includes(viewer);
+        // Starts with the visible name (and years), so speech input can say what it sees.
         const aria = [
-          fill(copy.map.open, { name }),
-          life,
+          [name, life].filter(Boolean).join(" "),
           !p.alive ? copy.map.passedMark : "",
-          restricted ? "" : `${trustedText(copy, facts.trustedBy)}, ${keptCountText(copy, facts.keptCount)}`,
+          restricted ? "" : factsLine(copy, facts, ", "),
+          fill(copy.map.open, { name }),
         ].filter(Boolean).join(". ");
         const key = (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(p.id); } };
         return (
           <motion.g
             key={p.id}
-            className="tree-node"
-            role="button"
-            tabIndex={0}
-            aria-label={aria}
-            data-person={p.id}
-            onClick={() => onOpen(p.id)}
-            onKeyDown={key}
             onPointerEnter={() => setFocus(p.id)}
             onPointerLeave={() => setFocus(null)}
-            onFocus={() => setFocus(p.id)}
-            onBlur={() => setFocus(null)}
             initial={reduced ? false : { x: pos.x, y: pos.y + 14, opacity: 0, scale: 0.6 }}
             animate={{ x: pos.x, y: pos.y, opacity: focus && focus !== p.id && !curves.some((c) => (c.edge.from === focus && c.edge.to === p.id) || (c.edge.to === focus && c.edge.from === p.id)) ? 0.55 : 1, scale: 1 }}
             transition={reduced ? { duration: 0 } : { duration: 0.6, ease, opacity: { duration: 0.3 } }}
           >
-            <circle r={NODE_R + 5} className="tree-focus" />
-            <Person alive={p.alive} hidden={p.hidden} me={me} text={p.hidden ? "" : initials(name)} />
-            <text y={NODE_R + 18} textAnchor="middle" className="fill-ink text-[0.8125rem] font-semibold">{name}</text>
-            {life && <text y={NODE_R + 33} textAnchor="middle" className="fill-ink-2 text-[0.75rem] tabular-nums">{life}</text>}
+            {/* The button holds only shapes; its name says everything the text beside it shows. */}
+            <g
+              className="tree-node"
+              role="button"
+              tabIndex={0}
+              aria-label={aria}
+              data-person={p.id}
+              onClick={() => onOpen(p.id)}
+              onKeyDown={key}
+              onFocus={() => setFocus(p.id)}
+              onBlur={() => setFocus(null)}
+            >
+              <circle r={NODE_R + 5} className="tree-focus" />
+              <Person alive={p.alive} hidden={p.hidden} me={me} />
+            </g>
+            <g aria-hidden="true" className="cursor-pointer" onClick={() => onOpen(p.id)}>
+              {!p.hidden && <text dy="0.35em" textAnchor="middle" className={`pointer-events-none ${p.alive ? "fill-ink" : "fill-ink-2"} text-[0.9375rem] font-semibold`}>{initials(name)}</text>}
+              <text y={NODE_R + 18} textAnchor="middle" className="tree-halo fill-ink text-[0.8125rem] font-semibold">{name}</text>
+              {life && <text y={NODE_R + 33} textAnchor="middle" className="tree-halo fill-ink-2 text-[0.75rem] tabular-nums">{life}</text>}
+            </g>
           </motion.g>
         );
       })}
@@ -150,7 +158,7 @@ function Rows({ layout, copy }: { layout: TreeLayout; copy: Copy }) {
   return (
     <g aria-hidden="true">
       {layout.rows.map((r, i) => (
-        <text key={r.generation} x={8} y={r.y - NODE_R - 16} className="fill-ink-2 text-[0.6875rem] font-semibold uppercase tracking-[0.12em]">
+        <text key={r.generation} x={12} y={r.y + 4} className="tree-halo fill-ink-2 text-[0.6875rem] font-semibold uppercase tracking-[0.12em]">
           {fill(copy.map.generation, { n: i + 1 })}
         </text>
       ))}
@@ -158,7 +166,7 @@ function Rows({ layout, copy }: { layout: TreeLayout; copy: Copy }) {
         const row = layout.rows.find((r) => r.generation === g);
         if (!row) return null;
         return (
-          <text key={`o-${g}`} x={x - NODE_R} y={row.y - NODE_R - 16} className="fill-ink-2 text-[0.6875rem] font-semibold uppercase tracking-[0.12em]">
+          <text key={`o-${g}`} x={x - NODE_R} y={row.y - NODE_R - 14} className="tree-halo fill-ink-2 text-[0.6875rem] font-semibold uppercase tracking-[0.12em]">
             {copy.map.outside}
           </text>
         );
@@ -168,7 +176,7 @@ function Rows({ layout, copy }: { layout: TreeLayout; copy: Copy }) {
 }
 
 /** A soft circle with initials; someone who has passed becomes an outline with a small mark. */
-function Person({ alive, hidden, me, text }: { alive: boolean; hidden: boolean; me: boolean; text: string }) {
+function Person({ alive, hidden, me }: { alive: boolean; hidden: boolean; me: boolean }) {
   return (
     <>
       <circle
@@ -178,7 +186,6 @@ function Person({ alive, hidden, me, text }: { alive: boolean; hidden: boolean; 
         strokeWidth={me ? 2.5 : 1.5}
         strokeDasharray={hidden ? "4 4" : undefined}
       />
-      {text && <text dy="0.35em" textAnchor="middle" className={`${alive ? "fill-ink" : "fill-ink-2"} text-[0.9375rem] font-semibold`}>{text}</text>}
       {hidden && (
         <g stroke="var(--ink-2)" strokeWidth={1.5} fill="none" aria-hidden="true">
           <circle cy={-6} r={6} />

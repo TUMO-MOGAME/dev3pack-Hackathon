@@ -10,7 +10,7 @@ import type { KeptPromise } from "@/lib/tree/types";
 import { PersonCardBody, cardTitle } from "./card";
 import { TreeMap, travellersAt } from "./map";
 import { TreeList } from "./list";
-import { factsFor, keptText, namesList, roleTermText, shortLabel, yearsText } from "./words";
+import { factsFor, keptText, namesList, roleTermText, shortLabel, yearsText, type Copy } from "./words";
 
 const t = treeFixture("EST");
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, "\"").replace(/&amp;/g, "&").replace(/\s+/g, " ");
@@ -62,7 +62,7 @@ describe("words", () => {
 });
 
 describe("person cards", () => {
-  const render = (year: number, id: string, viewer: string | null = null, c = copy) =>
+  const render = (year: number, id: string, viewer: string | null = null, c: Copy = copy) =>
     text(renderToStaticMarkup(createElement(PersonCardBody, { at: treeAtYear(t, year), id, copy: c, mock: true, viewer, onHide: () => {} })));
 
   it("never show an amount, on any card, in any year, in English or Afrikaans", () => {

@@ -79,6 +79,11 @@ export function keptCountText(copy: Copy, n: number): string {
   return n === 0 ? copy.person.kept.none : n === 1 ? copy.person.kept.one : fill(copy.person.kept.many, { n });
 }
 
+/** "Trusted by 3 people · Kept 14 promises" (the trusted part is left out when nobody has trusted them yet). */
+export function factsLine(copy: Copy, f: Pick<Facts, "trustedBy" | "keptCount">, sep = " · "): string {
+  return [f.trustedBy > 0 ? trustedText(copy, f.trustedBy) : "", keptCountText(copy, f.keptCount)].filter(Boolean).join(sep);
+}
+
 type NameOf = (id: PersonId) => string;
 
 /** "Trusted person in Thabo's plan, 2026–2034" (or "since 2026" while it lasts). */

@@ -70,7 +70,7 @@ function build(estate: string, mode: "mock" | "chain"): TreeSnapshot {
   ];
 
   const rel = (kind: Relationship["kind"], from: string, to: string, year: number): Relationship => ({
-    id: `rel-${kind}-${from.slice(-6)}-${to.slice(-6)}`, kind, from, to, declaredBy: THABO, declaredAt: yearTs(Math.max(year, TODAY), 3),
+    id: `rel-${kind}-${from}-${to}`, kind, from, to, declaredBy: THABO, declaredAt: yearTs(Math.max(year, TODAY), 3),
   });
   const relationships: Relationship[] = [
     rel("spouseOf", JOSEPH, MARTHA, 1990),
@@ -87,7 +87,7 @@ function build(estate: string, mode: "mock" | "chain"): TreeSnapshot {
   const edges: TrustEdge[] = [];
   const edge = (from: string, to: string, role: TrustRole, est: string, fromYear: number, toYear?: number, month = 4) => {
     edges.push({
-      id: `edge-${role}-${to.slice(-6)}-${est.slice(0, 6)}`, from, to, role, estate: est,
+      id: `edge-${role}-${to}-${est.slice(0, 6)}`, from, to, role, estate: est,
       fromTs: yearTs(fromYear, month), toTs: toYear ? yearTs(toYear, 9) : undefined, keptCount: 0,
     });
   };

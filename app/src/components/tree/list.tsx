@@ -10,7 +10,7 @@ import { ChevronRight } from "@/components/ui/icons";
 import type { PersonId, TreeAtYear } from "@/lib/tree/types";
 import { initials } from "@/lib/tree/layout";
 import { RoleSwatch } from "./card";
-import { factsFor, fill, isMinorAt, keptCountText, lifeText, shortLabel, trustedText, type Copy } from "./words";
+import { factsFor, factsLine, fill, isMinorAt, lifeText, shortLabel, type Copy } from "./words";
 
 export function TreeList({ at, copy, reduced, viewer, onOpen }: {
   at: TreeAtYear; copy: Copy; reduced: boolean; viewer: string | null; onOpen: (id: PersonId) => void;
@@ -64,7 +64,7 @@ export function TreeList({ at, copy, reduced, viewer, onOpen }: {
                               {life}{!p.alive ? `${life ? " · " : ""}${copy.map.passedMark}` : ""}
                             </span>
                           )}
-                          {!restricted && <span className="block text-small text-ink-2">{trustedText(copy, f.trustedBy)} · {keptCountText(copy, f.keptCount)}</span>}
+                          {!restricted && <span className="block text-small text-ink-2">{factsLine(copy, f)}</span>}
                           {!restricted && roles.length > 0 && (
                             <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
                               {roles.map((r) => (

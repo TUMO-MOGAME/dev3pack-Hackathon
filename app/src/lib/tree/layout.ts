@@ -33,8 +33,9 @@ export interface LayoutOptions {
   nodeGap?: number;
   /** Space above the first row and below the last. */
   padY?: number;
-  /** Space left and right. */
-  padX?: number;
+  /** Space on the left (the generation labels sit there) and on the right. */
+  padLeft?: number;
+  padRight?: number;
 }
 
 export const NODE_R = 26;
@@ -42,7 +43,7 @@ export const NODE_R = 26;
 type Person = Pick<TreePerson, "id" | "born" | "generation">;
 
 export function layoutTree(people: Person[], relationships: Relationship[], o: LayoutOptions): TreeLayout {
-  const { width, rowGap = 156, nodeGap = 132, padY = 64, padX = 56 } = o;
+  const { width, rowGap = 156, nodeGap = 132, padY = 64, padLeft = 150, padRight = 48 } = o;
   const ids = new Set(people.map((p) => p.id));
   const rels = relationships.filter((r) => ids.has(r.from) && ids.has(r.to));
   const parents = new Map<PersonId, PersonId[]>();
@@ -106,10 +107,10 @@ export function layoutTree(people: Person[], relationships: Relationship[], o: L
       gaps.push(toOutside ? 1.45 : spouse ? 0.82 : 1);
     }
     const units1 = gaps.reduce((s, x) => s + x, 0);
-    const room = Math.max(0, width - padX * 2);
+    const room = Math.max(0, width - padLeft - padRight);
     const gap = units1 > 0 ? Math.min(nodeGap, room / units1) : 0;
     const used = units1 * gap;
-    let x = (width - used) / 2;
+    let x = padLeft + (room - used) / 2;
     all.forEach((p, i) => {
       if (i > 0) x += gaps[i - 1] * gap;
       const isOutside = i >= order.length;
@@ -204,7 +205,8 @@ export function familyLines(relationships: Relationship[], layout: TreeLayout, r
     const kids = f.children.map((id) => pos.get(id)!).sort((a, b) => a.x - b.x);
     const top = Math.max(...ps.map((p) => p.y));
     const fromX = ps.reduce((s, p) => s + p.x, 0) / ps.length;
-    const fromY = ps.length > 1 ? top : top + r;
+    // A couple's line starts from the bar between them; a single parent's starts below their name and years.
+    const fromY = ps.length > 1 ? top : top + r + 40;
     const kidY = Math.min(...kids.map((k) => k.y));
     const midY = kidY - r - Math.max(18, (kidY - r - fromY) * 0.42);
     const left = Math.min(fromX, kids[0].x), right = Math.max(fromX, kids[kids.length - 1].x);
