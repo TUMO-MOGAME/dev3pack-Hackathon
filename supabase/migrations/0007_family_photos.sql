@@ -9,8 +9,9 @@
 create table if not exists public.family_photos (
   estate      text not null,                                         -- Estate PDA (base58)
   person      text not null check (char_length(person) <= 48),       -- wallet, or local:<slug> for someone without one
-  data        text not null check (char_length(data) <= 84000        -- data:image/webp;base64,… (60 KB of image data)
-                                   and data like 'data:image/webp;base64,%'),
+  data        text not null check (data = ''                         -- '' = removed (also hides a default drawing)
+                                   or (char_length(data) <= 84000     -- data:image/webp;base64,… (60 KB of image data)
+                                       and data like 'data:image/webp;base64,%')),
   created_by  text not null,                                         -- the wallet that added it
   created_at  bigint not null,                                       -- unix seconds
   primary key (estate, person)

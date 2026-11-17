@@ -290,6 +290,14 @@ describe("photos (plan.md §15.11): /api/tree/photo, Supabase off (server memory
   const routesFor = (owner: W, chain = true) => photoRoutes({ fetchRaw: async (_t, a) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => chain });
   const code = async (res: Response) => ((await res.json()) as { code?: string }).code;
 
+  it("the seeded devnet demo family starts with the demo site's illustrated faces (Kagiso has none)", async () => {
+    const t = await world().svc.getTree(E);
+    const p = (id: string) => t.people.find((x) => x.id === id)!;
+    expect(p(DEVNET_DEMO_CHILDREN.lerato).photo?.src).toMatch(/^data:image\/svg\+xml/);
+    expect(p("local:mkhulu-joseph").photo).toMatchObject({ memorial: true });
+    expect(p(DEVNET_DEMO_GUARDIANS.kagiso).photo).toBeUndefined();
+  });
+
   it("the owner adds a memorial photo and a child's photo; another device sees them; the fingerprint does not change", async () => {
     const w = world();
     const before = await w.svc.getTree(E);

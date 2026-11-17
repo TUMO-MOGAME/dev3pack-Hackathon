@@ -22,7 +22,7 @@ import { key, type Raw } from "@/lib/chain/decoders";
 import { DEVNET_DEMO_ESTATE, DEVNET_DEMO_FALLBACK_KINDS } from "@/lib/chain/demo-estate";
 import { defaultPeople, PERSON_ID, TREE_MAX_SKEW_MS, treeBody, treeMessage } from "../links";
 import { checkPhoto, PHOTO_MAX_BODY, photoConsent, type PhotoSubject } from "../photos";
-import { deletePhoto, getLinks, getPhotos, putPhoto } from "./store";
+import { getLinks, getPhotos, putPhoto } from "./store";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 const body = z.object({
@@ -88,7 +88,8 @@ export function photoRoutes(deps: PhotoRouteDeps = defaults) {
       throw new HttpError(403, subject.hidden ? "This person chose to hide from the tree." : "Only they can change their own photo, or the estate owner for a child, someone who has passed or an organisation.", "forbidden");
     }
 
-    if (b.photo === null) await deletePhoto(b.estate, b.person);
+    // A removal is kept as an empty photo, so it also hides a default drawing (the devnet demo family's) everywhere.
+    if (b.photo === null) await putPhoto(b.estate, b.person, { src: "", by: b.wallet, at: Math.floor(now / 1000) });
     else await putPhoto(b.estate, b.person, { src: b.photo, by: b.wallet, at: Math.floor(now / 1000) });
     return json({ ok: true });
   });

@@ -26,7 +26,10 @@ import {
 import {
   checkPhoto, mergePhotos, photoConsent, readLocalPhotos, writeLocalPhotos, type FamilyPhotos, type StoredPhoto,
 } from "../tree/photos";
-import { DEVNET_DEMO_ESTATE, DEVNET_DEMO_FALLBACK_KINDS } from "../chain/demo-estate";
+import {
+  DEVNET_DEMO_CHILDREN, DEVNET_DEMO_ESTATE, DEVNET_DEMO_FALLBACK_KINDS, DEVNET_DEMO_GUARDIANS, DEVNET_DEMO_META, DEVNET_DEMO_VERIFIERS,
+} from "../chain/demo-estate";
+import { demoPhotos } from "./mock-tree";
 import type { GenerationLink, PersonId, Relationship, TreeService } from "../tree/types";
 
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
@@ -88,7 +91,7 @@ export function createChainTree(d: ChainTreeDeps): TreeService {
         if (data?.photos && typeof data.photos === "object") server = data.photos;
       }
     } catch { /* server unreachable: this device's copy still shows */ }
-    return mergePhotos(server, readLocalPhotos(storage, estate));
+    return mergePhotos({ ...devnetDemoPhotos(estate), ...server }, readLocalPhotos(storage, estate));
   }
 
   /** Same rule as the server (lib/tree/server/photo-route.ts): what the estate declared, hidden flags, the owner. */
@@ -228,4 +231,12 @@ export function createChainTree(d: ChainTreeDeps): TreeService {
     const out = await post("photo", estate, { person, photo: src }, treeBody({ action: "photo", person, photo: src }), "/api/tree/photo");
     if (out.refused) { writeLocalPhotos(storage, estate, () => before); throw out.refused; }
   }
+}
+
+/** The seeded devnet demo family starts with the same illustrated faces as the demo site (photos people add win). */
+function devnetDemoPhotos(estate: Base58): Record<PersonId, StoredPhoto> {
+  if (estate !== DEVNET_DEMO_ESTATE) return {};
+  return demoPhotos({
+    estate, thabo: DEVNET_DEMO_META.ownerWallet, ...DEVNET_DEMO_CHILDREN, ...DEVNET_DEMO_VERIFIERS, ...DEVNET_DEMO_GUARDIANS,
+  });
 }

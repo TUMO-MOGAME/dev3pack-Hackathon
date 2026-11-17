@@ -115,13 +115,6 @@ export async function putPhoto(estate: Base58, person: string, photo: StoredPhot
   if (error) throw new Error("The photo could not be saved. Please try again.");
 }
 
-export async function deletePhoto(estate: Base58, person: string): Promise<void> {
-  const sb = getSupabase();
-  if (!sb) { mem.photos.get(estate)?.delete(person); return; }
-  const { error } = await sb.from("family_photos").delete().eq("estate", estate).eq("person", person);
-  warn("deletePhoto", error);
-  if (error) throw new Error("The photo could not be removed. Please try again.");
-}
 
 /** Tests only. */
 export function resetTreeMemory() { mem.links.clear(); mem.hidden.clear(); mem.photos.clear(); }
