@@ -22,7 +22,10 @@ export const GET = handler(async (req) => {
   let audio = cache.get(line);
   if (!audio) {
     rateLimit(req, "legacy-demo-voice", 20);
-    audio = await textToSpeech(found.voice === "heirloom" ? heirloomVoice() : standinVoice("he"), found.text);
+    audio = await textToSpeech(found.voice === "heirloom" ? heirloomVoice() : standinVoice("he"), found.text).catch((e: unknown) => {
+      console.error("[legacy] demo voice failed:", e instanceof Error ? e.message : e);
+      throw new HttpError(503, "The voice is not available right now.", "unavailable");
+    });
     cache.set(line, audio);
   }
   return new Response(audio as BodyInit, {

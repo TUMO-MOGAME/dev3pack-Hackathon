@@ -222,7 +222,11 @@ export async function speak(v: Viewer, req: SpeakRequest): Promise<{ text: strin
   const hit = await store.cachedMessage(v.estate, sha);
   if (hit) return { text, audio: hit, voice };
   countSpeak(v.estate);
-  const audio = await el.textToSpeech(voiceId, text);
+  const audio = await el.textToSpeech(voiceId, text).catch((e: unknown) => {
+    // Log ElevenLabs' detail on the server; the family sees a plain message (the app then shows the words).
+    console.error("[legacy] speak failed:", e instanceof Error ? e.message : e);
+    throw new HttpError(503, "The voice is not available right now.", "unavailable");
+  });
   await store.cacheMessage(v.estate, sha, milestoneId, audio).catch((e) => console.warn("[legacy] cache failed:", e instanceof Error ? e.message : e));
   return { text, audio, voice };
 }
