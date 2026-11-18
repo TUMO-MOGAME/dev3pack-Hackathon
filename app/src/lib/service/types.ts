@@ -19,6 +19,7 @@ import type { BillDetails, BillPayee, BillPayeeInput, PaidBill } from "../bills/
 import type { InvoiceRead } from "../bills/invoice";
 import type { AskNote, AskService } from "../ask/types";
 import type { TreeService } from "../tree/types";
+import type { LettersService } from "../letters/types";
 
 export interface TxResult { signature: string; explorerUrl: string }
 
@@ -46,7 +47,7 @@ export interface EstateSnapshot {
   asks?: Record<Base58, AskNote>;
 }
 
-export interface HeirloomService extends GuardiansService, DisputesService, AskService, TreeService {
+export interface HeirloomService extends GuardiansService, DisputesService, AskService, TreeService, LettersService {
   mode: "mock" | "chain";
 
   // Reads

@@ -19,6 +19,8 @@ import { createMockDisputes } from "./mock-disputes";
 import { createMockAsk } from "./mock-ask";
 import type { MockTreeState } from "./mock-tree";
 import type { TreeService } from "../tree/types";
+import type { MockLettersState } from "./mock-letters";
+import type { LettersService } from "../letters/types";
 import type { AskNote } from "../ask/types";
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, mediaRootHex } from "../assets/spec";
@@ -141,6 +143,8 @@ interface State {
   asks?: Record<Base58, AskNote>;
   /** Trust Tree: relationships the owner added or removed, hidden flags, photos (added after v5 shipped; created on first use). */
   tree?: MockTreeState;
+  /** Letters for later (plan.md §16; added after v5 shipped; created on first use). */
+  letters?: MockLettersState;
 }
 
 const KEY = MOCK_STORE_KEY;
@@ -298,6 +302,15 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     me, now: nowSecs, wait: async (ms) => { await wait(ms); }, save,
   })));
 
+  // Letters for later (mock-letters.ts), loaded on first use like the tree.
+  let lettersService: Promise<LettersService> | null = null;
+  const Lt = () => (lettersService ??= import("./mock-letters").then((m) => m.createMockLetters({
+    snap: () => (s.created ? s.snap : null), me, now: nowSecs, wait: async (ms) => { await wait(ms); }, save,
+    state: () => (s.letters ??= { byId: {} }),
+    sendConfirmed: (sig) => Object.values(s.sends).some((x) => x.receipt.signature === sig && x.receipt.status === "confirmed"),
+    cast: { lerato: s.bind.lerato, naledi: s.bind.naledi }, usdtZar: DEMO_FX,
+  })));
+
   /* ----- synchronous "instructions" (shared by the async API and the stage seeder) ----- */
 
   function createEstate(draft: WillDraft): TxResult[] {
@@ -361,6 +374,50 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     t = tx(); txs.push(t);
     log("WillSet", `Plan signed and locked: ${draft.rules.filter((r) => r.startsNow).length} rules start now, ${draft.rules.filter((r) => !r.startsNow).length} after a passing`, t);
     return txs;
+  }
+
+  function addPayee(input: { wallet: Base58; kind: PayeeKind; name: string }): TxResult {
+    needCreated(); needOwner();
+    need(est().status === "Active", "BadStatus", "Institutions can only be added while the estate is active.");
+    need(input.name.length <= 64, "StringTooLong", "That name is too long.");
+    s.snap.payees.push({ address: fakeAddr(), ...input });
+    s.names[input.wallet] = input.name;
+    const t = tx();
+    log("PayeeAdded", `${input.name} added as an approved institution`, t);
+    return t;
+  }
+
+  function addRule(input: Parameters<HeirloomService["addRule"]>[1]): TxResult {
+    needCreated(); needOwner();
+    need(est().status === "Active", "BadStatus", "Rules cannot change once a passing is being confirmed.");
+    need(input.maxPerClaimUsdt > 0 && input.maxPerClaimUsdt <= input.lifetimeCapUsdt, "InvalidAmount", "The per-claim limit must be above zero and within the total limit.");
+    s.snap.rules.push({
+      address: fakeAddr(), id: s.snap.rules.length, beneficiary: input.beneficiary, category: input.category, allowedPayeeKind: input.allowedPayeeKind,
+      maxPerClaim: toBase(input.maxPerClaimUsdt), lifetimeCap: toBase(input.lifetimeCapUsdt), spentTotal: 0n, validUntil: input.validUntil,
+      startsNow: input.startsNow,
+      recurringAmount: input.recurring ? toBase(input.recurring.amountUsdt) : 0n,
+      intervalSecs: input.recurring?.intervalSecs ?? 0,
+      // A living schedule is first due when the owner said (firstDue), not straight away.
+      nextDue: input.recurring && input.startsNow ? input.recurring.firstDue : null,
+      fixedPayee: input.recurring?.payee ?? null,
+    });
+    const t = tx();
+    log("RuleAdded", `New ${input.category.toLowerCase()} rule added for ${first(input.beneficiary)}`, t);
+    return t;
+  }
+
+  /**
+   * Letters for later (plan.md §16.5): Naledi's 500 USD₮ 18th-birthday gift, paid once to her own wallet on
+   * 14 Aug 2029 (00:00 SAST). Her letter "For your 18th birthday" opens with it.
+   */
+  function addNalediGift() {
+    const naledi = s.bind.naledi;
+    if (!s.snap.payees.some((p) => p.wallet === naledi)) addPayee({ wallet: naledi, kind: "Other", name: "Naledi Mokoena" });
+    addRule({
+      beneficiary: naledi, category: "General", allowedPayeeKind: "Other", maxPerClaimUsdt: 500, lifetimeCapUsdt: 500,
+      validUntil: Date.UTC(2030, 11, 31, 22) / 1000, startsNow: true,
+      recurring: { amountUsdt: 500, intervalSecs: 365 * 86_400, firstDue: Date.UTC(2029, 7, 13, 22) / 1000, payee: naledi },
+    });
   }
 
   function deposit(amountUsdt: number): TxResult {
@@ -909,6 +966,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       // Naledi's school fees: at most 3,000 USD₮ a year (yearly cap), on top of 1,500 per claim and 9,000 in total.
       const school = s.snap.rules.find((r) => r.category === "Tuition" && r.allowedPayeeKind === "School");
       if (school) D.setYearlyCap(school.address, toBase(3000));
+      addNalediGift();
       const car = draft.assets[0];
       // Adds the Corolla with its photos and spec sheet, and the motorbike with its own (see registerAsset).
       registerAsset({ nftMint: CAR_MINT, title: car.title, floorUsdt: car.floorPriceUsdt, hardshipFloorUsdt: car.hardshipFloorUsdt, askingUsdt: car.askingPriceUsdt, proceedsTo: ESTATE }, fakeHash());
@@ -1190,33 +1248,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       const docHash = input.docFile ? await hashFile(input.docFile) : fakeHash();
       return mutate(1000, () => registerAsset(input, docHash));
     },
-    addPayee: (_e, input) => mutate(700, () => {
-      needCreated(); needOwner();
-      need(est().status === "Active", "BadStatus", "Institutions can only be added while the estate is active.");
-      need(input.name.length <= 64, "StringTooLong", "That name is too long.");
-      s.snap.payees.push({ address: fakeAddr(), ...input });
-      s.names[input.wallet] = input.name;
-      const t = tx();
-      log("PayeeAdded", `${input.name} added as an approved institution`, t);
-      return t;
-    }),
-    addRule: (_e, input) => mutate(700, () => {
-      needCreated(); needOwner();
-      need(est().status === "Active", "BadStatus", "Rules cannot change once a passing is being confirmed.");
-      need(input.maxPerClaimUsdt > 0 && input.maxPerClaimUsdt <= input.lifetimeCapUsdt, "InvalidAmount", "The per-claim limit must be above zero and within the total limit.");
-      s.snap.rules.push({
-        address: fakeAddr(), id: s.snap.rules.length, beneficiary: input.beneficiary, category: input.category, allowedPayeeKind: input.allowedPayeeKind,
-        maxPerClaim: toBase(input.maxPerClaimUsdt), lifetimeCap: toBase(input.lifetimeCapUsdt), spentTotal: 0n, validUntil: input.validUntil,
-        startsNow: input.startsNow,
-        recurringAmount: input.recurring ? toBase(input.recurring.amountUsdt) : 0n,
-        intervalSecs: input.recurring?.intervalSecs ?? 0,
-        nextDue: input.recurring && input.startsNow ? input.recurring.firstDue : null,
-        fixedPayee: input.recurring?.payee ?? null,
-      });
-      const t = tx();
-      log("RuleAdded", `New ${input.category.toLowerCase()} rule added for ${first(input.beneficiary)}`, t);
-      return t;
-    }),
+    addPayee: (_e, input) => mutate(700, () => addPayee(input)),
+    addRule: (_e, input) => mutate(700, () => addRule(input)),
     ownerApproveClaim: (_e, claim) => mutate(900, () => ownerApproveClaim(claim)),
     executeScheduled: (_e, rule) => mutate(1000, () => executeScheduled(rule)),
     vetoDeath: () => mutate(800, vetoDeath),
@@ -1228,6 +1261,12 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     setPhoto: async (e, person, src) => (await Tr()).setPhoto(e, person, src),
     removePhoto: async (e, person) => (await Tr()).removePhoto(e, person),
     declineAsk: (e, claim) => A.declineAsk(e, claim),
+    listLetters: async (e) => (await Lt()).listLetters(e),
+    saveLetter: async (e, input, version) => (await Lt()).saveLetter(e, input, version),
+    deleteLetter: async (e, id, version) => (await Lt()).deleteLetter(e, id, version),
+    reviewLetter: async (e, draft, locale) => (await Lt()).reviewLetter(e, draft, locale),
+    suggestLetter: async (e, input, locale) => (await Lt()).suggestLetter(e, input, locale),
+    letterCounts: async (e) => (await Lt()).letterCounts(e),
 
     async submitDeathClaim(_e, certificate) {
       needCreated(); needBeneficiary();
