@@ -48,7 +48,8 @@ export function Sheet({
               <X className="size-5" aria-hidden="true" />
             </button>
           </div>
-          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">{children}</div>
+          {/* Focusable so keyboard users can scroll a long sheet (e.g. a letter on a phone); WCAG 2.1.1, axe scrollable-region-focusable. */}
+          <div role="region" aria-labelledby={titleId} tabIndex={0} className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">{children}</div>
           {footer && <div className="shrink-0 border-t border-line bg-surface px-4 pt-3 sm:px-5"><div className="pb-3">{footer}</div></div>}
         </>
       )}

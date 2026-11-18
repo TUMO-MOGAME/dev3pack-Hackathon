@@ -13,6 +13,8 @@
 - Found: "Hear a sample" showed after the passing (demo ?demo=unlocked) and only answered with a misleading line. It now shows only while the estate is active.
 - Letters: the four demo letters rewritten warmer (en/af/st/zu, machine-assisted, still need a native read) and set like a letter: greeting line, roomy paragraphs in the display face, amber rule, sign-off in amber ("With all my love, always, / Dad").
 - Checks: vitest 857/857, tsc, eslint. Local (no key): letter dialog axe clean, sample hidden after unlock, 0 browser-voice calls.
+- **BLOCKER (Tumo): the ElevenLabs API key on Vercel is rejected (401 "Invalid API key", checked live 18 Nov on the demo).** Until a valid key is set as ELEVENLABS_API_KEY (Production) on both Vercel projects and they are redeployed, every voice shows "The voice can't play right now. The words are shown here." ElevenLabs errors now answer a plain 503 (detail logged on the server only).
+- Sheets: the scrolling body is focusable (role=region), so a long letter on a phone passes axe scrollable-region-focusable.
 
 ## NOTES WITH A GIFT (plan §16, 18 Nov 2026): merged to main
 - LIVE on both sites (18 Nov, after merge 037e58c): demo Playwright suite passes at 1280 + 360 (letters + legacy words-only), axe clean, 0 errors. Devnet: Thabo (thabo2) sees L1 L2 L3 L5 after the PIN; Naledi's letter opens with her real gift rule (devnet: add_payee + add_rule 5, 500 USD₮ first due 2029-08-14, sent 18 Nov via scripts/seed-letter-gift.ts). Cancelling the PIN shows "Letters could not be loaded. Try again".
