@@ -6,6 +6,10 @@
 > real devnet proof (`docs/demo-screenshots`) and a 20-second "Dad's message" clip. Backup: `Heirloom-pitch-5min.mp4`.
 > Updated 2026-11-18: Legacy Voice is words only. The voice only ever says his own words: no chat and no call in Dad's
 > voice. Do not show the old "Dad's call" footage; play one of Dad's recorded messages instead.
+> Updated 2026-11-19: every voice is ElevenLabs (never the browser's). The demo has no clone of Thabo's voice, so an
+> ElevenLabs stock voice reads his words, labelled "Stand-in voice"; say "a stand-in voice" on stage, not "his voice".
+> New to show if there is time: **Letters for later** (`/letters?demo=funded`): Naledi's 18th-birthday letter opens with
+> her 500 USD₮ gift; "Check my letter" catches a PIN and "the Corolla is yours".
 
 ## 1. Script (timed)
 

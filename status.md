@@ -3,8 +3,19 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-18 (ElevenLabs voices only + warmer letters; before that: Letters for later and Legacy Voice words only merged to main; before that: Trust Tree photos with real demo faces, asset page layout; Trust Tree live on both sites; i18n2 + fixes merged; speed2 merged; plan §14/§15)
+**Last updated:** 2026-11-19 (docs brought up to date: README, architecture, pitch, ElevenLabs guide; ElevenLabs voices only + warmer letters live on both sites; before that: Letters for later and Legacy Voice words only merged)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
+
+
+## OPEN ITEMS FOR TUMO (as of 19 Nov 2026)
+1. Pitch video: re-cut the "Dad's call" part (from 3:27); that feature is gone. Say "a stand-in voice" for the demo voice.
+2. ElevenLabs dashboard: delete the old "Heirloom legacy <hash>" call agents by hand.
+3. Supabase: keys + migrations 0005-0008, or devnet letters/voice data live in server memory and vanish on restart.
+4. A dedicated devnet RPC URL (rate limits are the biggest live-demo risk).
+5. Native-speaker read of the af/st/zu copy, including the new demo letters.
+6. The second hackathon's prize brief and rubric (ends 30 Nov 2026).
+7. `app/.env.example`: remove `LEGACY_SPEAK_SECRET` (unused); `ELEVENLABS_HEIRLOOM_VOICE_ID` and new `ELEVENLABS_STANDIN_VOICE_ID` are optional overrides (.env* files are Tumo's to edit).
+8. Decide whether to clone a real voice for the demo Thabo (consenting speaker) instead of the stock stand-in.
 
 ## ELEVENLABS VOICES ONLY + WARMER LETTERS (18 Nov 2026, evening)
 - Decision (Tumo): **ElevenLabs voices always, never the browser's own speech voice.** The browser fallback is gone (components/legacy/use-player.ts plays audio only; with no audio it shows "The voice can't play right now. The words are shown here.").
@@ -38,7 +49,7 @@
 - Tests: 773 → 770. Removed 13 (persona prompt 5, guards and book-only companion 6, speak tokens 1, estateFacts 1); added 10 (disclosure + first-fees moment 2; routes: speak refuses free text, chat/call 410; words-only.test.ts 6: no chat/call in mock or chain, milestone playback in mock and chain, mock refuses free text, owner sample only while alive); the old chat route test became the milestone opt-in test.
 - Checks: tsc (only the known PageProps/LayoutProps typegen errors), eslint clean on changed files, vitest 770/770, mock and chain `next build` OK. Browser (mock dev :3430, ?demo=funded / ?demo=unlocked, Playwright at 1280 + 360): owner studio has no question box and no live-call line, sample plays; Lerato opt-in → messages play, Dad's words to read, help lines open, no chat box, no call button; /family has no "Talk with Dad"; no request to /api/legacy/chat or /api/voice/session; axe clean, no sideways scroll, 0 console errors. Seen: the global "Ask Heirloom" button covers part of the opt-in "Yes, switch it on" button at 360 px (existing, not changed here).
 - Both sites: shared code, so mock and chain change together. After merge + deploy, check /legacy on both (devnet: Lerato on the unlocked demo estate).
-- For Tumo: the 5-minute pitch video still has "Dad's call" (from 3:27): re-cut before reuse. Old "Heirloom legacy <hash>" agents may remain in the ElevenLabs dashboard (devnet ran without Supabase, so their ids were in server memory): delete them by hand. `app/.env.example` still lists `LEGACY_SPEAK_SECRET` and `ELEVENLABS_HEIRLOOM_VOICE_ID` (now unused; not edited: .env* files are off limits). Decide whether the voice copy should be deleted at death after pre-rendering the messages (plan §16.16 says so for the future).
+- For Tumo: the 5-minute pitch video still has "Dad's call" (from 3:27): re-cut before reuse. Old "Heirloom legacy <hash>" agents may remain in the ElevenLabs dashboard (devnet ran without Supabase, so their ids were in server memory): delete them by hand. `app/.env.example` still lists `LEGACY_SPEAK_SECRET` (unused; `ELEVENLABS_HEIRLOOM_VOICE_ID` is used again since 19 Nov; not edited: .env* files are off limits). Decide whether the voice copy should be deleted at death after pre-rendering the messages (plan §16.16 says so for the future).
 
 ## TRUST TREE FIXES LIVE (17 Nov 2026, main 068dd6c, checked on both sites)
 - The Corolla is ONE journey: Thabo's plan → Lerato → registered in Lerato's own plan → Amahle (assetPaths keys by asset; an heir re-registering what they received continues the path).

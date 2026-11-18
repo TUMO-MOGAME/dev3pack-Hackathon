@@ -151,7 +151,7 @@ created in the dashboard for it**; the app makes:
 | What | Endpoint | When |
 |---|---|---|
 | Instant Voice Clone | `POST /v1/voices/add` (multipart `name`, `files[]`, `remove_background_noise`, `description`, `labels`) → `{ voice_id, requires_verification }` | owner taps "Create my voice" (≥ 3 samples + recorded consent line) |
-| Text to speech | `POST /v1/text-to-speech/{voice_id}?output_format=mp3_44100_128` (`eleven_multilingual_v2`) | a milestone message is played (or the owner's fixed sample line); cached in the private `legacy-audio` bucket |
+| Text to speech | `POST /v1/text-to-speech/{voice_id}?output_format=mp3_44100_128` (`eleven_multilingual_v2`) | a milestone message is played (or the owner's fixed sample line, or Heirloom's disclosure); cached in the private `legacy-audio` bucket |
 | Delete voice | `DELETE /v1/voices/{voice_id}` | owner taps "Delete my voice" (also deletes the recordings and cached audio) |
 | Delete old call agent | `DELETE /v1/convai/agents/{id}` | voices made before 18 Nov 2026 had a private agent for live calls; it is deleted on the next status read |
 
@@ -168,5 +168,10 @@ created in the dashboard for it**; the app makes:
 ELEVENLABS_API_KEY=...             # already used by the main agent
 LEGACY_DEMO_WRITES=1               # DEMO ONLY: mock-mode deploy uses the real routes without wallet signatures
 ```
-Without `ELEVENLABS_API_KEY` the whole flow still works with a **simulated** voice (browser speech), labelled
-"Simulated voice: the real voice needs ElevenLabs". Run `supabase/migrations/0002_legacy.sql` for persistent storage.
+**ElevenLabs voices only (19 Nov 2026).** The browser's own speech voice is never used. With no cloned voice (the demo,
+or an owner who has not recorded yet) an ElevenLabs **stock voice** reads the owner's words and the app labels it
+"Stand-in voice: an ElevenLabs stock voice reads these words" ("George" for he, "Matilda" for she; override with
+`ELEVENLABS_STANDIN_VOICE_ID`). The disclosure before each message is spoken in Heirloom's own voice ("Sarah"; override
+with `ELEVENLABS_HEIRLOOM_VOICE_ID`). The demo site uses `GET /api/legacy/demo-voice?line=…`, which speaks only the
+demo book's fixed lines and is cached by the CDN. Stock voices need no paid plan. Without `ELEVENLABS_API_KEY` nothing
+plays and the words are shown instead. Run `supabase/migrations/0002_legacy.sql` for persistent storage.

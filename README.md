@@ -13,7 +13,7 @@ nothing makes sure it is spent on the children.
 
 | | |
 |---|---|
-| **Live demo** | **https://heirloom-one-iota.vercel.app** *(works on a phone; installable as an app)*. Runs in **mock mode**: the whole story is simulated in your browser with "Simulated" badges, and the agent gives labelled canned answers (no Gemini or ElevenLabs keys on the hosted demo). The on-chain proof is in the devnet links below |
+| **Live demo** | **https://heirloom-one-iota.vercel.app** *(works on a phone; installable as an app)*. Runs in **mock mode**: the money story is simulated in your browser with "Simulated" badges; the AI agent (Gemini) and the voices (ElevenLabs) are real. The on-chain proof is in the devnet links below |
 | **Live on devnet** | **https://heirloom.tumoolo.tech** (also https://heirloom-devnet.vercel.app): the same app in **chain mode** on Solana devnet with Tether WDK wallets. Create a wallet or bring a recovery phrase; the demo family lives on the demo site |
 | **Android app** | A Solana Mobile build of the devnet site (package `tech.tumoolo.heirloom`), for the Solana dApp Store. Build notes: [`docs/android-build.md`](docs/android-build.md); store assets: [`docs/store`](docs/store) |
 | **Demo video (≤ 3 min)** | [Watch on YouTube](https://youtu.be/N67LrkpVAmw) (2:58) |
@@ -54,7 +54,12 @@ person, collapses to an icon rail on desktop and becomes a drawer on phones.
    kept off-chain (never on the ledger, not even a hash); only the person a letter is for can read it once it opens.
    "Check my letter" warns about PINs, passwords, recovery phrases, ID and account numbers, and about words that
    disagree with the plan ("the Corolla is yours" while the plan sells it); the AI only warns and suggests. The family
-   sees "Thabo left you a letter", and the Trust Tree card counts opened letters by year. Text only: no AI voices.
+   sees "Thabo left you a letter", and the Trust Tree card counts opened letters by year. Letters are set like a letter
+   (greeting, paragraphs, "With all my love, Dad") and can be printed. Text only: no AI voices.
+8. **Dad's own words, in a voice.** On **Legacy voice** (`/legacy`) Thabo records his voice and writes messages for
+   moments (fees paid, graduation, a hard day). After he passes, each child can choose to hear them. The voice only
+   ever says words he wrote while alive: no chat, no calls. Every voice is ElevenLabs; when no voice was cloned (as in
+   the demo) an ElevenLabs stock voice reads his words and is labelled as a stand-in.
 
 ## Screenshots
 
@@ -231,14 +236,14 @@ Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`doc
 | Pay-once payment pipeline, reconnect re-check | **Real** (unit-tested in `payments.test.ts`) |
 | AI agent (Gemini orchestrator + 6 specialists) | **Real** with `GEMINI_API_KEY`; without it, clearly labelled canned answers |
 | Voice call (ElevenLabs) | **Real** with ElevenLabs keys; otherwise a labelled "Simulated call preview" |
-| Legacy voice (parent's cloned voice reads the parent's own messages, ElevenLabs IVC + TTS) | **Real** with `ELEVENLABS_API_KEY` in chain mode (or a demo deploy with `LEGACY_DEMO_WRITES=1`); otherwise the browser's voice stands in, labelled "Simulated voice" |
+| Legacy voice (parent's cloned voice reads the parent's own messages, ElevenLabs IVC + TTS) | **Real** ElevenLabs on both sites. The parent's cloned voice when one exists; otherwise an ElevenLabs stock voice, labelled "Stand-in voice". Never the browser's voice: without a key the words are shown instead |
 | USD₮ → ZAR rate | **Real**, live VALR public ticker (fallback rate labelled) |
 | Rand settlement to the university (PayShap/EFT) | **Simulated** and labelled ([`lib/offramp.ts`](app/src/lib/offramp.ts)). Next step: a licensed partner |
 | Institutions (UCT, residence, school, bookstore) | **Demo wallets** we control, not the real institutions |
 | Death certificate, fee statement, affidavit | **Sample documents** marked SAMPLE |
 | Waiting period and payment intervals | **60 seconds** for the demo instead of weeks / months |
 | Mock mode (default) | Whole story **simulated** in the browser, with a "Simulated" badge; Explorer will not find mock receipts |
-| Hosted demo (heirloom-one-iota.vercel.app) | **Mock mode**, with no Gemini, ElevenLabs or Supabase keys: canned agent answers and the simulated call preview, both labelled. The devnet links in this README are the on-chain proof |
+| Hosted demo (heirloom-one-iota.vercel.app) | **Mock mode** for the money story, with real Gemini and ElevenLabs keys (agent answers, voice call, Legacy voice) and no Supabase. The devnet links in this README are the on-chain proof |
 
 ## Run it locally
 
@@ -285,7 +290,7 @@ All names are in [`app/.env.example`](app/.env.example). Only `NEXT_PUBLIC_*` re
 | `AGENT_SEED_PHRASE`, `SOLANA_RPC_URL` | chain, server | the agent's WDK wallet; keep secret |
 | `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_VOICE_MODEL` | AI | without a key: labelled canned answers; voice calls use a fast model (default `gemini-3.5-flash-lite`) |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_TOOL_SECRET` | voice | setup in [`scripts/elevenlabs-agent.md`](scripts/elevenlabs-agent.md) |
-| `ELEVENLABS_TTS_MODEL`, `LEGACY_DEMO_WRITES` | legacy voice | §6 of [`scripts/elevenlabs-agent.md`](scripts/elevenlabs-agent.md); `LEGACY_DEMO_WRITES` is demo-only |
+| `ELEVENLABS_TTS_MODEL`, `ELEVENLABS_STANDIN_VOICE_ID`, `ELEVENLABS_HEIRLOOM_VOICE_ID`, `LEGACY_DEMO_WRITES` | legacy voice | optional overrides for the stand-in and Heirloom voices; §6 of [`scripts/elevenlabs-agent.md`](scripts/elevenlabs-agent.md); `LEGACY_DEMO_WRITES` is demo-only |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | storage | without them: in-memory store; schema in [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) |
 | `SCHEDULER_SECRET`, `CRON_SECRET` | scheduled payments | protects `POST /api/scheduler/tick` |
 | `FX_FALLBACK_USDT_ZAR` | FX | used only if VALR is unreachable |
@@ -329,8 +334,8 @@ anchor build && cargo test -p heirloom   # 25 LiteSVM program tests (Linux / WSL
   fraud tool if misused, so: only the living owner can create it (recorded consent line + unticked box, estate must be
   Active); every `/api/legacy/*` request is signed by the WDK wallet (ed25519 over action, estate, time and body hash;
   5-minute window, single use) and checked against the on-chain owner / beneficiaries; the ElevenLabs `voice_id` stays
-  server-side; `/api/legacy/speak` takes only a milestone id (or the owner's fixed sample line while alive) and refuses
-  any free text; each message is introduced in Heirloom's own voice as an AI copy; the child's page has SADAG help lines.
+  server-side; `/api/legacy/speak` takes only a milestone id (or the owner's fixed sample line while alive, or Heirloom's
+  disclosure) and refuses any free text; the demo's `/api/legacy/demo-voice` speaks only the demo book's fixed lines; each message is introduced in Heirloom's own voice as an AI copy; the child's page has SADAG help lines.
   See [`app/src/lib/legacy/`](app/src/lib/legacy/) and [`supabase/migrations/0002_legacy.sql`](supabase/migrations/0002_legacy.sql).
 - **Known limits:** devnet only; not audited; in-memory rate limits (per instance); no seed-recovery flow yet.
 - **Secrets:** `.env*`, keypairs and demo wallet seeds are gitignored. Report issues privately to the maintainer.
