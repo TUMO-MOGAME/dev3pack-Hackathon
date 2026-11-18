@@ -6,6 +6,9 @@
 **Last updated:** 2026-11-17 (Trust Tree live on both sites; i18n2 + fixes merged; speed2 merged; Trust Tree agreed, plan §15; before that: Infisical paused, keystore password rotated, plan §14; before that: everyday money: ask for money, pay a bill once, bill templates, monthly statement; merged to main)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
 
+## NOTES WITH A GIFT (plan §16, 18 Nov 2026): PLANNED
+- "Letters for later": signed, off-chain letters from the owner that open at unlock, on a date, or with a USD₮ payment (scheduled payment / claim payout via the rule's spent_total; send-to-family last). Text only; no program upgrade; no AI voices. Full design, build order and 4 open questions for Tumo (Legacy Voice overlap, Gemini vs Claude, devnet gift rule, Supabase on devnet) in plan.md §16.
+
 ## TRUST TREE FIXES LIVE (17 Nov 2026, main 068dd6c, checked on both sites)
 - The Corolla is ONE journey: Thabo's plan → Lerato → registered in Lerato's own plan → Amahle (assetPaths keys by asset; an heir re-registering what they received continues the path).
 - Charities are organisations (`TreePerson.org`, from the fallback plan's `kind: "charity"` or declared): a rounded square on the map, "Organisation" under the name (en/af/st/zu).
