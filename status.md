@@ -13,7 +13,7 @@
 - Found: "Hear a sample" showed after the passing (demo ?demo=unlocked) and only answered with a misleading line. It now shows only while the estate is active.
 - Letters: the four demo letters rewritten warmer (en/af/st/zu, machine-assisted, still need a native read) and set like a letter: greeting line, roomy paragraphs in the display face, amber rule, sign-off in amber ("With all my love, always, / Dad").
 - Checks: vitest 857/857, tsc, eslint. Local (no key): letter dialog axe clean, sample hidden after unlock, 0 browser-voice calls.
-- **BLOCKER (Tumo): the ElevenLabs API key on Vercel is rejected (401 "Invalid API key", checked live 18 Nov on the demo).** Until a valid key is set as ELEVENLABS_API_KEY (Production) on both Vercel projects and they are redeployed, every voice shows "The voice can't play right now. The words are shown here." ElevenLabs errors now answer a plain 503 (detail logged on the server only).
+- ElevenLabs key: the old key on Vercel was rejected (401). Fixed 19 Nov: ELEVENLABS_API_KEY (Production) on both Vercel projects (heirloom, heirloom-devnet) replaced with the working key from the root .env.local (`vercel env update`, value never printed), both redeployed. Checked live: demo-voice sample/disclosure/UCT message answer 200 audio/mpeg; demo /legacy sample plays with no errors and no browser voice; /api/voice/session gives a signed URL on both sites. ElevenLabs errors answer a plain 503 (detail logged on the server only).
 - Sheets: the scrolling body is focusable (role=region), so a long letter on a phone passes axe scrollable-region-focusable.
 
 ## NOTES WITH A GIFT (plan §16, 18 Nov 2026): merged to main
