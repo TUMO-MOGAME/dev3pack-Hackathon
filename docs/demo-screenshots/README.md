@@ -51,7 +51,10 @@ Fee payer `261pQ…sjNg` is Heirloom's fee wallet: family members, trusted peopl
 
 Not in the pictures: the voice call (record it live: **Call Heirloom**, ask "How much is in the vault?").
 
-## L. Talk with Dad (legacy voice, devnet laptop)
+## L. Dad's messages (legacy voice, devnet laptop)
+
+> 18 Nov 2026: Legacy Voice is now words only (plan §16.17): the voice plays Dad's own messages and nothing else.
+> L2-L4 show the chat and call that were removed; they are kept as a record of the 13 Nov build, not as the product.
 
 Thabo is fictional, so on the laptop demo a stock ElevenLabs voice ("Andreas", South African English) stands in for
 the voice clone a real parent records with consent (`lib/chain/demo-estate.ts`). His Legacy Book is the demo book.

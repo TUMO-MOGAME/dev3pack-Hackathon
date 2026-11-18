@@ -325,6 +325,8 @@ Two videos, never one edited into the other:
   Built from the same recordings plus the living plan (Pay now, Send to family), Lerato's call with Heirloom, the
   hardship refusal, Dad's recorded UCT message and more of Dad's call. (Check with the organisers which length they want
   uploaded: if they confirm 5 minutes, submit this one.)
+- **18 Nov 2026:** the call in Dad's voice was removed from the product (§16.17). Any cut for the second hackathon must
+  drop the "Dad's call" footage and keep only Dad's recorded messages ("the voice only ever says his own words").
 
 Both are built by a script (`scratchpad/video/build.mjs`, `build2.mjs`): narration "John Texas" (ElevenLabs), Dad =
 "Andreas" (stock voice standing in for a consented clone), music = an original ElevenLabs Music instrumental (no
@@ -339,7 +341,7 @@ browser full screen (F11) in a fresh profile (no other tabs, no autofill with yo
 | # | What to record (≈ length) | Where | Goes into chapter | Why judges care |
 |---|---|---|---|---|
 | R1 | **Thabo writes his plan by chatting**: type "Pay my children's university fees up to R70,000 a year, and sell my Corolla for no less than 9,000 USDT unless one of them is in real need." The rules appear; sign (40 s) | Public site, Demo controls → "Start from the beginning", as Thabo, **Plan** | Meet Thabo (replaces the still) | The AI turns plain words into rules the contract enforces |
-| R2 | **Thabo records his legacy voice and writes a few lines of his Legacy Book** (30 s, his real voice) | Public site, Demo controls → "Will signed, vault funded", **Legacy voice** | Before the passing | Consent-first voice cloning; the voice speaks only his words |
+| R2 | **Thabo records his legacy voice and writes a few lines of his Legacy Book** (30 s, his real voice) | Public site, Demo controls → "Will signed, vault funded", **Legacy voice** | Before the passing | Consent-first voice copy; the voice only ever says his own words (no chat, no calls: §16.17) |
 | R3 | **"I'm still here"**: a passing is reported while Thabo is alive; he taps "I'm still here" and it is cancelled (20 s) | Public site, "Will signed, vault funded", then Shortcuts → "Simulate a passing"; as Thabo, **Estate** | Right after the passing chapter | Protection against a false or fraudulent death report |
 | R4 | **Hardship that succeeds**: Sipho/Lerato submit the signed affidavit, two trusted people approve, an 8,000 offer is then accepted, never below 7,000 (40 s) | Public site, Demo controls → "Car listed, only low offers" | The car chapter | Shows the floor bending only with proof and people |
 | R5 | **Over-cap claim refused by the contract**: submit 5,000 on a 4,000 rule and show the contract's refusal (15 s) | Public site, Demo controls → "Estate unlocked" | Claims chapter | "Even if the AI were fooled, the contract says no" |
@@ -981,3 +983,30 @@ unchanged (letters code only in its own chunks). Then the lead merges, deploys a
   per-letter key released at opening by a threshold of trusted people), so the server stores ciphertext only.
 - Anchor a letter's hash on-chain (memo), a "a letter is waiting" teaser the owner can switch on, letters from other
   family members (not only the owner), letters that open on a guardian's milestone.
+
+### 16.17 Legacy Voice: words only (18 Nov 2026)
+
+**Decision (Tumo, 18 Nov 2026):** a voice only ever says words its owner wrote or approved while alive. No AI chat and
+no live call in a parent's voice after death. This answers §16.13 "Legacy Voice overlap" and §16.15 question 1: keep
+`/legacy`, without the parts that made the voice say new words.
+
+- **Kept:** the owner's consented voice copy (ElevenLabs Instant Voice Clone, recorded consent line + unticked box), the
+  Legacy Book, and the "messages for moments", played in the parent's voice with the "AI voice" label and a spoken
+  disclosure in Heirloom's voice first. The owner can still hear one fixed sample line while the estate is active.
+- **Removed:** the child's text chat with the voice (`/api/legacy/chat`), the live call (`POST /api/voice/session`
+  legacy mode and the per-estate ElevenLabs agent), the owner's "ask a question as {child}" preview, the
+  LegacyCompanion specialist and persona prompt, speak tokens, and `legacyChat` / `legacyCall` in the service
+  interface (mock and chain). Old call agents are deleted on the next status read.
+- **Server rule:** `/api/legacy/speak` accepts only `{ milestoneId }` or `{ sample: true }` (strict body, the sample
+  text is fixed on the server, owner only, estate active). Any free text is refused (400). The chat and call endpoints
+  answer **410 Gone** with a plain message.
+- **Child page:** the messages to play, the rest of the parent's words to read (note, values, lessons, sayings,
+  guidance; never voiced), help lines one tap away (SADAG, a trusted adult), switch off. No input box.
+- **Copy:** "Hear {called}'s messages in {possessive} own words, in {possessive} voice." Consent line now reads "...a copy
+  of my voice to read my own messages to my family after I'm gone." Privacy policy §13 states the rule; ElevenLabs
+  stays the operator for the voice copy; Gemini is no longer used for Legacy Voice.
+- **Not changed:** the future rule in §16.16 also says "the voice copy is deleted at death"; today the copy is kept so
+  the messages can play. Tumo to decide whether to pre-render the messages while the owner is alive and delete the
+  copy at death instead.
+- **Tests:** speak refuses free text (child and owner, with or without a token, extra text next to a valid body), the
+  chat and call endpoints answer 410, milestone playback works in the mock and the chain service.
