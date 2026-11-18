@@ -2,6 +2,9 @@
  * Legacy Voice rules shared by the browser and the server without zod: the kinds, the public types, the consent
  * line and the voice-recording checks, and small book helpers. The zod schemas (and the book's types inferred from
  * them) are in ./schema, which re-exports all of this.
+ *
+ * The rule (18 Nov 2026, plan §16.17): the voice only ever says words its owner wrote or approved while alive.
+ * It plays the owner's messages for moments; it never answers questions, takes calls or writes new words.
  */
 import type { Guidance, LegacyBook, LegacyChild, Milestone } from "./schema";
 
@@ -19,8 +22,6 @@ export interface LegacyVoiceInfo {
   simulated: boolean;
   /** ElevenLabs may ask the account holder to verify a new voice before it can be used. */
   needsVerification?: boolean;
-  /** Whether a live call (ElevenLabs agent) is available for this voice. */
-  liveCall: boolean;
 }
 
 export interface LegacyStatus {
@@ -32,7 +33,7 @@ export interface LegacyStatus {
   viewer: "owner" | "child" | "other";
   /** The child entry in the book that matches the viewer, if any. */
   childId: string | null;
-  /** Children may only talk after the estate unlocks. */
+  /** Children hear the messages only after the estate unlocks. */
   unlocked: boolean;
 }
 
@@ -41,24 +42,28 @@ export interface LegacySpeech {
   /** Object URL of rendered audio (ElevenLabs). Null when simulated: the UI uses speech synthesis. */
   audioUrl: string | null;
   simulated: boolean;
-  /** "heirloom" = the default assistant voice (disclosures, safety, refusals), never the parent's. */
+  /** "heirloom" = the default assistant voice (the disclosure), never the parent's. */
   voice: "parent" | "heirloom";
 }
 
-export interface LegacyChatReply {
-  reply: string;
-  voice: "parent" | "heirloom";
-  /** "book" = drawn from the Legacy Book without an AI model; "ai" = model answer grounded in the book. */
-  source: "book" | "ai" | "safety" | "refusal";
-  /** Set when the child seemed distressed: the UI shows the helplines and stays out of character. */
-  safety?: boolean;
-  /** Opaque server token that lets /api/legacy/speak voice exactly this reply (no arbitrary text). */
-  speakToken?: string;
+/* ---------- what the voice says around the messages ---------- */
+
+export interface Pronouns { subject: string; object: string; possessive: string }
+export function pronouns(p: LegacyBook["pronoun"]): Pronouns {
+  return p === "she" ? { subject: "she", object: "her", possessive: "her" }
+    : p === "they" ? { subject: "they", object: "them", possessive: "their" }
+      : { subject: "he", object: "him", possessive: "his" };
+}
+
+/** Said in Heirloom's own voice before the first message plays (honest disclosure). */
+export function disclosureLine(book: Pick<LegacyBook, "calledBy" | "pronoun">): string {
+  const p = pronouns(book.pronoun).possessive;
+  return `This is Heirloom. Next you will hear your ${book.calledBy.toLowerCase()}'s own words, in ${p} voice: an AI copy made with ${p} consent.`;
 }
 
 /* ---------- consent ---------- */
 
-export const CONSENT_LINE = "I, {name}, agree that Heirloom may create a copy of my voice to speak to my family after I'm gone.";
+export const CONSENT_LINE = "I, {name}, agree that Heirloom may create a copy of my voice to read my own messages to my family after I'm gone.";
 export const consentLine = (name: string) => CONSENT_LINE.replace("{name}", name.trim());
 
 export const MIN_SAMPLES = 3;
@@ -123,4 +128,10 @@ export function matchChild(book: LegacyBook, wallet: string | null | undefined, 
   if (wallet) { const w = book.children.find((c) => c.wallet === wallet); if (w) return w; }
   const first = label?.split(/[ (]/)[0]?.toLowerCase();
   return first ? book.children.find((c) => c.name.split(" ")[0].toLowerCase() === first) ?? null : null;
+}
+
+/** The book's message for one moment for this child: their own first, then one for all the children. */
+export function findMoment(book: LegacyBook, child: LegacyChild | null, kind: MilestoneKind): Milestone | null {
+  const list = milestonesFor(book, child?.id ?? null).filter((m) => m.kind === kind);
+  return list.find((m) => m.childId === child?.id) ?? list[0] ?? null;
 }

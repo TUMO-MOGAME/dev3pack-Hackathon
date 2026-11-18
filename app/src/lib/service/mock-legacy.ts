@@ -1,6 +1,6 @@
 /**
  * Legacy voice in mock mode. Same rules as the server (owner-only writes while the estate is active, consent
- * required, children only after unlock + opt-in, money refused, distress → helplines), with a SIMULATED voice:
+ * required, children only after unlock + opt-in, the voice speaks only the owner's own messages), with a SIMULATED voice:
  * the browser's speech synthesis stands in and the UI labels it "Simulated voice: the real voice needs ElevenLabs".
  *
  * On a demo deployment with ELEVENLABS_API_KEY and LEGACY_DEMO_WRITES=1, the same calls go to the real
@@ -8,7 +8,7 @@
  */
 import type { Base58, Estate, Role } from "../types";
 import type { EstateSnapshot } from "./types";
-import { bookReply } from "../legacy/companion";
+import { legacyVoiceSample } from "@/content/legacy";
 import { demoLegacyBook } from "../legacy/demo-book";
 import { legacyApi, type LegacySigner } from "../legacy/client";
 import { consentLine, matchChild, validateVoiceInput, type LegacyStatus, type LegacyVoiceInfo } from "../legacy/rules";
@@ -16,7 +16,7 @@ import type { LegacyBook } from "../legacy/schema";
 import type { HeirloomService } from "./types";
 
 type LegacyMethods = Pick<HeirloomService,
-  "legacyStatus" | "createLegacyVoice" | "deleteLegacyVoice" | "saveLegacyBook" | "deleteLegacyBook" | "setLegacyOptIn" | "legacyChat" | "legacySpeak" | "legacyCall">;
+  "legacyStatus" | "createLegacyVoice" | "deleteLegacyVoice" | "saveLegacyBook" | "deleteLegacyBook" | "setLegacyOptIn" | "legacySpeak">;
 
 interface Deps {
   actor(): { address: Base58; role: Role; label: string } | null;
@@ -41,7 +41,7 @@ const fail = (code: string, msg: string): never => { throw new LegacyError(code,
 export function createMockLegacy(d: Deps): LegacyMethods & { resetLegacy(): void } {
   const seed = (): LocalState => ({
     v: 1,
-    voice: { ownerName: "Thabo Mokoena", consentedAt: DEMO_CONSENTED_AT, samples: 4, simulated: true, liveCall: false },
+    voice: { ownerName: "Thabo Mokoena", consentedAt: DEMO_CONSENTED_AT, samples: 4, simulated: true },
     book: demoLegacyBook(d.wallets),
     optIns: {},
   });
@@ -109,7 +109,7 @@ export function createMockLegacy(d: Deps): LegacyMethods & { resetLegacy(): void
       if (input.consentText !== consentLine(input.ownerName)) fail("Invalid", "The consent line must be the exact sentence shown.");
       if (await isRemote()) { const v = await legacyApi.createVoice(signer("owner"), input); st.voice = v; save(); return v; }
       await sleep(1800); // "creating the voice"
-      st.voice = { ownerName: input.ownerName.trim(), consentedAt: Date.now(), samples: input.samples.length, simulated: true, liveCall: false };
+      st.voice = { ownerName: input.ownerName.trim(), consentedAt: Date.now(), samples: input.samples.length, simulated: true };
       save();
       return st.voice;
     },
@@ -146,36 +146,22 @@ export function createMockLegacy(d: Deps): LegacyMethods & { resetLegacy(): void
       st.optIns = { ...st.optIns, [me().address]: on }; save();
     },
 
-    async legacyChat(_e, history, opts) {
+    async legacySpeak(_e, input) {
       needTalk();
-      if (await isRemote()) return legacyApi.chat(signer(), history, opts?.previewChildId);
-      if (!st.book) fail("NoBook", "There is no Legacy Book.");
-      await sleep(700);
-      const kid = isOwner() ? st.book!.children.find((c) => c.id === opts?.previewChildId) ?? null : child();
-      const last = [...history].reverse().find((m) => m.role === "user")?.text ?? "";
-      return bookReply(st.book!, kid, last);
-    },
-
-    async legacySpeak(_e, input, voice = "parent") {
-      needTalk();
-      if (await isRemote() && voice === "parent") return legacyApi.speak(signer(), input, voice);
-      if (!st.voice && voice === "parent") fail("NoVoice", "No legacy voice has been created.");
+      if (await isRemote()) return legacyApi.speak(signer(), input);
+      if (!st.voice) fail("NoVoice", "No legacy voice has been created.");
       let text: string;
       if ("milestoneId" in input) {
         const m = st.book?.milestones.find((x) => x.id === input.milestoneId);
         if (!m) fail("NotFound", "That message was not found.");
         text = m!.text;
-      } else text = input.text;
-      return { text, audioUrl: null, simulated: true, voice };
-    },
-
-    async legacyCall(_e, opts) {
-      needTalk();
-      if (await isRemote()) {
-        try { return await legacyApi.session(signer(), opts?.previewChildId); }
-        catch { return null; }
+      } else {
+        // Same rule as the server: only the owner, while alive, hears the fixed sample line. Never free text.
+        if (!isOwner()) fail("Forbidden", "The legacy voice only speaks the messages in the Legacy Book.");
+        needAlive();
+        text = legacyVoiceSample;
       }
-      return null;
+      return { text, audioUrl: null, simulated: true, voice: "parent" };
     },
   };
 }

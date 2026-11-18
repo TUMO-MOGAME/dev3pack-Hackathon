@@ -16,10 +16,10 @@ export function DisclosureLabel({ text, simulated, simulatedText, className }: {
   );
 }
 
-/** Helplines shown when a child seems distressed (rule 5). Always in Heirloom's voice, never the parent's. */
+/** Help lines a child can open from their legacy page at any time. Always Heirloom's words, never the parent's. */
 export function SafetyCard({ copy, called, adults }: { copy: LegacySafetyCopy; called: string; adults: string }) {
   return (
-    <section role="alert" aria-labelledby="legacy-safety" className="rounded-lg border-2 border-ink bg-surface p-4">
+    <section aria-labelledby="legacy-safety" className="rounded-lg border-2 border-ink bg-surface p-4">
       <h2 id="legacy-safety" className="flex items-center gap-2 text-h3"><HeartHandshake className="size-5 shrink-0" aria-hidden="true" />{copy.title}</h2>
       <p className="mt-1 text-small text-ink-2">{fmt(copy.intro, { called })}</p>
       <p className="mt-2">{copy.body}</p>

@@ -712,12 +712,7 @@ export function createChainService(): HeirloomService {
     saveLegacyBook: (estate, book) => legacyApi.saveBook(legacySigner(estate), book),
     deleteLegacyBook: (estate) => legacyApi.deleteBook(legacySigner(estate)),
     setLegacyOptIn: (estate, on) => legacyApi.optIn(legacySigner(estate), on),
-    legacyChat: (estate, history, opts) => legacyApi.chat(legacySigner(estate), history, opts?.previewChildId),
-    legacySpeak: (estate, input, voice) => legacyApi.speak(legacySigner(estate), input, voice),
-    async legacyCall(estate, opts) {
-      try { return await legacyApi.session(legacySigner(estate), opts?.previewChildId); }
-      catch (e) { if ((e as { status?: number }).status === 503) return null; throw e; }
-    },
+    legacySpeak: (estate, input) => legacyApi.speak(legacySigner(estate), input),
   };
   return service;
 }

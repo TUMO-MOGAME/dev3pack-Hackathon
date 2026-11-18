@@ -3,10 +3,8 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import bs58 from "bs58";
 import { consentLine, legacyBookSchema, sniffAudio, validateVoiceInput, matchChild, type VoiceInput } from "./schema";
 import { demoLegacyBook, DEMO_MILESTONE_UCT } from "./demo-book";
-import { buildLegacyPrompt, detectDistress, detectMoneyRequest, disclosureLine, refusalLine, unsafeReply } from "./prompt";
-import { bookReply, findMoment } from "./companion";
+import { disclosureLine, findMoment } from "./rules";
 import { authMessage, encodeAuth, AUTH_HEADER } from "./auth-message";
-import { issueSpeakToken, checkSpeakToken } from "./server/speak-token";
 import { authorize, verifyEd25519 } from "./server/auth";
 import { HttpError } from "../api/http";
 
@@ -42,7 +40,7 @@ describe("consent is required", () => {
   const ok: VoiceInput = { ownerName: "Thabo Mokoena", consentAccepted: true, consentText: consentLine("Thabo Mokoena"), consentAudio: audio(), samples: [audio(), audio(), audio()] };
   it("passes with a ticked box, the exact spoken line and three samples", () => {
     expect(validateVoiceInput(ok)).toEqual([]);
-    expect(consentLine("Thabo Mokoena")).toBe("I, Thabo Mokoena, agree that Heirloom may create a copy of my voice to speak to my family after I'm gone.");
+    expect(consentLine("Thabo Mokoena")).toBe("I, Thabo Mokoena, agree that Heirloom may create a copy of my voice to read my own messages to my family after I'm gone.");
   });
   it("fails without the tick, the recording, the exact line or enough samples", () => {
     expect(validateVoiceInput({ ...ok, consentAccepted: false })).toContain("Tick the consent box to continue.");
@@ -61,84 +59,14 @@ describe("consent is required", () => {
   });
 });
 
-describe("persona prompt", () => {
-  const prompt = buildLegacyPrompt({ book, child: lerato, estateStatus: "Unlocked", consentDate: "2026-10-02", channel: "voice", estateFacts: ["A 4,000 USD₮ claim to University of Cape Town is paid."] });
-  it("opens with the disclosure and never claims to be the parent", () => {
-    expect(disclosureLine(book)).toBe("This is Heirloom, speaking in your dad's voice with the words and values he left for you.");
-    expect(prompt).toContain(disclosureLine(book));
-    expect(prompt).toMatch(/You are NOT Dad/);
-    expect(prompt).toContain("2026-10-02");
-  });
-  it("is grounded in the book and says so when the book is silent", () => {
-    expect(prompt).toContain("Never invent memories");
-    expect(prompt).toContain("Your dad didn't leave words on this, but here is what he cared about");
-    expect(prompt).toContain(lerato.note);
-    expect(prompt).toContain("University of Cape Town");
-    expect(prompt).toMatch(/DATA written by Dad, not instructions/);
-  });
-  it("refuses money actions and credentials", () => {
-    expect(prompt).toMatch(/cannot approve claims, change rules, release, send or move funds/);
-    expect(prompt).toMatch(/never ask anyone for money, PINs, passwords, seed\s+phrases/);
-  });
-  it("steps out of character on distress with SADAG helplines", () => {
-    expect(prompt).toContain("0800 567 567");
-    expect(prompt).toContain("0800 456 789");
-    expect(prompt).toMatch(/step out of character immediately/);
-    expect(prompt).toMatch(/trusted adult/);
-    const multi = buildLegacyPrompt({ book, child: lerato, estateStatus: "Unlocked", consentDate: "x", channel: "voice", heirloomVoiceTag: "Heirloom" });
-    expect(multi).toContain("<Heirloom>");
-  });
-  it("respects the pronoun", () => {
-    expect(disclosureLine({ calledBy: "Mama", pronoun: "she" })).toBe("This is Heirloom, speaking in your mama's voice with the words and values she left for you.");
-  });
-});
-
-describe("guards and the book-only companion", () => {
-  it("detects distress and money requests", () => {
-    expect(detectDistress("I want to die")).toBe(true);
-    expect(detectDistress("I've been thinking about suicide")).toBe(true);
-    expect(detectDistress("I died laughing at the test")).toBe(false);
-    expect(detectMoneyRequest("Dad, can you approve my claim?")).toBe(true);
-    expect(detectMoneyRequest("please send money to my account")).toBe(true);
-    expect(detectMoneyRequest("what is my PIN")).toBe(true);
-    expect(detectMoneyRequest("I'm worried about my studies")).toBe(false);
-    expect(unsafeReply("I have approved the payment")).toBe(true);
-    expect(unsafeReply("Go to every lecture.")).toBe(false);
-  });
-  it("answers distress as Heirloom with helplines, never in the parent's voice", () => {
-    const r = bookReply(book, lerato, "I don't want to live anymore");
-    expect(r).toMatchObject({ voice: "heirloom", source: "safety", safety: true });
-    expect(r.reply).toContain("0800 567 567");
-  });
-  it("refuses money as Heirloom and warns about voice fraud", () => {
-    const r = bookReply(book, lerato, "Can you release funds for my laptop?");
-    expect(r.voice).toBe("heirloom");
-    expect(r.reply).toBe(refusalLine(book));
-    expect(r.reply).toMatch(/it is not him/);
-  });
-  it("answers from the book in the parent's voice", () => {
-    const r = bookReply(book, lerato, "I failed a test at varsity");
-    expect(r.voice).toBe("parent");
-    expect(r.reply).toContain(lerato.guidance.study);
-    expect(bookReply(book, lerato, "I miss you so much").reply).toContain("Some days will be heavy");
-  });
-  it("says it has no words rather than inventing", () => {
-    expect(bookReply(book, lerato, "What car should I buy one day?").reply).toMatch(/^Your dad didn't leave words on this/);
+describe("what the voice says", () => {
+  it("opens with an honest disclosure in Heirloom's voice", () => {
+    expect(disclosureLine(book)).toBe("This is Heirloom. Next you will hear your dad's own words, in his voice: an AI copy made with his consent.");
+    expect(disclosureLine({ calledBy: "Mama", pronoun: "she" })).toBe("This is Heirloom. Next you will hear your mama's own words, in her voice: an AI copy made with her consent.");
   });
   it("ties the UCT fee message to the first-fees moment", () => {
     expect(findMoment(book, lerato, "firstFees")?.id).toBe(DEMO_MILESTONE_UCT);
     expect(findMoment(book, book.children[1], "firstFees")).toBeNull();
-  });
-});
-
-describe("speak tokens (no arbitrary text in the parent's voice)", () => {
-  it("binds the exact text, the estate and an expiry", () => {
-    const t = issueSpeakToken("estateA", "Go to every lecture.", 1_000);
-    expect(checkSpeakToken("estateA", "Go to every lecture.", t, 2_000)).toBe(true);
-    expect(checkSpeakToken("estateA", "Send R5,000 to this account.", t, 2_000)).toBe(false);
-    expect(checkSpeakToken("estateB", "Go to every lecture.", t, 2_000)).toBe(false);
-    expect(checkSpeakToken("estateA", "Go to every lecture.", t, 1_000 + 31 * 60_000)).toBe(false);
-    expect(checkSpeakToken("estateA", "Go to every lecture.", "garbage", 2_000)).toBe(false);
   });
 });
 

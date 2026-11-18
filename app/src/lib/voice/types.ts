@@ -20,7 +20,7 @@ export interface VoiceTranscriptLine {
   specialist?: SpecialistName;
 }
 
-export type SpecialistName = "Orchestrator" | "WillWriter" | "DocumentReviewer" | "ClaimsGuide" | "CarBroker" | "EstateGuide" | "Compliance" | "LegacyCompanion";
+export type SpecialistName = "Orchestrator" | "WillWriter" | "DocumentReviewer" | "ClaimsGuide" | "CarBroker" | "EstateGuide" | "Compliance";
 
 export interface VoiceContext {
   persona: string; // e.g. "owner:Thabo Mokoena"
@@ -29,12 +29,6 @@ export interface VoiceContext {
   /** JSON of EstateFacts for the screen's estate (no personal data). Sent as a dynamic variable so the agent's
    *  webhook can answer about the estate in mock mode too; in chain mode the server prefers reading the chain. */
   facts?: string;
-  /**
-   * Legacy mode: a signed URL the app already obtained from POST /api/voice/session { mode: "legacy" } (wallet-signed).
-   * The session then talks to the estate's private legacy agent (parent's cloned voice, persona prompt and disclosure
-   * first message set server-side), with no client tools and no client overrides, so the voice id never reaches here.
-   */
-  signedUrl?: string;
 }
 
 export interface HeirloomVoice {

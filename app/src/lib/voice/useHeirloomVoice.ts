@@ -15,7 +15,7 @@ import { dispatchAgentAction } from "../agent/action-events";
 import type { UiAction, uiActionSchema as UiActionSchema } from "../agent/actions";
 import { stripVoiceTags } from "./tags";
 
-const SPECIALISTS: SpecialistName[] = ["Orchestrator", "WillWriter", "DocumentReviewer", "ClaimsGuide", "CarBroker", "EstateGuide", "Compliance", "LegacyCompanion"];
+const SPECIALISTS: SpecialistName[] = ["Orchestrator", "WillWriter", "DocumentReviewer", "ClaimsGuide", "CarBroker", "EstateGuide", "Compliance"];
 
 /** Client tools the ElevenLabs agent may call (names must match scripts/elevenlabs-agent.md). */
 function clientTools(emit: (a: UiAction) => void, uiActionSchema: typeof UiActionSchema) {
@@ -91,25 +91,18 @@ export function useHeirloomVoice(): HeirloomVoice {
       stream.getTracks().forEach((t) => t.stop()); // permission only; the SDK opens its own stream
 
       setStatus("connecting");
-      let signedUrl = ctx.signedUrl;
-      if (!signedUrl) {
-        const res = await fetch("/api/voice/session", { cache: "no-store" });
-        if (res.status === 503) { setStatus("unavailable"); return; }
-        const data = (await res.json().catch(() => ({}))) as { signedUrl?: string; error?: string };
-        if (!res.ok || !data.signedUrl) throw new Error(data.error ?? "Could not start a voice session.");
-        signedUrl = data.signedUrl;
-      }
-      const legacy = Boolean(ctx.signedUrl);
+      const res = await fetch("/api/voice/session", { cache: "no-store" });
+      if (res.status === 503) { setStatus("unavailable"); return; }
+      const data = (await res.json().catch(() => ({}))) as { signedUrl?: string; error?: string };
+      if (!res.ok || !data.signedUrl) throw new Error(data.error ?? "Could not start a voice session.");
+      const signedUrl = data.signedUrl;
 
       // The action schema (zod) loads with the call, not with the agent sheet that every page mounts.
       const [{ VoiceConversation }, { uiActionSchema }] = await Promise.all([import("@elevenlabs/react"), import("../agent/actions")]);
       conv.current = await VoiceConversation.startSession({
         signedUrl,
-        // The legacy agent gets nothing from the client: no tools (no navigation, no claims), no variables.
-        ...(legacy ? {} : {
-          dynamicVariables: { persona: ctx.persona, persona_name: ctx.persona.split(":")[1]?.split(" ")[0] || "there", estate: ctx.estate ?? "none", page: ctx.page ?? "/", facts: ctx.facts ?? "none" },
-          clientTools: clientTools(emit, uiActionSchema),
-        }),
+        dynamicVariables: { persona: ctx.persona, persona_name: ctx.persona.split(":")[1]?.split(" ")[0] || "there", estate: ctx.estate ?? "none", page: ctx.page ?? "/", facts: ctx.facts ?? "none" },
+        clientTools: clientTools(emit, uiActionSchema),
         onConnect: () => { setStatus("connected"); startMeter(); },
         onDisconnect: () => { stopMeter(); conv.current = null; setSpeaking(false); setStatus((s) => (s === "error" ? s : "ended")); },
         onError: (message: string) => { setError(message); setStatus("error"); },

@@ -1708,7 +1708,6 @@ export const st: Bundle = {
       CarBroker: "Morekisi wa koloi",
       EstateGuide: "Motataisi wa lefa",
       Compliance: "Ho latela molao",
-      LegacyCompanion: "Lentswe la lefa",
     },
     specialistHint: "E arabilwe ke",
     chat: {

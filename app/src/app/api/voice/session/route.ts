@@ -1,7 +1,5 @@
-import { z } from "zod";
 import { handler, HttpError, json, rateLimit } from "@/lib/api/http";
-import { authJson } from "@/lib/legacy/server/http";
-import { session as legacySession } from "@/lib/legacy/server/service";
+import { gone } from "@/lib/legacy/server/gone";
 
 /**
  * GET /api/voice/session → { signedUrl } for @elevenlabs/client (WebSocket). Uses ELEVENLABS_API_KEY and
@@ -22,14 +20,7 @@ export const GET = handler(async (req) => {
 });
 
 /**
- * POST /api/voice/session { mode: "legacy", previewChildId? } (+ x-heirloom-auth) → { signedUrl, consentedAt } for a
- * call in the parent's cloned voice. The server verifies the child (wallet signature + on-chain beneficiary),
- * the unlock and their opt-in, refreshes the estate's private ElevenLabs agent (voice id, persona prompt from the
- * Legacy Book, disclosure first message) and returns only a signed URL: the voice id never reaches the browser.
+ * POST /api/voice/session { mode: "legacy" } was a live call in the parent's cloned voice. Removed on 18 Nov 2026
+ * (plan §16.17): the voice only ever says words its owner wrote or approved while alive. 410 Gone.
  */
-export const POST = handler(async (req) => {
-  rateLimit(req, "voice-session-legacy", 6);
-  const { body, viewer } = await authJson(req, "session", z.object({ mode: z.literal("legacy"), previewChildId: z.string().regex(/^[a-z0-9-]{1,32}$/).optional() }));
-  const s = await legacySession(viewer, viewer.role === "owner" ? body.previewChildId : undefined);
-  return json({ signedUrl: s.signedUrl, consentedAt: s.label.consentedAt });
-});
+export const POST = gone;

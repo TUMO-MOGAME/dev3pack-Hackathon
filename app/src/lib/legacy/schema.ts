@@ -4,7 +4,7 @@
  *
  * Safeguards encoded here (see README "Legacy Voice"):
  *  - consent is given by the living owner only, as a recorded line + an unticked box (validateVoiceInput)
- *  - the book is the ONLY source the companion may speak from (buildLegacyPrompt in ./prompt.ts)
+ *  - the voice only speaks the owner's own milestone messages; it never writes new words (plan §16.17)
  *  - voice_id never appears in any type the browser receives (LegacyVoiceInfo has no id)
  */
 import { z } from "zod";
