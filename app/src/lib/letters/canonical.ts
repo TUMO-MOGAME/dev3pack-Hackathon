@@ -15,7 +15,6 @@ import type { LetterInput, LetterOpens, LetterTo } from "./types";
 export function cleanLetterText(s: string): string {
   return s
     .replace(/\r\n?/g, "\n")
-    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, "")
     .replace(/\n{4,}/g, "\n\n\n")
     .trim();
@@ -23,7 +22,6 @@ export function cleanLetterText(s: string): string {
 
 /** One line, single spaces, trimmed. */
 export function cleanOccasion(s: string): string {
-  // eslint-disable-next-line no-control-regex
   return s.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
 }
 

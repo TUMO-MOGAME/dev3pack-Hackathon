@@ -7,6 +7,8 @@ import type { Base58 } from "../types";
 import type { Locale } from "../i18n/locales";
 import type { PersonId } from "../tree/types";
 
+export type DemoLetterKey = "family" | "lerato" | "naledi" | "mkhulu";
+
 /** At most this many characters of text, after cleaning (about 350 words). */
 export const LETTER_MAX_CHARS = 2000;
 /** "For your 18th birthday". */
@@ -64,8 +66,11 @@ export interface Letter extends LetterInput {
   openedAt: number | null;
   /** A tombstone: text, occasion and about are emptied. */
   deleted?: true;
-  /** Seeded demo letters: shown as "Demo letter, added when the demo was set up". */
-  seeded?: true;
+  /**
+   * Seeded demo letters only (sig null): which story letter this is, so the UI shows it in the visitor's language
+   * (content/letters.ts demo.*). "mkhulu" is Thabo's own words about his late father, labelled "Added by Thabo, 2026".
+   */
+  demoKey?: DemoLetterKey;
 }
 
 export type LetterState = "locked" | "open";
@@ -76,8 +81,9 @@ export interface LetterHint {
   giftUsdt?: number;
   /** Who the rule is for and what it pays for, e.g. "Naledi · General". */
   ruleLabel?: string;
-  /** The payment that opened it (tx signature), when known. */
+  /** The payment that opened it (tx signature) and when (unix seconds), when known. */
   paidSig?: string;
+  paidAt?: number;
 }
 export interface LetterView extends Letter {
   state: LetterState;
