@@ -22,7 +22,7 @@ export function LegalPage({ site, doc }: {
         </Notice>
         <p className="mt-6 text-lead text-ink-2">{doc.intro}</p>
         {doc.sections.map((s) => (
-          <section key={s.heading} className="mt-8">
+          <section key={s.heading} id={"id" in s ? s.id : undefined} className="mt-8 scroll-mt-20">
             <h2 className="text-h3">{s.heading}</h2>
             {s.paragraphs?.map((p) => <p key={p} className="mt-3">{p}</p>)}
             {s.list && (

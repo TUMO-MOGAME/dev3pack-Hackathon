@@ -40,7 +40,7 @@ export function LetterList({
               const gift = l.opens.kind === "payment";
               return (
                 <li key={l.id} className="rounded-lg border border-line bg-surface p-4 shadow-card">
-                  <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold">{title}</p>
                       <p className="mt-1 inline-flex items-start gap-1.5 text-small text-ink-2" data-state={l.state}>
@@ -49,7 +49,7 @@ export function LetterList({
                       </p>
                       {!l.sig && l.demoKey && <p className="mt-1 text-[0.75rem] text-ink-2">{copy.list.seeded}</p>}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="-ml-2 flex flex-wrap gap-1.5 sm:ml-0 sm:shrink-0">
                       <Button variant="ghost" small onClick={() => onRead(l)} aria-label={`${copy.read.title}: ${title}`}><BookOpen className="size-4" aria-hidden="true" />{copy.card.read}</Button>
                       {!locked && l.state !== "open" && <Button variant="secondary" small onClick={() => onEdit(l)} aria-label={`${copy.list.edit}: ${title}`}><Pencil className="size-4" aria-hidden="true" />{copy.list.edit}</Button>}
                       {!locked && <Button variant="ghost" small onClick={() => onDelete(l)} aria-label={`${copy.list.delete}: ${title}`}><Trash2 className="size-4" aria-hidden="true" />{copy.list.delete}</Button>}

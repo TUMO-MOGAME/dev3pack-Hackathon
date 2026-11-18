@@ -1,5 +1,7 @@
 /** Privacy policy (POPIA template) and terms. Both are marked as templates for legal review. */
 export interface LegalSection {
+  /** An anchor for links into the policy (/privacy#letters). */
+  id?: string;
   heading: string;
   paragraphs?: readonly string[];
   list?: readonly string[];
@@ -9,7 +11,7 @@ export const privacy = {
   title: "*Privacy* policy",
   templateNotice:
     "Template for legal review. This policy was drafted for a hackathon prototype and must be reviewed by the responsible party's legal adviser before Heirloom is offered to the public.",
-  updated: "Last updated: 17 November 2026",
+  updated: "Last updated: 18 November 2026",
   intro:
     "Heirloom helps a person record estate instructions and helps their family act on them. That involves sensitive personal information, so we collect as little as we can, keep documents off the public ledger and explain every use below. This policy follows the Protection of Personal Information Act 4 of 2013 (POPIA).",
   sections: [
@@ -33,6 +35,7 @@ export const privacy = {
         "Documents you upload (death certificate, fee statements, enrolment letters, leases, affidavits, vehicle registration papers): so the AI agent and your trusted people can check a request before money moves.",
         "What you type or say to the Heirloom agent, including voice call audio and transcripts when you choose a voice call: to draft your rules and answer your questions.",
         "Vehicle details (make, model, year, mileage): to suggest a fair asking price.",
+        "Letters for later that an estate owner writes to their family (the text, occasion, who it is for and when it opens): to deliver the owner's own words at the moment they chose (section 15).",
         "Your IP address and basic request details: for spam and abuse checks and rate limiting on forms and agent requests.",
         "Cookie-free visitor statistics (page, referrer, device type, with no cookies and no cross-site identifiers): to understand which pages are used.",
       ],
@@ -54,6 +57,7 @@ export const privacy = {
       list: [
         "Uploaded documents and agent reports: for as long as the estate is active and for 5 years after its last payment, or as the law requires for estate records, then deleted.",
         "Agent conversations and voice transcripts: 12 months, unless you delete them sooner.",
+        "Letters for later: while the estate's records are kept (the first item above). The owner can delete any letter while alive and its text is erased at once; see section 15.",
         "IP addresses used for spam checks: up to 30 days.",
         "On-chain records: permanent, by the nature of a public ledger (they contain no personal documents).",
       ],
@@ -62,8 +66,8 @@ export const privacy = {
       heading: "7. Operators who process information for us",
       list: [
         "Hosting: Vercel Inc. (application hosting and delivery).",
-        "Database and document storage: Supabase Inc. (encrypted at rest; access limited to the people named on an estate).",
-        "AI document review and drafting: Google LLC (Gemini API). Documents are sent for analysis and are not used by us to train models.",
+        "Database and document storage: Supabase Inc. (encrypted at rest; access limited to the people named on an estate), including letters for later.",
+        "AI document review and drafting: Google LLC (Gemini API). Documents are sent for analysis and are not used by us to train models. A letter for later is sent only when its owner taps \"Check my letter\" or \"Help me write it\".",
         "Voice calls with the agent: ElevenLabs Inc. (speech recognition and speech synthesis for calls you start).",
         "Exchange rate: a South African exchange's public price feed. No personal information is sent.",
         "Solana public ledger: stores hashes, addresses and amounts only, as described in section 5.",
@@ -133,6 +137,24 @@ export const privacy = {
         "Deletion and correction: the owner can remove a relationship at any time, and anyone on the tree may ask the information officer (section 2) to correct or delete information about them, as section 10 describes.",
         "Photos: a small photo may be shown beside a person's name on the tree (on the map, the family list, their card and a printed copy), so the family recognises faces in years to come. What we keep is one 256 by 256 pixel image of at most 60 KB per person, prepared on the person's own device: it is cropped, shrunk and re-encoded there, which removes the camera details and location (EXIF) before anything is sent. Photos are never written to the public ledger and are not part of the tree's fingerprint. Who sees them: the same people who can see the tree. Consent: a living adult adds, changes or removes only their own photo (trusted people and lawyers included). The estate owner decides for a child, and may add a memorial photo of someone who has passed or who has no wallet (shown as \"Added by\" with their name and the year), and an organisation's logo. A person who chose to hide never shows a photo. Deletion: the person (or, for a child, someone who has passed or an organisation, the owner) can remove a photo at any time from the card, and anyone may ask the information officer (section 2) to delete a photo of them. In the demo, photos stay on this device, and the demo family's pictures are drawn illustrations, not real people.",
         "Operators and transfers: relationships, names and photos are stored by Supabase Inc. (or, in the prototype, on the owner's device) under sections 7 and 8.",
+      ],
+    },
+    {
+      id: "letters",
+      heading: "15. Letters for later",
+      paragraphs: [
+        "An estate owner can write short personal letters for their family that open later: when the estate unlocks, on a date (for example an 18th birthday), or with a payment from the plan. This section is part of the template for legal review.",
+      ],
+      list: [
+        "What we collect: each letter's text, its occasion, who it is for (one family member or the whole family), when it opens (the unlock, a date, the payment rule or transfer it is linked to), the author's wallet address, the wallet's signature of the letter and the times it was written, changed and opened.",
+        "Why: to deliver the owner's own words at the moment they chose. A letter is personal; it is not part of the will and does not change who receives what.",
+        "Who can read it: the author at any time; once it opens, the person it is for, or, for a family letter, the family members named in the estate's plan. Nobody else sees the text, and nobody is told that a locked letter is waiting. Heirloom's operators can access stored letters only to run the service.",
+        "Never on the public ledger: no letter, and not even a fingerprint of one, is written on-chain.",
+        "Consent and children: the estate owner writes the letters. A letter to a child is read with the child's own wallet once it opens. \"Check my letter\" warns the owner against writing passwords, PINs, recovery phrases, ID numbers or bank details in a letter.",
+        "The AI check: \"Check my letter\" and \"Help me write it\" send the draft to the AI operator (Google LLC, Gemini API, section 7) only when the owner taps them; the AI only warns or suggests, and Heirloom does not keep that copy. The same checks also run on the owner's device without the AI.",
+        "How long we keep it: while the estate's records are kept (section 6). The owner can delete any letter while alive, and its text is erased at once. After the estate unlocks, letters are sealed and can no longer be changed; a person a letter is addressed to may ask the information officer (section 2) to delete it.",
+        "Storage and transfers: letters are stored by Supabase Inc. under sections 7 and 8 (in the prototype, until that store is switched on, a letter is kept in server memory and on the device that wrote it). The server can read stored letters; encrypting each letter so only its recipient can read it is planned.",
+        "In the demo: letters stay in this browser, and the demo family's letters are fictional.",
       ],
     },
   ] satisfies LegalSection[],
