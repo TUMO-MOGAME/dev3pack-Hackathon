@@ -80,6 +80,26 @@ describe("chain letters", () => {
     expect(mergeLetters([v2], [gone], (l) => l)[0].deleted).toBe(true);
   });
 
+  it("a quiet (background) read never signs while the wallet is locked: no PIN prompt; it answers from this device", async () => {
+    const dev = new MemoryStorage();
+    await client(owner, dev).saveLetter(E, input(), 1);
+    let signed = 0, fetched = 0;
+    const locked = { address: owner.address, canSignQuietly: () => false, signMessage: async (m: string) => { signed++; return owner.signMessage(m); } };
+    const counting: typeof fetch = async (i, init) => { fetched++; return fetchStub(i, init); };
+    const c = createChainLetters({ getEstate: async () => snap, signer: () => locked, fetch: counting, storage: dev, now: () => Date.now() });
+    expect((await c.listLetters(E, { quiet: true })).letters.map((l) => l.text)).toEqual(["Hello Lerato"]);
+    await c.letterCounts(E);
+    expect([signed, fetched]).toEqual([0, 0]);
+    // The letters page itself still signs (and so may ask for the PIN).
+    await c.listLetters(E);
+    expect([signed, fetched]).toEqual([1, 1]);
+    // Once unlocked, a quiet read goes to the server too.
+    const open = { ...locked, canSignQuietly: () => true };
+    const c2 = createChainLetters({ getEstate: async () => snap, signer: () => open, fetch: counting, storage: dev, now: () => Date.now() });
+    await c2.listLetters(E, { quiet: true });
+    expect([signed, fetched]).toEqual([2, 2]);
+  });
+
   it("recipients keep no letter text on their device", async () => {
     const tomorrow = sastDay(Date.now() + 86_400_000);
     await client(owner, new MemoryStorage()).saveLetter(E, input({ opens: { kind: "date", on: tomorrow } }), 1);

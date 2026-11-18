@@ -115,7 +115,11 @@ export interface LetterSuggestion { text: string; source: "template" | "ai" }
 
 export interface LettersService {
   /** Owner: all their letters. Beneficiary: open letters they may read. Both: counts for the tree. Others: refused. */
-  listLetters(estate: Base58): Promise<LettersView>;
+  /**
+   * `quiet`: a background read (a card, a notice, the tree's count) that must never ask for a PIN. If signing would
+   * need the wallet to be unlocked first, it answers from this device only, like when the server is unreachable.
+   */
+  listLetters(estate: Base58, opts?: { quiet?: boolean }): Promise<LettersView>;
   /** Owner, Active only. `version` = stored + 1 (1 for a new letter). */
   saveLetter(estate: Base58, input: LetterInput, version: number): Promise<LetterView>;
   /** Owner, Active only (open letters too). Keeps a tombstone with the next version. */

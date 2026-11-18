@@ -306,7 +306,7 @@ export function createChainService(): HeirloomService {
   })));
   const service: HeirloomService = {
     mode: "chain",
-    listLetters: async (estate) => (await letters()).listLetters(estate),
+    listLetters: async (estate, opts) => (await letters()).listLetters(estate, opts),
     saveLetter: async (estate, input, version) => (await letters()).saveLetter(estate, input, version),
     deleteLetter: async (estate, id, version) => (await letters()).deleteLetter(estate, id, version),
     reviewLetter: async (estate, draft, locale) => (await letters()).reviewLetter(estate, draft, locale),

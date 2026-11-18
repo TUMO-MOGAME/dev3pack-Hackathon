@@ -13,6 +13,8 @@ export interface ActiveSigner {
   signPartial?(base64Tx: string): Promise<{ signature: string; wireBase64: string }>;
   /** Signs a UTF-8 message with WDK (ed25519, hex). Used to authorise /api/legacy/* requests. */
   signMessage(message: string): Promise<string>;
+  /** True when signMessage can run without asking anything (no PIN prompt, no phone wallet app). */
+  canSignQuietly?(): boolean;
 }
 
 let active: ActiveSigner | null = null;

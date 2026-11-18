@@ -18,7 +18,8 @@ export function useLettersView(enabled: boolean): LettersView | null {
   useEffect(() => {
     if (!enabled || !service || !estate || !viewer) return;
     let live = true;
-    service.listLetters(estate).then((v) => { if (live) setView(v); }).catch(() => { if (live) setView(null); });
+    // A background read (the /will card, the "a letter for you" notices): never asks for a PIN.
+    service.listLetters(estate, { quiet: true }).then((v) => { if (live) setView(v); }).catch(() => { if (live) setView(null); });
     return () => { live = false; };
   }, [enabled, service, estate, status, spent, viewer]);
   return enabled ? view : null;

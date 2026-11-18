@@ -215,8 +215,9 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
       signOnly: (tx) => signOnlyAs(activeAddr, tx),
       signPartial: (tx) => signPartialAs(activeAddr, tx),
       signMessage: (m) => signMessageAs(activeAddr, m),
+      canSignQuietly: () => isMock || unlocked.current.has(activeAddr),
     } : null);
-  }, [activeAddr, signAndSendAs, signOnlyAs, signPartialAs, signMessageAs]);
+  }, [activeAddr, isMock, signAndSendAs, signOnlyAs, signPartialAs, signMessageAs]);
 
   const session = sessions.find((s) => s.address === activeAddr) ?? null;
   const api = useMemo<WalletApi>(() => ({

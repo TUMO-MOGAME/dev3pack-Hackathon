@@ -27,7 +27,7 @@ type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
 
 export interface ChainLettersDeps {
   getEstate(estate: Base58): Promise<EstateSnapshot>;
-  signer(): { address: Base58; signMessage(message: string): Promise<string> };
+  signer(): { address: Base58; signMessage(message: string): Promise<string>; canSignQuietly?(): boolean };
   usdtZar?(): Promise<number>;
   fetch?: typeof fetch;
   /** null = no device storage. */
@@ -75,8 +75,10 @@ export function createChainLetters(d: ChainLettersDeps): LettersService {
     return { snap, view: (l) => viewOf(l.deleted ? tomb(l) : l, snap, ctx) };
   }
 
-  async function listLetters(estate: Base58): Promise<LettersView> {
-    const r = await call<LettersView>("/api/letters", "list", estate, LIST_BODY, {});
+  async function listLetters(estate: Base58, opts: { quiet?: boolean } = {}): Promise<LettersView> {
+    // A background read never asks for a PIN: if the wallet is locked, answer from this device, as when offline.
+    const quietSkip = opts.quiet && d.signer().canSignQuietly?.() === false;
+    const r: Answer<LettersView> = quietSkip ? { ok: false, offline: true } : await call<LettersView>("/api/letters", "list", estate, LIST_BODY, {});
     if (!r.ok && !r.offline) throw r.error;
     const mine = device(estate);
     if (r.ok) {
@@ -160,7 +162,7 @@ export function createChainLetters(d: ChainLettersDeps): LettersService {
     },
 
     async letterCounts(estate) {
-      try { return (await listLetters(estate)).counts; } catch { return []; }
+      try { return (await listLetters(estate, { quiet: true })).counts; } catch { return []; }
     },
   };
 }
