@@ -14,6 +14,7 @@ import { ActionButtons, Chips, SpecialistChip, Thinking } from "@/components/age
 import { useChat } from "./chat-context";
 import { ChatComposer } from "./chat-composer";
 import { NudgeStack } from "./nudge-stack";
+import { LetterMoment } from "@/components/letters/lazy";
 import { AskLauncher } from "@/components/ask/launcher";
 
 export function ChatScreen() {
@@ -41,6 +42,7 @@ function Chat({ pending = false }: { pending?: boolean }) {
       {empty ? (
         <div className="flex flex-1 flex-col">
           {!pending && <NudgeStack className="mx-auto w-full max-w-xl pt-3" />}
+          {!pending && <LetterMoment variant="nudge" className="mx-auto mt-3 w-full max-w-xl" />}
           <div className="flex flex-1 flex-col items-center justify-center gap-4 py-6 text-center sm:gap-5 sm:py-8">
             <h1 className="rise text-display leading-none">{siteName}</h1>
             <p className="rise max-w-xl text-lead text-ink-2" style={{ "--i": 1 } as React.CSSProperties}>{h.subtitle}</p>

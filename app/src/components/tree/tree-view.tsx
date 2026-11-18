@@ -5,8 +5,13 @@
  * fingerprint, legal line and Print (photos included: the family's own copy). Nothing animates until this chunk has loaded after the page's first paint.
  */
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useReducedMotion } from "motion/react";
-import { CloudOff, Fingerprint, Info, Printer, UserRoundPlus } from "@/components/ui/icons";
+import { CloudOff, FileHeart, Fingerprint, Info, Printer, UserRoundPlus } from "@/components/ui/icons";
+import { letters as lettersEnglish } from "@/content/letters";
+import { useLocalized } from "@/lib/i18n/client";
+import { lettersLineFor } from "@/lib/letters/counts";
+import type { LetterCount } from "@/lib/letters/types";
 import { Button, Card, EmptyState, Notice } from "@/components/ui/primitives";
 import { TreeSkeleton } from "./skeleton";
 import { Sheet } from "@/components/ui/client";
@@ -24,7 +29,7 @@ import { TimelineSlider } from "./slider";
 import { PersonCardBody, RoleSwatch, cardTitle } from "./card";
 import { RelationshipSheet } from "./owner-sheet";
 import { useTree, useWide, useWidth } from "./use-tree";
-import { assetStepText, assetText, fill, holderBefore, shortLabel, type Copy } from "./words";
+import { assetStepText, assetText, fill, holderBefore, isMinorAt, shortLabel, type Copy } from "./words";
 
 const ROLE_ORDER: TrustRole[] = ["trustedPerson", "guardian", "heir", "beneficiary", "successor", "monitor", "fallback"];
 
@@ -56,7 +61,16 @@ function TreeViewInner({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot;
 function Tree({ copy, t, role, reload, source }: {
   copy: Copy; t: TreeSnapshot; role: Role; reload: () => Promise<void>; source: NonNullable<ReturnType<typeof useTree>["source"]>;
 }) {
-  const { session, run, busy } = useEstate();
+  const { session, run, busy, service } = useEstate();
+  const lettersCopy = useLocalized(lettersEnglish, (b) => b.letters);
+  // Letters for later that opened, by person and year: fetched after the tree has drawn, never part of its fingerprint.
+  const [letterCounts, setLetterCounts] = useState<LetterCount[]>([]);
+  useEffect(() => {
+    if (!service) return;
+    let live = true;
+    service.letterCounts(t.estate).then((c) => { if (live) setLetterCounts(c); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [service, t.estate]);
   const viewer = session?.address ?? null;
   const reduced = !!useReducedMotion();
   const wideScreen = useWide();
@@ -113,6 +127,22 @@ function Tree({ copy, t, role, reload, source }: {
   // Photo consent is judged on the person as they are today, not at the slider's year.
   const open = openId ? t.people.find((p) => p.id === openId) : undefined;
   const photoRight = open ? photoConsent(open, viewer, owner, t.today) : null;
+  const openAt = openId ? at.people.find((p) => p.id === openId) : undefined;
+  const lettersLine = openAt ? lettersLineFor(letterCounts, openAt, t.edges, year, isMinorAt(openAt, year)) : [];
+  const lettersNode = lettersLine.length > 0 && (
+    <ul className="mt-2 grid gap-1" data-letters-line>
+      {lettersLine.map((x) => (
+        <li key={x.from} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-small font-medium">
+          <FileHeart className="size-4 shrink-0 text-amber" aria-hidden="true" />
+          {fill(x.count === 1 ? lettersCopy.card.letter : lettersCopy.card.letters, { count: x.count, name: nameOf(x.from) })}
+          {x.imagined && <span className="font-normal text-ink-2">· {lettersCopy.card.imagined}</span>}
+          {!x.imagined && !!viewer && openAt!.wallets.includes(viewer) && (
+            <Link href="/letters" className="inline-flex min-h-9 items-center font-semibold underline underline-offset-4">{lettersCopy.card.read}</Link>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
   const addedBy = open?.photo ? shortLabel(copy, t.people.find((p) => p.id === open.photo!.addedBy || p.wallets.includes(open.photo!.addedBy)), t.today) : "";
 
   const hide = async (hidden: boolean) => {
@@ -217,6 +247,7 @@ function Tree({ copy, t, role, reload, source }: {
           <PersonCardBody
             at={at} id={openId} copy={copy} mock={mock} viewer={viewer} busy={busy === "tree.hide"} onHide={(h) => void hide(h)}
             photoRight={photoRight} photoBusy={busy === "tree.photo"} addedByName={addedBy} onPhoto={(src) => savePhoto(openId, src)}
+            letters={lettersNode || undefined}
           />
         )}
       </Sheet>

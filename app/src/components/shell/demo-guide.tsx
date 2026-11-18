@@ -7,6 +7,7 @@ import type { WalletSession } from "@/lib/types";
 import { useWallet } from "@/lib/hooks/wallet-source";
 import { useEstate } from "@/lib/hooks/estate";
 import { shortName } from "@/lib/names";
+import { scheduleStepDue } from "@/lib/schedule-step";
 import type { CommonCopy } from "@/content/common";
 import { fmt, useCopy } from "./copy";
 
@@ -27,7 +28,7 @@ function nextStep(snap: EstateSnapshot | null, sessions: WalletSession[]): Step 
   const car = snap.assets[0];
   if (e.status === "Active") {
     if (e.vaultBalance === BigInt(0)) return { key: "fund", actor: ownerS, href: "/vault" };
-    if (!e.death.certHash && snap.rules.some((r) => r.startsNow && r.recurringAmount > BigInt(0) && r.spentTotal === BigInt(0))) return { key: "schedule", actor: ownerS, href: "/estate" };
+    if (!e.death.certHash && scheduleStepDue(snap.rules, Math.floor(Date.now() / 1000))) return { key: "schedule", actor: ownerS, href: "/estate" };
     if (!car) return { key: "car", actor: ownerS, href: "/car" };
     // Everyday money: a child asks under a "starts now" claim rule, then Thabo answers on his chat home.
     if (!e.death.certHash) {

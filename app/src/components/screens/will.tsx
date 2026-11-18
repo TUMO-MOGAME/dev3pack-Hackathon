@@ -16,6 +16,7 @@ import { categoryIcon } from "./category-icon";
 import { FallbackPlanCard } from "@/components/guardians/fallback";
 import { GuardiansPlanLink } from "@/components/guardians/section";
 import { BillTemplates } from "@/components/everyday/bill-templates";
+import { WillLettersCard } from "@/components/letters/lazy";
 import { FRESH_ATTR, firstDemoPersona } from "@/lib/service/fresh-visit";
 import { ruleKey, withOwnerSummary } from "@/lib/will-summary";
 
@@ -500,6 +501,7 @@ function Locked({ copy, bills, snap }: { copy: Copy; bills: BillsCopy; snap: Est
       )}
       <GuardiansPlanLink />
       <FallbackPlanCard snap={snap} className="mt-5" />
+      <WillLettersCard className="mt-5" />
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <ButtonLink href="/estate">{l.estate}<ArrowRight className="size-5" aria-hidden="true" /></ButtonLink>
         <Button variant="secondary" onClick={() => openAgent("chat")}>{l.ask}</Button>

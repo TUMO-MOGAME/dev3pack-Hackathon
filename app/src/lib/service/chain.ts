@@ -35,6 +35,7 @@ import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-gua
 import { createChainDisputes, loadDisputes } from "./chain-disputes";
 import { createChainAsk } from "./chain-ask";
 import type { TreeService } from "../tree/types";
+import type { LettersService } from "../letters/types";
 import { disabledGuardians, SEAT_MONITOR_OFFSETS } from "../chain/guardians";
 import { SystemProgram } from "@solana/web3.js";
 import type { ActivityItem } from "../types";
@@ -296,8 +297,21 @@ export function createChainService(): HeirloomService {
     signer: () => getActiveSigner(),
     deviceWallets: () => loadWallets().map((w) => ({ address: w.address, label: w.label })),
   })));
+  // Letters for later: signed calls to /api/letters plus the owner's device copy (chain-letters.ts), loaded on first use.
+  let lettersService: Promise<LettersService> | null = null;
+  const letters = () => (lettersService ??= import("./chain-letters").then((m) => m.createChainLetters({
+    getEstate: (estate) => service.getEstate(estate),
+    signer: () => getActiveSigner(),
+    usdtZar: async () => (await service.getFx()).usdtZar,
+  })));
   const service: HeirloomService = {
     mode: "chain",
+    listLetters: async (estate) => (await letters()).listLetters(estate),
+    saveLetter: async (estate, input, version) => (await letters()).saveLetter(estate, input, version),
+    deleteLetter: async (estate, id, version) => (await letters()).deleteLetter(estate, id, version),
+    reviewLetter: async (estate, draft, locale) => (await letters()).reviewLetter(estate, draft, locale),
+    suggestLetter: async (estate, input, locale) => (await letters()).suggestLetter(estate, input, locale),
+    letterCounts: (estate) => cached(`letterCounts:${estate}`, 20_000, async () => (await letters()).letterCounts(estate)),
     getTree: (estate) => cached(`tree:${estate}`, 20_000, async () => {
       const t = await (await tree()).getTree(estate);
       // Older history still loading in the background: let the next read pick it up soon.

@@ -48,6 +48,13 @@ person, collapses to an icon rail on desktop and becomes a drawer on phones.
 6. **Send to family.** A plain peer-to-peer USD₮ send to a saved family member, with the full Tether review → approve →
    pending → confirmed flow, and pay-once protection if the connection drops. You can also type "Send R500 to Lerato
    for books" in the chat: the wallet assistant reads it and opens the same review sheet.
+7. **Letters for later: a note with a gift.** On **Letters** (`/letters`) Thabo writes short letters that open when the
+   estate unlocks, on a date, or with a USD₮ payment from the plan ("for your 18th birthday, 500 USD₮ and a letter
+   from me": the letter opens when the rule's on-chain `spent_total` goes up). Each write is signed by his wallet and
+   kept off-chain (never on the ledger, not even a hash); only the person a letter is for can read it once it opens.
+   "Check my letter" warns about PINs, passwords, recovery phrases, ID and account numbers, and about words that
+   disagree with the plan ("the Corolla is yours" while the plan sells it); the AI only warns and suggests. The family
+   sees "Thabo left you a letter", and the Trust Tree card counts opened letters by year. Text only: no AI voices.
 
 ## Screenshots
 
@@ -290,6 +297,7 @@ All names are in [`app/.env.example`](app/.env.example). Only `NEXT_PUBLIC_*` re
 | [`scripts/devnet-setup.ts`](scripts/devnet-setup.ts) | WDK persona wallets, funding, test USD₮ mint, car title NFT, writes `scripts/.env.devnet` |
 | [`scripts/seed-demo.ts`](scripts/seed-demo.ts) | Creates the demo estate (verifiers, beneficiaries, payees, rules, deposit, car). Idempotent |
 | [`scripts/run-scheduler.ts`](scripts/run-scheduler.ts) | Calls the scheduler every 20 s so living-plan payments run by themselves |
+| [`scripts/seed-letter-gift.ts`](scripts/seed-letter-gift.ts) | Adds Naledi's 500 USD₮ birthday gift rule to the devnet demo estate (dry run unless `--send`) |
 | [`scripts/build-program.sh`](scripts/build-program.sh) | Builds, tests and (optionally) deploys the program inside WSL Ubuntu |
 
 ## Tests

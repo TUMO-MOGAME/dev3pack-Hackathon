@@ -9,10 +9,12 @@
 import type { Bundle } from "./types";
 import { askZu } from "./ask";
 import { treeZu } from "./tree";
+import { lettersZu } from "./letters";
 
 export const zu: Bundle = {
   ask: askZu,
   tree: treeZu,
+  letters: lettersZu,
   legalNote: "Leli khasi litholakala ngesiNgisi kuphela. Liyisifanekiso okumele sihlolwe ngumeluleki wezomthetho.",
 
   site: {
@@ -1588,6 +1590,7 @@ export const zu: Bundle = {
         "/chat": "ingxoxo",
         "/legacy": "izwi lefa",
         "/tree": "Isihlahla Sokwethemba",
+        "/letters": "izincwadi zakusasa",
         "/bill": "khokha isikweletu",
       },
       fallbackPage: "lelo khasi",
@@ -1686,6 +1689,7 @@ export const zu: Bundle = {
         statement: "Isitatimende senyanga",
         bill: "Khokha isikweletu",
         tree: "Isihlahla Sokwethemba",
+        letters: "Izincwadi",
         call: "Khuluma ne-Heirloom",
         demo: "Imodi ye-demo",
         darkMode: "Imodi emnyama",

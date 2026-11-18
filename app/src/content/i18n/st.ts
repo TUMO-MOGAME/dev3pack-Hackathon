@@ -9,10 +9,12 @@
 import type { Bundle } from "./types";
 import { askSt } from "./ask";
 import { treeSt } from "./tree";
+import { lettersSt } from "./letters";
 
 export const st: Bundle = {
   ask: askSt,
   tree: treeSt,
+  letters: lettersSt,
   legalNote: "Leqephe lena le fumaneha ka Senyesemane feela. Ke mohlala o tlamehang ho hlahlojwa ke moeletsi wa molao.",
 
   site: {
@@ -1645,6 +1647,7 @@ export const st: Bundle = {
         "/chat": "moqoqo",
         "/legacy": "lentswe la lefa",
         "/tree": "Sefate sa Tshepo",
+        "/letters": "mangolo a kamoso",
         "/bill": "lefa akhaonto",
       },
       fallbackPage: "leqephe leo",
@@ -1743,6 +1746,7 @@ export const st: Bundle = {
         statement: "Setatemente sa kgwedi",
         bill: "Lefa akhaonto",
         tree: "Sefate sa Tshepo",
+        letters: "Mangolo",
         call: "Bua le Heirloom",
         demo: "Mokgwa wa demo",
         darkMode: "Mokgwa o lefifi",
