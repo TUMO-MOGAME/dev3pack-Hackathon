@@ -13,7 +13,6 @@
  */
 import type { Base58 } from "../types";
 import type { EstateSnapshot } from "./types";
-import type { Locale } from "../i18n/locales";
 import { letters as copy } from "@/content/letters";
 import { canonicalLetter, cleanInput } from "../letters/canonical";
 import { sha256Hex } from "../agent/hash";
@@ -163,7 +162,7 @@ export function createMockLetters(d: MockLettersDeps): LettersService & { stored
       d.save();
     },
 
-    async reviewLetter(_estate, draft: LetterInput, _locale: Locale) {
+    async reviewLetter(_estate, draft: LetterInput) {
       await d.wait(600);
       const snap = need();
       if (d.me() !== snap.estate.owner) fail("forbidden", copy.errors.forbidden);
@@ -171,7 +170,7 @@ export function createMockLetters(d: MockLettersDeps): LettersService & { stored
       return { warnings: await reviewDraft(input.text, reviewCtxFor(snap, input, d.usdtZar)), source: "rules" as const };
     },
 
-    async suggestLetter(_estate, input, _locale: Locale) {
+    async suggestLetter(_estate, input) {
       await d.wait(500);
       const snap = need();
       if (d.me() !== snap.estate.owner) fail("forbidden", copy.errors.forbidden);

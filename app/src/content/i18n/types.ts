@@ -9,6 +9,7 @@ import type { PayCopy } from "../pay";
 import type { ScreensCopy } from "../screens";
 import type { SiteCopy } from "../site";
 import type { TreeCopy } from "../tree";
+import type { LettersCopy } from "../letters";
 import type { DeepPartial, Widen } from "@/lib/i18n/merge";
 
 /**
@@ -25,6 +26,8 @@ export interface Bundle {
   ask: Widen<AskCopy>;
   /** The Trust Tree (content/i18n/tree.ts). */
   tree: Widen<TreeCopy>;
+  /** Letters for later (content/i18n/letters.ts). */
+  letters: Widen<LettersCopy>;
   landing: Widen<LandingCopy>;
   common: Widen<CommonCopy>;
   pay: Widen<PayCopy>;

@@ -9,10 +9,12 @@
 import type { Bundle } from "./types";
 import { askAf } from "./ask";
 import { treeAf } from "./tree";
+import { lettersAf } from "./letters";
 
 export const af: Bundle = {
   ask: askAf,
   tree: treeAf,
+  letters: lettersAf,
   legalNote: "Hierdie bladsy is net in Engels beskikbaar. Dit is 'n sjabloon wat 'n regsadviseur moet nagaan.",
 
   site: {
@@ -1620,6 +1622,7 @@ export const af: Bundle = {
         "/chat": "die gesprek",
         "/legacy": "nalatenskapstem",
         "/tree": "die Vertrouensboom",
+        "/letters": "briewe vir later",
         "/bill": "betaal 'n rekening",
       },
       fallbackPage: "daardie bladsy",
@@ -1719,6 +1722,7 @@ export const af: Bundle = {
         statement: "Maandstaat",
         bill: "Betaal 'n rekening",
         tree: "Vertrouensboom",
+        letters: "Briewe",
         call: "Praat met Heirloom",
         demo: "Demomodus",
         darkMode: "Donker modus",
