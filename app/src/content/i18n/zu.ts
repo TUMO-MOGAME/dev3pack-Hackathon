@@ -1651,7 +1651,6 @@ export const zu: Bundle = {
       CarBroker: "Umthengisi wemoto",
       EstateGuide: "Umhlahlandlela wefa",
       Compliance: "Ukuthobela imithetho",
-      LegacyCompanion: "Izwi lefa",
     },
     specialistHint: "Kuphendulwe ngu",
     chat: {

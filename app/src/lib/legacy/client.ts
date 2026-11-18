@@ -1,11 +1,11 @@
 /**
- * Browser client for /api/legacy/* and the legacy voice session. Every call is signed by the acting wallet
+ * Browser client for /api/legacy/*. Every call is signed by the acting wallet
  * (see ./auth-message.ts). Used by service/chain.ts (real WDK signatures) and by service/mock.ts on a demo
  * deployment that enables LEGACY_DEMO_WRITES (sig "demo", role from the demo persona).
  */
 import { sha256Hex } from "../agent/hash";
 import { AUTH_HEADER, authMessage, encodeAuth, type LegacyAction } from "./auth-message";
-import type { LegacyBook, LegacyChatReply, LegacySpeech, LegacyStatus, LegacyVoiceInfo } from "./schema";
+import type { LegacyBook, LegacySpeech, LegacyStatus, LegacyVoiceInfo } from "./schema";
 
 export interface LegacySigner {
   estate: string;
@@ -17,7 +17,8 @@ export interface LegacySigner {
 }
 
 export interface LegacyVoiceUpload { ownerName: string; consentText: string; consentAccepted: boolean; consent: Blob; samples: Blob[] }
-export type SpeakInput = { milestoneId: string } | { text: string; token?: string };
+/** The only things the voice may say: a milestone message the owner wrote, or the fixed sample line (owner). */
+export type SpeakInput = { milestoneId: string } | { sample: true };
 
 async function header(s: LegacySigner, action: LegacyAction, bodyHash: string): Promise<Record<string, string>> {
   const ts = Date.now();
@@ -57,10 +58,6 @@ export const legacyApi = {
   deleteBook: async (s: LegacySigner) => { await send(s, "book.delete", "DELETE", "/api/legacy/book"); },
   optIn: async (s: LegacySigner, on: boolean) => { await send(s, "optin", "PATCH", "/api/legacy/book", { optIn: on }); },
   deleteVoice: async (s: LegacySigner) => { await send(s, "voice.delete", "DELETE", "/api/legacy/voice"); },
-  chat: (s: LegacySigner, history: { role: "user" | "agent"; text: string }[], previewChildId?: string) =>
-    send<LegacyChatReply>(s, "chat", "POST", "/api/legacy/chat", { history, previewChildId }),
-  session: (s: LegacySigner, previewChildId?: string) =>
-    send<{ signedUrl: string; consentedAt: number }>(s, "session", "POST", "/api/voice/session", { mode: "legacy", previewChildId }),
 
   async createVoice(s: LegacySigner, u: LegacyVoiceUpload): Promise<LegacyVoiceInfo> {
     const [consentSha, ...sampleShas] = await Promise.all([blobHash(u.consent), ...u.samples.map(blobHash)]);
@@ -84,8 +81,7 @@ export const legacyApi = {
     }));
     if ((res.headers.get("content-type") ?? "").startsWith("audio/")) {
       const blob = await res.blob();
-      const spoken = "text" in input ? input.text : "";
-      return { text: spoken, audioUrl: URL.createObjectURL(blob), simulated: false, voice };
+      return { text: "", audioUrl: URL.createObjectURL(blob), simulated: false, voice };
     }
     const data = (await res.json()) as { simulated: true; text: string };
     return { text: data.text, audioUrl: null, simulated: true, voice };

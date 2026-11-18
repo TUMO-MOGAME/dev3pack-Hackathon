@@ -1,30 +1,29 @@
 import "server-only";
 /**
- * Legacy Voice server logic shared by /api/legacy/* and /api/voice/session (legacy mode).
- * Every function takes a Viewer from ./auth.ts (signature + on-chain role already checked).
+ * Legacy Voice server logic for /api/legacy/*. Every function takes a Viewer from ./auth.ts (signature + on-chain
+ * role already checked).
+ *
+ * Rule (18 Nov 2026, plan §16.17): the voice only ever says words its owner wrote or approved while alive. It speaks
+ * a milestone message from the Legacy Book, or (for the owner, while the estate is active) one fixed sample line.
+ * There is no chat, no live call and no AI-written reply in the parent's voice.
  */
 import { HttpError } from "@/lib/api/http";
 import { sha256Hex } from "@/lib/agent/hash";
-import { orchestrate } from "@/lib/agent/orchestrator";
-import { formatUsdt } from "@/lib/format";
-import type { EstateSnapshot } from "@/lib/service/types";
-import type { WillChatMessage } from "@/lib/types";
-import { buildLegacyPrompt, detectMoneyRequest, disclosureLine } from "../prompt";
+import { legacyVoiceSample } from "@/content/legacy";
 import {
   baseMime, consentLine, matchChild, sniffAudio, validateVoiceInput,
-  type LegacyBook, type LegacyChatReply, type LegacyChild, type LegacyStatus, type LegacyVoiceInfo,
+  type LegacyBook, type LegacyChild, type LegacyStatus, type LegacyVoiceInfo,
 } from "../schema";
 import type { Viewer } from "./auth";
 import * as el from "./elevenlabs";
 import * as store from "./store";
-import { checkSpeakToken, issueSpeakToken } from "./speak-token";
 
 const isUnlocked = (v: Viewer) => (v.snap ? v.snap.estate.status === "Unlocked" : v.demo);
 
 function voiceInfo(row: store.VoiceRow): LegacyVoiceInfo {
   return {
     ownerName: row.ownerName, consentedAt: row.consentedAt, samples: row.samplePaths.length, simulated: !row.voiceId,
-    needsVerification: row.requiresVerification || undefined, liveCall: Boolean(row.voiceId && process.env.ELEVENLABS_API_KEY),
+    needsVerification: row.requiresVerification || undefined,
   };
 }
 
@@ -37,8 +36,23 @@ function childFor(v: Viewer, book: LegacyBook): LegacyChild | null {
   return v.role === "child" ? matchChild(book, v.wallet, v.label) : null;
 }
 
+/**
+ * Voices made before 18 Nov 2026 also got a private ElevenLabs agent for live calls. Live calls are gone, so that
+ * agent is deleted (best effort) the next time anyone opens the estate's legacy voice.
+ */
+async function retireAgent(row: store.VoiceRow): Promise<void> {
+  if (!row.agentId) return;
+  try {
+    if (el.hasElevenLabs()) await el.deleteLegacyAgent(row.agentId);
+    await store.setAgentId(row.estate, null);
+  } catch (e) {
+    console.warn("[legacy] retiring the old call agent failed:", e instanceof Error ? e.message : e);
+  }
+}
+
 export async function status(v: Viewer): Promise<LegacyStatus> {
   const [voice, row] = await Promise.all([store.getVoice(v.estate), store.getBook(v.estate)]);
+  if (voice) await retireAgent(voice);
   const unlocked = isUnlocked(v);
   const optedIn = v.role === "owner" ? true : Boolean(row?.optIns[v.wallet]);
   const book = row ? (v.role === "owner" || (unlocked && optedIn) ? row.book : redact(row.book)) : null;
@@ -98,7 +112,6 @@ export async function createVoice(v: Viewer, u: VoiceUpload, files: Awaited<Retu
   const consentedAt = Date.now();
   let voiceId: string | null = null;
   let requiresVerification = false;
-  let agentId: string | null = null;
   if (el.hasElevenLabs()) {
     const r = await el.createInstantVoice({
       name: `Heirloom legacy ${key.slice(0, 8)}`,
@@ -109,18 +122,14 @@ export async function createVoice(v: Viewer, u: VoiceUpload, files: Awaited<Retu
     requiresVerification = r.requiresVerification;
   }
   const row: store.VoiceRow = {
-    estate: v.estate, ownerWallet: v.wallet, ownerName: u.ownerName.trim(), voiceId, agentId, requiresVerification,
+    estate: v.estate, ownerWallet: v.wallet, ownerName: u.ownerName.trim(), voiceId, agentId: null, requiresVerification,
     consentText: u.consentText, consentSha256: files.consent.sha, consentPath, samplePaths, sampleSha256: files.samples.map((s) => s.sha), consentedAt,
   };
   await store.saveVoice(row);
-  if (voiceId) {
-    // Best effort: the live-call agent can also be created lazily at the first call.
-    agentId = await ensureAgent(row).catch((e) => { console.warn("[legacy] agent create failed:", e instanceof Error ? e.message : e); return null; });
-  }
-  return voiceInfo({ ...row, agentId });
+  return voiceInfo(row);
 }
 
-/** Deletes the voice everywhere: ElevenLabs agent + voice, recordings, rendered messages. */
+/** Deletes the voice everywhere: ElevenLabs voice (and any old call agent), recordings, rendered messages. */
 export async function removeVoice(v: Viewer): Promise<void> {
   if (v.role !== "owner") throw new HttpError(403, "Only the estate owner can delete their voice.", "forbidden");
   const row = await store.getVoice(v.estate);
@@ -156,61 +165,16 @@ export async function optIn(v: Viewer, on: boolean): Promise<void> {
   await store.setOptIn(v.estate, v.wallet, on);
 }
 
-/* ---------- talking ---------- */
+/* ---------- speaking ---------- */
 
-async function talkContext(v: Viewer, previewChildId?: string) {
+async function speakContext(v: Viewer) {
   const row = await store.getBook(v.estate);
   if (!row) throw new HttpError(404, "There is no Legacy Book for this estate.", "not_found");
   if (v.role === "child") {
     if (!isUnlocked(v)) throw new HttpError(403, "The legacy voice opens once the estate unlocks.", "locked");
     if (!row.optIns[v.wallet]) throw new HttpError(403, "Switch the legacy voice on first.", "not_opted_in");
   }
-  const child = v.role === "child" ? childFor(v, row.book) : row.book.children.find((c) => c.id === previewChildId) ?? null;
-  const voice = await store.getVoice(v.estate);
-  return { book: row.book, child, voice };
-}
-
-export function estateFacts(snap: EstateSnapshot | null, childWallet: string | null): string[] {
-  if (!snap) return [];
-  const e = snap.estate;
-  const out = [`The estate is ${e.status === "Unlocked" ? "unlocked: the rules are running" : e.status === "DeathPending" ? "waiting for the passing to be confirmed" : "active"}.`];
-  const payee = (w: string) => snap.payees.find((p) => p.wallet === w)?.name ?? "an approved institution";
-  for (const c of snap.claims.filter((x) => x.beneficiary === childWallet).slice(-5)) {
-    out.push(`A ${formatUsdt(c.amount, { decimals: 0 })} claim to ${payee(c.payee)} is ${c.status === "Paid" ? "paid" : c.status === "Open" ? "waiting for approval" : "rejected"}.`);
-  }
-  // How far the child is under each rule the parent set for them (so the voice can speak to their progress).
-  for (const r of snap.rules.filter((x) => x.beneficiary === childWallet)) {
-    const used = `${formatUsdt(r.spentTotal, { decimals: 0 })} of ${formatUsdt(r.lifetimeCap, { decimals: 0 })}`;
-    out.push(r.recurringAmount > BigInt(0) && r.fixedPayee
-      ? `${r.category}: ${formatUsdt(r.recurringAmount, { decimals: 0 })} is paid automatically to ${payee(r.fixedPayee)} on schedule; ${used} paid so far.`
-      : `${r.category}: ${used} used so far, paid straight to the institution; up to ${formatUsdt(r.maxPerClaim, { decimals: 0 })} per claim.`);
-  }
-  const car = snap.assets[0];
-  if (car) out.push(`The family car is ${car.status === "Sold" ? "sold, and the money went into the estate's vault for the children" : car.status === "Listed" ? "for sale" : "kept"}.`);
-  return out;
-}
-
-function promptFor(v: Viewer, ctx: Awaited<ReturnType<typeof talkContext>>, channel: "voice" | "text", multiVoice = false) {
-  return buildLegacyPrompt({
-    book: ctx.book, child: ctx.child, channel,
-    estateStatus: v.snap?.estate.status ?? (v.demo ? "Unlocked (demo)" : "unknown"),
-    estateFacts: estateFacts(v.snap, ctx.child?.wallet ?? (v.role === "child" ? v.wallet : null)),
-    consentDate: ctx.voice ? new Date(ctx.voice.consentedAt).toISOString().slice(0, 10) : "unknown",
-    heirloomVoiceTag: multiVoice ? el.HEIRLOOM_VOICE_TAG : undefined,
-  });
-}
-
-export async function chat(v: Viewer, history: WillChatMessage[], previewChildId?: string): Promise<LegacyChatReply> {
-  const ctx = await talkContext(v, previewChildId);
-  const out = await orchestrate(
-    { history, facts: null, context: { role: v.role === "child" ? "beneficiary" : "owner", channel: "text" }, legacy: { book: ctx.book, child: ctx.child, prompt: promptFor(v, ctx, "text") } },
-    "LegacyCompanion",
-  );
-  const meta = out.legacy ?? { voice: "heirloom" as const, source: "refusal" as const };
-  return {
-    reply: out.reply, voice: meta.voice, source: meta.source, safety: meta.safety,
-    speakToken: meta.voice === "parent" && ctx.voice ? issueSpeakToken(v.estate, out.reply) : undefined,
-  };
+  return { book: row.book, child: childFor(v, row.book), voice: await store.getVoice(v.estate) };
 }
 
 const daily = new Map<string, { day: string; n: number }>();
@@ -223,24 +187,23 @@ function countSpeak(estate: string) {
   if (++d.n > SPEAK_DAILY_LIMIT) throw new HttpError(429, "The legacy voice has spoken a lot today. Please try again tomorrow.", "rate_limited");
 }
 
-export type SpeakRequest = { milestoneId: string } | { text: string; token?: string };
-export const OWNER_PREVIEW_MAX = 300;
+/** What may be spoken: a milestone the owner wrote, or the fixed sample line (owner, while alive). Never free text. */
+export type SpeakRequest = { milestoneId: string } | { sample: true };
 
 /** Returns MP3 bytes in the parent's voice, or null when simulated (the browser speaks the text instead). */
 export async function speak(v: Viewer, req: SpeakRequest): Promise<{ text: string; audio: Uint8Array | null }> {
-  const ctx = await talkContext(v);
+  const ctx = await speakContext(v);
   let text: string;
   let milestoneId: string | null = null;
   if ("milestoneId" in req) {
     const m = ctx.book.milestones.find((x) => x.id === req.milestoneId && (v.role === "owner" || x.childId === "all" || x.childId === ctx.child?.id));
     if (!m) throw new HttpError(404, "That message was not found.", "not_found");
     text = m.text; milestoneId = m.id;
-  } else if (req.token && checkSpeakToken(v.estate, req.text, req.token)) {
-    text = req.text;
-  } else if (v.role === "owner" && req.text.length <= OWNER_PREVIEW_MAX && !detectMoneyRequest(req.text)) {
-    text = req.text; // the owner previewing their own voice
   } else {
-    throw new HttpError(403, "The legacy voice only speaks words from the Legacy Book.", "forbidden");
+    // The owner hears one fixed line while alive. The line is the app's, never text the client sends.
+    if (v.role !== "owner") throw new HttpError(403, "The legacy voice only speaks the messages in the Legacy Book.", "forbidden");
+    if (v.snap && v.snap.estate.status !== "Active") throw new HttpError(409, "The sample plays only while the estate is active.", "bad_status");
+    text = legacyVoiceSample;
   }
   if (!ctx.voice?.voiceId) return { text, audio: null };
   if (ctx.voice.requiresVerification) throw new HttpError(409, "This voice still needs verification in the ElevenLabs dashboard.", "needs_verification");
@@ -251,28 +214,4 @@ export async function speak(v: Viewer, req: SpeakRequest): Promise<{ text: strin
   const audio = await el.textToSpeech(ctx.voice.voiceId, text);
   await store.cacheMessage(v.estate, sha, milestoneId, audio).catch((e) => console.warn("[legacy] cache failed:", e instanceof Error ? e.message : e));
   return { text, audio };
-}
-
-async function ensureAgent(row: store.VoiceRow, prompt?: string): Promise<string> {
-  if (row.agentId) return row.agentId;
-  const book = (await store.getBook(row.estate))?.book;
-  const p = prompt ?? (book ? buildLegacyPrompt({ book, child: null, channel: "voice", estateStatus: "unknown", consentDate: new Date(row.consentedAt).toISOString().slice(0, 10) }) : "You are Heirloom. The Legacy Book is empty: say so kindly and end the call.");
-  const { agentId } = await el.createLegacyAgent({
-    name: `Heirloom legacy ${(await store.estateKey(row.estate)).slice(0, 8)}`, prompt: p, voiceId: row.voiceId!,
-    firstMessage: book ? disclosureLine(book) : "This is Heirloom.",
-  });
-  await store.setAgentId(row.estate, agentId);
-  return agentId;
-}
-
-/** Live call: refresh the private agent's prompt for THIS verified child + live status, then mint a signed URL. */
-export async function session(v: Viewer, previewChildId?: string): Promise<{ signedUrl: string; label: { consentedAt: number } }> {
-  const ctx = await talkContext(v, previewChildId);
-  if (!ctx.voice?.voiceId || !el.hasElevenLabs()) throw new HttpError(503, "Live calls need ElevenLabs.", "unavailable");
-  if (ctx.voice.requiresVerification) throw new HttpError(409, "This voice still needs verification in the ElevenLabs dashboard.", "needs_verification");
-  const multi = Boolean(el.heirloomVoiceId());
-  const prompt = promptFor(v, ctx, "voice", multi);
-  const agentId = ctx.voice.agentId ?? await ensureAgent(ctx.voice, prompt);
-  await el.updateLegacyAgent(agentId, { prompt, firstMessage: disclosureLine(ctx.book), voiceId: ctx.voice.voiceId });
-  return { signedUrl: await el.agentSignedUrl(agentId), label: { consentedAt: ctx.voice.consentedAt } };
 }

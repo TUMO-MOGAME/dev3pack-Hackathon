@@ -67,9 +67,9 @@ Run on the real program on 12–13 Nov 2026 (laptop in chain mode): every step h
 its transaction (status Success, the Heirloom instruction in the logs, fee paid by Heirloom's sponsor wallet).
 Index with links: [docs/demo-screenshots](docs/demo-screenshots/README.md).
 
-| The AI catches a hidden instruction | Claim paid straight to UCT | Car sold through escrow | Lerato talks with Dad |
+| The AI catches a hidden instruction | Claim paid straight to UCT | Car sold through escrow | Lerato hears Dad's messages |
 |---|---|---|---|
-| <img src="docs/demo-screenshots/C1-trick-document-rejected.png" width="220" alt="Fee statement with a hidden instruction to the AI: not accepted, 99%"> | <img src="docs/demo-screenshots/C2-proof-explorer-claim-paid.png" width="220" alt="Solana Explorer: ExecuteClaim, Success, fee paid by Heirloom"> | <img src="docs/demo-screenshots/C7-car-sold.png" width="220" alt="Car sold for 9,500 USD₮; title and USD₮ swapped in one transaction"> | <img src="docs/demo-screenshots/L3-chat-with-dad.png" width="220" alt="Dad's AI voice knows her fee progress and refuses a money request"> |
+| <img src="docs/demo-screenshots/C1-trick-document-rejected.png" width="220" alt="Fee statement with a hidden instruction to the AI: not accepted, 99%"> | <img src="docs/demo-screenshots/C2-proof-explorer-claim-paid.png" width="220" alt="Solana Explorer: ExecuteClaim, Success, fee paid by Heirloom"> | <img src="docs/demo-screenshots/C7-car-sold.png" width="220" alt="Car sold for 9,500 USD₮; title and USD₮ swapped in one transaction"> | <img src="docs/demo-screenshots/L1-lerato-talk-with-dad.png" width="220" alt="Lerato is asked first whether she wants to hear Dad's messages in his voice; AI label with the consent date"> |
 
 ---
 
@@ -224,7 +224,7 @@ Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`doc
 | Pay-once payment pipeline, reconnect re-check | **Real** (unit-tested in `payments.test.ts`) |
 | AI agent (Gemini orchestrator + 6 specialists) | **Real** with `GEMINI_API_KEY`; without it, clearly labelled canned answers |
 | Voice call (ElevenLabs) | **Real** with ElevenLabs keys; otherwise a labelled "Simulated call preview" |
-| Legacy voice (parent's cloned voice, ElevenLabs IVC + TTS + private agent) | **Real** with `ELEVENLABS_API_KEY` in chain mode (or a demo deploy with `LEGACY_DEMO_WRITES=1`); otherwise the browser's voice stands in, labelled "Simulated voice" |
+| Legacy voice (parent's cloned voice reads the parent's own messages, ElevenLabs IVC + TTS) | **Real** with `ELEVENLABS_API_KEY` in chain mode (or a demo deploy with `LEGACY_DEMO_WRITES=1`); otherwise the browser's voice stands in, labelled "Simulated voice" |
 | USD₮ → ZAR rate | **Real**, live VALR public ticker (fallback rate labelled) |
 | Rand settlement to the university (PayShap/EFT) | **Simulated** and labelled ([`lib/offramp.ts`](app/src/lib/offramp.ts)). Next step: a licensed partner |
 | Institutions (UCT, residence, school, bookstore) | **Demo wallets** we control, not the real institutions |
@@ -278,7 +278,7 @@ All names are in [`app/.env.example`](app/.env.example). Only `NEXT_PUBLIC_*` re
 | `AGENT_SEED_PHRASE`, `SOLANA_RPC_URL` | chain, server | the agent's WDK wallet; keep secret |
 | `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_VOICE_MODEL` | AI | without a key: labelled canned answers; voice calls use a fast model (default `gemini-3.5-flash-lite`) |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_TOOL_SECRET` | voice | setup in [`scripts/elevenlabs-agent.md`](scripts/elevenlabs-agent.md) |
-| `ELEVENLABS_HEIRLOOM_VOICE_ID`, `ELEVENLABS_TTS_MODEL`, `LEGACY_SPEAK_SECRET`, `LEGACY_DEMO_WRITES` | legacy voice | §6 of [`scripts/elevenlabs-agent.md`](scripts/elevenlabs-agent.md); `LEGACY_DEMO_WRITES` is demo-only |
+| `ELEVENLABS_TTS_MODEL`, `LEGACY_DEMO_WRITES` | legacy voice | §6 of [`scripts/elevenlabs-agent.md`](scripts/elevenlabs-agent.md); `LEGACY_DEMO_WRITES` is demo-only |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | storage | without them: in-memory store; schema in [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) |
 | `SCHEDULER_SECRET`, `CRON_SECRET` | scheduled payments | protects `POST /api/scheduler/tick` |
 | `FX_FALLBACK_USDT_ZAR` | FX | used only if VALR is unreachable |
@@ -315,12 +315,14 @@ anchor build && cargo test -p heirloom   # 25 LiteSVM program tests (Linux / WSL
   shared secrets; Supabase tables have RLS on with no public policies; evidence bucket is private.
 - **Prompt injection:** uploaded documents are passed to the model as data, and the system prompt tells it to ignore
   instructions inside them. A manipulated verdict still can't break a cap or a quorum.
-- **Legacy voice:** a parent's cloned voice is a fraud tool if misused, so: only the living owner can create it (recorded
-  consent line + unticked box, estate must be Active); every `/api/legacy/*` request is signed by the WDK wallet
-  (ed25519 over action, estate, time and body hash; 5-minute window, single use) and checked against the on-chain owner /
-  beneficiaries; the ElevenLabs `voice_id` and agent id stay server-side (live calls use a private per-estate agent, so no
-  client overrides); the voice only speaks owner-written milestones or companion replies carrying a server HMAC token,
-  never arbitrary text; it has no tools and refuses money requests; distress steps out of character with SADAG helplines.
+- **Legacy voice:** the rule is **the voice only ever says the parent's own words**: words its owner wrote or approved
+  while alive. It plays the parent's messages for moments (fees paid, graduation, a hard day); there is no chat and no
+  call in a parent's voice, and no AI writes new words in it (decided 18 Nov 2026, plan §16.17). A cloned voice is also a
+  fraud tool if misused, so: only the living owner can create it (recorded consent line + unticked box, estate must be
+  Active); every `/api/legacy/*` request is signed by the WDK wallet (ed25519 over action, estate, time and body hash;
+  5-minute window, single use) and checked against the on-chain owner / beneficiaries; the ElevenLabs `voice_id` stays
+  server-side; `/api/legacy/speak` takes only a milestone id (or the owner's fixed sample line while alive) and refuses
+  any free text; each message is introduced in Heirloom's own voice as an AI copy; the child's page has SADAG help lines.
   See [`app/src/lib/legacy/`](app/src/lib/legacy/) and [`supabase/migrations/0002_legacy.sql`](supabase/migrations/0002_legacy.sql).
 - **Known limits:** devnet only; not audited; in-memory rate limits (per instance); no seed-recovery flow yet.
 - **Secrets:** `.env*`, keypairs and demo wallet seeds are gitignored. Report issues privately to the maintainer.

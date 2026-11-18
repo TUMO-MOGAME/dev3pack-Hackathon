@@ -13,9 +13,8 @@ import { runSpecialist, type SpecialistInput, type SpecialistResult } from "./sp
 import { toContents } from "./will";
 
 /**
- * Specialists the router may pick. LegacyCompanion (the parent's voice) is deliberately NOT routable: it is reached
- * only through /api/legacy/chat (and the legacy voice agent), after the server verified the child, their opt-in and
- * that the estate is unlocked. See lib/agent/legacy-companion.ts.
+ * Specialists the router may pick. There is no specialist that speaks as a parent: the legacy voice only plays the
+ * owner's own messages and never answers (plan §16.17).
  */
 export const ROUTABLE = ["WillWriter", "DocumentReviewer", "ClaimsGuide", "CarBroker", "EstateGuide", "Compliance"] as const;
 export type Routable = (typeof ROUTABLE)[number];

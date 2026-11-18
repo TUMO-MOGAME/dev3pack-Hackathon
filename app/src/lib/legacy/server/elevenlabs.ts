@@ -5,12 +5,8 @@ import "server-only";
  *                                                                  description, labels) → { voice_id, requires_verification }
  *  - Delete voice            DELETE /v1/voices/{voice_id}
  *  - Text to speech          POST   /v1/text-to-speech/{voice_id}?output_format=mp3_44100_128 { text, model_id, voice_settings }
- *  - Legacy agent            POST   /v1/convai/agents/create      { name, conversation_config, platform_settings }
- *                            PATCH  /v1/convai/agents/{agent_id}  (prompt refreshed per call with the verified child + status)
- *                            DELETE /v1/convai/agents/{agent_id}
- *  - Signed URL              GET    /v1/convai/conversation/get-signed-url?agent_id=…
- * Why a per-estate agent instead of client overrides: overrides are sent by the browser, so tts.voice_id and the
- * persona prompt would be visible to (and changeable by) the client. A private agent keeps both server-side.
+ *  - Delete old call agent   DELETE /v1/convai/agents/{agent_id}  (voices made before 18 Nov 2026 had a private agent
+ *                                                                  for live calls; live calls were removed, plan §16.17)
  */
 const BASE = "https://api.elevenlabs.io";
 
@@ -71,61 +67,8 @@ export async function textToSpeech(voiceId: string, text: string): Promise<Uint8
   return new Uint8Array(await res.arrayBuffer());
 }
 
-/** Label the legacy agent uses to switch to Heirloom's own voice (multi-voice), when a default voice is configured. */
-export const HEIRLOOM_VOICE_TAG = "Heirloom";
-export const heirloomVoiceId = () => process.env.ELEVENLABS_HEIRLOOM_VOICE_ID || null;
-
-function agentBody(input: { name?: string; prompt: string; firstMessage: string; voiceId: string }, multiVoice: boolean) {
-  const def = heirloomVoiceId();
-  return {
-    ...(input.name ? { name: input.name } : {}),
-    conversation_config: {
-      agent: { prompt: { prompt: input.prompt }, first_message: input.firstMessage, language: "en" },
-      tts: {
-        voice_id: input.voiceId,
-        ...(multiVoice && def ? { supported_voices: [{ label: HEIRLOOM_VOICE_TAG, voice_id: def, description: "Heirloom's own voice for disclosures, safety and refusals" }] } : {}),
-      },
-    },
-    platform_settings: { auth: { enable_auth: true } },
-  };
-}
-
-export async function createLegacyAgent(input: { name: string; prompt: string; firstMessage: string; voiceId: string }): Promise<{ agentId: string; multiVoice: boolean }> {
-  const attempt = async (multi: boolean) => {
-    const res = await call("/v1/convai/agents/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(agentBody(input, multi)) });
-    const data = (await res.json()) as { agent_id?: string };
-    if (!data.agent_id) throw new ElevenLabsError(502, "ElevenLabs returned no agent.");
-    return data.agent_id;
-  };
-  const multi = Boolean(heirloomVoiceId());
-  try { return { agentId: await attempt(multi), multiVoice: multi }; }
-  catch (e) {
-    // Multi-voice may not be available on every plan: retry with the parent's voice only.
-    if (multi && e instanceof ElevenLabsError && e.status === 422) return { agentId: await attempt(false), multiVoice: false };
-    throw e;
-  }
-}
-
-export async function updateLegacyAgent(agentId: string, input: { prompt: string; firstMessage: string; voiceId: string }): Promise<void> {
-  try {
-    await call(`/v1/convai/agents/${encodeURIComponent(agentId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(agentBody(input, true)) });
-  } catch (e) {
-    if (e instanceof ElevenLabsError && e.status === 422) {
-      await call(`/v1/convai/agents/${encodeURIComponent(agentId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(agentBody(input, false)) });
-      return;
-    }
-    throw e;
-  }
-}
-
 export async function deleteLegacyAgent(agentId: string): Promise<void> {
   try { await call(`/v1/convai/agents/${encodeURIComponent(agentId)}`, { method: "DELETE" }); }
   catch (e) { if (!(e instanceof ElevenLabsError && e.status === 404)) throw e; }
 }
 
-export async function agentSignedUrl(agentId: string): Promise<string> {
-  const res = await call(`/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`, { timeoutMs: 8000 });
-  const data = (await res.json()) as { signed_url?: string };
-  if (!data.signed_url) throw new ElevenLabsError(502, "ElevenLabs returned no session.");
-  return data.signed_url;
-}

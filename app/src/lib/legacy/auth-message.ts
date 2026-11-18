@@ -7,7 +7,7 @@
 export const AUTH_HEADER = "x-heirloom-auth";
 export const AUTH_MAX_SKEW_MS = 5 * 60 * 1000;
 
-export type LegacyAction = "status" | "voice.create" | "voice.delete" | "book.read" | "book.write" | "book.delete" | "optin" | "speak" | "chat" | "session";
+export type LegacyAction = "status" | "voice.create" | "voice.delete" | "book.read" | "book.write" | "book.delete" | "optin" | "speak";
 
 export interface LegacyAuth {
   estate: string;

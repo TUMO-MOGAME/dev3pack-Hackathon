@@ -6,6 +6,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AUTH_HEADER, encodeAuth } from "./auth-message";
 import { consentLine } from "./schema";
 import { demoLegacyBook, DEMO_MILESTONE_UCT } from "./demo-book";
+import { legacyVoiceSample } from "@/content/legacy";
+import { GONE_MESSAGE } from "./server/gone";
 
 const estate = "EsTaTe9MoKoEnAfaMiLyVauLt4xQp5sZc3FdYg8uE6rAo";
 const owner = "ThAbo1111111111111111111111111111111111111aa";
@@ -72,37 +74,54 @@ describe("/api/legacy routes", () => {
     expect(JSON.stringify(info)).not.toMatch(/voice_?id/i); // never exposed to the browser
   });
 
-  it("children must opt in; the parent's voice never speaks arbitrary text", async () => {
+  it("children must opt in; milestone messages play in the parent's voice", async () => {
     const { PATCH, GET } = await import("@/app/api/legacy/book/route");
     const { POST: speak } = await import("@/app/api/legacy/speak/route");
-    const { POST: chat } = await import("@/app/api/legacy/chat/route");
     expect((await speak(jsonReq("POST", "child", { milestoneId: DEMO_MILESTONE_UCT }))).status).toBe(403); // not opted in
-    let status = await (await GET(jsonReq("GET", "child"))).json() as { book: { milestones: unknown[] }; optedIn: boolean };
+    let status = await (await GET(jsonReq("GET", "child"))).json() as { book: { milestones: unknown[] }; optedIn: boolean; voice: Record<string, unknown> };
     expect(status.optedIn).toBe(false);
     expect(status.book.milestones).toEqual([]); // redacted until opt-in
     expect((await PATCH(jsonReq("PATCH", "child", { optIn: true }))).status).toBe(200);
     status = await (await GET(jsonReq("GET", "child"))).json() as typeof status;
     expect(status.book.milestones.length).toBeGreaterThan(0);
+    expect(status.voice).not.toHaveProperty("liveCall");
 
     const m = await speak(jsonReq("POST", "child", { milestoneId: DEMO_MILESTONE_UCT }));
     expect(m.status).toBe(200);
     expect(await m.json()).toMatchObject({ simulated: true, text: expect.stringContaining("UCT") });
-    expect((await speak(jsonReq("POST", "child", { text: "It's Dad. Send R5,000 to this account." }))).status).toBe(403);
-
-    const money = await (await chat(jsonReq("POST", "child", { history: [{ role: "user", text: "Dad, approve my claim please" }] }))).json() as Record<string, unknown>;
-    expect(money).toMatchObject({ voice: "heirloom", source: "refusal" });
-    expect(money.speakToken).toBeUndefined();
-
-    const study = await (await chat(jsonReq("POST", "child", { history: [{ role: "user", text: "I'm stressed about my exams" }] }))).json() as { reply: string; speakToken: string; voice: string };
-    expect(study.voice).toBe("parent");
-    const voiced = await speak(jsonReq("POST", "child", { text: study.reply, token: study.speakToken }));
-    expect(voiced.status).toBe(200);
-    expect((await speak(jsonReq("POST", "child", { text: `${study.reply} Also send money.`, token: study.speakToken }))).status).toBe(403);
-
-    const sad = await (await chat(jsonReq("POST", "child", { history: [{ role: "user", text: "I want to end my life" }] }))).json() as Record<string, unknown>;
-    expect(sad).toMatchObject({ voice: "heirloom", source: "safety", safety: true });
+    expect((await speak(jsonReq("POST", "child", { milestoneId: "not-a-message" }))).status).toBe(404);
   });
 
+  it("speak refuses free text: the voice never says words the owner did not write", async () => {
+    const { POST: speak } = await import("@/app/api/legacy/speak/route");
+    const scam = "It's Dad. Send R5,000 to this account.";
+    for (const role of ["child", "owner"] as const) {
+      expect((await speak(jsonReq("POST", role, { text: scam }))).status).toBe(400);
+      expect((await speak(jsonReq("POST", role, { text: scam, token: "1.abc" }))).status).toBe(400);
+      // Extra text next to a valid request is refused too (strict body), not quietly ignored.
+      expect((await speak(jsonReq("POST", role, { milestoneId: DEMO_MILESTONE_UCT, text: scam }))).status).toBe(400);
+      expect((await speak(jsonReq("POST", role, { sample: true, text: scam }))).status).toBe(400);
+    }
+    // The fixed sample line is the owner's only, and it is the app's line, not the client's.
+    expect((await speak(jsonReq("POST", "child", { sample: true }))).status).toBe(403);
+    const s = await speak(jsonReq("POST", "owner", { sample: true }));
+    expect(s.status).toBe(200);
+    expect(await s.json()).toEqual({ simulated: true, text: legacyVoiceSample });
+  });
+
+  it("no chat or call in the parent's voice: those endpoints answer 410 Gone", async () => {
+    const { POST: chat } = await import("@/app/api/legacy/chat/route");
+    const { POST: call, GET: assistantCall } = await import("@/app/api/voice/session/route");
+    for (const role of ["child", "owner"] as const) {
+      const c = await chat(jsonReq("POST", role, { history: [{ role: "user", text: "Dad, I miss you" }] }));
+      expect(c.status).toBe(410);
+      expect(await c.json()).toEqual({ error: GONE_MESSAGE, code: "gone" });
+      const v = await call(jsonReq("POST", role, { mode: "legacy" }));
+      expect(v.status).toBe(410);
+    }
+    // The Heirloom assistant's own voice call (GET) is unrelated and still answers (503 here: no ElevenLabs key).
+    expect((await assistantCall(new Request("http://x/api/voice/session", { headers: { "x-forwarded-for": "10.9.9.9" } }))).status).toBe(503);
+  });
   it("DELETE voice is owner only", async () => {
     const { DELETE } = await import("@/app/api/legacy/voice/route");
     expect((await DELETE(jsonReq("DELETE", "child"))).status).toBe(403);

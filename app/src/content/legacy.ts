@@ -1,8 +1,12 @@
 /**
  * Legacy Voice copy: the parent records their voice and a Legacy Book while alive; after they pass, each child
- * can choose to hear guidance in that voice, always labelled as AI and always grounded in what was left.
- * Placeholders in {braces} are filled with fmt().
+ * can choose to hear the parent's own messages in that voice, always labelled as AI.
+ * The rule (18 Nov 2026, plan §16.17): the voice only ever says words its owner wrote or approved while alive.
+ * No chat and no calls in a parent's voice. Placeholders in {braces} are filled with fmt().
  */
+
+/** The one line the owner can hear in their new voice while alive (the server speaks this, never client text). */
+export const legacyVoiceSample = "Hello my children. This is how I sound in Heirloom. I'm proud of you.";
 
 /**
  * Helplines used when a child seems distressed. Verified 11 Nov 2026 against public listings (SADAG / press);
@@ -10,8 +14,10 @@
  */
 export const legacySafety = {
   title: "You don't have to carry this alone",
-  intro: "I'm stepping out of {called}'s voice for a moment. This is Heirloom.",
-  body: "It sounds like things are really hard right now. Please talk to someone today. These lines are free and confidential:",
+  open: "Having a hard time? Find help",
+  close: "Hide the help lines",
+  intro: "This is Heirloom, not {called}'s voice.",
+  body: "If things feel too heavy, please talk to someone today. These lines are free and confidential:",
   lines: [
     { name: "SADAG Suicide Crisis Helpline", number: "0800 567 567", tel: "0800567567", note: "Free call" },
     { name: "SADAG 24-hour Mental Health Helpline", number: "0800 456 789", tel: "0800456789", note: "24 hours, 7 days" },
@@ -19,7 +25,6 @@ export const legacySafety = {
   ],
   adult: "Please also tell a trusted adult near you: {adults}, a teacher, or someone at your residence.",
   website: "More help: sadag.org",
-  spoken: "I'm stepping out of your {called}'s voice now. This is Heirloom. It sounds like things are really hard. Please call the SADAG Suicide Crisis Helpline on 0800 567 567, or the 24-hour line on 0800 456 789, and tell a trusted adult near you today. You matter.",
 } as const;
 
 export const legacyEntry = {
@@ -28,13 +33,13 @@ export const legacyEntry = {
   ownerCta: "Set up your legacy voice",
   ownerReady: "Your legacy voice is ready. Keep your Legacy Book up to date.",
   ownerReadyCta: "Open your Legacy Book",
-  childTitle: "Talk with {called}",
-  childBody: "{called} recorded {possessive} voice and left words for you. Hear them in {possessive} voice, with care.",
-  childCta: "Talk with {called}",
+  childTitle: "{called}'s messages for you",
+  childBody: "{called} wrote messages for you while {pronoun} was alive. Hear them in {possessive} own words, in {possessive} voice.",
+  childCta: "Hear {called}'s messages",
   childLocked: "{called} left words for you. They open once the estate unlocks.",
   childMaybe: "If {called} recorded {possessive} voice for you, you can hear the words {pronoun} left here.",
-  sheetCta: "Talk with {called} instead",
-  sheetHint: "An AI voice made with {called}'s consent, speaking only the words {pronoun} left.",
+  sheetCta: "Hear {called}'s messages",
+  sheetHint: "{called}'s own words, in {possessive} voice: an AI copy made with {possessive} consent. It only plays what {pronoun} wrote.",
   moment: {
     title: "{called} left you a message for this moment",
     play: "Play {called}'s message",
@@ -51,17 +56,17 @@ export const legacy = {
   eyebrow: "Legacy voice",
   owner: {
     title: "Your voice for them",
-    body: "One day your children may need you and you won't be there. Record your voice and write down how you'd guide them. Heirloom will only ever speak your words, and always says it is an AI voice.",
-    steps: ["Consent", "Record", "Your voice", "Legacy Book", "Preview"],
+    body: "One day your children may need you and you won't be there. Record your voice and write messages for the moments you may miss. Heirloom will only ever play your own words, and always says it is an AI voice.",
+    steps: ["Consent", "Record", "Your voice", "Legacy Book", "Listen"],
     stepLabel: "Step {n} of {total}: {name}",
     promise: {
       title: "What Heirloom promises",
       items: [
         "Only you can create your voice, while you are alive. Nobody can upload someone else's recordings.",
-        "It speaks only from your Legacy Book and the estate's real status. It never invents memories or promises.",
-        "Every conversation starts by saying it is Heirloom, speaking in your voice. The screen always says \"AI voice\".",
+        "It only ever says the words you wrote while you were alive. It never answers questions, takes calls or makes up new words in your voice.",
+        "Before your words play, Heirloom says that this is an AI copy of your voice. The screen always says \"AI voice\".",
         "It can never approve claims, move money or ask anyone for money, PINs or passwords.",
-        "If a child is in distress it steps out of your voice and points them to real help.",
+        "Help lines are always one tap away on your children's page.",
         "You can delete your voice at any time. It is deleted at ElevenLabs too.",
       ],
     },
@@ -108,10 +113,7 @@ export const legacy = {
       samples: "{n} recordings",
       simulated: "Simulated voice: the real voice needs ElevenLabs. Your browser's voice stands in for the demo.",
       verification: "ElevenLabs asks the account holder to verify this new voice in the ElevenLabs dashboard before it can speak.",
-      live: "Live calls are on",
-      liveOff: "Live calls are not set up yet; messages still play in your voice.",
       hear: "Hear a sample",
-      sample: "Hello my children. This is how I sound in Heirloom. I'm proud of you.",
       delete: "Delete my voice",
       deleteConfirm: "Delete your voice? Your recordings and the voice copy at ElevenLabs are deleted. Your Legacy Book stays until you delete it.",
       deleteYes: "Yes, delete my voice",
@@ -124,7 +126,7 @@ export const legacy = {
     },
     book: {
       title: "Your Legacy Book",
-      body: "This is everything the voice may say. If it isn't written here, Heirloom says so instead of guessing.",
+      body: "Your children can read everything here. Your messages for moments play in your voice. Nothing else is ever said in your voice.",
       calledBy: "What your children call you",
       calledByHint: "For example Dad, Papa, Baba, Tata, Mama.",
       pronoun: "Speak about you as",
@@ -161,19 +163,17 @@ export const legacy = {
       body: "Pick a message and listen. This is exactly what {name} would hear.",
       child: "Child",
       play: "Play",
-      ask: "Or ask a question as {name} would",
-      askPlaceholder: "e.g. Dad, I failed a test. What should I do?",
       none: "Add a message in your Legacy Book to preview it.",
     },
   },
   child: {
-    title: "Talk with {called}",
-    body: "{called} recorded {possessive} voice and wrote down how {pronoun} wanted to guide you. This voice only speaks those words.",
+    title: "{called}'s messages for you",
+    body: "{called} recorded {possessive} voice and wrote these messages for you while {pronoun} was alive. The voice only says {possessive} own words. It doesn't answer questions or take calls.",
     label: "AI voice, created with {called}'s consent on {date}",
     labelSimulated: "Simulated voice: the real voice needs ElevenLabs",
     optIn: {
-      title: "Would you like to hear {called}'s voice?",
-      body: "This is an AI copy of {called}'s voice, made with {possessive} consent. It speaks only the words and values {pronoun} left for you. It can't decide anything about money. You can switch it off at any time, and it's okay to not be ready.",
+      title: "Would you like to hear {called}'s messages in {possessive} voice?",
+      body: "You will hear {called}'s messages in {possessive} own words, in {possessive} voice. The voice is an AI copy, made with {possessive} consent. It only plays what {pronoun} wrote, and it can't decide anything about money. You can switch it off at any time, and it's okay to not be ready.",
       yes: "Yes, switch it on",
       notNow: "Not now",
       off: "Switch the voice off",
@@ -181,25 +181,17 @@ export const legacy = {
     },
     locked: "{called}'s words open once the estate unlocks.",
     noVoice: "{called} did not leave a recorded voice.",
-    disclosure: "This is Heirloom, speaking in your {calledLower}'s voice with the words and values {pronoun} left for you.",
     messages: "Messages {called} left for you",
+    noMessages: "{called} didn't leave a message for you to play yet.",
     play: "Play",
-    playing: "Playing…",
     stopPlaying: "Stop",
-    chatTitle: "Ask {called}",
-    placeholder: "Type what's on your mind",
-    inputLabel: "Your message to {called}",
-    send: "Send",
-    thinking: "Finding {called}'s words",
-    you: "You",
-    fromBook: "From the Legacy Book",
-    heirloom: "Heirloom",
-    replay: "Play again",
-    suggestions: ["I'm worried about my studies", "What would you say about money?", "I miss you", "Can you approve my claim?"],
-    call: "Start a call",
-    callLive: "Call in {called}'s voice",
-    callEnd: "End call",
-    callUnavailable: "Live calls need ElevenLabs. You can still type, and replies play in {called}'s voice.",
+    words: "Words {called} wrote for you",
+    wordsBody: "To read in your own time. Only the messages above play in {possessive} voice.",
+    note: "A note for you",
+    values: "What mattered to {called}",
+    lessons: "What {called} learnt",
+    phrases: "Things {called} often said",
+    guidance: "{called}'s guidance",
     error: "Something went wrong. Please try again.",
     retry: "Try again",
   },

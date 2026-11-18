@@ -1,17 +1,16 @@
 "use client";
 /**
  * Entry points to Legacy Voice, placed on shared screens with one line each (estate, family, claims, agent sheet):
- *  - LegacyEntry: owner "Your voice for them" card; child "Talk with Dad" card (after unlock)
+ *  - LegacyEntry: owner "Your voice for them" card; child "Dad's messages for you" card (after unlock)
  *  - MilestoneMoment: "Dad left you a message for this moment" when that moment has happened
  *    (first fees: a paid claim to a university for this child)
- *  - LegacySheetLink: "Talk with Dad instead" in the agent sheet
+ *  - LegacySheetLink: "Hear Dad's messages" in the agent sheet
  * Copy comes from the small `legacyEntry` object only.
  */
 import { HeartHandshake, Mic } from "@/components/ui/icons";
 import { legacyEntry as copy } from "@/content/legacy";
 import { useEstate } from "@/lib/hooks/estate";
-import { findMoment } from "@/lib/legacy/companion";
-import { pronouns } from "@/lib/legacy/prompt";
+import { findMoment, pronouns } from "@/lib/legacy/rules";
 import type { LegacyStatus } from "@/lib/legacy/schema";
 import { ButtonLink, Card } from "@/components/ui/primitives";
 import { fmt } from "@/components/shell/copy";

@@ -29,7 +29,7 @@ export function mapAgentPath(path: string): string {
   return ROUTES[clean] ?? path;
 }
 
-const SPECIALISTS: SpecialistName[] = ["Orchestrator", "WillWriter", "DocumentReviewer", "ClaimsGuide", "CarBroker", "EstateGuide", "Compliance", "LegacyCompanion"];
+const SPECIALISTS: SpecialistName[] = ["Orchestrator", "WillWriter", "DocumentReviewer", "ClaimsGuide", "CarBroker", "EstateGuide", "Compliance"];
 
 /** Accepts whatever shape the server sends ({type,...} or {name, params}) and keeps only actions we can render. */
 export function normaliseReply(raw: unknown): OrchestratorReply | null {

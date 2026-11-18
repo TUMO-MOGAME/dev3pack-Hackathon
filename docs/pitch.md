@@ -3,7 +3,9 @@
 > Live judging, Sat 14 Nov 2026: **5:00 pitch + 3:00 Q&A**. Rehearse with a timer at least 3 times.
 > Numbers on stage must come from `landing-facts.md`. Anything marked [fill] comes from `validation.md`.
 > Updated 2026-11-13 (after submission): the demo uses the public site's guided demo (12 steps, resettable), then the
-> real devnet proof (`docs/demo-screenshots`) and a 20-second "Talk with Dad" clip. Backup: `Heirloom-pitch-5min.mp4`.
+> real devnet proof (`docs/demo-screenshots`) and a 20-second "Dad's message" clip. Backup: `Heirloom-pitch-5min.mp4`.
+> Updated 2026-11-18: Legacy Voice is words only. The voice only ever says his own words: no chat and no call in Dad's
+> voice. Do not show the old "Dad's call" footage; play one of Dad's recorded messages instead.
 
 ## 1. Script (timed)
 
@@ -46,7 +48,7 @@ week we asked N parents and young adults; X of them…". No interviews were run 
 ### 1:15–3:30 Live demo (cut to the app; show, don't tell)
 **Before you go on stage:** open https://heirloom-one-iota.vercel.app → Try the demo → Start as Thabo, then
 **Demo mode → Start from the beginning** so the story is fresh. Second tab: the README's "with proof" section.
-Third: `Heirloom-pitch-5min.mp4` paused at **3:27** (Dad's call). Follow the black **Demo guide** bar at the top
+Third: Dad's UCT message ready to play (Lerato's **Legacy voice** page after unlock, or a clip of it; not the old call footage). Follow the black **Demo guide** bar at the top
 ("Take me there", "Switch to …"). **Say less, click more.** One sentence per step (all checked on 13 Nov):
 
 1. **(15 s) Plan builder.** Tap the suggested replies, then **Sign and lock**. "The agent turns plain words into
@@ -64,9 +66,9 @@ Third: `Heirloom-pitch-5min.mp4` paused at **3:27** (Dad's call). Follow the bla
 7. **(20 s) "And it's real."** Second tab, README "with proof": "We ran the whole story on Solana devnet. Here a fee
    statement hides an instruction telling the AI to pay out 50,000. Caught, 99 percent. Here's the real payment to
    the university on Explorer, and the fee was paid by Heirloom, so families never need SOL."
-8. **(20 s) Talk with Dad.** Play the video from 3:27 for 20 seconds ("…I couldn't be there to drive you, but I made
-   sure of this… I am so proud of you, my girl"). "An AI voice made with his consent, speaking only his words, and
-   it can never move a cent."
+8. **(20 s) Dad's message.** Play Dad's UCT fees message (Lerato, **Legacy voice**, "Your first fees are paid"). "An AI
+   copy of his voice, made with his consent. **The voice only ever says his own words**: the messages he wrote while
+   alive. It never chats, never takes a call, and it can never move a cent."
 
 *If you're running late, skip step 3 and shorten step 6 to "the agent settles the sale above the floor".*
 
@@ -197,17 +199,18 @@ Answer in **under 20 seconds**, then stop. If you don't know, say so and say how
 
 15. **"What's real and what's simulated?"**
     "Real: the Anchor program on devnet, the WDK wallets and their USD₮ transfers, the payment flow, the AI agent
-    and the voice call, and the cap, floor and quorum checks, which are tested. Simulated: devnet uses our own
+    and the assistant's voice call, and the cap, floor and quorum checks, which are tested. Simulated: devnet uses our own
     6-decimal test USD₮ mint, the institutions are demo wallets, the waiting period and payment interval are 60
     seconds, documents are samples, and the rand settlement is labelled simulated. The contract isn't audited.
     The public site runs in demo mode (marked "Simulated network"); the same story ran on devnet from a laptop, and
     every step's Explorer receipt is in the README."
 
 16. **"An AI copy of a dead parent's voice: isn't that creepy, or a deepfake risk?"**
-    "Three rules. Consent: the parent records the consent line in their own voice while alive. Honesty: every call
-    opens with 'This is Heirloom, speaking in your dad's voice', and it says it's an AI if asked. Grounded: it only
-    speaks the words and values the parent wrote, it can never move money, and if a child mentions self-harm it
-    steps out of the voice and gives helpline numbers. The child chooses to switch it on and can switch it off."
+    "One rule above all: the voice only ever says his own words. It plays the messages the parent wrote while alive,
+    and nothing else: no chatbot, no calls, no new words after death. Consent: the parent records the consent line in
+    their own voice while alive. Honesty: Heirloom says it's an AI copy before every message, and the screen always says
+    'AI voice'. It can never move money, the child chooses to switch it on and can switch it off, and help lines are
+    one tap away."
 
 17. **"Why devnet and not mainnet?"**
     "Because the contract isn't audited yet, and we won't put families' money in an unaudited contract. The steps

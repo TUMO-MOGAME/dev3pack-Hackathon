@@ -39,7 +39,7 @@ const mem = {
 };
 
 // Devnet laptop demo without Supabase: the fictional Mokoena family's Legacy Book and a stand-in stock voice, so
-// "Talk with Dad" works on the already-unlocked demo estate (a real book can only be written while the estate is
+// Dad's messages play on the already-unlocked demo estate (a real book can only be written while the estate is
 // Active). Never on other clusters; with Supabase configured, the database wins.
 if (chainConfig.cluster === "devnet" && !getSupabase()) {
   const estate = DEVNET_DEMO_META.estate;

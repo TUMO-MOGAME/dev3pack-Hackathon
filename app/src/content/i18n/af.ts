@@ -1683,7 +1683,6 @@ export const af: Bundle = {
       CarBroker: "Motormakelaar",
       EstateGuide: "Boedelgids",
       Compliance: "Nakoming",
-      LegacyCompanion: "Nalatenskapstem",
     },
     specialistHint: "Beantwoord deur",
     chat: {

@@ -7,11 +7,10 @@ import type { EstateSnapshot } from "@/lib/service";
 import { useEstate } from "@/lib/hooks/estate";
 import {
   consentLine, legacyBookSchema, MIN_SAMPLES, MILESTONE_KINDS, GUIDANCE_TOPICS,
-  type LegacyBook, type LegacySpeech, type LegacyStatus, type Milestone,
+  type LegacyBook, type LegacyStatus, type Milestone,
 } from "@/lib/legacy/schema";
 import { Button, Card, Consent, Field, inputClass, Notice } from "@/components/ui/primitives";
 import { fmt } from "@/components/shell/copy";
-import { Bubble } from "./bubble";
 import { DisclosureLabel, LevelMeter, PlayButton } from "./parts";
 import { useRecorder } from "./use-recorder";
 import { useLegacyPlayer } from "./use-player";
@@ -211,7 +210,7 @@ function VoiceCard({ copy, status, canChange, onRerecord, reload }: { copy: Copy
   const hear = async () => {
     if (!service || !snap) return;
     setBusy("hear"); setError(null);
-    try { const s = await service.legacySpeak(snap.estate.address, { text: o.sample }); setBusy(null); await play("sample", s); }
+    try { const s = await service.legacySpeak(snap.estate.address, { sample: true }); setBusy(null); await play("sample", s); }
     catch (e) { setError(legacyError(e, copy.child.error)); setBusy(null); }
   };
   const remove = async () => {
@@ -234,7 +233,6 @@ function VoiceCard({ copy, status, canChange, onRerecord, reload }: { copy: Copy
       <DisclosureLabel className="mt-3" text={fmt(copy.child.label, { called: status.book?.calledBy ?? "Dad", date: fmtDate(v.consentedAt) })} simulated={v.simulated} simulatedText={copy.child.labelSimulated} />
       {v.simulated && <p className="mt-2 text-small text-ink-2">{o.simulated}</p>}
       {v.needsVerification && <Notice tone="warn" className="mt-3"><p>{o.verification}</p></Notice>}
-      {!v.simulated && <p className="mt-2 text-small text-ink-2">{v.liveCall ? o.live : o.liveOff}</p>}
       {error && <p role="alert" className="mt-2 text-small font-medium text-danger">{error}</p>}
       {canChange && (
         confirm ? (
@@ -391,9 +389,6 @@ function Preview({ copy, book }: { copy: Copy; book: LegacyBook }) {
   const kid = book.children.find((c) => c.id === childId);
   const name = kid?.name ?? "";
   const { play, stop, playing } = useLegacyPlayer(book.pronoun);
-  const [q, setQ] = useState("");
-  const [answer, setAnswer] = useState<{ q: string; text: string; voice: "parent" | "heirloom"; speech?: LegacySpeech } | null>(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sid = useId();
   const ms = useMemo(() => book.milestones.filter((m) => m.childId === "all" || m.childId === childId), [book, childId]);
@@ -404,20 +399,6 @@ function Preview({ copy, book }: { copy: Copy; book: LegacyBook }) {
     try { await play(m.id, await service.legacySpeak(snap.estate.address, { milestoneId: m.id })); }
     catch (e) { setError(legacyError(e, copy.child.error)); }
   };
-  const ask = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!service || !snap || !q.trim()) return;
-    setBusy(true); setError(null);
-    try {
-      const r = await service.legacyChat(snap.estate.address, [{ role: "user", text: q.trim() }], { previewChildId: childId });
-      const asked = q.trim();
-      setQ("");
-      const s = await service.legacySpeak(snap.estate.address, { text: r.reply, token: r.speakToken }, r.voice);
-      setAnswer({ q: asked, text: r.reply, voice: r.voice, speech: s });
-      setBusy(false);
-      await play("answer", s);
-    } catch (err) { setError(legacyError(err, copy.child.error)); setBusy(false); }
-  };
 
   return (
     <Card>
@@ -425,7 +406,7 @@ function Preview({ copy, book }: { copy: Copy; book: LegacyBook }) {
       <p className="mt-1 text-ink-2">{fmt(p.body, { name })}</p>
       {book.children.length > 1 && (
         <Field label={p.child} htmlFor={`${sid}-child`} className="mt-3 max-w-xs">
-          <select id={`${sid}-child`} className={inputClass} value={childId} onChange={(e) => { setChildId(e.target.value); setAnswer(null); stop(); }}>
+          <select id={`${sid}-child`} className={inputClass} value={childId} onChange={(e) => { setChildId(e.target.value); stop(); }}>
             {book.children.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
@@ -441,20 +422,6 @@ function Preview({ copy, book }: { copy: Copy; book: LegacyBook }) {
               <PlayButton small playing={playing === m.id} onPlay={() => void playM(m)} onStop={stop} label={p.play} stopLabel={copy.child.stopPlaying} />
             </li>
           ))}
-        </ul>
-      )}
-      <form onSubmit={ask} className="mt-4 grid gap-2">
-        <label htmlFor={`${sid}-q`} className="text-small font-semibold">{fmt(p.ask, { name })}</label>
-        <div className="flex gap-2">
-          <input id={`${sid}-q`} className={inputClass} value={q} placeholder={p.askPlaceholder} onChange={(e) => setQ(e.target.value)} />
-          <Button type="submit" loading={busy} disabled={!q.trim()}>{copy.child.send}</Button>
-        </div>
-      </form>
-      {answer && (
-        <ul className="mt-4 flex flex-col gap-3">
-          <Bubble role="user" text={answer.q} copy={copy} called={book.calledBy} />
-          <Bubble role="agent" text={answer.text} voice={answer.voice} copy={copy} called={book.calledBy}
-            action={answer.speech && <PlayButton small playing={playing === "answer"} onPlay={() => void play("answer", answer.speech!)} onStop={stop} label={copy.child.replay} stopLabel={copy.child.stopPlaying} />} />
         </ul>
       )}
       {error && <p role="alert" className="mt-2 text-small font-medium text-danger">{error}</p>}

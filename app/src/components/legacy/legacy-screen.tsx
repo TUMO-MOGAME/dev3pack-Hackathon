@@ -5,12 +5,12 @@ import type { EstateSnapshot } from "@/lib/service";
 import { Button, EmptyState, LoadingCards, PageHeader } from "@/components/ui/primitives";
 import { Gate } from "@/components/shell/gate";
 import { fmt } from "@/components/shell/copy";
-import { pronouns } from "@/lib/legacy/prompt";
+import { pronouns } from "@/lib/legacy/rules";
 import { OwnerStudio } from "./owner-studio";
 import { ChildTalk } from "./child-talk";
 import { useLegacyStatus } from "./use-legacy";
 
-/** /legacy: the owner records their voice and Legacy Book; a child (after unlock, by choice) talks with it. */
+/** /legacy: the owner records their voice and Legacy Book; a child (after unlock, by choice) hears the owner's messages. */
 export function LegacyScreen({ copy, safety }: { copy: LegacyCopy; safety: LegacySafetyCopy }) {
   return <Gate roles={["owner", "beneficiary"]}>{({ snap, role }) => <Inner copy={copy} safety={safety} role={role} snap={snap!} />}</Gate>;
 }
