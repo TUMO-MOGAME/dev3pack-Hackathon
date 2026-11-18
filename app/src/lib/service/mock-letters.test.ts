@@ -140,6 +140,15 @@ describe("mock letters", () => {
     expect(JSON.stringify(counts)).not.toMatch(/ltr_|Dad|Corolla/);
   });
 
+  it("letters never change the Trust Tree's fingerprint", async () => {
+    const svc = demo("funded");
+    const E = await estateOf(svc);
+    const before = (await svc.getTree(E)).fingerprint;
+    await svc.saveLetter(E, letter({ to: { kind: "family" } }), 1);
+    await svc.letterCounts(E);
+    expect((await svc.getTree(E)).fingerprint).toBe(before);
+  });
+
   it("uses the tree story's ids for Lerato's plan and Amahle", () => {
     expect([STORY_LERATO_ESTATE, STORY_AMAHLE_WALLET]).toEqual([STORY_ESTATE_LERATO, STORY_AMAHLE]);
   });

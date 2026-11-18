@@ -17,7 +17,7 @@ import {
 } from "./words";
 
 export function PersonCardBody({
-  at, id, copy, mock, viewer, busy, onHide, photoRight = null, photoBusy = false, addedByName = "", onPhoto,
+  at, id, copy, mock, viewer, busy, onHide, photoRight = null, photoBusy = false, addedByName = "", onPhoto, letters,
 }: {
   at: TreeAtYear; id: PersonId; copy: Copy; mock: boolean; viewer: string | null; busy?: boolean;
   /** Present when hiding is possible on this screen. */
@@ -29,6 +29,8 @@ export function PersonCardBody({
   addedByName?: string;
   /** Saves a prepared photo (or null to remove it); resolves true when saved. */
   onPhoto?: (src: string | null) => Promise<boolean>;
+  /** Letters for later that opened for this person ("2 letters from Thabo"), up to the slider's year. */
+  letters?: React.ReactNode;
 }) {
   const p = at.people.find((x) => x.id === id);
   if (!p) return null;
@@ -71,6 +73,7 @@ export function PersonCardBody({
         {life && <p className="text-small text-ink-2 tabular-nums">{life}{me ? ` · ${copy.person.you}` : ""}</p>}
         <p className="mt-1 font-semibold" data-facts>{factsLine(copy, f)}</p>
         {p.ownsEstate && <p className="mt-1 text-small text-ink-2">{copy.person.ownPlan}</p>}
+        {letters}
       </div>
 
       <section aria-labelledby={`roles-${id}`}>

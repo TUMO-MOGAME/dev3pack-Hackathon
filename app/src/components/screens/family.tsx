@@ -17,6 +17,7 @@ import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { LegacyEntry, MilestoneMoment } from "@/components/legacy/lazy";
+import { LetterMoment } from "@/components/letters/lazy";
 import { PausedNotice } from "@/components/guardians/parts";
 import { guardiansOf, isMonitor, objectionFor } from "@/components/guardians/derive";
 import { RaiseObjection } from "@/components/guardians/objections";
@@ -130,7 +131,7 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />
-      <div className="mb-5 grid gap-3 empty:hidden"><MilestoneMoment /><LegacyEntry /></div>
+      <div className="mb-5 grid gap-3 empty:hidden"><LetterMoment /><MilestoneMoment /><LegacyEntry /></div>
 
       {role === "owner" && reported && !unlocked && (
         <Notice tone="danger" icon={<TriangleAlert className="size-6" aria-hidden="true" />} title={copy.veto.title} className="mb-5">
