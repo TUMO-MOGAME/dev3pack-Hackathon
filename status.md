@@ -3,8 +3,16 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-18 (Letters for later and Legacy Voice words only merged to main; before that: Trust Tree photos with real demo faces, asset page layout; Trust Tree live on both sites; i18n2 + fixes merged; speed2 merged; plan §14/§15)
+**Last updated:** 2026-11-18 (ElevenLabs voices only + warmer letters; before that: Letters for later and Legacy Voice words only merged to main; before that: Trust Tree photos with real demo faces, asset page layout; Trust Tree live on both sites; i18n2 + fixes merged; speed2 merged; plan §14/§15)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
+
+## ELEVENLABS VOICES ONLY + WARMER LETTERS (18 Nov 2026, evening)
+- Decision (Tumo): **ElevenLabs voices always, never the browser's own speech voice.** The browser fallback is gone (components/legacy/use-player.ts plays audio only; with no audio it shows "The voice can't play right now. The words are shown here.").
+- When no voice was cloned (the demo, and devnet thabo2), an **ElevenLabs stock voice stands in** ("George" for he, "Matilda" for she; lib/legacy/server/standin.ts, override ELEVENLABS_STANDIN_VOICE_ID). Labelled "Stand-in voice: an ElevenLabs stock voice reads these words". The disclosure is now spoken by ElevenLabs in Heirloom's own voice ("Sarah"; ELEVENLABS_HEIRLOOM_VOICE_ID is used again). /api/legacy/speak also takes `{ disclosure: true }` (text built on the server).
+- Demo (mock): new GET /api/legacy/demo-voice?line=<milestone id|sample|disclosure> speaks only the demo book's fixed lines (404 otherwise; 503 without a key), public + immutable so the CDN asks ElevenLabs once per line. A message the owner rewrote in the demo has no audio (NoAudio), so old words are never voiced.
+- Found: "Hear a sample" showed after the passing (demo ?demo=unlocked) and only answered with a misleading line. It now shows only while the estate is active.
+- Letters: the four demo letters rewritten warmer (en/af/st/zu, machine-assisted, still need a native read) and set like a letter: greeting line, roomy paragraphs in the display face, amber rule, sign-off in amber ("With all my love, always, / Dad").
+- Checks: vitest 857/857, tsc, eslint. Local (no key): letter dialog axe clean, sample hidden after unlock, 0 browser-voice calls.
 
 ## NOTES WITH A GIFT (plan §16, 18 Nov 2026): merged to main
 - LIVE on both sites (18 Nov, after merge 037e58c): demo Playwright suite passes at 1280 + 360 (letters + legacy words-only), axe clean, 0 errors. Devnet: Thabo (thabo2) sees L1 L2 L3 L5 after the PIN; Naledi's letter opens with her real gift rule (devnet: add_payee + add_rule 5, 500 USD₮ first due 2029-08-14, sent 18 Nov via scripts/seed-letter-gift.ts). Cancelling the PIN shows "Letters could not be loaded. Try again".

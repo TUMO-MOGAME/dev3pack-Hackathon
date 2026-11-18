@@ -4,7 +4,7 @@ import { HeartHandshake, Lock, Power } from "@/components/ui/icons";
 import type { LegacyCopy, LegacySafetyCopy } from "@/content/legacy";
 import type { EstateSnapshot } from "@/lib/service";
 import { useEstate } from "@/lib/hooks/estate";
-import { disclosureLine, GUIDANCE_TOPICS, milestonesFor, pronouns, type LegacySpeech, type LegacyStatus } from "@/lib/legacy/rules";
+import { GUIDANCE_TOPICS, milestonesFor, pronouns, type LegacySpeech, type LegacyStatus } from "@/lib/legacy/rules";
 import { Button, ButtonLink, Card, Notice } from "@/components/ui/primitives";
 import { fmt } from "@/components/shell/copy";
 import { DisclosureLabel, PlayButton, SafetyCard } from "./parts";
@@ -67,22 +67,24 @@ function Messages({ copy, safety, status, snap, reload }: { copy: LegacyCopy; sa
   const p = pronouns(book.pronoun);
   const vars = { called, calledLower: called.toLowerCase(), pronoun: p.subject, possessive: p.possessive };
   const estate = snap.estate.address;
-  const { play, stop, playing } = useLegacyPlayer(book.pronoun);
-  const disclosure = disclosureLine(book);
+  const { play, stop, playing } = useLegacyPlayer();
   const disclosed = useRef(false);
   const [showHelp, setShowHelp] = useState(false);
   const ms = milestonesFor(book, status.childId);
   const kid = book.children.find((k) => k.id === status.childId) ?? null;
   const adults = snap.estate.verifierNames.map(shortName).join(", ");
 
-  /** The disclosure is spoken (in Heirloom's voice) before the first message plays in the parent's voice. */
+  /**
+   * The disclosure is spoken (in Heirloom's own ElevenLabs voice) before the first message plays in the parent's
+   * voice. If it can't play, the written disclosure label on screen still says it.
+   */
   const say = useCallback(async (id: string, s: LegacySpeech) => {
-    if (!disclosed.current) {
+    if (!disclosed.current && service) {
       disclosed.current = true;
-      await play("disclosure", { text: disclosure, audioUrl: null, simulated: true, voice: "heirloom" });
+      await service.legacySpeak(estate, { disclosure: true }).then((d) => play("disclosure", d)).catch(() => undefined);
     }
     await play(id, s);
-  }, [play, disclosure]);
+  }, [play, service, estate]);
 
   const playMilestone = async (id: string) => {
     if (!service) return;

@@ -202,7 +202,7 @@ function VoiceCard({ copy, status, canChange, onRerecord, reload }: { copy: Copy
   const o = copy.owner.voice;
   const { service, snap, notify } = useEstate();
   const v = status.voice!;
-  const { play, stop, playing } = useLegacyPlayer(status.book?.pronoun);
+  const { play, stop, playing } = useLegacyPlayer();
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState<"hear" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -228,7 +228,8 @@ function VoiceCard({ copy, status, canChange, onRerecord, reload }: { copy: Copy
           <h2 className="flex items-center gap-2 text-h3"><Volume2 className="size-5" aria-hidden="true" />{o.title}</h2>
           <p className="mt-1 text-small text-ink-2">{fmt(o.created, { date: fmtDate(v.consentedAt) })} · {fmt(o.samples, { n: v.samples })}</p>
         </div>
-        <PlayButton playing={playing === "sample"} onPlay={() => void hear()} onStop={stop} label={o.hear} stopLabel={copy.owner.record.stop} disabled={busy === "hear"} />
+        {/* The sample line is for the owner while alive (the server refuses it after); hide it rather than fail. */}
+        {canChange && <PlayButton playing={playing === "sample"} onPlay={() => void hear()} onStop={stop} label={o.hear} stopLabel={copy.owner.record.stop} disabled={busy === "hear"} />}
       </div>
       <DisclosureLabel className="mt-3" text={fmt(copy.child.label, { called: status.book?.calledBy ?? "Dad", date: fmtDate(v.consentedAt) })} simulated={v.simulated} simulatedText={copy.child.labelSimulated} />
       {v.simulated && <p className="mt-2 text-small text-ink-2">{o.simulated}</p>}
@@ -388,7 +389,7 @@ function Preview({ copy, book }: { copy: Copy; book: LegacyBook }) {
   const [childId, setChildId] = useState(book.children[0]?.id ?? "");
   const kid = book.children.find((c) => c.id === childId);
   const name = kid?.name ?? "";
-  const { play, stop, playing } = useLegacyPlayer(book.pronoun);
+  const { play, stop, playing } = useLegacyPlayer();
   const [error, setError] = useState<string | null>(null);
   const sid = useId();
   const ms = useMemo(() => book.milestones.filter((m) => m.childId === "all" || m.childId === childId), [book, childId]);

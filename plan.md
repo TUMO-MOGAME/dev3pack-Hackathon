@@ -1010,3 +1010,7 @@ no live call in a parent's voice after death. This answers §16.13 "Legacy Voice
   copy at death instead.
 - **Tests:** speak refuses free text (child and owner, with or without a token, extra text next to a valid body), the
   chat and call endpoints answer 410, milestone playback works in the mock and the chain service.
+- **ElevenLabs voices only (18 Nov 2026, evening):** the browser's own speech voice is never used. With no cloned
+  voice, an ElevenLabs stock voice reads the owner's words and is labelled as a stand-in; the disclosure is spoken in
+  Heirloom's own ElevenLabs voice (`{ disclosure: true }`). The demo uses GET /api/legacy/demo-voice, which speaks
+  only the demo book's fixed lines. With no ElevenLabs key the app shows the words instead of playing anything.

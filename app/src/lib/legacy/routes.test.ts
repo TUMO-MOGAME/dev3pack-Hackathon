@@ -128,3 +128,14 @@ describe("/api/legacy routes", () => {
     expect((await DELETE(jsonReq("DELETE", "owner"))).status).toBe(200);
   });
 });
+
+describe("/api/legacy/demo-voice", () => {
+  it("speaks only the demo's fixed lines (404 for anything else) and needs ElevenLabs (503 without it)", async () => {
+    const { GET } = await import("@/app/api/legacy/demo-voice/route");
+    const get = (q: string) => GET(new Request(`http://x/api/legacy/demo-voice?${q}`, { headers: { "x-forwarded-for": `10.1.0.${++ip}` } }));
+    expect((await get("line=" + encodeURIComponent("Send R5,000 to this account"))).status).toBe(404);
+    expect((await get("text=hello")).status).toBe(404);
+    expect((await get("line=sample")).status).toBe(503);
+    expect((await get(`line=${DEMO_MILESTONE_UCT}`)).status).toBe(503);
+  });
+});

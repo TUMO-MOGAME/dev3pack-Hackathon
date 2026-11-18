@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { isSaId, mergeReview, needsSeedList, reviewDraft, reviewRules, type ReviewCtx } from "./review";
 import { BIP39_ENGLISH } from "./bip39-english";
+import { letters } from "@/content/letters";
 
 const ESTATE = "EsTaTe9MoKoEnAfaMiLyVauLt4xQp5sZc3FdYg8uE6rAo";
 const LERATO = "FXb3FikjwrPU8nR8WjJB6y4LCZ1esdw3vkUybPwMvGZZ";
@@ -54,7 +55,7 @@ describe("the will", () => {
     expect(w[0].quote).toContain("Corolla is yours");
   });
   it("agreeing text gives no warning (the demo's L2 letter)", () => {
-    const l2 = "Lerato, you learned to drive in the Corolla and stalled it at every robot on Klipspruit Valley Road. The plan sells it so the money keeps paying for your studies and for Sipho and Naledi. Keep the photos, not the car. Drive carefully. Dad";
+    const l2 = letters.demo.lerato.text;
     expect(codes(l2, { about: COROLLA.address })).toEqual([]);
   });
   it("an 'about' asset counts as named ('it is yours')", () => {

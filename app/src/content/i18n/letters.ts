@@ -168,19 +168,19 @@ export const lettersAf: T = {
   demo: {
     family: {
       occasion: "Vir julle almal",
-      text: "Aan Lerato, Sipho en Naledi. As julle dit lees, doen die plan sy werk en ek is nie daar om myne te doen nie. Kyk eers na mekaar en dan na die geld. Besoek Gogo se graf wanneer julle kan, en vra Uncle Bongani vir die stories wat ek nooit klaargemaak het nie. Ek is trots op elkeen van julle. Pa",
+      text: "My liewe Lerato, Sipho en Naledi,\n\nAs julle dit lees, kon ek nie so lank bly soos ek wou nie. Ek is so jammer. Moet asseblief nie die hartseer alleen dra nie. Dra dit saam, soos ons daardie ou bank die trappe op gedra het, en die hele pad gelag het.\n\nKyk eers na mekaar en dan na die geld. Bel mekaar op Sondae. Besoek Gogo se graf wanneer julle kan, en vra Uncle Bongani vir die stories wat ek nooit klaar vertel het nie.\n\nElke oggend het ek dankbaar wakker geword dat ek julle pa kon wees. Niks wat julle doen, sal my ooit minder lief vir julle maak nie. Ek is vandag trots op julle, en ek sal trots wees op elke dag wat ek nie kan sien nie.\n\nMet al my liefde, altyd,\nPa",
     },
     lerato: {
       occasion: "Oor die Corolla",
-      text: "Lerato, jy het in die Corolla leer bestuur en dit by elke robot in Klipspruit Valley Road laat doodgaan. Die plan verkoop dit sodat die geld aanhou betaal vir jou studies en vir Sipho en Naledi. Hou die foto's, nie die motor nie. Ry versigtig. Pa",
+      text: "My Lerato,\n\nOnthou jy hoe die Corolla by elke robot in Klipspruit Valley Road doodgegaan het? Jy het gehuil, toe gelag, en toe weer probeer. Dit is presies wie jy is, en daarom was ek nooit bekommerd oor jou nie.\n\nDie plan verkoop die motor sodat die geld aanhou betaal vir jou studies en vir Sipho en Naledi. Ek weet dit sal seermaak om dit te sien gaan. Hou die foto's, nie die motor nie. Die herinneringe was nog altyd die beste deel.\n\nJy was my eerste baba, en jy het my 'n pa gemaak. Wees sag met jouself, en ry versigtig, my meisie.\n\nLief vir jou tot by die maan en terug,\nPa",
     },
     naledi: {
       occasion: "Vir jou 18de verjaardag",
-      text: "Naledi, vandag is jy 18. Die 500 USD₮ is joune om iets van jou eie te begin: 'n kursus, 'n skootrekenaar, 'n eerste maand se huur. Spandeer 'n bietjie daarvan aan iets wat jou laat lag. Pa",
+      text: "Gelukkige 18de verjaardag, my Naledi!\n\nJou naam beteken ster, en van die nag van jou geboorte af het jy elke kamer waarin jy instap, opgehelder. Ek wens ek kon daar wees om jou skaam te maak met 'n lang toespraak en 'n koek wat heeltemal te groot is.\n\nDie 500 USD₮ is my geskenk aan jou, om iets van jou eie te begin: 'n kursus, 'n skootrekenaar, 'n eerste maand se huur. Spandeer asseblief 'n bietjie daarvan aan iets wat jou hardop laat lag.\n\nWees dapper, wees goedhartig, en moet nooit toelaat dat iemand jou lig dof maak nie.\n\nEk is meer lief vir jou as al die sterre,\nPa",
     },
     mkhulu: {
       occasion: "Oor Mkhulu Joseph",
-      text: "Mkhulu Joseph het geen brief gelos nie, so dit is my woorde, nie syne nie. Hy het die huis in Soweto met sy eie hande gebou en elke Januarie elke skoolboek kontant betaal. Wanneer julle iets plant, dink aan hom. Thabo",
+      text: "My kinders,\n\nMkhulu Joseph het geen brief gelos nie, so dit is my woorde, nie syne nie. Maar ek het hom geken, en ek weet wat hy sou wou hê julle moet hoor.\n\nHy het die huis in Soweto met sy eie hande gebou, steen vir steen, na lang skofte. Elke Januarie het hy elke skoolboek kontant betaal, en hy het nooit een keer gekla nie. Hy het in julle geglo nog voor julle gebore is.\n\nWanneer julle iets plant, dink aan hom. Wanneer julle moeg is en wil opgee, onthou die hande wat daardie huis gebou het. Sy krag is in julle.\n\nMet liefde, van hom en van my,\nPa",
     },
   },
 };
@@ -345,19 +345,19 @@ export const lettersSt: T = {
   demo: {
     family: {
       occasion: "Bakeng sa lona bohle",
-      text: "Ho Lerato, Sipho le Naledi. Ha le bala sena, morero o etsa mosebetsi wa wona mme ha ke yo ho etsa wa ka. Hlokomelang e mong le e mong pele, tjhelete hamorao. Etelang lebitla la Gogo ha le kgona, mme le kope Uncle Bongani dipale tseo ke sa kang ka di qeta. Ke motlotlo ka e mong le e mong wa lona. Ntate",
+      text: "Lerato, Sipho le Naledi ba ka ba ratehang,\n\nHa le bala sena, ha ke a kgona ho dula nako e telele kamoo ke neng ke batla. Ke maswabi haholo. Ka kopo le se ke la jara masisapelo le le bang. A jareng mmoho, jwalo ka ha re ne re jara sofa ya kgale ho nyoloha ditepisi, re tsheha tsela yohle.\n\nHlokomelang e mong le e mong pele, tjhelete hamorao. Letsetsanang ka Sontaha. Etelang lebitla la Gogo ha le kgona, mme le kope Uncle Bongani dipale tseo ke sa kang ka qeta ho di pheta.\n\nHoseng ho hong le ho hong ke ne ke tsoha ke leboha hobane ke bile ntate wa lona. Ha ho letho leo le ka le etsang le tla etsa hore ke le rate hanyane. Ke motlotlo ka lona kajeno, mme ke tla ba motlotlo ka lona letsatsi le leng le le leng leo ke sa kgoneng ho le bona.\n\nKa lerato lohle la ka, kamehla,\nNtate",
     },
     lerato: {
       occasion: "Ka Corolla",
-      text: "Lerato, o ithutile ho kganna ka Corolla mme wa e tima robotong e nngwe le e nngwe ho Klipspruit Valley Road. Morero o e rekisa hore tjhelete e tswelepele ho lefella dithuto tsa hao le tsa Sipho le Naledi. Boloka ditshwantsho, eseng koloi. Kganna ka hloko. Ntate",
+      text: "Lerato wa ka,\n\nNa o a hopola ha Corolla e ne e tima robotong e nngwe le e nngwe ho Klipspruit Valley Road? O ile wa lla, wa tsheha, wa nna wa leka hape. Ke yona eo o leng yona, mme ke ka hona ke sa kang ka tshwenyeha ka wena.\n\nMorero o rekisa koloi hore tjhelete e tswelepele ho lefella dithuto tsa hao le tsa Sipho le Naledi. Ke a tseba ho tla bohloko ho e bona e tsamaya. Boloka ditshwantsho, eseng koloi. Mehopolo e ne e le karolo e molemo ka ho fetisisa kamehla.\n\nO ne o le lesea la ka la pele, mme o nkentse ntate. Iphe nako, mme o kganne ka hloko, ngwanana wa ka.\n\nKe o rata ho ya kgweding le ho kgutla,\nNtate",
     },
     naledi: {
       occasion: "Bakeng sa letsatsi la hao la tswalo la bo-18",
-      text: "Naledi, kajeno o na le dilemo tse 18. 500 USD₮ ke ya hao ho qala ho hong ha hao: thuto, laptop, rente ya kgwedi ya pele. Sebedisa hanyane ya yona hodima ho hong ho o tshehisang. Ntate",
+      text: "Letsatsi le monate la tswalo la bo-18, Naledi wa ka!\n\nLebitso la hao le bolela naledi, mme ho tloha bosiung boo o tswalwang ka bona o kgantshitse kamore e nngwe le e nngwe eo o kenang ho yona. Ke lakatsa eka nka be ke le teng ho o hlabisa dihlong ka puo e telele le kuku e kgolo haholo.\n\n500 USD₮ ke mpho ya ka ho wena, ho qala ho hong ha hao: thuto, laptop, rente ya kgwedi ya pele. Ka kopo sebedisa hanyane ya yona hodima ho hong ho o tshehisang haholo.\n\nEba sebete, eba mosa, mme o se ke wa dumella motho a fifatsa lesedi la hao.\n\nKe o rata ho feta dinaledi tsohle,\nNtate",
     },
     mkhulu: {
       occasion: "Ka Mkhulu Joseph",
-      text: "Mkhulu Joseph ha a ka a siya lengolo, kahoo ana ke mantswe a ka, eseng a hae. O hahile ntlo Soweto ka matsoho a hae mme a lefa buka e nngwe le e nngwe ya sekolo ka kheshe Pherekgong ka nngwe. Ha le jala ho hong, le mo hopole. Thabo",
+      text: "Bana ba ka,\n\nMkhulu Joseph ha a ka a siya lengolo, kahoo ana ke mantswe a ka, eseng a hae. Empa ke ne ke mo tseba, mme ke a tseba seo a neng a tla batla hore le se utlwe.\n\nO hahile ntlo Soweto ka matsoho a hae, setene ka setene, kamora mesebetsi e telele. Pherekgong ka nngwe o ne a lefa buka e nngwe le e nngwe ya sekolo ka kheshe, mme ha a ka a tletleba le ka mohla. O ne a dumela ho lona le pele le tswalwa.\n\nHa le jala ho hong, le mo hopole. Ha le kgathetse mme le batla ho tela, hopolang matsoho a hahileng ntlo eo. Matla a hae a ho lona.\n\nKa lerato, ho tswa ho yena le ho nna,\nNtate",
     },
   },
 };
@@ -522,19 +522,19 @@ export const lettersZu: T = {
   demo: {
     family: {
       occasion: "Kini nonke",
-      text: "Ku-Lerato, Sipho no-Naledi. Uma nifunda lokhu, uhlelo lwenza umsebenzi walo futhi angikho ukuze ngenze owami. Nakekelanani kuqala, imali ilandele. Vakashelani ithuna likaGogo uma nikwazi, futhi nicele u-Uncle Bongani izindaba engingazange ngiziqede. Ngiyaziqhenya ngamunye wenu. Baba",
+      text: "Lerato, Sipho noNaledi bami abathandekayo,\n\nUma nifunda lokhu, angikwazanga ukuhlala isikhathi eside ngendlela ebengifisa ngayo. Ngiyaxolisa kakhulu. Ngicela ningakuthwali nodwa ukudabuka. Kuthwaleni ndawonye, njengoba sasithwala lowo sofa omdala sikhuphuka izitebhisi, sihleka yonke indlela.\n\nNakekelanani kuqala, imali ilandele. Shayelanani ucingo ngamaSonto. Vakashelani ithuna likaGogo uma nikwazi, futhi nicele u-Uncle Bongani izindaba engingazange ngiqede ukuzixoxa.\n\nNjalo ekuseni bengivuka ngibonga ukuthi ngaba nguyihlo. Akukho enizokwenza okuyongenza nginithande kancane. Ngiyaziqhenya ngani namuhla, futhi ngizoziqhenya ngani ngazo zonke izinsuku engingeke ngizibone.\n\nNgalo lonke uthando lwami, njalo,\nBaba",
     },
     lerato: {
       occasion: "Mayelana neCorolla",
-      text: "Lerato, wafunda ukushayela ngeCorolla futhi wayicisha kuyo yonke irobhothi ku-Klipspruit Valley Road. Uhlelo luyayithengisa ukuze imali iqhubeke ikhokhela izifundo zakho nezika-Sipho no-Naledi. Gcina izithombe, hhayi imoto. Shayela ngokucophelela. Baba",
+      text: "Lerato wami,\n\nUyakhumbula ukuthi iCorolla yayicisha kanjani kuyo yonke irobhothi ku-Klipspruit Valley Road? Wakhala, wahleka, wazama futhi. Yilokho kanye oyikho, futhi yingakho ngingazange ngikhathazeke ngawe.\n\nUhlelo luthengisa imoto ukuze imali iqhubeke ikhokhela izifundo zakho nezikaSipho noNaledi. Ngiyazi kuzobuhlungu ukuyibona ihamba. Gcina izithombe, hhayi imoto. Izinkumbulo bezihlale ziyingxenye engcono kakhulu.\n\nWawuyingane yami yokuqala, futhi wangenza ubaba. Zipha isikhathi, futhi ushayele ngokucophelela, ntombi yami.\n\nNgikuthanda kuze kufike enyangeni nasemuva,\nBaba",
     },
     naledi: {
       occasion: "Kosuku lwakho lokuzalwa lwe-18",
-      text: "Naledi, namuhla uneminyaka engu-18. Ama-500 USD₮ angawakho ukuqala okuthile okungokwakho: isifundo, i-laptop, irenti yenyanga yokuqala. Sebenzisa okuncane kwawo entweni ekuhlekisayo. Baba",
+      text: "Usuku oluhle lokuzalwa lwe-18, Naledi wami!\n\nIgama lakho lisho inkanyezi, futhi kusukela ngobusuku owazalwa ngabo ukhanyise wonke amakamelo ongena kuwo. Ngifisa sengathi ngabe ngikhona ukuze ngikuphoxe ngenkulumo ende nekhekhe elikhulu kakhulu.\n\nAma-500 USD₮ yisipho sami kuwe, ukuqala okuthile okungokwakho: isifundo, i-laptop, irenti yenyanga yokuqala. Ngicela usebenzise okuncane kwawo entweni ekuhlekisa kakhulu.\n\nYiba nesibindi, yiba nomusa, futhi ungavumeli muntu acime ukukhanya kwakho.\n\nNgikuthanda ngaphezu kwazo zonke izinkanyezi,\nBaba",
     },
     mkhulu: {
       occasion: "Mayelana noMkhulu Joseph",
-      text: "UMkhulu Joseph akashiyanga ncwadi, ngakho lawa ngamazwi ami, hhayi awakhe. Wakha indlu eSoweto ngezandla zakhe futhi wakhokha yonke incwadi yesikole ngokheshi njalo ngoJanuwari. Uma nitshala okuthile, nicabange ngaye. Thabo",
+      text: "Bantwana bami,\n\nUMkhulu Joseph akashiyanga ncwadi, ngakho lawa ngamazwi ami, hhayi awakhe. Kodwa bengimazi, futhi ngiyazi ukuthi yini ayengafuna niyizwe.\n\nWakha indlu eSoweto ngezandla zakhe, isitini ngesitini, ngemva kwamashifu amade. Njalo ngoJanuwari wayekhokha yonke incwadi yesikole ngokheshi, futhi akakaze akhononde. Wayekholelwa kini ngaphambi kokuba nize nizalwe.\n\nUma nitshala okuthile, nicabange ngaye. Uma nikhathele futhi nifuna ukuyeka, khumbulani izandla ezakha leyo ndlu. Amandla akhe akini.\n\nNgothando, kuvela kuye nakimi,\nBaba",
     },
   },
 };

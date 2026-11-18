@@ -18,7 +18,7 @@ export interface LegacySigner {
 
 export interface LegacyVoiceUpload { ownerName: string; consentText: string; consentAccepted: boolean; consent: Blob; samples: Blob[] }
 /** The only things the voice may say: a milestone message the owner wrote, or the fixed sample line (owner). */
-export type SpeakInput = { milestoneId: string } | { sample: true };
+export type SpeakInput = { milestoneId: string } | { sample: true } | { disclosure: true };
 
 async function header(s: LegacySigner, action: LegacyAction, bodyHash: string): Promise<Record<string, string>> {
   const ts = Date.now();
@@ -72,7 +72,8 @@ export const legacyApi = {
     return (await check(res)).json() as Promise<LegacyVoiceInfo>;
   },
 
-  async speak(s: LegacySigner, input: SpeakInput, voice: LegacySpeech["voice"] = "parent"): Promise<LegacySpeech> {
+  async speak(s: LegacySigner, input: SpeakInput): Promise<LegacySpeech> {
+    const voice: LegacySpeech["voice"] = "disclosure" in input ? "heirloom" : "parent";
     const text = JSON.stringify(input);
     const res = await check(await fetch("/api/legacy/speak", {
       method: "POST", cache: "no-store",

@@ -60,7 +60,7 @@ export function LegacyEntry() {
 export function MilestoneMoment() {
   const { role, snap, session, service, notify } = useEstate();
   const { status, passive } = useLegacyStatus({ passive: true });
-  const { play, stop, playing } = useLegacyPlayer(status?.book?.pronoun);
+  const { play, stop, playing } = useLegacyPlayer();
   if (role !== "beneficiary" || !snap || !session || snap.estate.status !== "Unlocked") return null;
   if (status && (!status.voice || !status.unlocked)) return null;
   if (!status && !passive) return null;
@@ -101,7 +101,7 @@ export function MilestoneMoment() {
         </div>
         <PlayButton playing={playing === m.id} onPlay={() => void listen()} onStop={stop} label={fmt(copy.moment.play, v)} stopLabel={copy.moment.stop} />
       </div>
-      <DisclosureLabel className="mt-3" text={fmt(copy.moment.label, v)} simulated={Boolean(status.voice?.simulated)} simulatedText={copy.moment.simulated} />
+      <DisclosureLabel className="mt-3" text={fmt(copy.moment.label, v)} simulated={Boolean(status.voice?.simulated)} simulatedText={fmt(copy.moment.simulated, v)} />
     </Card>
   );
 }

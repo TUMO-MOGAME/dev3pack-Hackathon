@@ -6,7 +6,7 @@
  * family a paper copy.
  */
 import Link from "next/link";
-import { CarFront, ExternalLink, HandHeart, Printer } from "@/components/ui/icons";
+import { CarFront, ExternalLink, FileHeart, HandHeart, Printer } from "@/components/ui/icons";
 import { Button } from "@/components/ui/primitives";
 import { explorerTx, shortAddress } from "@/lib/format";
 import type { EstateSnapshot } from "@/lib/service";
@@ -15,6 +15,26 @@ import type { LetterView } from "@/lib/letters/types";
 import { dateText, fill, letterWords, nameOf, recipientText, usdt, type Copy } from "./words";
 
 const chip = "inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line bg-surface-2 px-3 text-small font-medium";
+
+/**
+ * The letter's words, set like a letter: the greeting on its own line, roomy paragraphs in the display face, and the
+ * sign-off ("With all my love, / Dad") set apart in amber. A greeting or sign-off is only styled when the writer
+ * put it on its own paragraph; anything else stays plain text exactly as written.
+ */
+export function LetterBody({ text }: { text: string }) {
+  const paras = text.trim().split(/\n\s*\n/);
+  const greeting = paras.length > 2 && paras[0].length <= 80 && !paras[0].includes("\n") ? paras[0] : null;
+  const last = paras.at(-1) ?? "";
+  const signOff = paras.length > 2 && last.length <= 80 ? last : null;
+  const body = paras.slice(greeting ? 1 : 0, signOff ? -1 : undefined);
+  return (
+    <div className="mt-5 max-w-prose border-l-2 border-amber pl-4 font-display break-words sm:pl-6" data-letter-text>
+      {greeting && <p className="text-lead font-medium">{greeting}</p>}
+      {body.map((p, i) => <p key={i} className="mt-4 whitespace-pre-wrap text-body leading-[1.8] first:mt-0">{p}</p>)}
+      {signOff && <p className="mt-6 whitespace-pre-line text-lead font-medium text-amber-ink">{signOff}</p>}
+    </div>
+  );
+}
 
 export function LetterCard({ letter: l, snap, copy, locale, mock, onPrint }: {
   letter: LetterView; snap: EstateSnapshot; copy: Copy; locale: Locale; mock: boolean; onPrint?: () => void;
@@ -26,14 +46,15 @@ export function LetterCard({ letter: l, snap, copy, locale, mock, onPrint }: {
   return (
     <article id={l.id} aria-labelledby={`${l.id}-title`} className="print-avoid scroll-mt-20 rounded-lg border border-line bg-surface p-5 shadow-card sm:p-7">
       <header className="grid gap-1">
-        <p className="text-small font-semibold uppercase tracking-[0.12em] text-ink-2">
+        <p className="flex items-center gap-2 text-small font-semibold uppercase tracking-[0.12em] text-ink-2">
+          <FileHeart className="size-4 shrink-0 text-amber" aria-hidden="true" />
           {fill(copy.read.from, { name: from })} · {recipientText(l, snap, copy)}
         </p>
         <h3 id={`${l.id}-title`} className="text-h3">{words.occasion || copy.list.untitled}</h3>
         {l.state === "open" && l.openedAt && <p className="text-small text-ink-2 tabular-nums">{fill(copy.read.opened, { date: dateText(l.openedAt, locale) })}</p>}
       </header>
 
-      <div className="mt-4 max-w-prose whitespace-pre-wrap break-words text-body leading-relaxed" data-letter-text>{words.text}</div>
+      <LetterBody text={words.text} />
 
       {(asset || l.opens.kind === "payment" || l.demoKey === "mkhulu" || l.transcribed) && (
         <div className="mt-4 flex flex-wrap gap-2">

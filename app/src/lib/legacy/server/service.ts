@@ -11,11 +11,12 @@ import { HttpError } from "@/lib/api/http";
 import { sha256Hex } from "@/lib/agent/hash";
 import { legacyVoiceSample } from "@/content/legacy";
 import {
-  baseMime, consentLine, matchChild, sniffAudio, validateVoiceInput,
+  baseMime, consentLine, disclosureLine, matchChild, sniffAudio, validateVoiceInput,
   type LegacyBook, type LegacyChild, type LegacyStatus, type LegacyVoiceInfo,
 } from "../schema";
 import type { Viewer } from "./auth";
 import * as el from "./elevenlabs";
+import { heirloomVoice, standinVoice } from "./standin";
 import * as store from "./store";
 
 const isUnlocked = (v: Viewer) => (v.snap ? v.snap.estate.status === "Unlocked" : v.demo);
@@ -187,31 +188,41 @@ function countSpeak(estate: string) {
   if (++d.n > SPEAK_DAILY_LIMIT) throw new HttpError(429, "The legacy voice has spoken a lot today. Please try again tomorrow.", "rate_limited");
 }
 
-/** What may be spoken: a milestone the owner wrote, or the fixed sample line (owner, while alive). Never free text. */
-export type SpeakRequest = { milestoneId: string } | { sample: true };
+/** What may be spoken: a milestone the owner wrote, the fixed sample line (owner, while alive), or Heirloom's
+ * disclosure line (app copy, in Heirloom's own voice). Never free text. */
+export type SpeakRequest = { milestoneId: string } | { sample: true } | { disclosure: true };
 
-/** Returns MP3 bytes in the parent's voice, or null when simulated (the browser speaks the text instead). */
-export async function speak(v: Viewer, req: SpeakRequest): Promise<{ text: string; audio: Uint8Array | null }> {
+/**
+ * Returns MP3 bytes, or null when ElevenLabs is not configured (the app then shows the words; it never falls back
+ * to the browser's voice). The parent's cloned voice when there is one; otherwise an ElevenLabs stock voice stands
+ * in (labelled as such in the app). The disclosure is always in Heirloom's own stock voice.
+ */
+export async function speak(v: Viewer, req: SpeakRequest): Promise<{ text: string; audio: Uint8Array | null; voice: "parent" | "heirloom" }> {
   const ctx = await speakContext(v);
   let text: string;
   let milestoneId: string | null = null;
+  const voice = "disclosure" in req ? "heirloom" : "parent";
   if ("milestoneId" in req) {
     const m = ctx.book.milestones.find((x) => x.id === req.milestoneId && (v.role === "owner" || x.childId === "all" || x.childId === ctx.child?.id));
     if (!m) throw new HttpError(404, "That message was not found.", "not_found");
     text = m.text; milestoneId = m.id;
+  } else if ("disclosure" in req) {
+    text = disclosureLine(ctx.book);
   } else {
     // The owner hears one fixed line while alive. The line is the app's, never text the client sends.
     if (v.role !== "owner") throw new HttpError(403, "The legacy voice only speaks the messages in the Legacy Book.", "forbidden");
     if (v.snap && v.snap.estate.status !== "Active") throw new HttpError(409, "The sample plays only while the estate is active.", "bad_status");
     text = legacyVoiceSample;
   }
-  if (!ctx.voice?.voiceId) return { text, audio: null };
-  if (ctx.voice.requiresVerification) throw new HttpError(409, "This voice still needs verification in the ElevenLabs dashboard.", "needs_verification");
-  const sha = await sha256Hex(`${ctx.voice.voiceId}\n${text}`);
+  if (!el.hasElevenLabs()) return { text, audio: null, voice };
+  const cloned = voice === "parent" ? ctx.voice?.voiceId ?? null : null;
+  if (cloned && ctx.voice?.requiresVerification) throw new HttpError(409, "This voice still needs verification in the ElevenLabs dashboard.", "needs_verification");
+  const voiceId = voice === "heirloom" ? heirloomVoice() : cloned ?? standinVoice(ctx.book.pronoun);
+  const sha = await sha256Hex(`${voiceId}\n${text}`);
   const hit = await store.cachedMessage(v.estate, sha);
-  if (hit) return { text, audio: hit };
+  if (hit) return { text, audio: hit, voice };
   countSpeak(v.estate);
-  const audio = await el.textToSpeech(ctx.voice.voiceId, text);
+  const audio = await el.textToSpeech(voiceId, text);
   await store.cacheMessage(v.estate, sha, milestoneId, audio).catch((e) => console.warn("[legacy] cache failed:", e instanceof Error ? e.message : e));
-  return { text, audio };
+  return { text, audio, voice };
 }

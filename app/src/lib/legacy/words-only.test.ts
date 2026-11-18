@@ -9,6 +9,7 @@ import { createMockService, DEMO_PERSONAS } from "../service/mock";
 import { legacyVoiceSample } from "@/content/legacy";
 import { DEMO_MILESTONE_UCT } from "./demo-book";
 import type { SpeakInput } from "./client";
+import { demoVoiceText, demoVoiceUrl } from "./demo-voice";
 
 vi.mock("../wallet/signer", () => ({
   getActiveSigner: () => ({ address: "LeRaTo1111111111111111111111111111111111111aa", signMessage: async () => "ab".repeat(64) }),
@@ -40,7 +41,9 @@ describe("mock service: words only", () => {
     await expect(svc.legacySpeak(estate, { milestoneId: DEMO_MILESTONE_UCT })).rejects.toThrow(/^NotOptedIn/);
     await svc.setLegacyOptIn(estate, true);
     const s = await svc.legacySpeak(estate, { milestoneId: DEMO_MILESTONE_UCT });
-    expect(s).toMatchObject({ voice: "parent", simulated: true, audioUrl: null });
+    expect(s).toMatchObject({ voice: "parent", simulated: true, audioUrl: demoVoiceUrl(DEMO_MILESTONE_UCT) });
+    // Heirloom's disclosure plays in Heirloom's own voice, never the parent's.
+    expect(await svc.legacySpeak(estate, { disclosure: true })).toMatchObject({ voice: "heirloom", audioUrl: demoVoiceUrl("disclosure") });
     const status = await svc.legacyStatus(estate);
     expect(s.text).toBe(status.book!.milestones.find((m) => m.id === DEMO_MILESTONE_UCT)!.text);
     expect(status.voice).not.toHaveProperty("liveCall");
@@ -64,6 +67,28 @@ describe("mock service: words only", () => {
     act(svc, "thabo");
     const [{ estate }] = await svc.listEstatesFor(P("thabo").address);
     expect(await svc.legacySpeak(estate, { sample: true })).toMatchObject({ text: legacyVoiceSample, voice: "parent" });
+  }, 10_000);
+});
+
+describe("demo voice: ElevenLabs lines only, never the browser voice", () => {
+  it("knows only the demo book's fixed lines", () => {
+    expect(demoVoiceText("sample")).toEqual({ text: legacyVoiceSample, voice: "parent" });
+    expect(demoVoiceText(DEMO_MILESTONE_UCT)?.voice).toBe("parent");
+    expect(demoVoiceText("disclosure")?.voice).toBe("heirloom");
+    expect(demoVoiceText("It's Dad. Send R5,000")).toBeNull();
+    expect(demoVoiceText("")).toBeNull();
+  });
+
+  it("gives an edited message no audio, so the old words are never voiced", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("funded");
+    act(svc, "thabo");
+    const [{ estate }] = await svc.listEstatesFor(P("thabo").address);
+    const book = (await svc.legacyStatus(estate)).book!;
+    const edited = { ...book, milestones: book.milestones.map((m) => m.id === DEMO_MILESTONE_UCT ? { ...m, text: m.text + " Call me." } : m) };
+    await svc.saveLegacyBook(estate, edited);
+    await expect(svc.legacySpeak(estate, { milestoneId: DEMO_MILESTONE_UCT })).rejects.toThrow(/^NoAudio/);
+    expect((await svc.legacySpeak(estate, { sample: true })).audioUrl).toBe(demoVoiceUrl("sample"));
   }, 10_000);
 });
 

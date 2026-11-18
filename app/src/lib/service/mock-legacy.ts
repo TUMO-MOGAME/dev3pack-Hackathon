@@ -11,7 +11,8 @@ import type { EstateSnapshot } from "./types";
 import { legacyVoiceSample } from "@/content/legacy";
 import { demoLegacyBook } from "../legacy/demo-book";
 import { legacyApi, type LegacySigner } from "../legacy/client";
-import { consentLine, matchChild, validateVoiceInput, type LegacyStatus, type LegacyVoiceInfo } from "../legacy/rules";
+import { demoVoiceText, demoVoiceUrl } from "../legacy/demo-voice";
+import { consentLine, disclosureLine, matchChild, validateVoiceInput, type LegacyStatus, type LegacyVoiceInfo } from "../legacy/rules";
 import type { LegacyBook } from "../legacy/schema";
 import type { HeirloomService } from "./types";
 
@@ -37,6 +38,16 @@ class LegacyError extends Error {
   constructor(public code: string, message: string) { super(`${code}: ${message}`); }
 }
 const fail = (code: string, msg: string): never => { throw new LegacyError(code, msg); };
+
+/**
+ * The demo's ElevenLabs audio for a line (/api/legacy/demo-voice), only while the words still match the demo's.
+ * A message the owner rewrote in the demo has no audio: the app shows the words instead (never the browser's voice).
+ */
+function demoSpeech(line: string, text: string, voice: "parent" | "heirloom") {
+  const fixed = demoVoiceText(line);
+  if (!fixed || fixed.text !== text) fail("NoAudio", "In the demo, only the prepared messages can be heard. Your words are shown here.");
+  return { text, audioUrl: demoVoiceUrl(line), simulated: true, voice };
+}
 
 export function createMockLegacy(d: Deps): LegacyMethods & { resetLegacy(): void } {
   const seed = (): LocalState => ({
@@ -151,17 +162,21 @@ export function createMockLegacy(d: Deps): LegacyMethods & { resetLegacy(): void
       if (await isRemote()) return legacyApi.speak(signer(), input);
       if (!st.voice) fail("NoVoice", "No legacy voice has been created.");
       let text: string;
+      let line: string;
       if ("milestoneId" in input) {
         const m = st.book?.milestones.find((x) => x.id === input.milestoneId);
         if (!m) fail("NotFound", "That message was not found.");
-        text = m!.text;
+        text = m!.text; line = m!.id;
+      } else if ("disclosure" in input) {
+        return demoSpeech("disclosure", disclosureLine(st.book ?? demoLegacyBook()), "heirloom");
       } else {
         // Same rule as the server: only the owner, while alive, hears the fixed sample line. Never free text.
         if (!isOwner()) fail("Forbidden", "The legacy voice only speaks the messages in the Legacy Book.");
         needAlive();
-        text = legacyVoiceSample;
+        text = legacyVoiceSample; line = "sample";
       }
-      return { text, audioUrl: null, simulated: true, voice: "parent" };
+      return demoSpeech(line, text, "parent");
     },
+
   };
 }
