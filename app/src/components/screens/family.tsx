@@ -12,14 +12,16 @@ import { formatUsdt, shortAddress } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Button, ButtonLink, Card, Consent, ExplorerLink, Notice, PageHeader } from "@/components/ui/primitives";
-import { FilePicker, Quorum } from "@/components/ui/client";
+import { FilePicker } from "@/components/ui/client";
 import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { LegacyEntry, MilestoneMoment } from "@/components/legacy/lazy";
 import { LetterMoment } from "@/components/letters/lazy";
 import { PausedNotice } from "@/components/guardians/parts";
-import { guardiansOf, isMonitor, objectionFor } from "@/components/guardians/derive";
+import { guardiansOf, isMonitor, mayRaise } from "@/components/guardians/derive";
+import { ReplaceWhen, useWho, VoteTally } from "@/components/guardians/decision";
+import { canSubmitDeath, deathOpen, deathReplace, deathTally, hasLivingSeat, isFamily } from "@/lib/guardians/decisions";
 import { RaiseObjection } from "@/components/guardians/objections";
 import { SuccessionTimeline } from "@/components/guardians/section";
 import { DisputePanel } from "@/components/disputes/disputes";
@@ -45,14 +47,16 @@ function FamilyScreenBody({ copy: english }: { copy: Copy }) {
 }
 
 function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role: Role }) {
-  const { common } = useCopy();
+  const { common, guardians } = useCopy();
   const { run, busy, session, intent, setIntent } = useEstate();
   const now = useNow();
+  const who = useWho(snap);
+  const rules = guardians.rules;
   // Kept here, not in the form: once the report is in, the estate leaves "Active" and the form is no longer shown.
   const [accepted, setAccepted] = useState<{ report: AgentReport; tx: TxResult } | null>(null);
   const e = snap.estate;
   const d = e.death;
-  const got = d.attestations.filter(Boolean).length;
+  const tally = deathTally(e);
   const report = (d as { agentReport?: AgentReport }).agentReport;
   const reported = !!d.certHash || e.status === "DeathPending" || e.status === "Unlocked";
   const confirmed = e.status === "DeathPending" || e.status === "Unlocked";
@@ -60,8 +64,11 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
   const remaining = e.status === "DeathPending" && d.pendingSince !== null && now !== null ? d.pendingSince + e.waitingPeriodSecs - now : null;
   const waitOver = remaining !== null && remaining <= 0;
   const period = e.waitingPeriodSecs >= 86400 ? fmt(copy.periodDays, { days: Math.round(e.waitingPeriodSecs / 86400) }) : fmt(copy.periodDemo, { secs: e.waitingPeriodSecs });
-  const isFamily = snap.beneficiaries.some((b) => b.wallet === session?.address);
-  const reporter = d.submittedBy ? snap.beneficiaries.find((b) => b.wallet === d.submittedBy)?.label ?? shortAddress(d.submittedBy) : "";
+  const family = isFamily(snap, session?.address);
+  const reporter = d.submittedBy ? snap.beneficiaries.find((b) => b.wallet === d.submittedBy)?.label ?? who(d.submittedBy) : "";
+  const open = e.status === "Active" && !!d.certHash;
+  const replaceable = open ? deathReplace(e) : null;
+  const canReplace = open && canSubmitDeath(snap, session?.address, now);
   const s = copy.steps;
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -78,9 +85,13 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
     { key: "signed", title: s.signed.title, state: "done", text: fmt(s.signed.done, { name: e.ownerName, amount: formatUsdt(e.vaultBalance, { decimals: 0 }) }) },
     {
       key: "reported", title: s.reported.title, state: state(reported, !reported),
-      text: reported ? fmt(s.reported.done, { name: reporter || e.ownerName }) : s.reported.todo,
+      text: !reported ? s.reported.todo
+        : fmt(open && d.verdict === "Pending" ? rules.death.pending : open && d.verdict === "Referred" ? rules.death.referred : s.reported.done, { name: reporter || e.ownerName }),
       extra: reported && d.certHash ? (
         <>
+          {open && (replaceable
+            ? <ReplaceWhen times={replaceable} who="death" />
+            : d.verdict !== "Pending" && !hasLivingSeat(e) && <p className="mt-2 text-small font-semibold">{rules.replace.kept}</p>)}
           <p className="mt-1 text-[0.75rem] text-ink-2">{copy.certificate}: <span className="font-mono">{shortAddress(d.certHash, 6)}</span></p>
           {report && !confirmed && <div className="mt-3"><ReportCard report={report} compact /></div>}
         </>
@@ -88,9 +99,11 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
     },
     {
       key: "confirmed", title: s.confirmed.title, state: state(confirmed, reported && !confirmed),
-      text: confirmed ? fmt(s.confirmed.done, { got: Math.max(got, e.deathThreshold), need: e.deathThreshold, total: e.verifiers.length }) : fmt(s.confirmed.todo, { need: e.deathThreshold, total: e.verifiers.length }),
+      text: confirmed
+        ? d.attestations.some(Boolean) ? fmt(s.confirmed.done, { got: d.attestations.filter(Boolean).length }) : rules.death.byFallback
+        : tally.eligible === 0 ? rules.tally.nobody : fmt(s.confirmed.todo, { need: tally.needed, total: tally.eligible }),
       extra: reported && !confirmed ? (
-        <div className="mt-2"><Quorum approvals={d.attestations} needed={e.deathThreshold} names={e.verifierNames} label={fmt(s.confirmed.progress, { got, need: e.deathThreshold })} /></div>
+        <div className="mt-2"><VoteTally kind="confirmed" tally={tally} names={e.verifierNames} /></div>
       ) : undefined,
     },
     {
@@ -107,7 +120,7 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
           </div>
           <PausedNotice target={e.address} className="mt-3" />
           <DisputePanel kind="Unlock" target={e.address} className="mt-3" />
-          {isMonitor(guardiansOf(snap), session?.address) && !objectionFor(guardiansOf(snap), e.address) && (
+          {isMonitor(guardiansOf(snap), session?.address) && mayRaise(snap, "Unlock", e.address, session?.address, now) && (
             <div className="mt-3"><RaiseObjection kind="Unlock" target={e.address} seatIndex={null} /></div>
           )}
           {waitOver && (
@@ -122,7 +135,7 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
       key: "unlocked", title: s.unlocked.title, state: state(unlocked, false), text: unlocked ? s.unlocked.done : s.unlocked.todo,
       extra: unlocked ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {role === "beneficiary" && <ButtonLink href="/claims" small>{copy.next.claims}<ArrowRight className="size-4" aria-hidden="true" /></ButtonLink>}
+          {role === "beneficiary" && family && <ButtonLink href="/claims" small>{copy.next.claims}<ArrowRight className="size-4" aria-hidden="true" /></ButtonLink>}
           {role === "verifier" && <ButtonLink href="/inbox" small>{copy.next.inbox}<ArrowRight className="size-4" aria-hidden="true" /></ButtonLink>}
           <ButtonLink href="/car" small variant="secondary">{copy.next.car}</ButtonLink>
         </div>
@@ -135,9 +148,10 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
       <PageHeader eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />
       <div className="mb-5 grid gap-3 empty:hidden"><LetterMoment /><MilestoneMoment /><LegacyEntry /></div>
 
-      {role === "owner" && reported && !unlocked && (
+      {role === "owner" && session?.address === e.owner && deathOpen(e) && (
         <Notice tone="danger" icon={<TriangleAlert className="size-6" aria-hidden="true" />} title={copy.veto.title} className="mb-5">
           <p className="text-body">{copy.veto.body}</p>
+          <p className="mt-1 text-body font-semibold">{rules.here.warning}</p>
           <Button className="mt-3" loading={busy === "veto"} onClick={() => run("veto", (svc, est) => svc.vetoDeath(est), copy.veto.done)}>
             <HeartPulse className="size-5" aria-hidden="true" />{copy.veto.cta}
           </Button>
@@ -176,11 +190,11 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
         ))}
       </ol>
 
-      {accepted ? (
+      {accepted && d.certHash ? (
         <div className="mt-6"><ReportAccepted copy={copy} report={accepted.report} tx={accepted.tx} /></div>
-      ) : e.status === "Active" && !d.certHash && (
+      ) : e.status === "Active" && (!d.certHash || canReplace) && (
         <div ref={reportRef} className="mt-6 scroll-mt-32">
-          {isFamily ? <ReportForm copy={copy} onAccepted={setAccepted} /> : role !== "owner" ? <p className="text-small text-ink-2">{copy.report.onlyFamily}</p> : null}
+          {family ? <ReportForm key={d.certHash ?? "first"} copy={copy} replacing={open} onAccepted={setAccepted} /> : role !== "owner" ? <p className="text-small text-ink-2">{copy.report.onlyFamily}</p> : null}
         </div>
       )}
       <SuccessionTimeline snap={snap} />
@@ -212,10 +226,11 @@ function ReportAccepted({ copy, report, tx }: { copy: Copy; report: AgentReport;
   );
 }
 
-function ReportForm({ copy, onAccepted }: { copy: Copy; onAccepted: (r: { report: AgentReport; tx: TxResult }) => void }) {
-  const { common } = useCopy();
+function ReportForm({ copy, replacing, onAccepted }: { copy: Copy; replacing: boolean; onAccepted: (r: { report: AgentReport; tx: TxResult }) => void }) {
+  const { common, guardians } = useCopy();
   const { run, busy } = useEstate();
   const r = copy.report;
+  const again = guardians.rules.replace;
   const [file, setFile] = useState<File | null>(null);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -243,8 +258,8 @@ function ReportForm({ copy, onAccepted }: { copy: Copy; onAccepted: (r: { report
   }
   return (
     <Card>
-      <h2 className="flex items-center gap-2 text-h3"><FileHeart className="size-5 text-amber" aria-hidden="true" />{r.title}</h2>
-      <p className="mt-1 text-ink-2">{r.body}</p>
+      <h2 className="flex items-center gap-2 text-h3"><FileHeart className="size-5 text-amber" aria-hidden="true" />{replacing ? again.deathTitle : r.title}</h2>
+      <p className="mt-1 text-ink-2">{replacing ? again.deathBody : r.body}</p>
       <form onSubmit={submit} noValidate className="mt-4 flex flex-col gap-4">
         <FilePicker id="death-cert" label={r.file} hint={r.fileHint} file={file} onFile={(f) => { setFile(f); setError(null); }} samples={r.samples} copy={common.file} />
         <Consent id="death-consent" checked={consent} onChange={(v) => { setConsent(v); setError(null); }} copy={common.consent} />

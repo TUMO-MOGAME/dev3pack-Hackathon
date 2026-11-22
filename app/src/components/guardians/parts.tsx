@@ -5,6 +5,7 @@ import { Pause } from "@/components/ui/icons";
 import type { HeirloomService } from "@/lib/service";
 import type { Base58 } from "@/lib/types";
 import { useEstate, type RunResult } from "@/lib/hooks/estate";
+import { useNow } from "@/lib/hooks/use-now";
 import { ExplorerLink } from "@/components/ui/primitives";
 import { Blocked } from "@/components/shell/blocked";
 import { fmt, useCopy } from "@/components/shell/copy";
@@ -62,7 +63,8 @@ export function ActionResult({ receipt, refusal, children }: { receipt: string |
 export function PausedNotice({ target, className }: { target: Base58; className?: string }) {
   const { guardians: c } = useCopy();
   const g = useGuardians();
-  const o = pausedBy(g, target);
+  const now = useNow(5000);
+  const o = pausedBy(g, target, now);
   if (!o) return null;
   return (
     <p role="status" className={`flex items-center gap-2 rounded-md border-[1.5px] border-dashed border-ink bg-surface px-3 py-2 text-small font-semibold ${className ?? ""}`}>

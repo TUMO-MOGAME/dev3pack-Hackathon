@@ -12,8 +12,6 @@ import { formatUsdt, formatZar, fromBase, shortAddress, toBase } from "@/lib/for
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Badge, Button, ButtonLink, Card, Consent, EmptyState, Eyebrow, ExplorerLink, Field, inputClass, Money, Notice, TickDisc } from "@/components/ui/primitives";
-import { Quorum } from "@/components/ui/client";
-import { Blocked } from "@/components/shell/blocked";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate } from "@/components/shell/gate";
 import { ActivityText, useNameBook } from "@/components/shell/activity-text";
@@ -32,7 +30,10 @@ import { listingLink } from "@/lib/hooks/pick-estate";
 import { fullName } from "@/lib/names";
 import { ReferredNote, RelistNote } from "@/components/continuity/continuity";
 import { listingEnded } from "@/lib/continuity/logic";
-import { quorumFor } from "@/lib/verdict";
+import { hardshipTally, hasLivingSeat, isFamily, isHeld, mayList } from "@/lib/guardians/decisions";
+import { VoteTally } from "@/components/guardians/decision";
+import { CoSign } from "@/components/continuity/cosign";
+import { ReleaseAsset } from "@/components/continuity/membership";
 
 type Copy = ScreensCopy["car"];
 const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
@@ -57,7 +58,8 @@ function Assets({ copy, a, snap, session, role }: { copy: Copy; a: AssetsCopy; s
   const { media } = useAssetMedia(service, snap);
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const canEdit = role === "owner" && snap.estate.status === "Active";
+  // Photos, the spec sheet and taking it back: the living owner only (R15, R22).
+  const canEdit = role === "owner" && session.address === snap.estate.owner && snap.estate.status === "Active";
   const list = snap.assets;
 
   if (list.length === 0 || adding) {
@@ -83,7 +85,7 @@ function Assets({ copy, a, snap, session, role }: { copy: Copy; a: AssetsCopy; s
 function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLevel }: {
   copy: Copy; a: AssetsCopy; snap: EstateSnapshot; car: Asset; media?: AssetMediaView; session: WalletSession; role: Role; canEdit: boolean; headingLevel: 1 | 2;
 }) {
-  const { common } = useCopy();
+  const { common, guardians } = useCopy();
   const { service, fx, run, busy } = useEstate();
   const book = useNameBook(snap);
   // A buyer's name: the one the offer carries, else whatever this estate or device knows about that wallet.
@@ -93,15 +95,19 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
   const e = snap.estate;
   const offers = snap.offers.filter((o) => o.asset === car.address).sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0));
   const mine = offers.find((o) => o.buyer === session.address);
-  const hardship = snap.hardships.find((h) => h.asset === car.address && (h.status === "Open" || h.status === "Approved"));
+  // The approved one stands; otherwise one that is waiting.
+  const requests = snap.hardships.filter((h) => h.asset === car.address);
+  const hardship = requests.find((h) => h.status === "Approved" && car.hardshipBeneficiary === h.beneficiary) ?? requests.find((h) => h.status === "Open");
   const hardshipName = car.hardshipBeneficiary ? (snap.beneficiaries.find((b) => b.wallet === car.hardshipBeneficiary)?.label.split(" ")[0] ?? "") : "";
   // The sale line for this asset (an estate can sell more than one); see lib/assets/handover.ts.
   const saleFacts = saleOf(snap, car.address);
   const sale = saleFacts ? snap.activity.find((x) => x.kind === "AssetSold" && x.txSignature === saleFacts.txSignature && x.ts === saleFacts.ts) : undefined;
   const sellerSide = isSellerSide(snap, session.address);
-  const isFamily = snap.beneficiaries.some((b) => b.wallet === session.address);
-  const isVerifier = e.verifiers.includes(session.address);
-  const [blocked, setBlocked] = useState<{ code: string; message: string } | null>(null);
+  const family = isFamily(snap, session.address);
+  const isVerifier = isHeld(session.address) && e.verifiers.includes(session.address);
+  const staffed = hasLivingSeat(e);
+  const relist = car.status === "Listed";
+  const canList = e.status === "Unlocked" && now !== null && mayList(snap, car, session.address, now) && (!relist || listingEnded(car, now));
   const [editing, setEditing] = useState<"photos" | "spec" | null>(null);
   const kind = kindOf(media);
   const title = media?.title || car.title;
@@ -115,8 +121,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
   const [seenOffers, setSeenOffers] = useState(offersKey);
   if (seenOffers !== offersKey) {
     setSeenOffers(offersKey);
-    setBlocked(null);
-    if (offers.length === 0) setRanking(null);
+    setRanking(null);
   }
 
   useEffect(() => {
@@ -126,12 +131,6 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service, offersKey, car.address]);
-
-  const settle = async () => {
-    setBlocked(null);
-    const res = await run("settle", (s, est) => s.acceptBestOffer(est, car.address), copy.settle.done, true);
-    if (!res.ok) setBlocked({ code: res.code, message: res.message });
-  };
 
   const statusOf = (addr: string, amount: bigint) => {
     if (car.status === "Sold") return { tone: "neutral" as const, text: copy.offers.notChosen };
@@ -182,6 +181,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="secondary" small onClick={() => setEditing("photos")}><Pencil className="size-4" aria-hidden="true" />{a.photos.manage}</Button>
                 <Button variant="secondary" small onClick={() => setEditing("spec")}><Pencil className="size-4" aria-hidden="true" />{hasSpec(media?.spec) ? a.spec.edit : a.spec.add}</Button>
+                <ReleaseAsset asset={car} title={title} />
               </div>
             )}
           </div>
@@ -219,13 +219,13 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
 
       <div className="grid gap-5 *:min-w-0">
         {/* What this person can do */}
-        {(car.status === "Held" || (!!now && isVerifier && listingEnded(car, now))) && (
-          isVerifier && e.status === "Unlocked" ? (
+        {(car.status === "Held" || canList) && (
+          canList ? (
             <Card>
               <h2 className="flex items-center gap-2 text-h3"><Store className="size-5 text-amber" aria-hidden="true" />{copy.list.title}</h2>
-              <p className="mt-1 text-ink-2">{copy.list.body}</p>
-              {car.status === "Listed" && <RelistNote />}
-              <Button className="mt-3" loading={busy === "list"} onClick={() => run("list", (s, est) => s.listAsset(est, car.address, 7 * 86400), copy.list.done)}>{copy.list.cta}</Button>
+              <p className="mt-1 text-ink-2">{isVerifier ? copy.list.body : relist ? guardians.rules.sale.relistFamily : guardians.rules.sale.listFamily}</p>
+              {relist && isVerifier && <RelistNote />}
+              <Button className="mt-3" loading={busy === "list"} onClick={() => run("list", (s, est) => s.listAsset(est, car.address, 7 * 86400), copy.list.done)}>{relist ? guardians.rules.sale.relist : copy.list.cta}</Button>
             </Card>
           ) : (
             <Notice icon={<Lock className="size-5" aria-hidden="true" />}><p className="text-body">{e.status === "Unlocked" ? copy.offers.emptyHeld : copy.list.wait}</p></Notice>
@@ -237,8 +237,8 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
         {editing !== "spec" && <SpecSheet spec={media?.spec} kind={kind} copy={a.spec} />}
 
         {car.status === "Listed" && role === "buyer" && <OfferForm copy={copy} car={car} mine={mine?.amount ?? null} />}
-        {car.status === "Listed" && (sellerSide || isFamily || isVerifier) && <ShareListing copy={copy} estate={e.address} />}
-        {car.status === "Listed" && role !== "buyer" && !isFamily && !isVerifier && <p className="text-small text-ink-2">{copy.offer.onlyBuyers}</p>}
+        {car.status === "Listed" && (sellerSide || family || isVerifier) && <ShareListing copy={copy} estate={e.address} />}
+        {car.status === "Listed" && role !== "buyer" && !family && !isVerifier && <p className="text-small text-ink-2">{copy.offer.onlyBuyers}</p>}
         {car.status === "Sold" && mine && (
           <Card>
             <p className="font-semibold">{copy.offers.you}: {formatUsdt(mine.amount)}</p>
@@ -246,18 +246,16 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
           </Card>
         )}
 
-        {car.status === "Listed" && isVerifier && (
+        {car.status === "Listed" && (staffed ? isVerifier : family) && (
           <Card>
             <h2 className="flex items-center gap-2 text-h3"><Gavel className="size-5 text-amber" aria-hidden="true" />{copy.settle.title}</h2>
-            <p className="mt-1 text-ink-2">{copy.settle.body}</p>
-            <Button className="mt-3" loading={busy === "settle"} disabled={offers.length === 0} onClick={settle}>{busy === "settle" ? copy.settle.working : copy.settle.cta}</Button>
-            {blocked && (
-              <div className="mt-4">
-                <Blocked code={blocked.code} message={blocked.message}>
-                  {isFamily && !hardship && <ButtonLink href="/hardship" small variant="secondary"><HandHeart className="size-4" aria-hidden="true" />{copy.settle.hardshipLink}</ButtonLink>}
-                </Blocked>
-              </div>
-            )}
+            {staffed || (now !== null && listingEnded(car, now)) ? (
+              <CoSign
+                snap={snap} asset={car} ranking={offers.length ? ranking : null}
+                body={copy.settle.body} cta={copy.settle.cta} working={copy.settle.working} done={copy.settle.done}
+                refusalExtra={family && !hardship ? <ButtonLink href="/hardship" small variant="secondary"><HandHeart className="size-4" aria-hidden="true" />{copy.settle.hardshipLink}</ButtonLink> : undefined}
+              />
+            ) : <p className="mt-1 text-ink-2">{guardians.rules.sale.noSeats}</p>}
           </Card>
         )}
 
@@ -278,7 +276,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
                     <li key={o.address} className="enter border-b border-line/70 py-3 last:border-0 [--from-y:6px]">
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                         <p className="min-w-0 font-semibold">{buyerName(o) ?? shortAddress(o.buyer)}{o.buyer === session.address && <span className="ml-2 text-small font-medium text-accent">({copy.offers.you})</span>}</p>
-                        <Badge tone={st.tone}>{st.text}</Badge>
+                        <Badge tone={st.tone} className="max-w-full whitespace-normal! py-1">{st.text}</Badge>
                       </div>
                       <p className="tabular-nums">{formatUsdt(o.amount)}{rate ? <span className="ml-2 text-small text-ink-2">≈ {formatZar(o.amount, rate)}</span> : null}</p>
                       {reason && <p className="mt-0.5 text-small text-ink-2">{reason}</p>}
@@ -305,9 +303,9 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
             </div>
             <p className="mt-1 text-ink-2">{fmt(copy.hardship.from, { name: snap.beneficiaries.find((b) => b.wallet === hardship.beneficiary)?.label ?? "" })}</p>
             <ReferredNote verdict={hardship.agentVerdict} />
-            <div className="mt-3"><Quorum approvals={hardship.approvals} needed={quorumFor(hardship.agentVerdict, e.hardshipThreshold)} names={e.verifierNames} label={fmt(copy.hardship.approvals, { got: hardship.approvals.filter(Boolean).length, need: e.hardshipThreshold })} /></div>
+            {hardship.status === "Open" && <div className="mt-3"><VoteTally tally={hardshipTally(e, hardship)} names={e.verifierNames} /></div>}
           </Card>
-        ) : isFamily && car.status !== "Sold" && e.status === "Unlocked" ? (
+        ) : family && car.status !== "Sold" && e.status === "Unlocked" ? (
           <Card className="bg-surface-2/50">
             <p className="text-small text-ink-2">{copy.hardship.linkBody}</p>
             <ButtonLink href="/hardship" variant="secondary" small className="mt-3"><HandHeart className="size-4" aria-hidden="true" />{copy.hardship.link}<ArrowRight className="size-4" aria-hidden="true" /></ButtonLink>

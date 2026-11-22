@@ -2,7 +2,8 @@
  * Continuity rules shared by both services and the screens; mirrors programs/heirloom (continuity.rs and
  * execute_scheduled). Pure.
  */
-import type { Base58, Rule } from "../types";
+import type { Base58, Payee, Rule } from "../types";
+import type { RemoveMemberInput } from "./types";
 
 export const MAX_RULES = 16;
 export const MIN_WAITING_SECS = 60;
@@ -42,3 +43,29 @@ export function residualRecipient(named: Base58 | null, fallback: { wallets: Bas
 
 export const listingEnded = (a: { status: string; listingEnds: number | null }, now: number): boolean =>
   a.status === "Listed" && a.listingEnds !== null && now >= a.listingEnds;
+
+/** An ended rule gives up its slot; a live one's cap still matters (R17). */
+export const ruleEnded = (r: Pick<Rule, "validUntil">, now: number) => now > r.validUntil;
+
+/**
+ * The slot a new rule takes: none while the plan has room. At the limit, the rule that ended first, so history about
+ * the most recent rules keeps reading right.
+ */
+export function slotToReuse(rules: readonly Rule[], now: number): Rule | null {
+  if (rules.length < MAX_RULES) return null;
+  return rules.filter((r) => ruleEnded(r, now)).sort((a, b) => a.validUntil - b.validUntil || a.id - b.id)[0] ?? null;
+}
+
+/** Live rules only the removed people could use: their own, schedules to the payee, and the last payee of a kind's. */
+export function rulesEndedByRemoval(
+  snap: { rules: readonly Rule[]; payees: readonly Payee[] }, input: Pick<RemoveMemberInput, "beneficiary" | "payee">, now: number,
+): Rule[] {
+  const gone = input.payee ? snap.payees.find((p) => p.wallet === input.payee) : undefined;
+  const lastOfKind = !!gone && !snap.payees.some((p) => p.wallet !== gone.wallet && p.kind === gone.kind);
+  return snap.rules.filter((r) => {
+    if (ruleEnded(r, now)) return false;
+    if (input.beneficiary && r.beneficiary === input.beneficiary) return true;
+    if (!gone) return false;
+    return r.recurringAmount > 0n ? r.fixedPayee === gone.wallet : lastOfKind && r.allowedPayeeKind === gone.kind;
+  });
+}

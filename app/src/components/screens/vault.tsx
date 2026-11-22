@@ -15,6 +15,7 @@ import { fmt, timeAgo, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { usePay } from "@/components/pay/payment";
 import { ResidualCard } from "@/components/continuity/continuity";
+import { useStillHere } from "@/components/guardians/decision";
 
 type Copy = ScreensCopy["vault"];
 
@@ -29,8 +30,10 @@ function VaultScreenBody({ copy: english }: { copy: Copy }) {
 }
 
 function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
-  const { common } = useCopy();
-  const { fx, run, busy, walletUsdt } = useEstate();
+  const { common, guardians } = useCopy();
+  const { fx, busy, walletUsdt } = useEstate();
+  const { checkIn, cancels } = useStillHere(copy.heartbeat.done);
+  const here = guardians.rules.here;
   const now = useNow(10000);
   const { pay } = usePay();
   const { session } = useEstate();
@@ -44,7 +47,8 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
   const n = Number(amount.replace(/[\s,]/g, ""));
   const valid = Number.isFinite(n) && n > 0;
   const limit = tab === "deposit" ? walletUsdt : e.vaultBalance;
-  const promised = snap.rules.reduce((sum, r) => sum + (r.lifetimeCap - r.spentTotal), BigInt(0));
+  // What live rules can still pay: an ended one promises nothing.
+  const promised = snap.rules.reduce((sum, r) => (now !== null && now > r.validUntil ? sum : sum + (r.lifetimeCap - r.spentTotal)), BigInt(0));
   const cover = promised > BigInt(0) ? Math.min(1, Number(e.vaultBalance) / Number(promised)) : 0;
 
   const submit = async (ev: FormEvent) => {
@@ -60,9 +64,24 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
 
   const quick = tab === "deposit" ? [1000, 5000, 10000] : [500, 1000, 5000];
 
+  const checkInCard = e.status !== "Unlocked" && (
+    <Card className={clsx(cancels ? "mb-4" : "mt-4", "flex flex-wrap items-center justify-between gap-3", cancels && "border-2 border-l-8 border-ink")}>
+      <div className="min-w-0 max-w-md">
+        <h2 className="text-h3">{cancels ? here.title : copy.heartbeat.title}</h2>
+        <p className="mt-1 text-ink-2">{cancels ? here.body : copy.heartbeat.body}</p>
+        {cancels && <p className="mt-2 font-semibold">{here.warning}</p>}
+        <p className="mt-1 min-h-5 text-small text-ink-2">{now !== null ? fmt(copy.heartbeat.last, { when: timeAgo(e.lastHeartbeat, now, common.time) }) : ""}</p>
+      </div>
+      <Button variant={cancels ? "primary" : "secondary"} loading={busy === "heartbeat"} onClick={() => void checkIn()}>
+        <HeartPulse className="size-5" aria-hidden="true" />{cancels ? here.cta : copy.heartbeat.cta}
+      </Button>
+    </Card>
+  );
+
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />
+      {cancels && checkInCard}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <p className="flex items-center gap-2 text-small font-semibold text-accent"><Landmark className="size-4" aria-hidden="true" />{copy.balance}</p>
@@ -133,18 +152,7 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
         </Card>
       )}
 
-      {e.status !== "Unlocked" && (
-        <Card className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 max-w-md">
-            <h2 className="text-h3">{copy.heartbeat.title}</h2>
-            <p className="mt-1 text-ink-2">{copy.heartbeat.body}</p>
-            <p className="mt-1 min-h-5 text-small text-ink-2">{now !== null ? fmt(copy.heartbeat.last, { when: timeAgo(e.lastHeartbeat, now, common.time) }) : ""}</p>
-          </div>
-          <Button variant="secondary" loading={busy === "heartbeat"} onClick={() => run("heartbeat", (s, est) => s.heartbeat(est), copy.heartbeat.done)}>
-            <HeartPulse className="size-5" aria-hidden="true" />{copy.heartbeat.cta}
-          </Button>
-        </Card>
-      )}
+      {!cancels && checkInCard}
     </div>
   );
 }

@@ -13,6 +13,10 @@ import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { GuardiansPeople } from "@/components/guardians/section";
 import { NamesNotice } from "@/components/continuity/names-notice";
+import { AgentControl } from "@/components/continuity/agent";
+import { RemoveMember } from "@/components/continuity/membership";
+import { eligibleSeats } from "@/lib/death-rules";
+import { useNow } from "@/lib/hooks/use-now";
 
 type Copy = ScreensCopy["people"];
 const KINDS: PayeeKind[] = ["University", "School", "Landlord", "Other"];
@@ -33,7 +37,11 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
   const [kind, setKind] = useState<PayeeKind>("University");
   const [wallet, setWallet] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const thresholds = [e.deathThreshold, e.claimThreshold, e.hardshipThreshold];
+  const now = useNow(15000);
+  // What it takes now: a quorum falls to the seats still held (R8).
+  const living = eligibleSeats(e.verifiers).length;
+  const thresholds = [e.deathThreshold, e.claimThreshold, e.hardshipThreshold].map((n) => Math.min(n, living));
+  const family = [...snap.beneficiaries].sort((a, b) => Number(b.active) - Number(a.active));
   const you = (addr: string) => addr === session.address && <Badge tone="accent">{copy.you}</Badge>;
 
   const submit = async (ev: FormEvent) => {
@@ -63,11 +71,11 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
               </li>
             ); })}
           </ul>
-          <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
+          <dl className="mt-4 grid grid-cols-3 gap-2 text-center *:min-w-0">
             {copy.trusted.thresholds.map((t, i) => (
               <div key={t.label} className="flex flex-col-reverse rounded-md bg-accent-soft p-2.5">
                 <dt className="text-[0.75rem] leading-tight text-ink-2">{t.label}</dt>
-                <dd className="font-display text-h3 text-accent">{fmt(t.value, { n: thresholds[i] })}</dd>
+                <dd className="font-display text-h3 text-accent">{living ? fmt(t.value, { n: thresholds[i], total: living }) : <span className="font-sans text-small">{gc.rules.tally.nobody}</span>}</dd>
               </div>
             ))}
           </dl>
@@ -79,16 +87,17 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
           <h2 className="flex items-center gap-2 text-h3"><UsersRound className="size-5 text-amber" aria-hidden="true" />{copy.family.title}</h2>
           <p className="mt-1 text-ink-2">{copy.family.body}</p>
           <ul className="mt-3 flex flex-col">
-            {snap.beneficiaries.map((b) => {
-              const count = snap.rules.filter((r) => r.beneficiary === b.wallet).length;
+            {family.map((b) => {
+              const count = snap.rules.filter((r) => r.beneficiary === b.wallet && (now === null || now <= r.validUntil)).length;
               return (
-                <li key={b.address} className="flex items-center gap-3 border-b border-line/70 py-2.5 last:border-0">
+                <li key={b.address} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line/70 py-2.5 last:border-0">
                   <Avatar name={b.label} role="beneficiary" />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-32 flex-1">
                     <p className="flex flex-wrap items-center gap-2 font-semibold">{b.label}{you(b.wallet)}</p>
                     <p className="font-mono text-[0.75rem] text-ink-2">{shortAddress(b.wallet)}</p>
+                    {b.active && <p className="text-small text-ink-2">{count === 1 ? copy.family.oneRule : fmt(copy.family.rules, { n: count })}</p>}
                   </div>
-                  <span className="shrink-0 text-small text-ink-2">{count === 1 ? copy.family.oneRule : fmt(copy.family.rules, { n: count })}</span>
+                  {b.active ? <RemoveMember snap={snap} kind="beneficiary" wallet={b.wallet} name={b.label} /> : <Badge>{gc.rules.remove.removed}</Badge>}
                 </li>
               );
             })}
@@ -101,12 +110,13 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
           {snap.payees.length === 0 ? <p className="mt-3 text-ink-2">{copy.payees.empty}</p> : (
             <ul className="mt-3 flex flex-col">
               {snap.payees.map((p) => (
-                <li key={p.address} className="flex items-center justify-between gap-3 border-b border-line/70 py-2.5 last:border-0">
-                  <div className="min-w-0">
-                    <p className="font-semibold">{p.name}</p>
+                <li key={p.address} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line/70 py-2.5 last:border-0">
+                  <div className="min-w-32 flex-1">
+                    <p className="font-semibold break-words">{p.name}</p>
                     <p className="font-mono text-[0.75rem] text-ink-2">{shortAddress(p.wallet)}</p>
+                    <Badge className="mt-1 max-w-full whitespace-normal! py-1">{common.status.payeeKind[p.kind]}</Badge>
                   </div>
-                  <Badge className="shrink whitespace-normal! py-1 text-right">{common.status.payeeKind[p.kind]}</Badge>
+                  <RemoveMember snap={snap} kind="payee" wallet={p.wallet} name={p.name} />
                 </li>
               ))}
             </ul>
@@ -139,10 +149,11 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
         <Card className="md:col-span-2">
           <div className="flex items-start gap-3.5">
             <span className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-bg"><Bot className="size-5" aria-hidden="true" /></span>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h2 className="text-h3">{copy.agent.title}</h2>
               <p className="mt-1 text-ink-2">{copy.agent.body}</p>
               <p className="mt-2 text-small text-ink-2">{copy.wallet}: <span className="font-mono">{shortAddress(e.agent, 6)}</span></p>
+              <AgentControl snap={snap} />
             </div>
           </div>
         </Card>

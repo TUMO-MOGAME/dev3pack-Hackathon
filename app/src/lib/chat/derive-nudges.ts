@@ -14,7 +14,7 @@ import { openDisputeOn } from "@/lib/disputes/types";
 import { shortName } from "@/lib/names";
 import type { Nudge, NudgeKind } from "./types";
 import { openToPeople } from "@/lib/verdict";
-import { quorumFor } from "@/lib/verdict";
+import { canSign, claimBlock, claimPayable, claimVote, deathVote, hardshipVote, isFamily } from "@/lib/guardians/decisions";
 
 export const DAY = 86400;
 /** The owner is nudged to check in after this long without a heartbeat. */
@@ -56,12 +56,11 @@ export function sortNudges(list: Nudge[]): Nudge[] {
   return [...list].sort((a, b) => URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency] || KIND_RANK[a.kind] - KIND_RANK[b.kind] || (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
 }
 
-const count = (a: boolean[]) => a.filter(Boolean).length;
-
 /** A schedule that is allowed to pay right now (living plan while active, any after unlock), within its limits. */
 function scheduleLive(snap: EstateSnapshot, r: Rule, now: number): boolean {
   const st = snap.estate.status;
   return r.recurringAmount > BigInt(0) && !!r.fixedPayee && r.nextDue !== null
+    && isFamily(snap, r.beneficiary) && snap.payees.some((p) => p.wallet === r.fixedPayee && p.kind === r.allowedPayeeKind)
     && (st === "Unlocked" || (r.startsNow && st === "Active"))
     && now <= r.validUntil && r.spentTotal + r.recurringAmount <= r.lifetimeCap;
 }
@@ -129,7 +128,7 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
     return n?.currency === "ZAR" && n.typed > 0 ? ` · R ${Math.round(n.typed).toLocaleString("en-ZA")}` : zar(cl.amount);
   };
   for (const cl of snap.claims) {
-    if (cl.status !== "Open" || !openToPeople(cl.agentVerdict) || cl.ownerApproved || notes[cl.address]?.declinedAt) continue;
+    if (cl.status !== "Open" || !openToPeople(cl.agentVerdict) || cl.ownerApproved || notes[cl.address]?.declinedAt || claimBlock(snap, cl, now)) continue;
     const rule = snap.rules.find((r) => r.address === cl.rule);
     const vars = { name: personName(cl.beneficiary), amount: usd(cl.amount), zar: zar(cl.amount), payee: payeeName(cl.payee) };
     if (role === "owner" && e.status === "Active" && rule?.startsNow) {
@@ -148,14 +147,14 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
           : { label: a.owner.approve, action: { type: "run", op: "approveAsk", target: cl.address } },
       });
       out[out.length - 1].secondary = { label: a.owner.decline, action: { type: "run", op: "declineAsk", target: cl.address } };
-    } else if (isVerifier && e.status === "Unlocked" && !cl.approvals[vIndex] && count(cl.approvals) < quorumFor(cl.agentVerdict, e.claimThreshold)) {
+    } else if (isVerifier && canSign(claimVote(snap, cl, me, now)) && !claimPayable(snap, cl, now)) {
       push({ id: `claim:${cl.address}`, kind: "claim-to-approve", urgency: "now", title: c.claimVerifier.title, body: fill(c.claimVerifier.body, vars), primary: { label: c.claimVerifier.cta, action: { type: "navigate", to: "/inbox" } } });
     }
   }
 
   // A reported passing.
   const d = e.death;
-  if (isVerifier && e.status === "Active" && d.certHash && openToPeople(d.verdict) && !d.attestations[vIndex]) {
+  if (isVerifier && canSign(deathVote(e, me))) {
     push({
       id: `death:${d.certHash}`, kind: "death-to-confirm", urgency: "now", title: c.deathToConfirm.title,
       body: fill(c.deathToConfirm.body, { name: personName(d.submittedBy), owner }),
@@ -181,7 +180,7 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
   // Hardship requests for a trusted person.
   if (isVerifier) {
     for (const h of snap.hardships) {
-      if (h.status !== "Open" || !openToPeople(h.agentVerdict) || h.approvals[vIndex]) continue;
+      if (!canSign(hardshipVote(snap, h, me))) continue;
       push({
         id: `hardship:${h.address}`, kind: "hardship-to-review", urgency: "soon", title: c.hardshipToReview.title,
         body: fill(c.hardshipToReview.body, { name: personName(h.beneficiary) }),
@@ -197,7 +196,8 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
       const min = a.hardshipBeneficiary ? a.hardshipFloor : a.floorPrice;
       const best = snap.offers.filter((o) => o.asset === a.address && o.amount >= min)
         .sort((x, y) => (y.amount > x.amount ? 1 : y.amount < x.amount ? -1 : x.createdAt - y.createdAt))[0];
-      if (!best) continue;
+      // The co-signature is never offered to the buyer.
+      if (!best || best.buyer === me) continue;
       const ended = a.listingEnds !== null && now >= a.listingEnds;
       push({
         id: `offer:${a.address}:${best.address}`, kind: "offer-received", urgency: ended ? "now" : "soon", title: c.offerReceived.title,
@@ -233,7 +233,7 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
       const rule = snap.rules.find((r) => r.address === cl.rule);
       const note = notes[cl.address];
       const status = askStatus(cl, e, note);
-      if (status === "checking") continue;
+      if (status === "checking" || (cl.status === "Open" && claimBlock(snap, cl, now))) continue; // Claims says why
       const v = { owner, purpose: note?.purpose || (rule ? rule.category.toLowerCase() : ""), amount: usdCents(cl.amount), zar: askZar(cl), payee: cl.payee === me ? a.asker.yourWallet : payeeName(cl.payee) };
       const see = { label: a.asker.see, action: { type: "navigate" as const, to: "/claims" } };
       const again = { label: a.asker.again, action: { type: "run" as const, op: "openAsk" as const, target: cl.rule } };

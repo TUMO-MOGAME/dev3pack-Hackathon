@@ -81,7 +81,7 @@ export function Quorum({ approvals, needed, names, label }: { approvals: boolean
         {approvals.map((on, i) => <QuorumDot key={i} on={on} name={names?.[i]} n={i + 1} />)}
       </div>
       <span className="text-small font-semibold tabular-nums">{label}</span>
-      {got >= needed && <span className="sr-only">✓</span>}
+      {needed > 0 && got >= needed && <span className="sr-only">✓</span>}
     </div>
   );
 }

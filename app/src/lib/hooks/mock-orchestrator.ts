@@ -8,7 +8,7 @@ import type { FxRate, Role } from "../types";
 import type { AssistantCopy } from "@/content/assistant";
 import type { AgentAction, OrchestratorReply } from "./agent-types";
 import { shortName } from "../names";
-import { openToPeople } from "@/lib/verdict";
+import { canSign, claimVote, deathVote, hardshipVote } from "@/lib/guardians/decisions";
 
 export interface OrchestratorContext { role: Role | null; address: string | null; snap: EstateSnapshot | null; fx: FxRate | null }
 
@@ -88,14 +88,14 @@ export function mockOrchestrate(text: string, ctx: OrchestratorContext, copy: As
   }
 
   if (has("waiting for me", "inbox", "approve")) {
-    const n = (e.death.certHash && openToPeople(e.death.verdict) && e.status === "Active" ? 1 : 0)
-      + snap.claims.filter((c) => c.status === "Open").length + snap.hardships.filter((h) => h.status === "Open").length;
+    const n = (canSign(deathVote(e, address)) ? 1 : 0)
+      + snap.claims.filter((c) => canSign(claimVote(snap, c, address))).length + snap.hardships.filter((h) => canSign(hardshipVote(snap, h, address))).length;
     return out("EstateGuide", n ? fill(f.inbox, { count: n === 1 ? copy.inboxCountOne : fill(copy.inboxCountMany, { n }) }) : f.inboxEmpty, [{ type: "navigate", to: "/inbox" }]);
   }
 
   if (has("will", "rule", "write", "wish")) {
     if (role !== "owner") return out("EstateGuide", f.willOther, [{ type: "navigate", to: "/estate" }]);
-    return out("WillWriter", fill(f.willDone, { rules: snap.rules.length, children: snap.beneficiaries.length }), [{ type: "navigate", to: "/estate" }]);
+    return out("WillWriter", fill(f.willDone, { rules: snap.rules.length, children: snap.beneficiaries.filter((b) => b.active).length }), [{ type: "navigate", to: "/estate" }]);
   }
 
   if (has("vault", "balance", "money", "how much", "deposit", "fund")) {
@@ -106,7 +106,7 @@ export function mockOrchestrate(text: string, ctx: OrchestratorContext, copy: As
   }
 
   return out("EstateGuide", fill(f.summary, {
-    owner: e.ownerName, status, vault: formatUsdt(e.vaultBalance), vaultZar: zar(e.vaultBalance), rules: snap.rules.length, children: snap.beneficiaries.length,
+    owner: e.ownerName, status, vault: formatUsdt(e.vaultBalance), vaultZar: zar(e.vaultBalance), rules: snap.rules.length, children: snap.beneficiaries.filter((b) => b.active).length,
     next: e.status === "Unlocked" ? f.nextUnlocked : e.status === "DeathPending" ? f.nextPending : f.nextActive,
   }), [{ type: "navigate", to: "/estate" }]);
 }

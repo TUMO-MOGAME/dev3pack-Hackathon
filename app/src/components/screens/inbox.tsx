@@ -6,11 +6,10 @@ import { Banknote, Check, FileHeart, HandHeart, Inbox as InboxIcon, ScanSearch, 
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
-import type { AgentReport, WalletSession } from "@/lib/types";
+import type { AgentReport, Claim, Verdict, WalletSession } from "@/lib/types";
 import { formatUsdt, formatZar } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, EmptyState, ExplorerLink, Notice, PageHeader } from "@/components/ui/primitives";
-import { Quorum } from "@/components/ui/client";
 import { ReportCard } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
@@ -23,7 +22,9 @@ import { DisputeList, DisputePanel } from "@/components/disputes/disputes";
 import { disputesVotedBy, effectiveStatus, openDisputeOn } from "@/lib/disputes/types";
 import { useNow } from "@/lib/hooks/use-now";
 import { openToPeople } from "@/lib/verdict";
-import { quorumFor } from "@/lib/verdict";
+import { canSign, claimPayable, claimTally, claimVote, deathTally, deathVote, hardshipStands, hardshipTally, hardshipVote, type Tally, type Vote } from "@/lib/guardians/decisions";
+import { ClaimState, useWho, VoteNote, VoteTally } from "@/components/guardians/decision";
+import { ReferredNote } from "@/components/continuity/continuity";
 
 type Copy = ScreensCopy["inbox"];
 
@@ -36,9 +37,13 @@ interface Item {
   report?: AgentReport;
   /** The agent's review tx, for when its report can't be loaded (the chain keeps only the report's hash). */
   reviewTx?: string;
-  approvals: boolean[];
-  need: number;
-  mine: boolean; // this person has already approved
+  tally: Tally;
+  verdict: Verdict;
+  /** What this person can do: the program's rules (lib/guardians/decisions). */
+  vote: Vote | null;
+  claim?: Claim;
+  /** A note in place of buttons. */
+  note?: string;
   /** Claims, hardship sales and the unlock can be paused by a watcher's objection. */
   target?: string;
   /** Guard estates: a fully approved claim waits out the objection window, then anyone pays it. */
@@ -58,21 +63,25 @@ function InboxScreenBody({ copy: english }: { copy: Copy }) {
 }
 
 function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; session: WalletSession }) {
-  const { common, disputes: dc } = useCopy();
+  const { common, disputes: dc, guardians: gc } = useCopy();
   const { fx, run, busy } = useEstate();
   const [declined, setDeclined] = useState<string[]>([]);
   const { pay } = usePay();
   const e = snap.estate;
   const rate = fx?.usdtZar ?? null;
   const me = e.verifiers.indexOf(session.address);
-  const label = (wallet: string) => snap.beneficiaries.find((b) => b.wallet === wallet)?.label ?? "";
-  const car = snap.assets[0];
+  const who = useWho(snap);
+  const label = (wallet: string) => snap.beneficiaries.find((b) => b.wallet === wallet)?.label ?? who(wallet);
   const now = useNow(15000);
   const g = guardiansOf(snap);
   const guardianCount = guardianTodo(g, snap, session.address, now) + (isMonitor(g, session.address) ? 1 : 0);
 
   // Watchers who are not trusted people only see the guardians part below.
   const items: Item[] = [];
+  // Would this person's approval reach the quorum? Stale approvals don't count towards it.
+  const finishes = (c: Claim) => claimTally(e, {
+    ...c, approvalsCount: true, approvals: c.approvals.map((v, j) => j === me || (c.approvalsCount !== false && v)),
+  }).met;
   const d = e.death;
   if (me >= 0 && e.status === "Active" && d.certHash && openToPeople(d.verdict)) {
     items.push({
@@ -81,30 +90,32 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       body: fmt(copy.death.body, { by: d.submittedBy ? label(d.submittedBy) : "" }),
       report: d.agentReport,
       reviewTx: snap.activity.find((a) => a.kind === "DeathReviewed")?.txSignature,
-      approvals: d.attestations, need: quorumFor(d.verdict, e.deathThreshold), mine: !!d.attestations[me], approveLabel: copy.death.approve,
+      tally: deathTally(e), verdict: d.verdict, vote: deathVote(e, session.address), approveLabel: copy.death.approve,
       act: async () => { await run("death", (s, est) => s.attestDeath(est), copy.death.done); },
     });
   }
   for (const c of me >= 0 && e.status === "Unlocked" ? snap.claims.filter((x) => x.status === "Open" && openToPeople(x.agentVerdict)) : []) {
     const rule = snap.rules.find((r) => r.address === c.rule);
-    const payee = snap.payees.find((p) => p.wallet === c.payee)?.name ?? "";
-    const got = c.approvals.filter(Boolean).length;
+    const payee = who(c.payee);
+    const vote = claimVote(snap, c, session.address, now);
+    const current = rule && !c.fromEndedRule ? rule : undefined;
     items.push({
       key: c.address, kind: "claim", target: c.address,
       title: fmt(copy.claim.title, { amount: formatUsdt(c.amount), payee }),
-      body: fmt(copy.claim.body, {
-        name: label(c.beneficiary), category: rule ? common.status.category[rule.category].toLowerCase() : "",
-        left: rule ? formatUsdt(rule.lifetimeCap - rule.spentTotal - c.amount, { decimals: 0 }) : "",
-      }),
+      body: current ? fmt(copy.claim.body, {
+        name: label(c.beneficiary), category: common.status.category[current.category].toLowerCase(),
+        left: formatUsdt(current.lifetimeCap - current.spentTotal - c.amount, { decimals: 0 }),
+      }) : label(c.beneficiary),
       amountZar: rate ? formatZar(c.amount, rate) : undefined,
-      report: c.agentReport, approvals: c.approvals, need: quorumFor(c.agentVerdict, e.claimThreshold), mine: !!c.approvals[me], approveLabel: copy.claim.approve,
-      payable: g?.enabled && got >= quorumFor(c.agentVerdict, e.claimThreshold) ? { payee: c.payee, payeeName: payee, amount: c.amount, successText: fmt(copy.claim.done, { payee }) } : undefined,
+      report: c.agentReport, claim: c, tally: claimTally(e, c), verdict: c.agentVerdict, vote,
+      approveLabel: finishes(c) && !g?.enabled ? copy.claim.approve : copy.claim.approveOnly,
+      payable: claimPayable(snap, c, now) ? { payee: c.payee, payeeName: payee, amount: c.amount, successText: fmt(copy.claim.done, { payee }) } : undefined,
       act: async () => {
         // Approve, and if that completes the quorum, release the payment in the same breath. With watchers (a Guard),
         // the payment waits out the objection window first, so only approve here.
-        if (got + 1 >= quorumFor(c.agentVerdict, e.claimThreshold) && !g?.enabled && !openDisputeOn(snap.disputes, c.address, now ?? 0)) {
+        if (finishes(c) && !g?.enabled && !openDisputeOn(snap.disputes, c.address, now ?? 0)) {
           // "Try again" in the payment sheet re-runs execute: don't approve a second time (the program rejects that).
-          let approved = !!c.approvals[me];
+          let approved = !canSign(vote);
           await pay({
             kind: "claim-payout", source: "vault", to: c.payee, toLabel: payee, amount: c.amount,
             execute: async (s, est) => {
@@ -120,25 +131,29 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
     });
   }
   for (const h of me >= 0 ? snap.hardships.filter((x) => x.status === "Open" && openToPeople(x.agentVerdict)) : []) {
+    const asset = snap.assets.find((a) => a.address === h.asset);
+    if (asset?.status === "Sold") continue;
     items.push({
       key: h.address, kind: "hardship", target: h.address,
       title: fmt(copy.hardship.title, { name: label(h.beneficiary) }),
-      body: car ? fmt(copy.hardship.body, { floor: formatUsdt(car.hardshipFloor, { decimals: 0 }), min: formatUsdt(car.floorPrice, { decimals: 0 }), name: label(h.beneficiary).split(" ")[0] }) : "",
-      report: h.agentReport, approvals: h.approvals, need: quorumFor(h.agentVerdict, e.hardshipThreshold), mine: !!h.approvals[me], approveLabel: copy.hardship.approve,
+      body: asset ? fmt(copy.hardship.body, { floor: formatUsdt(asset.hardshipFloor, { decimals: 0 }), min: formatUsdt(asset.floorPrice, { decimals: 0 }), name: label(h.beneficiary).split(" ")[0] }) : "",
+      report: h.agentReport, tally: hardshipTally(e, h), verdict: h.agentVerdict, vote: hardshipVote(snap, h, session.address), approveLabel: copy.hardship.approve,
+      note: hardshipStands(snap, h) ? gc.rules.vote.stands : undefined,
       act: async () => { await run(h.address, (s, est) => s.approveHardship(est, h.address), copy.hardship.done); },
     });
   }
 
-  const todo = items.filter((i) => !i.mine);
-  const waiting = items.filter((i) => i.mine);
+  const actionable = (i: Item) => !i.payable && canSign(i.vote);
+  const todo = items.filter(actionable);
+  const waiting = items.filter((i) => !actionable(i));
   const handled: { key: string; text: string; tag: string }[] = [
     ...(e.status !== "Active" && d.attestations[me] ? [{ key: "death", text: fmt(copy.death.title, { name: e.ownerName }), tag: copy.confirmed }] : []),
-    ...snap.claims.filter((c) => c.status === "Paid" && c.approvals[me]).map((c) => ({ key: c.address, text: fmt(copy.claim.title, { amount: formatUsdt(c.amount, { decimals: 0 }), payee: snap.payees.find((p) => p.wallet === c.payee)?.name ?? "" }), tag: copy.paid })),
+    ...snap.claims.filter((c) => c.status === "Paid" && c.approvals[me]).map((c) => ({ key: c.address, text: fmt(copy.claim.title, { amount: formatUsdt(c.amount, { decimals: 0 }), payee: who(c.payee) }), tag: copy.paid })),
     // Disputes this trusted person voted on (upheld, dismissed, lapsed, or still waiting for a second vote).
     ...disputesVotedBy(snap.disputes, me).map((x) => {
       const claim = x.kind === "Claim" ? snap.claims.find((c) => c.address === x.target) : undefined;
       const about = x.kind === "Unlock" ? dc.card.aboutUnlock
-        : claim ? fmt(dc.card.aboutClaim, { amount: formatUsdt(claim.amount, { decimals: 0 }), payee: snap.payees.find((p) => p.wallet === claim.payee)?.name ?? "" }) : "";
+        : claim ? fmt(dc.card.aboutClaim, { amount: formatUsdt(claim.amount, { decimals: 0 }), payee: who(claim.payee) }) : "";
       return { key: x.address, text: [fmt(dc.card.by, { name: x.disputerName }), about].filter(Boolean).join(" · "), tag: dc.card.status[now === null ? x.status : effectiveStatus(x, now)] };
     }),
   ];
@@ -147,7 +162,6 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
   };
 
   const card = (it: Item) => {
-    const got = it.approvals.filter(Boolean).length;
     const isDeclined = declined.includes(it.key);
     return (
       <motion.li key={it.key} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} className="rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
@@ -170,21 +184,25 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
             {it.reviewTx && <ExplorerLink className="mt-1" signature={it.reviewTx} label={copy.reportMissing.link} srLabel={copy.reportMissing.sr} />}
           </Notice>
         )}
-        <div className="mt-4"><Quorum approvals={it.approvals} needed={it.need} names={e.verifierNames} label={fmt(copy.quorum, { got, need: it.need })} /></div>
+        <ReferredNote verdict={it.verdict} />
+        <div className="mt-4"><VoteTally tally={it.tally} kind={it.kind === "death" ? "confirmed" : "approved"} names={e.verifierNames} /></div>
+        {it.claim && <ClaimState snap={snap} claim={it.claim} />}
+        {it.note && <p className="mt-3 text-small font-semibold">{it.note}</p>}
+        <VoteNote vote={it.vote} death={it.kind === "death"} />
         {it.payable && it.target ? (
           <ClaimWindow claim={it.target} {...it.payable} />
-        ) : it.mine ? (
+        ) : it.vote === "waiting" ? (
           <p className="mt-3 flex items-center gap-2 text-small font-medium text-ok"><Check className="size-4" aria-hidden="true" />{copy.already}</p>
-        ) : isDeclined ? (
+        ) : !canSign(it.vote) ? null : isDeclined ? (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-2 p-3">
             <p className="text-small" role="status">{copy.declined}</p>
             <Button variant="ghost" small onClick={() => setDeclined((x) => x.filter((k) => k !== it.key))}><Undo2 className="size-4" aria-hidden="true" />{copy.undo}</Button>
           </div>
         ) : (
-          <div className="mt-4 flex gap-3">
+          <div className="mt-4 flex flex-wrap gap-3">
             <Button variant="secondary" className="flex-1" disabled={!!busy} onClick={() => setDeclined((x) => [...x, it.key])}>{copy.decline}</Button>
             <Button className="flex-[2]" loading={busy === it.key || (it.kind === "death" && busy === "death")} disabled={!!busy} onClick={() => void it.act()}>
-              <Check className="size-5" aria-hidden="true" />{it.approveLabel}
+              <Check className="size-5" aria-hidden="true" />{it.vote === "complete" ? gc.rules.vote.completeCta : it.vote === "again" ? gc.rules.vote.againCta : it.approveLabel}
             </Button>
           </div>
         )}

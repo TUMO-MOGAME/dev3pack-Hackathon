@@ -105,6 +105,9 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
 
   const explain = useCallback((error: unknown) => {
     const raw = error instanceof Error ? error.message : String(error);
+    // A refusal that carries its code ("recurring_payee", "residual") needn't repeat it in the message.
+    const given = (error as { code?: unknown } | null)?.code;
+    if (typeof given === "string" && given !== "generic" && Object.hasOwn(errors, given)) return { code: given, message: errors[given] };
     const code = Object.keys(errors).find((k) => k !== "generic" && new RegExp(`\\b${k}\\b`).test(raw)) ?? "generic";
     return { code, message: errors[code] ?? errors.generic ?? raw };
   }, [errors]);

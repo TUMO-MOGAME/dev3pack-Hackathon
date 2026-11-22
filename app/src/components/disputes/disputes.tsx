@@ -11,28 +11,32 @@ import { Gavel, Pause } from "@/components/ui/icons";
 import type { EstateSnapshot } from "@/lib/service";
 import type { Base58 } from "@/lib/types";
 import { disputeOn, effectiveStatus, type Dispute, type DisputeKind } from "@/lib/disputes/types";
+import { deathSince, interestedIn, isHeld } from "@/lib/guardians/decisions";
 import { formatUsdt, shortAddress } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Badge, Button, Consent, Field, inputClass, Notice } from "@/components/ui/primitives";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { ActionResult, useAction, useWaitText } from "@/components/guardians/parts";
-import { clock } from "@/components/guardians/derive";
+import { clock, objectionOver } from "@/components/guardians/derive";
 
 export const MIN_DISPUTE_REASON = 10;
 
 /** May `me` raise a dispute on `target` now? Mirrors raise_dispute (the program has the final word). */
-export function canDispute(snap: EstateSnapshot, me: Base58 | undefined, kind: DisputeKind, target: Base58): boolean {
-  if (!me) return false;
+export function canDispute(snap: EstateSnapshot, me: Base58 | undefined, kind: DisputeKind, target: Base58, now: number | null = null): boolean {
+  if (!me || me === interestedIn(snap, kind, target)) return false;
   const e = snap.estate;
-  const allowed = e.verifiers.includes(me) || snap.beneficiaries.some((b) => b.wallet === me && b.active);
+  const allowed = (isHeld(me) && e.verifiers.includes(me)) || snap.beneficiaries.some((b) => b.wallet === me && b.active);
   if (!allowed) return false;
   // One challenge at a time per target (shared with monitors' objections), one per claim / per waiting period.
-  if (snap.guardians?.objections.some((o) => o.target === target && (o.status === "Open" || kind === "Claim"))) return false;
+  const since = deathSince(e);
+  if (snap.guardians?.objections.some((o) => o.target === target && (
+    kind === "Claim" || (o.status === "Open" && !objectionOver(o, now)) || (o.status !== "Upheld" && o.raisedAt >= since)
+  ))) return false;
   const prev = disputeOn(snap.disputes, target);
   if (kind === "Claim") return !prev && snap.claims.some((c) => c.address === target && c.status === "Open");
   if (e.status !== "DeathPending") return false;
-  return !prev || prev.status === "Upheld" || prev.raisedAt < (e.death.pendingSince ?? 0);
+  return !prev || prev.status === "Upheld" || prev.raisedAt < since;
 }
 
 /** A trusted person who may still vote on this dispute. */
@@ -45,11 +49,12 @@ export function canResolve(snap: EstateSnapshot, me: Base58 | undefined, d: Disp
 /** The dispute on a pending claim or unlock, or the button to raise one. Renders nothing when neither applies. */
 export function DisputePanel({ kind, target, className }: { kind: DisputeKind; target: Base58; className?: string }) {
   const { snap, session } = useEstate();
+  const now = useNow(5000);
   if (!snap) return null;
   const d = disputeOn(snap.disputes, target);
   const current = d && (kind === "Claim" || d.raisedAt >= (snap.estate.death.pendingSince ?? 0) || d.status === "Open") ? d : null;
   if (current) return <DisputeCard dispute={current} className={className} />;
-  if (!canDispute(snap, session?.address, kind, target)) return null;
+  if (!canDispute(snap, session?.address, kind, target, now)) return null;
   return <div className={className}><RaiseDispute kind={kind} target={target} /></div>;
 }
 
@@ -150,7 +155,8 @@ export function DisputeCard({ dispute: d, className }: { dispute: Dispute; class
             <>
               <p className="mt-1 text-small text-ink-2">{t.youDecide}</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button variant="secondary" className="flex-1" loading={busy === `${key}-down`} disabled={!!busy} onClick={() => void act(`${key}-down`, (s, est) => s.resolveDispute(est, d.address, false), t.dismissed)}>{t.dismiss}</Button>
+                {/* Nobody dismisses a challenge in their own favour. */}
+                {me !== interestedIn(snap, d.kind, d.target) && <Button variant="secondary" className="flex-1" loading={busy === `${key}-down`} disabled={!!busy} onClick={() => void act(`${key}-down`, (s, est) => s.resolveDispute(est, d.address, false), t.dismissed)}>{t.dismiss}</Button>}
                 <Button className="flex-1" loading={busy === `${key}-up`} disabled={!!busy} onClick={() => void act(`${key}-up`, (s, est) => s.resolveDispute(est, d.address, true), t.upheld)}>{t.uphold}</Button>
               </div>
             </>

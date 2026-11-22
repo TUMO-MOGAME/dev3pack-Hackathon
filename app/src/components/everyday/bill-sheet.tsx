@@ -18,6 +18,7 @@ import { fmt, useCopy } from "@/components/shell/copy";
 import { NamesNotice } from "@/components/continuity/names-notice";
 import { BILL_TEMPLATES, checkBill, templateForm, toAddRule, toDraftRule, type BillForm, type Every, type TemplateKey } from "@/lib/everyday/templates";
 import type { WillDraft } from "@/lib/types";
+import { MAX_RULES, slotToReuse } from "@/lib/continuity/logic";
 
 type Copy = ScreensCopy["bills"];
 export interface Option { value: string; label: string }
@@ -40,8 +41,8 @@ export default function BillSheet({ copy, template, target, onClose }: { copy: C
 
 function BillFormView({ copy, template, target, onDone }: { copy: Copy; template: TemplateKey; target: BillTarget; onDone: () => void }) {
   const f = copy.form;
-  const { common } = useCopy();
-  const { fx, run, busy, isMock } = useEstate();
+  const { common, guardians } = useCopy();
+  const { fx, run, busy, isMock, snap } = useEstate();
   const id = useId();
   const signed = target.mode === "signed";
   const [now] = useState(() => Date.now());
@@ -67,10 +68,13 @@ function BillFormView({ copy, template, target, onDone }: { copy: Copy; template
   const zar = (n: number) => (rate && Number.isFinite(n) && n > 0 ? fmt(f.rand, { zar: formatZar(toBase(n), rate) }) : undefined);
   const room = form.amountUsdt > 0 && form.capUsdt >= form.amountUsdt ? Math.floor(form.capUsdt / form.amountUsdt) : 0;
   const name = copy.templates[template].name;
+  // All 16 places used: a rule that has ended gives up its place (R17).
+  const slot = signed && snap ? slotToReuse(snap.rules, Math.floor(now / 1000)) : null;
+  const full = signed && !!snap && snap.rules.length >= MAX_RULES && !slot;
 
   const submit = async () => {
     setTried(true);
-    if (Object.keys(errors).length || walletBad) return;
+    if (Object.keys(errors).length || walletBad || full) return;
     if (target.mode === "draft") {
       target.onAdd(toDraftRule(form, `${name}: ${copy.templates[template].hint}`));
       onDone();
@@ -79,7 +83,8 @@ function BillFormView({ copy, template, target, onDone }: { copy: Copy; template
     const wallet = newWallet.trim();
     const res = await run("bill", async (svc, estate) => {
       if (isNew) await svc.addPayee(estate, { wallet, kind: form.payeeKind, name: newName.trim().slice(0, 64) });
-      return svc.addRule(estate, toAddRule(isNew ? { ...form, payee: wallet } : form, { now: Date.now(), demo: isMock }));
+      const rule = toAddRule(isNew ? { ...form, payee: wallet } : form, { now: Date.now(), demo: isMock });
+      return svc.addRule(estate, slot ? { ...rule, reuse: slot.address } : rule);
     }, fmt(f.added, { name }));
     if (res.ok) onDone();
   };
@@ -159,9 +164,11 @@ function BillFormView({ copy, template, target, onDone }: { copy: Copy; template
       {form.scheduled && !signed && !isMock && <p className="text-small text-ink-2">{f.draftPayeeNote}</p>}
       <p className="text-[0.75rem] text-ink-2">{common.status.category[form.category]} · {common.status.payeeKind[form.payeeKind]}</p>
 
+      {(slot || full) && <Notice tone={full ? "danger" : "warn"}><p role="status">{full ? guardians.rules.slots.full : guardians.rules.slots.reuse}</p></Notice>}
+
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button variant="secondary" onClick={onDone}>{f.cancel}</Button>
-        <Button type="submit" loading={busy === "bill"}><Plus className="size-5" aria-hidden="true" />{busy === "bill" ? f.adding : f.add}</Button>
+        <Button type="submit" disabled={full} loading={busy === "bill"}><Plus className="size-5" aria-hidden="true" />{busy === "bill" ? f.adding : f.add}</Button>
       </div>
     </form>
   );

@@ -159,9 +159,12 @@ describe("mock guardians: monitors and objections", () => {
 
   it("the owner decides an objection alone while the estate is active", async () => {
     const { svc, estate, guardians } = await start("funded");
-    const claim = await bonganiApproved(svc, estate);
+    // While Thabo is alive only he approves claims (R3): what Uncle Bongani can approve is a reported passing.
+    act(svc, "lerato");
+    await svc.submitDeathClaim(estate, pdf());
+    svc.simulateSeatApproval(2);
     act(svc, "zodwa");
-    await svc.raiseObjection(estate, { kind: "Claim", target: claim, seatIndex: 2, reason: "Check first." });
+    await svc.raiseObjection(estate, { kind: "Unlock", target: estate, seatIndex: null, reason: "Check first." });
     act(svc, "thabo");
     await svc.voteObjection(estate, (await guardians()).objections[0].address, false);
     expect((await guardians()).objections[0].status).toBe("Dismissed");
@@ -294,6 +297,11 @@ describe("mock guardians: fallback plan", () => {
     act(svc, "sipho");
     const { report } = await svc.reportFallbackDeath(estate, 0, pdf());
     expect(report.extracted["Full name"]).toBe("Lerato"); // the plain name, never the role label
+    // The agent's word alone never marks a recipient dead (R4): a second person confirms after the wait.
+    expect((await guardians()).fallback.recipients[0].dead).toBe(false);
+    svc.endFallbackWait();
+    act(svc, "naledi");
+    await svc.resolveFallbackDeath(estate, 0, true);
     expect((await guardians()).fallback.recipients[0].dead).toBe(true);
     await expect(svc.reportFallbackDeath(estate, 0, pdf())).rejects.toThrow(/^BadStatus/); // already recorded
     await svc.startFallback(estate);
@@ -392,7 +400,7 @@ describe("mock guardians: a fallback objection lapses (funds are never locked fo
 });
 
 describe("mock guardians: asset photos", () => {
-  it("records the photos with the root of their hashes; owner or agent only", async () => {
+  it("records the photos with the root of their hashes; the living owner only", async () => {
     const { svc, estate, snap } = await start("funded");
     const asset = (await snap()).assets[0].address;
     const photo = (n: string) => ({ sha256: n.repeat(64), url: `/p/${n}.webp`, width: 1600, height: 1200, bytes: 200_000 });
@@ -424,6 +432,8 @@ describe("mock guardians: the owner replaces a trusted person (owner_replace_sea
     expect(e.verifiers[2]).toBe(NEW.wallet);
     expect(e.verifierNames[2]).toBe(NEW.name);
     expect((await svc.listEstatesFor(P("busi").address)).some((x) => x.role === "verifier")).toBe(false);
+    act(svc, "lerato");
+    await svc.submitDeathClaim(estate, pdf());
     svc.simulateSeatApproval(2);
     expect((await guardians()).feed[0].approver).toBe(NEW.wallet);
   });

@@ -23,7 +23,7 @@ const en = {
     },
     claimVerifier: {
       title: "A claim is waiting for you",
-      body: "{name} asked for {amount}{zar} to go to {payee}. My report is attached. One trusted person's approval releases it.",
+      body: "{name} asked for {amount}{zar} to go to {payee}. My report is attached. The trusted people's approval releases it.",
       cta: "Open your inbox",
     },
     deathToConfirm: {
@@ -38,14 +38,14 @@ const en = {
     },
     hardshipToReview: {
       title: "A hardship request needs you",
-      body: "{name} asked for the car to sell below the minimum price. I've checked the affidavit. Two trusted people must agree.",
+      body: "{name} asked for the car to sell below the minimum price. I've checked the affidavit. The trusted people decide.",
       cta: "Review the request",
     },
     offerReceived: {
       title: "The car has an offer to settle",
-      body: "The best offer for the {title} is {amount}{zar}, at or above the minimum. You can accept it and the sale completes in one step.",
-      bodyEnded: "The listing for the {title} has ended. The best offer is {amount}{zar}, at or above the minimum. Settle it now.",
-      cta: "Settle the sale",
+      body: "I rank the offer of {amount}{zar} for the {title} best, at or above the limit. Read the buyer and the exact amount, then co-sign it.",
+      bodyEnded: "The listing for the {title} has ended. I rank the offer of {amount}{zar} best, at or above the limit. Check it, then co-sign it.",
+      cta: "Check the offer",
     },
     legacyMessage: {
       title: "A message from {calledBy}",
@@ -61,7 +61,7 @@ const en = {
     },
     deathReported: {
       title: "Someone reported your passing",
-      body: "If this is a mistake, one tap on \"I'm still here\" cancels it and keeps the vault locked.",
+      body: "If this is a mistake, \"I'm still here\" cancels the reported passing and keeps the plan as it is.",
       cta: "I'm still here",
     },
     fundVault: {
@@ -119,9 +119,9 @@ const en = {
     report: "I read {name} ({type}, {confidence}% sure). {verdict}\n\n{summary}",
     redFlags: "Things to check: {flags}.",
     next: {
-      death: "If this is right, you can report the passing with it. Two trusted people then confirm.",
+      death: "If this is right, you can report the passing with it. The trusted people then confirm.",
       claim: "If this is right, you can claim against your rule with it. The money goes straight to the institution.",
-      hardship: "If this is right, you can start a hardship request with it. Two trusted people must agree.",
+      hardship: "If this is right, you can start a hardship request with it. The trusted people decide.",
       verifier: "The family member submits it through their own claim; you'll see it in your inbox with this report.",
       other: "Only the family member it concerns can submit it.",
     },

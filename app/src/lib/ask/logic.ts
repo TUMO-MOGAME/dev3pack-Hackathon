@@ -9,7 +9,8 @@ import { yearlyLeft } from "../disputes/types";
 import { toBase } from "../format";
 import type { AskCurrency, AskNote } from "./types";
 import { openToPeople } from "@/lib/verdict";
-import { quorumFor } from "@/lib/verdict";
+import { quorum as quorumOf } from "../death-rules";
+import { claimBlock, isFamily } from "../guardians/decisions";
 
 /** A rule is open for payments now: always after unlock, and while the owner is alive only if it "starts now". */
 export function ruleOpen(estate: Pick<Estate, "status">, rule: Pick<Rule, "startsNow">): boolean {
@@ -32,7 +33,8 @@ export interface AskOption {
  * pays claims (not schedules) and is open now. Everyday ("General") rules first, then the asker's own wallet.
  */
 export function askOptions(snap: EstateSnapshot, wallet: Base58 | null | undefined, now: number): AskOption[] {
-  if (!wallet) return [];
+  // Someone taken out of the plan can't ask (R16).
+  if (!wallet || !isFamily(snap, wallet)) return [];
   const out: AskOption[] = [];
   for (const rule of snap.rules) {
     if (rule.beneficiary !== wallet || rule.recurringAmount > BigInt(0) || !ruleOpen(snap.estate, rule) || now > rule.validUntil) continue;
@@ -116,11 +118,15 @@ export type AskStatus = "checking" | "refused" | "waiting" | "declined" | "appro
  * waiting: with the owner or the trusted people; declined: the owner said no; approved: approved, not yet paid
  * (e.g. an objection window); paid.
  */
-export function askStatus(claim: Claim, estate: Pick<Estate, "status" | "claimThreshold">, note?: AskNote | null): AskStatus {
+export function askStatus(claim: Claim, estate: Pick<Estate, "status" | "claimThreshold"> & Partial<Pick<Estate, "verifiers">>, note?: AskNote | null): AskStatus {
   if (claim.status === "Paid") return "paid";
   if (claim.status === "Rejected") return "refused";
   if (claim.agentVerdict === "Pending") return "checking";
-  const quorum = estate.status === "Unlocked" && claim.approvals.filter(Boolean).length >= quorumFor(claim.agentVerdict, estate.claimThreshold);
+  // Only votes given after the death, by seats still held, not by the claimant (R3, R8, R11).
+  const quorum = estate.status === "Unlocked" && quorumOf({
+    verifiers: estate.verifiers ?? ["seat 1", "seat 2", "seat 3"], votes: claim.approvalsCount === false ? [] : claim.approvals,
+    threshold: estate.claimThreshold, verdict: claim.agentVerdict, interested: claim.beneficiary,
+  }).met;
   if (claim.ownerApproved || quorum) return "approved";
   if (note?.declinedAt) return "declined";
   return "waiting";
@@ -130,6 +136,6 @@ export function askStatus(claim: Claim, estate: Pick<Estate, "status" | "claimTh
 export function ownerCanDecide(snap: EstateSnapshot, claim: Claim): boolean {
   const rule = snap.rules.find((r) => r.address === claim.rule);
   if (snap.estate.status !== "Active" || !rule?.startsNow) return false;
-  if (claim.status !== "Open" || !openToPeople(claim.agentVerdict)) return false;
+  if (claim.status !== "Open" || !openToPeople(claim.agentVerdict) || claimBlock(snap, claim)) return false;
   return !snap.asks?.[claim.address]?.declinedAt;
 }

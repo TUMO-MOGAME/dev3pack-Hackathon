@@ -1,5 +1,6 @@
 /** Practice setup for the test network: who still needs a wallet, and the payees a plan's rules need. Pure. */
 import type { PayeeKind, Role, WillDraft } from "../types";
+import { fullName } from "../names";
 
 export interface MissingPerson { key: string; name: string; role: Role }
 
@@ -51,4 +52,45 @@ export function practicePayees(rules: WillDraft["rules"], existing: { name: stri
     if (!all().some((p) => p.kind === r.allowedPayeeKind)) out.push({ name: PRACTICE_NAME[r.allowedPayeeKind], kind: r.allowedPayeeKind });
   }
   return out;
+}
+
+/** Scheduled payments with no approved payee of that name and kind: signing stops on them, it never downgrades them (U2). */
+export function missingPayees(
+  rules: WillDraft["rules"], existing: readonly { name: string; kind: PayeeKind }[] = [], practice = false,
+): { index: number; name: string; kind: PayeeKind }[] {
+  const known = practice ? [...existing, ...practicePayees(rules, [...existing])] : existing;
+  return rules.flatMap((r, index) => {
+    if (!r.recurring) return [];
+    const name = r.recurring.payeeName.trim();
+    const found = !!name && known.some((p) => p.kind === r.allowedPayeeKind && p.name.toLowerCase() === name.toLowerCase());
+    return found ? [] : [{ index, name, kind: r.allowedPayeeKind }];
+  });
+}
+
+/** The owner's explicit choice, shown before signing: a schedule becomes a rule paid on request. */
+export const paidOnRequest = (rule: WillDraft["rules"][number]): WillDraft["rules"][number] => {
+  const { recurring, ...rest } = rule;
+  void recurring;
+  return rest;
+};
+
+export type TrustedProblem = "three" | "name" | "wallet" | "samePerson" | "sameWallet" | "owner";
+
+/** Setup takes three different real trusted people (R14). `heirs`: the ones who are also in the family. */
+export function checkTrusted(
+  draft: Pick<WillDraft, "ownerName" | "beneficiaries" | "verifiers">, ownerWallet?: string | null,
+): { problem: TrustedProblem | null; heirs: string[] } {
+  const norm = (s: string) => fullName(s).trim().replace(/\s+/g, " ").toLowerCase();
+  const people = draft.verifiers;
+  const heirs = people
+    .filter((v) => draft.beneficiaries.some((b) => (!!v.wallet && v.wallet === b.wallet) || norm(v.name) === norm(b.label)))
+    .map((v) => v.name);
+  const wallets = people.flatMap((v) => (v.wallet ? [v.wallet] : []));
+  const problem: TrustedProblem | null = people.length !== 3 ? "three"
+    : people.some((v) => !norm(v.name)) ? "name"
+      : wallets.some((w) => /^1{32}$/.test(w)) ? "wallet"
+        : (!!ownerWallet && wallets.includes(ownerWallet)) || people.some((v) => norm(v.name) === norm(draft.ownerName)) ? "owner"
+          : new Set(wallets).size !== wallets.length ? "sameWallet"
+            : new Set(people.map((v) => norm(v.name))).size !== 3 ? "samePerson" : null;
+  return { problem, heirs };
 }

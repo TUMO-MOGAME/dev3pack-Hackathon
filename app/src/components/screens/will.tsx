@@ -23,7 +23,10 @@ import { isMockService } from "@/lib/service/is-mock";
 import { willView } from "@/lib/hooks/pick-estate";
 import { ConnectPeople, EndRule, ResidualPicker } from "@/components/continuity/continuity";
 import { NamesNotice } from "@/components/continuity/names-notice";
-import { missingPeople, withWallets } from "@/lib/continuity/practice";
+import { checkTrusted, missingPayees, missingPeople, paidOnRequest, withWallets } from "@/lib/continuity/practice";
+import { SetupChecks } from "@/components/continuity/setup-checks";
+import { useWho } from "@/components/guardians/decision";
+import { DEMO_PAYEES } from "@/lib/service/mock-payees";
 
 type Copy = ScreensCopy["will"];
 type BillsCopy = ScreensCopy["bills"];
@@ -110,6 +113,8 @@ function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
 
 /* ---------- Conversation + live preview + review + sign ---------- */
 
+const scheduleKey = (r: WillDraft["rules"][number]) => `${r.beneficiaryLabel}|${r.category}|${r.recurring?.payeeName ?? ""}`;
+
 /** `firstVisit`: the server-rendered copy shown to a first demo visit before the app loads (see Gate `fresh`). */
 function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: Copy; bills: BillsCopy; session: WalletSession; onSigned: (r: { estate: string; txs: TxResult[] }) => void; firstVisit?: boolean }) {
   // The opening message fades in with CSS, so the server-rendered first visit shows it without JavaScript. When this
@@ -120,6 +125,11 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
   const { service, run, busy, openAgent, isMock } = useEstate();
   const [wallets, setWallets] = useState<Record<string, string>>({});
   const [practice, setPractice] = useState(false);
+  // Schedules the owner chose to pay on request, by who + what + payee: the only way one stops being scheduled (U2).
+  const [onRequest, setOnRequest] = useState<string[]>([]);
+  const [payeeRefused, setPayeeRefused] = useState(false);
+  // Bumped when the owner clears the addresses, so the address boxes start empty.
+  const [addressRound, setAddressRound] = useState(0);
   const [residualLabel, setResidualLabel] = useState("");
   const first = session.label.split(/[ (]/)[0];
   // The greeting (message 0) follows the current language and name: this writer can be the first-visit copy that was
@@ -137,11 +147,15 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
   // the summary shown on the review and hashed into the signed will is then written from the rules (lib/will-summary).
   const owned = useMemo(() => {
     if (!rawDraft) return null;
-    const rules = [...rawDraft.rules, ...extra].map((r) => { const k = ruleKey(r); return k in starts ? { ...r, startsNow: starts[k] } : r; });
+    const rules = [...rawDraft.rules, ...extra].map((r) => {
+      const k = ruleKey(r);
+      const timed = k in starts ? { ...r, startsNow: starts[k] } : r;
+      return onRequest.includes(scheduleKey(r)) ? paidOnRequest(timed) : timed;
+    });
     return withOwnerSummary(rawDraft, rules, copy.review, {
       category: (c) => common.status.category[c], every: (e) => copy.review.summaryEvery[e], usd, need: 2,
     });
-  }, [rawDraft, extra, starts, copy, common]);
+  }, [rawDraft, extra, starts, onRequest, copy, common]);
   const draft: WillDraft | null = owned?.draft ?? null;
   const addBill = (rule: WillDraft["rules"][number]) => {
     setExtra((x) => [...x, rule]);
@@ -217,22 +231,39 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
   const sign = async () => {
     if (!draft) return;
     const signed = isMock ? draft : withWallets(draft, wallets);
+    setPayeeRefused(false);
     const res = await run("sign", (s) => s.createEstateFromWill(signed, { practice, residualLabel: residualLabel || draft.beneficiaries[0]?.label }));
     if (res.ok) onSigned(res.value);
+    else if (res.code === "recurring_payee") setPayeeRefused(true);
   };
 
   if (view === "review" && draft) {
     const missing = isMock ? [] : missingPeople(draft, wallets);
+    const trusted = checkTrusted(isMock ? draft : withWallets(draft, wallets), session.address);
+    const known = isMock ? DEMO_PAYEES : [];
+    const noPayee = missingPayees(draft.rules, known, practice);
+    const made = practice ? [...new Set(missingPayees(draft.rules, known).map((m) => m.name))] : [];
     return (
       <Review
         copy={copy} draft={draft} edited={owned?.edited ?? false} onBack={() => setView("chat")} onSign={sign} signing={busy === "sign"}
-        blocked={missing.length > 0}
+        blocked={missing.length > 0 || !!trusted.problem || noPayee.length > 0}
         setup={(
           <>
+            <SetupChecks
+              draft={draft} every={copy.preview.every} trusted={trusted} missing={noPayee} made={made} refused={payeeRefused}
+              onFixPeople={() => setView("chat")}
+              onFixWallets={isMock ? undefined : () => { setWallets({}); setPractice(false); setAddressRound((n) => n + 1); }}
+              onPractice={() => { setPractice(true); setPayeeRefused(false); }}
+              onRequest={(index) => {
+                const r = [...(rawDraft?.rules ?? []), ...extra][index];
+                if (r) setOnRequest((x) => [...x, scheduleKey(r)]);
+                setPayeeRefused(false);
+              }}
+            />
             <NamesNotice className="mt-4" />
             <ResidualPicker draft={draft} value={residualLabel || draft.beneficiaries[0]?.label || ""} onChange={setResidualLabel} />
             {!isMock && (
-              <ConnectPeople draft={draft} missing={missing} wallets={wallets} onWallets={(next, made) => { setWallets(next); if (made) setPractice(true); }} />
+              <ConnectPeople key={addressRound} draft={draft} missing={missing} wallets={wallets} onWallets={(next, made) => { setWallets(next); if (made) setPractice(true); }} />
             )}
           </>
         )}
@@ -286,7 +317,7 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
 
         <div className="flex max-h-[min(42rem,80dvh)] min-h-0 flex-col lg:h-full lg:max-h-none">
           <Preview
-            copy={copy} draft={draft} onStart={(i, now) => { const r = draft?.rules[i]; if (r) setStarts((prev) => ({ ...prev, [ruleKey(r)]: now })); }}
+            copy={copy} draft={draft} onStart={(i, now) => { const r = [...(rawDraft?.rules ?? []), ...extra][i]; if (r) setStarts((prev) => ({ ...prev, [ruleKey(r)]: now })); }}
             bills={bills} extraFrom={rawDraft?.rules.length ?? 0} onAddBill={addBill}
             onRemoveBill={(i) => setExtra((x) => x.filter((_, j) => j !== i))}
             footer={complete && (
@@ -510,6 +541,7 @@ function Review({ copy, draft, edited, onBack, onSign, signing, blocked, setup }
 function Locked({ copy, bills, snap }: { copy: Copy; bills: BillsCopy; snap: EstateSnapshot }) {
   const { common } = useCopy();
   const { openAgent } = useEstate();
+  const nameOf = useWho(snap);
   const l = copy.locked;
   return (
     <div className="mx-auto max-w-2xl">
@@ -517,7 +549,7 @@ function Locked({ copy, bills, snap }: { copy: Copy; bills: BillsCopy; snap: Est
       <ol className="grid gap-2.5">
         {snap.rules.map((rule) => {
           const Icon = categoryIcon[rule.category];
-          const who = snap.beneficiaries.find((b) => b.wallet === rule.beneficiary)?.label ?? "";
+          const who = snap.beneficiaries.find((b) => b.wallet === rule.beneficiary)?.label ?? nameOf(rule.beneficiary);
           const base = {
             name: who, category: common.status.category[rule.category].toLowerCase(), kind: common.status.payeeKind[rule.allowedPayeeKind].toLowerCase(),
             max: formatUsdt(rule.maxPerClaim, { decimals: 0 }), cap: formatUsdt(rule.lifetimeCap, { decimals: 0 }), date: longDate(rule.validUntil),
@@ -529,7 +561,7 @@ function Locked({ copy, bills, snap }: { copy: Copy; bills: BillsCopy; snap: Est
               <div className="min-w-0">
                 <Badge tone={rule.startsNow ? "gold" : "neutral"}>{rule.startsNow ? <Zap className="size-3.5" aria-hidden="true" /> : <Hourglass className="size-3.5" aria-hidden="true" />}{rule.startsNow ? copy.preview.now : copy.preview.later}</Badge>
                 <p className="mt-1.5">{recurring
-                  ? fmt(copy.review.recurringRule, { ...base, amount: formatUsdt(rule.recurringAmount, { decimals: 0 }), payee: snap.payees.find((x) => x.wallet === rule.fixedPayee)?.name ?? "", every: copy.preview.every[signedEvery(rule)] })
+                  ? fmt(copy.review.recurringRule, { ...base, amount: formatUsdt(rule.recurringAmount, { decimals: 0 }), payee: nameOf(rule.fixedPayee), every: copy.preview.every[signedEvery(rule)] })
                   : fmt(rule.allowedPayeeKind === "Other" ? copy.review.ruleOther : copy.review.rule, base)}</p>
                 <EndRule snap={snap} rule={rule} />
               </div>

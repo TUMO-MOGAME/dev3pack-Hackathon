@@ -6,19 +6,23 @@
  * Synchronous "instructions" only; mock.ts wraps them in the async GuardiansService methods (hashing, the agent's
  * review, latency) and calls the hooks (recordApproval, check*) from its existing instructions.
  */
-import type { AgentReport, Base58, PaymentRef } from "../types";
+import type { AgentReport, Base58, Claim, PaymentRef } from "../types";
 import type { EstateSnapshot, TxResult } from "./types";
 import type {
-  AssetKind, AssetMediaInfo, AssetPhoto, FallbackRecipient, GuardiansSnapshot, ObjectionStatus, SeatApprovalItem, TargetKind,
+  AssetKind, AssetMediaInfo, AssetPhoto, FallbackRecipient, GuardiansSnapshot, ObjectionStatus, Seat, SeatApprovalItem, TargetKind,
 } from "../guardians/types";
 import { fail, need } from "./mock-errors";
 import { shortName } from "../names";
 import { cleanSpec, foreignSpecKeys, isPhotoLabel, type AssetSpec } from "../assets/spec";
 import { objectionLapsesAt } from "../disputes/types";
+import { eligibleSeats, refuteWait, replaceableAt, reviewedHold } from "../death-rules";
+import { openToPeople } from "../verdict";
+import { confirmRoute, deathSince, interestedIn, NO_WALLET, successionOutcome } from "../guardians/decisions";
+import { clearDeath, COLLECTING, proofOfLife, votesCount, type MockStamp } from "./mock-rules";
 
 /** Demo timings: objection window, succession wait and fallback wait (real: 2 days, 7 days, 90 days). */
 export const GUARD_DEMO_TIMINGS = { objectionWindowSecs: 60, successionWaitSecs: 60, fallbackWaitSecs: 120 } as const;
-export const VACANT_KEY = "11111111111111111111111111111111";
+export const VACANT_KEY = NO_WALLET;
 /** The program's MAX_PHOTOS (raised from 8 to 24 on 15 Nov 2026). */
 export const MAX_PHOTOS = 24;
 
@@ -31,7 +35,22 @@ interface MockSuccession {
   verdict: "Pending" | "Approved" | "Rejected";
   report?: AgentReport;
   confirmedBy: Base58 | null;
+  /** When it was reported (absent: saved before times were stored, so long stale). */
+  reportedAt?: number;
+  /** When the wait started. The demo's "end the wait" moves it back. */
   pendingSince: number;
+  /** When it was confirmed, never moved. */
+  confirmedAt?: number;
+}
+
+/** FallbackReport: an open report that a fallback recipient died (R4). */
+interface MockFallbackReport {
+  recipient: Base58;
+  reporter: Base58;
+  certHash: string;
+  verdict: "Pending" | "Approved";
+  report?: AgentReport;
+  reportedAt: number;
 }
 
 interface MockSeat {
@@ -70,8 +89,10 @@ export interface MockGuardState {
   fallbackDead: boolean[];
   fallbackStartedAt: number | null;
   fallbackDone: boolean;
-  /** ApprovalStamp per target (claims): who brought it to its threshold and when. */
-  stamps: Record<Base58, { seatIndex: number; approver: Base58; approvedAt: number }>;
+  /** ApprovalStamp per claim, with or without a Guard: whether approvals count, and the window. */
+  stamps: Record<Base58, MockStamp>;
+  /** Open reports by recipient index (added 22 Nov 2026; absent in older saved states). */
+  fallbackReports?: Record<number, MockFallbackReport>;
   feed: SeatApprovalItem[];
   objections: MockObjection[];
   media: Record<Base58, { kind: AssetKind; title: string; description?: string; photos: AssetPhoto[]; spec?: AssetSpec; photosRoot: string; updatedAt: number }>;
@@ -86,7 +107,7 @@ export function blankGuard(): MockGuardState {
   return {
     address: fakeAddr(), enabled: false, ...GUARD_DEMO_TIMINGS,
     seats: [], fallback: [], fallbackDead: [], fallbackStartedAt: null, fallbackDone: false,
-    stamps: {}, feed: [], objections: [], media: {},
+    stamps: {}, feed: [], objections: [], media: {}, fallbackReports: {},
   };
 }
 
@@ -96,7 +117,8 @@ export interface GuardDeps {
   names(): Record<Base58, string>;
   created(): boolean;
   me(): Base58;
-  agent: Base58;
+  /** The latest dispute on a target: it shares the objection's place. */
+  dispute(target: Base58): { raisedAt: number; lapsesAt: number } | null;
   tx(): TxResult;
   log(kind: string, text: string, t: TxResult, amount?: bigint, payment?: PaymentRef): void;
   credit(wallet: Base58, amount: bigint): void;
@@ -117,12 +139,35 @@ export function createMockGuardians(d: GuardDeps) {
     need(est().status === "Active", "BadStatus", "This can only change while the estate is active.");
   };
   const seat = (index: number) => g().seats.find((s) => s.index === index) ?? fail("BadStatus", "That trusted person's seat does not exist.");
+  /** The owner showed life after it was raised, so the death it challenged, and any votes on it, are void. */
+  const voidedByOwner = (o: MockObjection) => (o.kind === "Unlock" || o.kind === "Fallback") && o.raisedAt < est().lastHeartbeat;
   /** An Open objection lapses (counts as dismissed): Fallback after the fallback wait, the others after two waiting periods. */
-  const lapsesAt = (o: MockObjection) => (o.status !== "Open" ? null
-    : o.kind === "Fallback" ? o.raisedAt + g().fallbackWaitSecs : objectionLapsesAt(o.raisedAt, est().waitingPeriodSecs));
-  const openObjection = (target: Base58) =>
-    g().objections.find((o) => o.target === target && o.status === "Open" && (o.kind === "Fallback" || !lapsed(o)));
+  function lapsesAt(o: MockObjection): number | null {
+    if (o.status !== "Open") return null;
+    const at = o.kind === "Fallback" ? o.raisedAt + g().fallbackWaitSecs : objectionLapsesAt(o.raisedAt, est().waitingPeriodSecs);
+    return voidedByOwner(o) ? Math.min(at, est().lastHeartbeat) : at;
+  }
   const lapsed = (o: MockObjection) => { const at = lapsesAt(o); return at !== null && nowSecs() >= at; };
+  /** Open and binding. A Fallback one binds until it is closed as lapsed. */
+  const binding = (o: MockObjection) => o.status === "Open" && (o.kind === "Fallback" || !lapsed(o));
+  const openObjection = (target: Base58) => g().objections.find((o) => o.target === target && binding(o));
+  const objectionBinds = (target: Base58) => !!openObjection(target);
+  const interested = (kind: TargetKind, target: Base58) => (kind === "Fallback"
+    ? g().fallback.find((_r, k) => !g().fallbackDead[k])?.wallet ?? null
+    : interestedIn(d.snap(), kind, target));
+  /** Votes of vacant seats don't count. Monitors' bits are positions, not seats. */
+  const countedVotes = (o: MockObjection, votes: number) =>
+    o.kind === "Fallback" ? votes : eligibleSeats(est().verifiers).reduce((all, i) => all | (votes & (1 << i)), 0);
+  const named = (w: Base58): Named => ({ wallet: w, name: name(w) });
+  const seatView = (s: MockSeat): Seat => ({
+    address: s.address, index: s.index, holder: s.holder, holderName: s.holder ? name(s.holder) : "", backups: s.backups.map(named),
+    monitors: s.monitors.map(named), generation: s.generation, vacant: s.vacant,
+    succession: s.succession ? { ...s.succession, readyAt: 0, nextHolder: null } : null,
+  });
+  function promotedNext(s: MockSeat): Named | null {
+    const o = successionOutcome(est(), seatView(s));
+    return o.kind === "promote" ? o.next : null;
+  }
   function markLapsed(o: MockObjection) {
     o.status = "Dismissed";
     d.log("ObjectionResolved", o.kind === "Fallback" ? "The objection lapsed: it was not upheld in time, so the fallback plan can go ahead" : "The objection lapsed: it was not upheld in time, so the paused step can go ahead", d.tx());
@@ -145,6 +190,7 @@ export function createMockGuardians(d: GuardDeps) {
     for (const w of wallets) {
       need(!!w && w !== VACANT_KEY, "BadBackup", "A backup needs a wallet address.");
       need(w !== est().owner, "BadBackup", "The owner cannot be a backup.");
+      need(w !== est().agent, "BadBackup", "The agent cannot be a backup.");
       need(w !== seat(index).holder, "BadBackup", "A trusted person cannot be their own backup.");
       need(!holders.includes(w), "BadBackup", "This person already holds another seat.");
     }
@@ -170,15 +216,36 @@ export function createMockGuardians(d: GuardDeps) {
 
   /* ----- owner setup ----- */
 
+  /** lib/service/chain-guardians.ts `defaultMonitor`: not who would take the seat, rather not a trusted person, spread out. */
+  function watcherFor(index: number, holder: Base58 | null, backup: Base58 | undefined): Base58 | null {
+    const { owner, verifiers } = est();
+    const able = d.snap().beneficiaries.filter((b) => b.active)
+      .sort((a, b) => a.label.localeCompare(b.label, "en", { numeric: true }) || a.wallet.localeCompare(b.wallet))
+      .map((b) => b.wallet).filter((w) => w !== holder && w !== backup && w !== owner);
+    const outside = able.filter((w) => !verifiers.includes(w));
+    const pool = outside.length ? outside : able;
+    return pool.length ? pool[index % pool.length] : null;
+  }
+
   function setup(input: {
     seats: { index: number; backups: Named[]; monitors: Named[] }[];
     fallback: FallbackInput[];
   }): TxResult[] {
     needCreated(); needOwnerActive();
     const txs: TxResult[] = [];
+    const watchers = new Map<number, Base58>();
     if (!g().enabled) {
       g().enabled = true;
       createSeats();
+      // A seat made without a monitor gets one from the active family, as on the chain.
+      for (const s of g().seats) {
+        const asked = input.seats.find((x) => x.index === s.index);
+        if (asked?.monitors.length) continue;
+        const watcher = watcherFor(s.index, s.holder, asked?.backups[0]?.wallet);
+        if (!watcher) continue;
+        watchers.set(s.index, watcher);
+        s.monitors = [watcher];
+      }
       const t = d.tx(); txs.push(t);
       d.log("GuardCreated", "Guardians switched on: approvals now wait for an objection window", t);
     }
@@ -186,7 +253,8 @@ export function createMockGuardians(d: GuardDeps) {
       need(s.index >= 0 && s.index <= 2, "BadStatus", "There are only three trusted people.");
       remember([...s.backups, ...s.monitors]);
       txs.push(setBackups(s.index, s.backups.map((b) => b.wallet)));
-      txs.push(setMonitors(s.index, s.monitors.map((m) => m.wallet)));
+      const watcher = watchers.get(s.index);
+      txs.push(setMonitors(s.index, watcher ? [watcher] : s.monitors.map((m) => m.wallet)));
     }
     if (input.fallback.length) txs.push(setFallback(input.fallback));
     return txs;
@@ -197,8 +265,12 @@ export function createMockGuardians(d: GuardDeps) {
     const s = seat(index);
     const isHolder = !!s.holder && d.me() === s.holder;
     if (!isHolder) needOwnerActive();
-    need(!s.succession, "SuccessionPending", "A passing is being confirmed for this seat.");
     validBackups(index, wallets);
+    if (s.succession) {
+      need(reportStale(s.succession, d.me()), "SuccessionPending", "A passing is being confirmed for this seat.");
+      s.succession = null;
+      d.log("SeatDeathReportCleared", "A passing reported for this seat went unconfirmed too long, so the report was cleared", d.tx());
+    }
     s.backups = [...wallets];
     const t = d.tx();
     const who = s.holder ? first(s.holder) : "this seat";
@@ -210,6 +282,11 @@ export function createMockGuardians(d: GuardDeps) {
     needGuard(); needOwnerActive();
     const s = seat(index);
     validMonitors(index, wallets);
+    // Someone watches this seat from now on, so a family member's confirmation gives way to theirs (R18).
+    if (s.succession?.confirmedBy && wallets.length && confirmRoute(est(), seatView(s)) === "family") {
+      s.succession = null;
+      d.log("SeatDeathReportCleared", "This seat has a monitor now, so the family's confirmation was cleared", d.tx());
+    }
     s.monitors = [...wallets];
     const t = d.tx();
     d.log("SeatMonitorsSet", wallets.length
@@ -232,7 +309,7 @@ export function createMockGuardians(d: GuardDeps) {
   }
 
   /**
-   * owner_replace_seat: the living owner swaps the person in a seat (or fills an empty one). Same checks as the
+   * owner_replace_seat: the living owner swaps the person in a seat (or fills an empty one); proof of life. Same checks as the
    * program: the owner, estate Active (BadStatus), the new holder set, not the owner and not holding any seat
    * (DuplicateVerifier). Backups and monitors stay, minus the new holder; a reported passing is cleared.
    */
@@ -244,6 +321,7 @@ export function createMockGuardians(d: GuardDeps) {
     need(!!w && w !== VACANT_KEY, "DuplicateVerifier", "The new trusted person needs a wallet address.");
     need(w !== e.owner, "DuplicateVerifier", "The owner cannot be their own trusted person.");
     need(!e.verifiers.includes(w), "DuplicateVerifier", "This person already holds a trusted place.");
+    need(w !== e.agent, "BadAgent", "The agent cannot be a trusted person.");
     remember([{ wallet: w, name: newHolder.name.trim() }]);
     const previous = s.holder;
     s.holder = w;
@@ -255,6 +333,8 @@ export function createMockGuardians(d: GuardDeps) {
     e.verifiers[index] = w;
     e.verifierNames[index] = name(w);
     const t = d.tx();
+    // Only the living owner can do this, and it revokes what the replaced person attested (R2).
+    proofOfLife(e, nowSecs(), d.log, d.tx);
     d.log("SeatConfigured", previous ? `${name(w)} replaces ${name(previous)} as a trusted person` : `${name(w)} fills an empty trusted place`, t);
     return t;
   }
@@ -271,12 +351,29 @@ export function createMockGuardians(d: GuardDeps) {
     });
   }
 
-  /** approve_claim reached its threshold: init the ApprovalStamp. Returns the objection deadline. */
-  function stamp(target: Base58, seatIndex: number): number | null {
-    if (!g().enabled) return null;
-    const approvedAt = nowSecs();
-    if (!g().stamps[target]) g().stamps[target] = { seatIndex, approver: d.me(), approvedAt };
-    return g().stamps[target].approvedAt + g().objectionWindowSecs;
+  const countsFor = (c: Claim) => votesCount(g().stamps[c.address], c, est());
+
+  /**
+   * approve_claim's stamp: collecting until the quorum, then the window runs from when it was reached, again if it
+   * had been lost. Returns when the claim may be paid, or null while it can't be.
+   */
+  function recordStamp(claim: Claim, seatIndex: number, starts: boolean): number | null {
+    const stamps = g().stamps;
+    if (starts) stamps[claim.address] = { seatIndex, approver: d.me(), approvedAt: nowSecs(), givenAt: nowSecs() };
+    else if (!stamps[claim.address]?.approvedAt) stamps[claim.address] = { seatIndex: COLLECTING, approver: d.me(), approvedAt: 0 };
+    return payableAt(claim.address);
+  }
+
+  /** With a Guard: when the window closes. A dispute held the objection's place, so the window follows it. */
+  function payableAt(claim: Base58): number | null {
+    const st = g().stamps[claim];
+    if (!g().enabled || !st?.approvedAt) return null;
+    let at = st.approvedAt + g().objectionWindowSecs;
+    const dispute = d.dispute(claim);
+    if (dispute && !st.windowEnded && !g().objections.some((o) => o.target === claim && o.raisedAt > dispute.raisedAt)) {
+      at = Math.max(at, dispute.lapsesAt + g().objectionWindowSecs);
+    }
+    return at;
   }
 
   /** execute_claim with a Guard: the stamp must exist, the window must have passed, and no objection may be open. */
@@ -284,9 +381,8 @@ export function createMockGuardians(d: GuardDeps) {
     if (!g().enabled) return;
     need(!openObjection(claim), "ObjectionOpen", "A monitor objected. This payment waits until the objection is decided.");
     if (!byQuorum) return; // the owner's own approval (living plan) is not a seat approval
-    const st = g().stamps[claim];
-    need(!!st, "ObjectionWindowOpen", "This approval has not been recorded yet.");
-    need(nowSecs() >= st.approvedAt + g().objectionWindowSecs, "ObjectionWindowOpen", "The objection window is still open. Try again shortly.");
+    const at = payableAt(claim) ?? fail("ObjectionWindowOpen", "This approval has not been recorded yet.");
+    need(nowSecs() >= at, "ObjectionWindowOpen", "The objection window is still open. Try again shortly.");
   }
 
   /** finalize_unlock / accept_offer / hardship-gated sales: no open objection on the target. */
@@ -297,22 +393,39 @@ export function createMockGuardians(d: GuardDeps) {
 
   /* ----- succession ----- */
 
-  /** report_seat_death + review_seat_death in one step (the agent's verdict is already known). */
-  function reportSeatDeath(index: number, certHash: string, report: AgentReport): TxResult {
+  const isFamilyMember = (w: Base58) => d.snap().beneficiaries.some((b) => b.wallet === w && b.active);
+  const isMonitorOfAny = (w: Base58) => g().seats.some((s) => s.monitors.includes(w));
+  /** A living trusted person, this seat's monitor or an active beneficiary; never the agent. */
+  const isParticipant = (who: Base58, s: MockSeat | null) =>
+    who !== est().agent && who !== VACANT_KEY && (est().verifiers.includes(who) || !!s?.monitors.includes(who) || isFamilyMember(who));
+
+  function reportStale(sc: MockSuccession, who: Base58): boolean {
+    const w = est().waitingPeriodSecs;
+    return !sc.confirmedBy && nowSecs() >= replaceableAt({
+      verdict: sc.verdict, reportedAt: sc.reportedAt ?? 0, reporter: sc.reportedBy, who, waitingSecs: w, hold: reviewedHold(w),
+    });
+  }
+
+  /** report_seat_death + review_seat_death in one step (the agent's verdict is already known; null = not read yet). */
+  function reportSeatDeath(index: number, certHash: string, report: AgentReport | null): TxResult {
     needGuard();
     const s = seat(index);
+    const who = d.me();
     need(!s.vacant && !!s.holder, "SeatVacant", "This seat is already empty.");
-    need(d.me() !== s.holder, "BadStatus", "You cannot report your own passing.");
-    need(!s.succession, "SuccessionPending", "A passing is already being confirmed for this seat.");
+    need(who !== s.holder, "BadStatus", "You cannot report your own passing.");
+    need(isParticipant(who, s) || (who !== est().agent && (who === est().owner || s.backups.includes(who))),
+      "NotParticipant", "Only the trusted people, the owner, the family, or this person's backups and monitors can report this.");
+    need(!s.succession || reportStale(s.succession, who), "SuccessionPending", "A passing is already being confirmed for this seat.");
     const t = d.tx();
-    d.log("SeatDeathReported", `${first(d.me())} reported that ${first(s.holder!)} has passed away`, t);
-    if (report.verdict !== "approve") {
+    d.log("SeatDeathReported", `${first(who)} reported that ${first(s.holder!)} has passed away`, t);
+    s.succession = null;
+    if (report && report.verdict !== "approve") {
       d.log("SeatDeathReviewed", "The agent could not accept the certificate. Nothing has changed", d.tx());
       return t;
     }
-    // The wait starts when another trusted person confirms (pendingSince stays 0 until then).
-    s.succession = { certHash, reportedBy: d.me(), verdict: "Approved", report, confirmedBy: null, pendingSince: 0 };
-    d.log("SeatDeathReviewed", `The agent read ${first(s.holder!)}'s death certificate and found no problems`, d.tx());
+    // The wait starts when another person confirms (pendingSince stays 0 until then).
+    s.succession = { certHash, reportedBy: who, verdict: report ? "Approved" : "Pending", report: report ?? undefined, confirmedBy: null, pendingSince: 0, reportedAt: nowSecs() };
+    if (report) d.log("SeatDeathReviewed", `The agent read ${first(s.holder!)}'s death certificate and found no problems`, d.tx());
     return t;
   }
 
@@ -330,13 +443,16 @@ export function createMockGuardians(d: GuardDeps) {
     need(me !== sc.reportedBy, "NotConfirmer", "The person who reported the passing cannot also confirm it.");
     need(me !== s.holder, "NotConfirmer", "You cannot confirm your own passing.");
     need(me !== s.backups[0], "NotConfirmer", "The next holder cannot confirm their own promotion.");
-    const others = otherLivingHolders(index);
-    const allowed = others.length ? others : [s.backups[1], ...s.monitors].filter(Boolean);
-    need(allowed.includes(me), "NotConfirmer", others.length
-      ? "Only another trusted person can confirm this."
-      : "Only this seat's second backup or a monitor can confirm this.");
+    need(me !== est().agent, "NotConfirmer", "The agent only reviews.");
+    const route = confirmRoute(est(), seatView(s));
+    const allowed = route === "trusted" ? otherLivingHolders(index).includes(me)
+      : route === "watchers" ? me === s.backups[1] || s.monitors.includes(me)
+        : isFamilyMember(me); // R18: nobody else is left to confirm
+    need(allowed, "NotConfirmer", route === "trusted" ? "Only another trusted person can confirm this."
+      : route === "watchers" ? "Only this seat's second backup or a monitor can confirm this."
+        : "Only a family member other than whoever reported it can confirm this.");
     sc.confirmedBy = me;
-    sc.pendingSince = nowSecs();
+    sc.pendingSince = sc.confirmedAt = nowSecs();
     const t = d.tx();
     d.log("SeatDeathConfirmed", `${first(me)} confirmed ${first(s.holder!)}'s passing. ${s.backups[0] ? `${first(s.backups[0])} takes the seat after a short wait` : "The seat becomes empty after a short wait"}`, t);
     return t;
@@ -363,10 +479,26 @@ export function createMockGuardians(d: GuardDeps) {
     need(!openObjection(s.address), "ObjectionOpen", "A monitor objected. This waits until the objection is decided.");
     const gone = s.holder!;
     const e = est();
-    // First backup still eligible: not the owner, not already a holder, not the reporter or confirmer.
-    const pick = s.backups.findIndex((b) => b !== e.owner && !e.verifiers.includes(b) && b !== sc.confirmedBy && b !== sc.reportedBy);
-    need(pick >= 0 || s.backups.length === 0, "BadBackup", "No backup can take this seat. The owner or a new report must sort it out.");
-    const next = pick >= 0 ? s.backups[pick] : null;
+    const view = seatView(s);
+    const clear = (text: string) => {
+      s.succession = null;
+      const t = d.tx();
+      d.log("SeatDeathReportCleared", text, t);
+      return t;
+    };
+    // The owner has since removed whoever confirmed, which revokes it. A confirmer who died instead keeps it.
+    const by = sc.confirmedBy!;
+    const route = confirmRoute(e, view);
+    const mayStillConfirm = e.verifiers.includes(by)
+      || (route !== "trusted" && (s.monitors.includes(by) || by === s.backups[1] || (route === "family" && by !== e.agent && isFamilyMember(by))));
+    if ((sc.confirmedAt ?? sc.pendingSince) <= e.lastHeartbeat && !mayStillConfirm) {
+      return clear("The owner removed the person who confirmed this passing, so the report was cleared");
+    }
+    const outcome = successionOutcome(e, view);
+    // Only held back by this report: clear it, so someone else can report and the backup can take the seat (R10).
+    if (outcome.kind === "clear") return clear("The only possible backup reported or confirmed this passing, so it must be reported again");
+    const next = outcome.kind === "promote" ? outcome.next.wallet : null;
+    const pick = next ? s.backups.indexOf(next) : -1;
     s.succession = null;
     s.generation += 1;
     const t = d.tx();
@@ -400,7 +532,7 @@ export function createMockGuardians(d: GuardDeps) {
       }
       case "Hardship": {
         const h = sn.hardships.find((x) => x.address === target) ?? fail("BadStatus", "That request does not exist.");
-        need(h.status !== "Rejected", "BadStatus", "This request is already closed.");
+        need(h.status === "Open" || h.status === "Approved", "BadStatus", "This request is already closed.");
         need(!!h.approvals[seatIndex ?? -1], "BadStatus", "The person you watch has not approved this.");
         need(sn.assets.find((a) => a.address === h.asset)?.status !== "Sold", "BadStatus", "The asset has already been sold.");
         return;
@@ -423,7 +555,7 @@ export function createMockGuardians(d: GuardDeps) {
       case "Fallback":
         need(target === g().address, "BadStatus", "That is not this estate's fallback plan.");
         need(!g().fallbackDone, "FallbackDone", "The fallback plan has already been paid out.");
-        need(g().fallbackStartedAt !== null, "FallbackNotReady", "The fallback plan is not running.");
+        need(countdownValid(), "FallbackNotReady", "The fallback plan is not running.");
     }
   }
 
@@ -443,19 +575,27 @@ export function createMockGuardians(d: GuardDeps) {
       need(anyMonitor || beneficiary, "NotMonitor", input.kind === "Fallback" ? "Only a monitor or a family member can object." : "Only a monitor can object.");
     }
     targetIsLive(input.kind, input.target, input.seatIndex);
-    // One objection per target at a time; a decided one may be raised again, except a dismissed one on a claim or hardship.
+    need(me !== interested(input.kind, input.target), "OwnClaimDispute", "You would gain if this went ahead, so you cannot be the one who challenges it.");
+    // One objection per target at a time; a decided one may be raised again, except a dismissed one on a claim or
+    // hardship. A dispute raised since took its place, and a finished dispute never uses the objection up.
     const prev = g().objections.find((o) => o.target === input.target);
     if (prev) {
-      need(prev.status !== "Open", "ObjectionOpen", "An objection is already open on this.");
-      if (prev.status === "Open" && prev.kind !== "Fallback" && lapsed(prev)) markLapsed(prev);
-      need(!(prev.status === "Dismissed" && (input.kind === "Claim" || input.kind === "Hardship")), "BadStatus", "This objection was already dismissed.");
-      need(!(input.kind === "Unlock" && prev.status === "Dismissed" && prev.raisedAt >= (est().death.pendingSince ?? 0)), "BadStatus", "This waiting period has already been challenged once.");
-      if (prev.status === "Dismissed" && (input.kind === "Sale" || input.kind === "Succession")) {
-        const free = objectionLapsesAt(prev.raisedAt, est().waitingPeriodSecs) + Math.max(est().waitingPeriodSecs, 60);
-        need(nowSecs() >= free, "ObjectionCooldown", "It is too soon to object to this again.");
+      need(!binding(prev), "ObjectionOpen", "An objection is already open on this.");
+      const dispute = d.dispute(input.target);
+      const dismissed = prev.status !== "Upheld" && !(dispute && dispute.raisedAt >= prev.raisedAt);
+      if (dismissed) {
+        const beforeThisDeath = prev.raisedAt < deathSince(est());
+        if (input.kind === "Claim") need(est().status === "Unlocked" && beforeThisDeath, "BadStatus", "This objection was already dismissed.");
+        if (input.kind === "Hardship") fail("BadStatus", "This objection was already dismissed.");
+        if (input.kind === "Unlock") need(beforeThisDeath, "BadStatus", "This waiting period has already been challenged once.");
+        if (input.kind === "Sale" || input.kind === "Succession") {
+          const free = objectionLapsesAt(prev.raisedAt, est().waitingPeriodSecs) + Math.max(est().waitingPeriodSecs, 60);
+          need(nowSecs() >= free, "ObjectionCooldown", "It is too soon to object to this again.");
+        }
+        // One fallback objection per countdown: a dismissed or lapsed one can't be raised again until it restarts.
+        need(!(input.kind === "Fallback" && prev.raisedAt >= (g().fallbackStartedAt ?? Infinity)), "BadStatus", "An objection to this countdown was already decided.");
       }
-      // One fallback objection per countdown: a dismissed or lapsed one can't be raised again until it restarts.
-      need(!(input.kind === "Fallback" && prev.status === "Dismissed" && prev.raisedAt >= (g().fallbackStartedAt ?? Infinity)), "BadStatus", "An objection to this countdown was already decided.");
+      if (prev.status === "Open") markLapsed(prev);
       g().objections = g().objections.filter((o) => o !== prev);
     }
     g().objections.unshift({
@@ -483,7 +623,7 @@ export function createMockGuardians(d: GuardDeps) {
       case "Unlock":
         if (e.status === "Unlocked") return;
         e.status = "Active";
-        e.death = { certHash: null, submittedBy: null, verdict: "Pending", attestations: [false, false, false], pendingSince: null };
+        clearDeath(e);
         return;
       case "Succession": {
         const s = g().seats.find((x) => x.address === o.target);
@@ -524,20 +664,24 @@ export function createMockGuardians(d: GuardDeps) {
       return t;
     }
     need(me !== o.monitor, "NotVerifier", "You raised this objection, so you cannot vote on it.");
+    // `bit` is recorded; a vote at any of the voter's `positions` means they have voted (R9).
     let bit: number;
+    let positions: number;
     if (o.kind === "Fallback") {
       // Every trusted person is gone: the monitors decide (bit = seat * 2 + monitor slot).
-      const s = g().seats.find((x) => x.monitors.includes(me)) ?? fail("NotMonitor", "Only a monitor can decide this.");
-      bit = 1 << (s.index * 2 + s.monitors.indexOf(me));
+      positions = g().seats.reduce((all, s) => s.monitors.reduce((m, w, j) => (w === me ? m | (1 << (s.index * 2 + j)) : m), all), 0);
+      need(positions !== 0, "NotMonitor", "Only a monitor can decide this.");
+      bit = positions & -positions;
     } else {
       const i = e.verifiers.indexOf(me);
       need(i >= 0 && me !== VACANT_KEY, "NotVerifier", "Only a trusted person or the owner can decide this.");
       need(o.seatIndex === null || i !== o.seatIndex, "NotVerifier", "The person being watched cannot vote on this.");
-      bit = 1 << i;
+      bit = positions = 1 << i;
     }
-    need(((o.votesUphold | o.votesDismiss) & bit) === 0, "AlreadyApproved", "You have already voted.");
+    need(((o.votesUphold | o.votesDismiss) & positions) === 0, "AlreadyApproved", "You have already voted.");
+    if (!uphold) need(me !== interested(o.kind, o.target), "OwnApproval", "You cannot dismiss a challenge in your own favour.");
     o[uphold ? "votesUphold" : "votesDismiss"] |= bit;
-    const n = bitCount(uphold ? o.votesUphold : o.votesDismiss);
+    const n = bitCount(countedVotes(o, uphold ? o.votesUphold : o.votesDismiss));
     d.log("ObjectionVoted", `${first(me)} voted to ${uphold ? "uphold" : "dismiss"} the objection (${n} of 2)`, t);
     if (n >= 2) {
       resolve(o, uphold);
@@ -548,35 +692,99 @@ export function createMockGuardians(d: GuardDeps) {
 
   /* ----- fallback plan ----- */
 
-  function reportFallbackDeath(i: number, _certHash: string, report: AgentReport): TxResult {
+  const reports = () => (g().fallbackReports ??= {});
+  const livingRecipient = (i: number) => !!g().fallback[i] && !g().fallbackDead[i];
+  const nextRecipient = (from = 0) => g().fallback.findIndex((_r, k) => k >= from && !g().fallbackDead[k]);
+  const isFallbackParticipant = (who: Base58) => who !== est().agent
+    && (isParticipant(who, null) || isMonitorOfAny(who) || g().fallback.some((r, k) => r.wallet === who && livingRecipient(k)));
+
+  /** report_fallback_death + review_fallback_death: the agent only sets the verdict, never the dead bit (R4). */
+  function reportFallbackDeath(i: number, certHash: string, report: AgentReport | null): TxResult {
     needGuard();
     need(!g().fallbackDone, "FallbackDone", "The fallback plan has already been paid out.");
     const r = g().fallback[i] ?? fail("NoFallbackRecipient", "That fallback recipient does not exist.");
-    need(!g().fallbackDead[i], "BadStatus", "This passing is already recorded.");
+    need(livingRecipient(i), "BadStatus", "This passing is already recorded.");
+    const who = d.me();
+    need(who !== r.wallet && isFallbackParticipant(who), "NotParticipant", "Only someone else in this estate's plan can report this.");
+    const prev = reports()[i];
+    if (prev && prev.recipient === r.wallet) {
+      need(nowSecs() >= replaceableAt({
+        verdict: prev.verdict, reportedAt: prev.reportedAt, reporter: prev.reporter, who,
+        waitingSecs: est().waitingPeriodSecs, hold: 2 * refuteWait(g().fallbackWaitSecs),
+      }), "BadStatus", "A report about this person is already open.");
+    }
     const t = d.tx();
-    d.log("FallbackDeathReported", `${first(d.me())} reported that ${r.name} has passed away`, t);
-    if (report.verdict !== "approve") {
+    d.log("FallbackDeathReported", `${first(who)} reported that ${r.name} has passed away`, t);
+    delete reports()[i];
+    if (report && report.verdict !== "approve") {
       d.log("FallbackDeathReviewed", "The agent could not accept the certificate. Nothing has changed", d.tx());
       return t;
     }
-    g().fallbackDead[i] = true;
-    // The recipient changed: restart the countdown so the family can object to the new one.
-    if (g().fallbackStartedAt !== null) g().fallbackStartedAt = nowSecs();
-    d.log("FallbackDeathReviewed", `The agent checked the certificate: ${r.name} is skipped in the fallback order`, d.tx());
+    reports()[i] = { recipient: r.wallet, reporter: who, certHash, verdict: report ? "Approved" : "Pending", report: report ?? undefined, reportedAt: nowSecs() };
+    if (report) d.log("FallbackDeathReviewed", `The agent checked the certificate. ${r.name} can say "I'm alive", and a second person must confirm after the wait`, d.tx());
     return t;
   }
 
+  /** resolve_fallback_death: a second participant confirms after the wait, or the person says "I'm alive" any time before. */
+  function resolveFallbackDeath(i: number, dead: boolean): TxResult {
+    needGuard();
+    const rep = reports()[i] ?? fail("BadStatus", "Nobody has reported this person's passing.");
+    const who = d.me();
+    if (!dead) {
+      need(who === rep.recipient, "NotParticipant", "Only the person reported can say they are alive.");
+      delete reports()[i];
+      const t = d.tx();
+      d.log("FallbackDeathRefuted", `${first(who)} said "I'm alive". The report was cancelled`, t);
+      return t;
+    }
+    need(!g().fallbackDone, "FallbackDone", "The fallback plan has already been paid out.");
+    need(livingRecipient(i), "BadStatus", "This passing is already recorded.");
+    const r = g().fallback[i];
+    need(rep.recipient === r.wallet, "NoFallbackRecipient", "The owner has put someone else in this place since the report.");
+    need(rep.verdict === "Approved", "AgentNotApproved", "The agent has not cleared the certificate.");
+    const gains = g().fallback[nextRecipient(i + 1)]?.wallet;
+    need(who !== rep.recipient && who !== rep.reporter && who !== gains && isFallbackParticipant(who),
+      "NotConfirmer", "A second person must confirm: not whoever reported it, or who would be paid instead.");
+    need(nowSecs() >= rep.reportedAt + refuteWait(g().fallbackWaitSecs), "WaitingPeriodNotOver", "The person reported still has time to say they are alive.");
+    const running = countdownValid();
+    g().fallbackDead[i] = true;
+    // The recipient changed: restart a running countdown so the family can object to the new one.
+    if (running) g().fallbackStartedAt = nowSecs();
+    delete reports()[i];
+    const t = d.tx();
+    d.log("FallbackDeathConfirmed", `${first(who)} confirmed that ${r.name} has passed away. The fallback plan skips them`, t);
+    return t;
+  }
+
+  /** An approved report on whoever is paid next holds the payment, for a bounded time. */
+  function heldByReport(i: number, before = Infinity): boolean {
+    const r = reports()[i];
+    return !!r && r.recipient === g().fallback[i]?.wallet && r.verdict === "Approved" && r.reportedAt < before
+      && nowSecs() < r.reportedAt + 2 * refuteWait(g().fallbackWaitSecs);
+  }
+
+  /** sweep_residual's fallback route (R20): who it pays, unless a reported death holds it. */
+  function sweepRecipient(): Base58 | null {
+    const i = g().enabled ? nextRecipient() : -1;
+    if (i < 0) return null;
+    need(!heldByReport(i), "DeathReportOpen", "This person's passing has been reported, so the payment waits until that is confirmed or refuted.");
+    return g().fallback[i].wallet;
+  }
+
   const allSeatsVacant = () => g().seats.length === 3 && g().seats.every((s) => s.vacant && !s.holder);
-  const nextRecipient = () => g().fallback.findIndex((_r, k) => !g().fallbackDead[k]);
-  /** A heartbeat (or veto) after the start voids the countdown (on-chain: last_heartbeat >= started_at; the mock
-   * ignores a heartbeat in the very same second, which only the instant demo seeding can produce). */
-  const startVoided = () => g().fallbackStartedAt !== null && est().lastHeartbeat > g().fallbackStartedAt!;
-  const ownerDeathProven = () => est().death.verdict === "Approved" || est().status === "Unlocked";
+  /** The countdown still runs: started for this death, and the owner has shown no life since. */
+  function countdownValid() {
+    const at = g().fallbackStartedAt;
+    return !!at && est().lastHeartbeat < at && deathSince(est()) <= at;
+  }
+  const ownerDeathProven = () => est().status === "Unlocked" || openToPeople(est().death.verdict);
+  /** A death the agent only referred, with no trusted people to decide it, waits twice as long (R7). */
+  const fallbackDelay = () => g().fallbackWaitSecs * (est().status === "Active" && est().death.verdict === "Referred" ? 2 : 1);
 
   function startFallback(): TxResult {
     needGuard();
     need(!g().fallbackDone, "FallbackDone", "The fallback plan has already been paid out.");
-    need(g().fallbackStartedAt === null || startVoided(), "BadStatus", "The fallback plan has already started.");
+    need(!countdownValid(), "BadStatus", "The fallback plan has already started.");
     need(allSeatsVacant(), "SeatsNotVacant", "A trusted person is still available, so the fallback plan cannot start.");
     need(ownerDeathProven(), "FallbackNotReady", "The owner's passing has not been proven.");
     need(nextRecipient() >= 0, "NoFallbackRecipient", "Every fallback recipient has passed away.");
@@ -590,21 +798,24 @@ export function createMockGuardians(d: GuardDeps) {
     needGuard();
     need(!g().fallbackDone, "FallbackDone", "The fallback plan has already been paid out.");
     const started = g().fallbackStartedAt ?? fail("FallbackNotReady", "The fallback plan has not started.");
-    need(!startVoided(), "FallbackNotReady", "The owner checked in after the plan started.");
+    need(countdownValid(), "FallbackNotReady", "The owner checked in, or a new death claim was made, after the plan started.");
     need(ownerDeathProven(), "FallbackNotReady", "The owner's passing has not been proven.");
     need(allSeatsVacant(), "SeatsNotVacant", "A trusted person is available again.");
-    need(nowSecs() >= started + g().fallbackWaitSecs, "WaitingPeriodNotOver", "The waiting period has not ended yet.");
+    const runsAt = started + fallbackDelay();
+    need(nowSecs() >= runsAt, "WaitingPeriodNotOver", "The waiting period has not ended yet.");
     const fo = openObjection(g().address);
-    if (fo && lapsed(fo)) markLapsed(fo); // a lapsed objection is closed in the same step, then the payout runs
-    need(!openObjection(g().address), "ObjectionOpen", "Someone objected. This waits until the objection is decided.");
+    need(!fo || lapsed(fo), "ObjectionOpen", "Someone objected. This waits until the objection is decided.");
     const i = nextRecipient();
     need(i >= 0, "NoFallbackRecipient", "Every fallback recipient has passed away.");
+    need(!heldByReport(i, runsAt), "DeathReportOpen", "This person's passing has been reported, so the payment waits until that is confirmed or refuted.");
+    if (fo) markLapsed(fo); // a lapsed objection is closed in the same step, then the payout runs
     const r = g().fallback[i];
     const e = est();
     const amount = e.vaultBalance;
     e.vaultBalance = 0n;
     d.credit(r.wallet, amount);
     g().fallbackDone = true;
+    if (e.status === "Active") e.death.pendingSince = nowSecs();
     e.status = "Unlocked";
     const t = d.tx();
     d.log("FallbackExecuted", `Fallback plan: the whole vault (${d.usd(amount)}) went to ${r.name}`, t, amount, { payee: r.wallet });
@@ -630,7 +841,7 @@ export function createMockGuardians(d: GuardDeps) {
   function setAssetMedia(asset: Base58, input: { kind: AssetKind; title: string; photos: AssetPhoto[]; description?: string; spec?: AssetSpec }, photosRoot: string, checked?: { success: boolean; data?: AssetSpec }): TxResult {
     needCreated();
     const me = d.me();
-    need(me === d.agent || (me === est().owner && est().status === "Active"), "NotOwner", "Only the owner (while the estate is active) or the agent can change photos.");
+    need(me === est().owner && est().status === "Active", "NotOwner", "Only the owner, while the estate is active, can change what buyers see.");
     const a = d.snap().assets.find((x) => x.address === asset) ?? fail("BadStatus", "That asset does not exist.");
     need(input.photos.length <= MAX_PHOTOS, "InvalidAmount", `Add at most ${MAX_PHOTOS} photos.`);
     // Off-chain checks the photo API makes (the program only sees the root): known labels, a valid spec sheet.
@@ -655,7 +866,6 @@ export function createMockGuardians(d: GuardDeps) {
 
   function snapshot(): GuardiansSnapshot {
     const gs = g();
-    const named = (w: Base58) => ({ wallet: w, name: name(w) });
     if (!gs.enabled) {
       return {
         enabled: false, ...GUARD_DEMO_TIMINGS, seats: [], feed: [], objections: [], claimPayableAt: {},
@@ -671,24 +881,37 @@ export function createMockGuardians(d: GuardDeps) {
         succession: s.succession ? {
           certHash: s.succession.certHash, reportedBy: s.succession.reportedBy, verdict: s.succession.verdict,
           report: s.succession.report ? structuredClone(s.succession.report) : undefined,
-          confirmedBy: s.succession.confirmedBy, pendingSince: s.succession.pendingSince,
+          confirmedBy: s.succession.confirmedBy, reportedAt: s.succession.reportedAt ?? 0, pendingSince: s.succession.pendingSince,
           readyAt: s.succession.pendingSince ? s.succession.pendingSince + gs.successionWaitSecs : 0,
-          nextHolder: s.backups[0] ? named(s.backups[0]) : null,
+          nextHolder: promotedNext(s),
         } : null,
       })),
       feed: gs.feed.map((f) => ({ ...f })),
-      claimPayableAt: Object.fromEntries(Object.entries(gs.stamps).map(([claim, st]) => [claim, st.approvedAt + gs.objectionWindowSecs])),
+      claimPayableAt: Object.fromEntries(d.snap().claims.flatMap((c) => {
+        const at = payableAt(c.address);
+        return at !== null && countsFor(c) ? [[c.address, at] as const] : [];
+      })),
       objections: gs.objections.map((o) => ({
         address: o.address, kind: o.kind, target: o.target, monitor: o.monitor, monitorName: name(o.monitor), seatIndex: o.seatIndex,
         reason: o.reason, reasonHash: o.reasonHash, raisedAt: o.raisedAt, status: o.status,
-        votesUphold: bitCount(o.votesUphold), votesDismiss: bitCount(o.votesDismiss), lapsesAt: lapsesAt(o),
+        votesUphold: bitCount(countedVotes(o, o.votesUphold)), votesDismiss: bitCount(countedVotes(o, o.votesDismiss)), lapsesAt: lapsesAt(o),
       })),
       fallback: {
-        recipients: gs.fallback.map((r, i) => ({ wallet: r.wallet, name: r.name, kind: r.kind, dead: !!gs.fallbackDead[i] })),
-        startedAt: gs.fallbackStartedAt,
-        readyAt: gs.fallbackStartedAt === null ? null : gs.fallbackStartedAt + gs.fallbackWaitSecs,
+        recipients: gs.fallback.map((r, i) => {
+          const rep = gs.fallbackReports?.[i];
+          return {
+            wallet: r.wallet, name: r.name, kind: r.kind, dead: !!gs.fallbackDead[i],
+            report: rep && rep.recipient === r.wallet && !gs.fallbackDead[i] ? {
+              reporter: rep.reporter, certHash: rep.certHash, verdict: rep.verdict, reportedAt: rep.reportedAt,
+              confirmableAt: rep.reportedAt + refuteWait(gs.fallbackWaitSecs), report: rep.report ? structuredClone(rep.report) : undefined,
+            } : null,
+          };
+        }),
+        // A voided countdown isn't running: anyone may start it again.
+        startedAt: countdownValid() || gs.fallbackDone ? gs.fallbackStartedAt : null,
+        readyAt: countdownValid() || gs.fallbackDone ? gs.fallbackStartedAt! + fallbackDelay() : null,
         done: gs.fallbackDone,
-        canStart: (gs.fallbackStartedAt === null || startVoided()) && !gs.fallbackDone && nextRecipient() >= 0 && allSeatsVacant() && ownerDeathProven(),
+        canStart: !countdownValid() && !gs.fallbackDone && nextRecipient() >= 0 && allSeatsVacant() && ownerDeathProven(),
       },
     };
   }
@@ -697,20 +920,39 @@ export function createMockGuardians(d: GuardDeps) {
 
   function endObjectionWindow() {
     const back = g().objectionWindowSecs;
-    for (const st of Object.values(g().stamps)) st.approvedAt -= back;
+    for (const st of Object.values(g().stamps)) {
+      if (!st.approvedAt) continue;
+      st.givenAt ??= st.approvedAt;
+      st.approvedAt -= back;
+      st.windowEnded = true;
+    }
     for (const f of g().feed) if (f.objectionDeadline !== null) f.objectionDeadline -= back;
   }
   function endSuccessionWait() {
-    for (const s of g().seats) if (s.succession?.pendingSince) s.succession.pendingSince -= g().successionWaitSecs;
+    for (const s of g().seats) {
+      if (!s.succession?.pendingSince) continue;
+      s.succession.confirmedAt ??= s.succession.pendingSince;
+      s.succession.pendingSince -= g().successionWaitSecs;
+    }
   }
   function endFallbackWait() {
+    // The same time passes for reports, so a second person can confirm them.
+    const refute = refuteWait(g().fallbackWaitSecs);
+    for (const r of Object.values(g().fallbackReports ?? {})) r.reportedAt -= refute;
     const started = g().fallbackStartedAt;
     if (started === null) return;
-    g().fallbackStartedAt = started - g().fallbackWaitSecs;
+    const back = fallbackDelay();
+    const moved = started - back;
+    g().fallbackStartedAt = moved;
     // The same time passes for fallback objections (so they can lapse).
-    for (const o of g().objections) if (o.kind === "Fallback") o.raisedAt -= g().fallbackWaitSecs;
-    // Moving the clock must not make an earlier heartbeat look like a check-in after the start.
-    if (est().lastHeartbeat <= started) est().lastHeartbeat = Math.min(est().lastHeartbeat, started - g().fallbackWaitSecs - 1);
+    for (const o of g().objections) if (o.kind === "Fallback") o.raisedAt -= back;
+    // Moving the clock must not make an earlier check-in or death look as if it came after the start.
+    const e = est();
+    if (e.lastHeartbeat < started) e.lastHeartbeat = Math.min(e.lastHeartbeat, moved - 1);
+    if (deathSince(e) <= started) {
+      if (e.status === "Active" && e.death.certHash) e.death.submittedAt = Math.min(e.death.submittedAt ?? 0, moved);
+      else if (e.death.pendingSince !== null) e.death.pendingSince = Math.min(e.death.pendingSince, moved);
+    }
   }
   /** Every holder and backup gone (demo of the fallback plan). */
   function vacateAllSeats() {
@@ -726,10 +968,10 @@ export function createMockGuardians(d: GuardDeps) {
 
   return {
     setup, setBackups, setMonitors, setFallback, replaceSeat,
-    recordApproval, stamp, checkClaimExecutable, checkNotObjected,
+    recordApproval, recordStamp, countsFor, checkClaimExecutable, checkNotObjected, objectionBinds,
     reportSeatDeath, confirmSeatDeath, vetoSeatDeath, finalizeSuccession,
     raiseObjection, voteObjection,
-    reportFallbackDeath, startFallback, executeFallback, lapseObjection,
+    reportFallbackDeath, resolveFallbackDeath, sweepRecipient, startFallback, executeFallback, lapseObjection,
     setAssetMedia, assetMedia, snapshot,
     endObjectionWindow, endSuccessionWait, endFallbackWait, vacateAllSeats,
     otherLivingHolders, seat,

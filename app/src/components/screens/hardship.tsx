@@ -7,14 +7,15 @@ import type { EstateSnapshot } from "@/lib/service";
 import type { AgentReport, Hardship, Role, WalletSession } from "@/lib/types";
 import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, ButtonLink, Card, Consent, Money, Notice, PageHeader, TickDisc } from "@/components/ui/primitives";
-import { FilePicker, Quorum } from "@/components/ui/client";
+import { FilePicker } from "@/components/ui/client";
 import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { Blocked } from "@/components/shell/blocked";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { formatUsdt } from "@/lib/format";
 import { ReferredNote } from "@/components/continuity/continuity";
-import { quorumFor } from "@/lib/verdict";
+import { hardshipStands, hardshipTally, isFamily as inPlan } from "@/lib/guardians/decisions";
+import { VoteTally } from "@/components/guardians/decision";
 
 type Copy = ScreensCopy["hardship"];
 
@@ -24,12 +25,12 @@ export function HardshipScreen({ copy: english }: { copy: Copy }) {
 }
 
 function HardshipView({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role }) {
-  const { common } = useCopy();
+  const { common, guardians } = useCopy();
   const { fx, run, busy } = useEstate();
   const rate = fx?.usdtZar ?? null;
   const e = snap.estate;
   const car = snap.assets[0];
-  const isFamily = snap.beneficiaries.some((b) => b.wallet === session.address);
+  const isFamily = inPlan(snap, session.address);
   const list = isFamily ? snap.hardships.filter((h) => h.beneficiary === session.address) : snap.hardships;
   const open = list.find((h) => h.status === "Open" || h.status === "Approved");
   const [file, setFile] = useState<File | null>(null);
@@ -83,7 +84,6 @@ function HardshipView({ copy, snap, session, role }: { copy: Copy; snap: EstateS
           <h2 id="hardship-status" className="mb-3 text-h3">{isFamily ? copy.statusTitle : copy.statusTitleAll}</h2>
           <ul className="grid gap-3">
             {list.map((h) => {
-              const got = h.approvals.filter(Boolean).length;
               return (
                 <li key={h.address} className="rounded-lg border border-line bg-surface p-4 shadow-card">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -92,7 +92,8 @@ function HardshipView({ copy, snap, session, role }: { copy: Copy; snap: EstateS
                   </div>
                   {h.status === "Open" && (<>
                     <ReferredNote verdict={h.agentVerdict} />
-                    <div className="mt-3"><Quorum approvals={h.approvals} needed={quorumFor(h.agentVerdict, e.hardshipThreshold)} names={e.verifierNames} label={fmt(copy.approvals, { got, need: quorumFor(h.agentVerdict, e.hardshipThreshold) })} /></div>
+                    <div className="mt-3"><VoteTally tally={hardshipTally(e, h)} names={e.verifierNames} /></div>
+                    {hardshipStands(snap, h) && <p className="mt-2 text-small font-semibold">{guardians.rules.vote.stands}</p>}
                   </>)}
                   {h.status === "Approved" && car && (
                     <p className="mt-3 flex items-start gap-2 rounded-md border-[1.5px] border-ink p-3 font-medium"><TickDisc className="mt-0.5 size-5" />{fmt(copy.approved, { floor: formatUsdt(car.hardshipFloor, { decimals: 0 }), name: nameOf(h).split(" ")[0] })}</p>

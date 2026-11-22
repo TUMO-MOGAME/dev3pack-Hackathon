@@ -11,7 +11,7 @@ export const privacy = {
   title: "*Privacy* policy",
   templateNotice:
     "Template for legal review. This policy was drafted for a hackathon prototype and must be reviewed by the responsible party's legal adviser before Heirloom is offered to the public.",
-  updated: "Last updated: 18 November 2026",
+  updated: "Last updated: 22 November 2026",
   intro:
     "Heirloom helps a person record estate instructions and helps their family act on them. That involves sensitive personal information, so we collect as little as we can, keep documents off the public ledger and explain every use below. This policy follows the Protection of Personal Information Act 4 of 2013 (POPIA).",
   sections: [
@@ -37,8 +37,9 @@ export const privacy = {
         "Vehicle details (make, model, year, mileage): to suggest a fair asking price.",
         "Letters for later that an estate owner writes to their family (the text, occasion, who it is for and when it opens): to deliver the owner's own words at the moment they chose (section 15).",
         "Your IP address and basic request details: for spam and abuse checks and rate limiting on forms and agent requests.",
-        "On the test network, a request for starter funds (your wallet address and IP address): to give test money once per wallet and to limit abuse. The transfer itself is public on the ledger.",
-        "Cookie-free visitor statistics (page, referrer, device type, with no cookies and no cross-site identifiers): to understand which pages are used.",
+        "On the test network, a request for starter funds (your wallet address and IP address): to give test money once per wallet and to limit abuse. The transfer is public and permanent on the ledger, with a note (memo) that holds the time, the cost, a short hash of your wallet address and a code that proves Heirloom sent it. The memo never holds your IP address or anything made from it.",
+        "Names on your device: the owner's browser keeps a copy of the names in their estate, so they can be put back if the server loses them, and devices that named a backup, monitor or payee keep those names. The copy stays after you sign out. Clearing this site's data in the browser removes it (it also removes any wallet kept there, so save the recovery phrase first).",
+        "We set no tracking cookies and this build has no visitor-statistics tool. If statistics are added, they will be cookie-free and this policy will say so first.",
       ],
     },
     {
@@ -50,7 +51,9 @@ export const privacy = {
     {
       heading: "5. What goes on the public ledger",
       paragraphs: [
-        "The Solana ledger is public and permanent. Heirloom writes only wallet addresses, amounts, rule limits, roles (for example \"Family member 1\" or \"Approved payee\"), the public names of universities and schools, and SHA-256 fingerprints (hashes) of documents and reports. No personal names, ID numbers or document contents are written on-chain. Family names, reports and notes are shown only to that estate's members, who prove it with their wallet's signature. A fingerprint cannot be turned back into the document.",
+        "The Solana ledger is public and permanent. The app writes wallet addresses, amounts, times, rule limits and categories, decisions and votes, roles (for example \"Family member 1\" or \"Approved payee\"), the names typed for universities and schools, SHA-256 fingerprints (hashes) of documents and reports, and the starter memo in section 3. It does not write ID numbers or document contents, or family members' names.",
+        "Two things limit that. A name typed as a university or school payee is published as typed, so don't put a person's name there. Test estates made before 22 November 2026 have name labels on-chain (the seeded demo families' fictional names and test runs), and those can't be removed. Wallet addresses and the pattern of payments may also let someone work out who is involved.",
+        "Family names, reports and notes are kept off-chain. The app shows reports and notes to that estate's members, who prove it with their wallet's signature. A fingerprint cannot be turned back into the document.",
       ],
     },
     {
@@ -61,13 +64,15 @@ export const privacy = {
         "Letters for later: while the estate's records are kept (the first item above). The owner can delete any letter while alive and its text is erased at once; see section 15.",
         "IP addresses used for spam checks: up to 30 days.",
         "On-chain records: permanent, by the nature of a public ledger (they contain no personal documents).",
+        "The copy of names on your device: until you clear this site's data in that browser.",
+        "Where database storage is not switched on, what the server holds (names, reports, letters) is in temporary memory and can be lost when it restarts, sooner than the periods above.",
       ],
     },
     {
       heading: "7. Operators who process information for us",
       list: [
         "Hosting: Vercel Inc. (application hosting and delivery).",
-        "Database and document storage: Supabase Inc. (encrypted at rest; access limited to the people named on an estate), including letters for later.",
+        "Database and document storage, only where it is switched on for the site you are using: Supabase Inc., with data stored in Ireland (encrypted at rest; the app limits access to the people named on an estate), including letters for later. Where it is not switched on, Supabase receives nothing: the server keeps this information in temporary memory and some of it also stays on your device.",
         "AI document review and drafting: Google LLC (Gemini API). Documents are sent for analysis and are not used by us to train models. A letter for later is sent only when its owner taps \"Check my letter\" or \"Help me write it\".",
         "Voice calls with the agent: ElevenLabs Inc. (speech recognition and speech synthesis for calls you start).",
         "Exchange rate: a South African exchange's public price feed. No personal information is sent.",
@@ -77,7 +82,7 @@ export const privacy = {
     {
       heading: "8. Transfers outside South Africa",
       paragraphs: [
-        "Our operators store and process information on servers outside South Africa, including in the United States and the European Union. We rely on your consent and on operator agreements that require protection substantially similar to POPIA, as section 72 requires.",
+        "Our operators store and process information on servers outside South Africa, including in the United States and the European Union. Where Supabase storage is switched on, the stored names, documents, reports and letters are transferred to and kept in Ireland. The public ledger is copied worldwide. We rely on your consent and on operator agreements that require protection substantially similar to POPIA, as section 72 requires.",
       ],
     },
     {
@@ -92,7 +97,7 @@ export const privacy = {
         "Ask whether we hold information about you and request a copy.",
         "Ask us to correct or delete information that is inaccurate, out of date or no longer needed.",
         "Object to processing or withdraw consent.",
-        "Not be subject to a decision based solely on automated processing: the AI agent only recommends, and a person you trust approves.",
+        "Not be subject to a decision based solely on automated processing: the AI agent can't approve a payment, a passing or an exception, which takes people. It can turn down a document it doesn't accept, and you can ask the information officer (section 2) to have a person look at that.",
         "Complain to the Information Regulator.",
       ],
     },
@@ -117,7 +122,7 @@ export const privacy = {
         "What we collect: the recorded consent sentence, three to eight short voice recordings, the voice copy made from them, the Legacy Book text, each child's on/off choice, and the audio of the owner's messages once the voice has read them.",
         "Why: to let the owner's children hear the messages the owner left for them, in the owner's voice, clearly labelled as an AI voice. Before a message plays, the app says it is an AI copy of the owner's voice. The voice cannot approve claims, move money or ask anyone for money or passwords.",
         "Children's information: a child only switches the voice on and plays messages; there is nothing to type to it, so we do not collect what a child says. The child's page always offers South African helplines (SADAG) and suggests a trusted adult.",
-        "Operator: ElevenLabs Inc. creates and hosts the voice copy (Instant Voice Cloning) and turns the owner's written messages into speech in that voice. Supabase Inc. stores the recordings and the Legacy Book in private, access-controlled storage.",
+        "Operator: ElevenLabs Inc. creates and hosts the voice copy (Instant Voice Cloning) and turns the owner's written messages into speech in that voice. Where storage is switched on (section 7), Supabase Inc. stores the recordings and the Legacy Book in private, access-controlled storage.",
         "Transfer outside South Africa: ElevenLabs processes this information outside South Africa, including in the United States and the European Union, under the safeguards in section 8.",
         "How long we keep it: until the owner deletes the voice or the Legacy Book, which they can do at any time in the app (the voice copy is then also deleted at ElevenLabs), or [N] years after the estate's final payment, whichever comes first. [Placeholder: the responsible party must set N with its legal adviser.]",
         "Nothing about the legacy voice is written on the public ledger. If a record is ever anchored on-chain, it is only a SHA-256 fingerprint.",
@@ -138,7 +143,7 @@ export const privacy = {
         "How long we keep it: for as long as the estate is active and for 5 years after its last payment, unless deleted sooner. [Placeholder: the responsible party must confirm this with its legal adviser.]",
         "Deletion and correction: the owner can remove a relationship at any time, and anyone on the tree may ask the information officer (section 2) to correct or delete information about them, as section 10 describes.",
         "Photos: a small photo may be shown beside a person's name on the tree (on the map, the family list, their card and a printed copy), so the family recognises faces in years to come. What we keep is one 256 by 256 pixel image of at most 60 KB per person, prepared on the person's own device: it is cropped, shrunk and re-encoded there, which removes the camera details and location (EXIF) before anything is sent. Photos are never written to the public ledger and are not part of the tree's fingerprint. Who sees them: the same people who can see the tree. Consent: a living adult adds, changes or removes only their own photo (trusted people and lawyers included). The estate owner decides for a child, and may add a memorial photo of someone who has passed or who has no wallet (shown as \"Added by\" with their name and the year), and an organisation's logo. A person who chose to hide never shows a photo. Deletion: the person (or, for a child, someone who has passed or an organisation, the owner) can remove a photo at any time from the card, and anyone may ask the information officer (section 2) to delete a photo of them. In the demo, photos stay on this device, and the demo family's pictures are drawn illustrations, not real people.",
-        "Operators and transfers: relationships, names and photos are stored by Supabase Inc. (or, in the prototype, on the owner's device) under sections 7 and 8.",
+        "Operators and transfers: where storage is switched on, relationships, names and photos are stored by Supabase Inc. in Ireland (otherwise in server memory or on the owner's device) under sections 7 and 8.",
       ],
     },
     {
@@ -155,7 +160,7 @@ export const privacy = {
         "Consent and children: the estate owner writes the letters. A letter to a child is read with the child's own wallet once it opens. \"Check my letter\" warns the owner against writing passwords, PINs, recovery phrases, ID numbers or bank details in a letter.",
         "The AI check: \"Check my letter\" and \"Help me write it\" send the draft to the AI operator (Google LLC, Gemini API, section 7) only when the owner taps them; the AI only warns or suggests, and Heirloom does not keep that copy. The same checks also run on the owner's device without the AI.",
         "How long we keep it: while the estate's records are kept (section 6). The owner can delete any letter while alive, and its text is erased at once. After the estate unlocks, letters are sealed and can no longer be changed; a person a letter is addressed to may ask the information officer (section 2) to delete it.",
-        "Storage and transfers: letters are stored by Supabase Inc. under sections 7 and 8 (in the prototype, until that store is switched on, a letter is kept in server memory and on the device that wrote it). The server can read stored letters; encrypting each letter so only its recipient can read it is planned.",
+        "Storage and transfers: where storage is switched on, letters are stored by Supabase Inc. in Ireland under sections 7 and 8 (until then, a letter is kept in server memory and on the device that wrote it). The server can read stored letters; encrypting each letter so only its recipient can read it is planned.",
         "In the demo: letters stay in this browser, and the demo family's letters are fictional.",
       ],
     },
@@ -166,7 +171,7 @@ export const terms = {
   title: "*Terms* of use",
   templateNotice:
     "Template for legal review. These terms describe a hackathon prototype and must be reviewed by a legal adviser before public use.",
-  updated: "Last updated: 11 November 2026",
+  updated: "Last updated: 22 November 2026",
   intro:
     "Please read these terms before using Heirloom. By creating a wallet or using the demo you agree to them.",
   sections: [
@@ -180,6 +185,10 @@ export const terms = {
       heading: "2. Prototype status",
       paragraphs: [
         "Heirloom runs on a test network (Solana devnet) with test tokens. The program has not been audited. Do not rely on it for real assets. The demo personas, institutions' wallets and rand settlements shown in the app are simulated.",
+        "Heirloom holds the program's upgrade key, so it can change the rules the program enforces. While a passing is confirmed or the estate is unlocked, the program itself lets nobody edit a plan's rules.",
+        "Payments aren't guaranteed to happen on time or by themselves. The hosted schedule runs once a day and may miss one; anyone can trigger a payment that is due, and it pays only if the vault holds enough. Rules pay approved payees. What no rule needs, the fallback plan and sale money can also go to the people the owner named or who receive it under an approved hardship.",
+        "Network fees are sponsored when the sponsor is available. Creating accounts needs a little SOL for rent.",
+        "Some situations can't be resolved in the program: a sole remaining trusted person can't approve their own claim, some votes can't be taken back, and money can only be recovered while at least one working path is left (trusted people, or a fallback plan). An estate with neither can be left with money nobody can move.",
       ],
     },
     {
@@ -191,7 +200,7 @@ export const terms = {
     {
       heading: "4. The AI agent",
       paragraphs: [
-        "The agent drafts rules, reads documents and suggests prices. It can be wrong. It cannot move money beyond the limits in the program, and people you name must approve a passing and any exception. Nothing the agent says is legal, tax or financial advice.",
+        "The agent drafts rules, reads documents, turns down documents it doesn't accept and suggests prices. It can be wrong. It cannot move money beyond the limits in the program. People you name confirm a passing and any exception; if none of them is left, the fallback plan can run on the agent's review of the owner's death after a long wait, which can be objected to. In a sale the program checks the price limit, the exact amount and a trusted person's co-signature (none is needed when no trusted person is left and the listing has ended); which offer is best is the agent's advice. Nothing the agent says is legal, tax or financial advice.",
       ],
     },
     {

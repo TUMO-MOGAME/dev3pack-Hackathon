@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { EstateSnapshot } from "@/lib/service";
+import { NO_WALLET } from "@/lib/guardians/decisions";
 import type { GuardiansSnapshot, Objection, Seat, SeatApprovalItem } from "@/lib/guardians/types";
 import {
   afterReplacement, allVacant, canConfirm, checkReplacement, canObject, canReport, checkFallback, checkPeople, clock, fallbackStage, fallbackWinner, feedFor,
-  guardianTodo, heldSeat, isMonitor, monitorPending, moveItem, pausedBy, secondsLeft, shortName, successionStage, voterRole,
+  guardianTodo, heldSeat, isMonitor, mayRaise, monitorPending, moveItem, pausedBy, secondsLeft, shortName, successionStage, voterRole,
   waitFraction, waitUnit,
 } from "./derive";
 
@@ -27,7 +28,16 @@ function guard(over: Partial<GuardiansSnapshot> = {}): GuardiansSnapshot {
   };
 }
 
-const snap = (status: "Active" | "Unlocked" = "Active") => ({ estate: { owner: OWNER, status } } as unknown as EstateSnapshot);
+/** A snapshot around a guard: the trusted people are its holders, Lerato the family. */
+const snap = (status: "Active" | "Unlocked" = "Active", g: GuardiansSnapshot = guard()) => ({
+  estate: {
+    owner: OWNER, agent: W("G"), status, waitingPeriodSecs: 60, verifiers: g.seats.map((s) => s.holder ?? NO_WALLET),
+    death: { certHash: null, submittedBy: null, verdict: "Pending", attestations: [], pendingSince: null },
+  },
+  beneficiaries: [{ address: W("R"), wallet: LERATO, label: "Lerato", active: true }],
+  claims: [], hardships: [], disputes: [],
+  guardians: g,
+} as unknown as EstateSnapshot);
 
 const item = (over: Partial<SeatApprovalItem> = {}): SeatApprovalItem => ({
   seatIndex: 2, approver: BONGANI, approverName: "Uncle Bongani", kind: "Claim", target: W("C"), summary: "Approved 3 500 USD₮", ts: 1000, objectionDeadline: 1060, ...over,
@@ -110,28 +120,32 @@ describe("succession", () => {
   it("only another living holder confirms; never the reporter, the holder or the first backup", () => {
     const s = { ...guard().seats[2], succession: pending() };
     const g = withSeat(s);
-    expect(canConfirm(g, s, THANDI)).toBe(true);
-    expect(canConfirm(g, s, BONGANI)).toBe(false);
-    expect(canConfirm(g, s, LERATO)).toBe(false);
-    expect(canConfirm(g, s, KAGISO)).toBe(false);
-    expect(canConfirm(g, s, ZODWA)).toBe(false);
-    expect(canConfirm(g, { ...s, succession: pending({ verdict: "Pending" }) }, THANDI)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, THANDI)).toBe(true);
+    expect(canConfirm(snap("Active", g), s, BONGANI)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, LERATO)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, KAGISO)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, ZODWA)).toBe(false);
+    expect(canConfirm(snap("Active", g), { ...s, succession: pending({ verdict: "Pending" }) }, THANDI)).toBe(false);
   });
 
   it("with no other living holder, the second backup or a monitor confirms", () => {
     const s = { ...guard().seats[2], succession: pending() };
     const g = guard({ seats: [seat(0, null), seat(1, null), s] });
-    expect(canConfirm(g, s, NAIDOO)).toBe(true);
-    expect(canConfirm(g, s, ZODWA)).toBe(true);
-    expect(canConfirm(g, s, KAGISO)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, NAIDOO)).toBe(true);
+    expect(canConfirm(snap("Active", g), s, ZODWA)).toBe(true);
+    expect(canConfirm(snap("Active", g), s, KAGISO)).toBe(false);
   });
 
-  it("anyone but the holder may report, once", () => {
+  it("only participants report, never the holder, and again only when the report is stale", () => {
     const s = guard().seats[2];
-    expect(canReport(s, LERATO)).toBe(true);
-    expect(canReport(s, BONGANI)).toBe(false);
-    expect(canReport({ ...s, succession: pending() }, LERATO)).toBe(false);
-    expect(canReport(seat(0, null), LERATO)).toBe(false);
+    expect(canReport(snap(), s, LERATO, 0)).toBe(true);
+    expect(canReport(snap(), s, ZODWA, 0)).toBe(true);
+    expect(canReport(snap(), s, BONGANI, 0)).toBe(false);
+    expect(canReport(snap(), s, W("S"), 0)).toBe(false);
+    const reported = { ...s, succession: { ...pending(), reportedBy: THANDI, reportedAt: 1000 } };
+    expect(canReport(snap(), reported, LERATO, 1119)).toBe(false);
+    expect(canReport(snap(), reported, LERATO, 1120)).toBe(true);
+    expect(canReport(snap(), seat(0, null), LERATO, 0)).toBe(false);
   });
 
   it("finds the seat a wallet holds", () => {
@@ -217,10 +231,11 @@ describe("inbox count", () => {
   it("adds votes, confirmations, 'I'm still here' and the monitor's feed", () => {
     const s2 = { ...guard().seats[2], succession: { certHash: "aa", reportedBy: LERATO, verdict: "Approved" as const, confirmedBy: null, pendingSince: 0, readyAt: 60, nextHolder: null } };
     const g = guard({ seats: [seat(0, THANDI), seat(1, ANITA), s2], objections: [objection()], feed: [item({ target: W("G") })] });
-    expect(guardianTodo(g, snap(), THANDI, 1000)).toBe(2); // vote + confirm
-    expect(guardianTodo(g, snap(), BONGANI, 1000)).toBe(1); // I'm still here
-    expect(guardianTodo(g, snap(), ZODWA, 1000)).toBe(1);   // feed item
-    expect(guardianTodo(null, snap(), THANDI, 1000)).toBe(0);
+    const s = snap("Active", g);
+    expect(guardianTodo(g, s, THANDI, 1000)).toBe(2); // vote + confirm
+    expect(guardianTodo(g, s, BONGANI, 1000)).toBe(1); // I'm still here
+    expect(guardianTodo(g, s, ZODWA, 1000)).toBe(1);   // feed item
+    expect(guardianTodo(null, s, THANDI, 1000)).toBe(0);
   });
 });
 
@@ -246,5 +261,61 @@ describe("replacing a trusted person (owner_replace_seat)", () => {
     expect(afterReplacement(s, LERATO)).toMatchObject({ removed: false, backups: s.backups, monitors: s.monitors });
     expect(afterReplacement(s, KAGISO)).toMatchObject({ removed: true, backups: [{ wallet: NAIDOO, name: "Adv. Naidoo" }] });
     expect(afterReplacement(s, ZODWA)).toMatchObject({ removed: true, monitors: [] });
+  });
+});
+
+describe("objections after the second review", () => {
+  const C1 = W("C"), NOW = 2000;
+  /** One open claim of Lerato's, or a death Lerato reported, with what was raised before. */
+  const at = (status: "Active" | "Unlocked", objections: Objection[] = [], since = 900, g: Partial<GuardiansSnapshot> = {}) => {
+    const s = snap(status, guard({ objections, ...g }));
+    s.claims = [{ address: C1, beneficiary: LERATO, status: "Open" }] as EstateSnapshot["claims"];
+    s.estate.death = { ...s.estate.death, certHash: "cert", submittedBy: LERATO, submittedAt: since, pendingSince: status === "Active" ? null : since };
+    return s;
+  };
+
+  it("a monitor may challenge once; never the person who gains", () => {
+    expect(mayRaise(at("Unlocked"), "Claim", C1, ZODWA, NOW)).toBe(true);
+    expect(mayRaise(at("Unlocked"), "Claim", C1, LERATO, NOW)).toBe(false);
+    expect(mayRaise(at("Active"), "Unlock", W("E"), LERATO, NOW)).toBe(false);
+    expect(mayRaise(at("Unlocked", [objection({ status: "Dismissed" })]), "Claim", C1, ZODWA, NOW)).toBe(false);
+  });
+  it("again for another death, or after the earlier one was upheld", () => {
+    expect(mayRaise(at("Unlocked", [objection({ status: "Upheld" })]), "Claim", C1, ZODWA, NOW)).toBe(true);
+    expect(mayRaise(at("Unlocked", [objection({ status: "Dismissed", raisedAt: 500 })]), "Claim", C1, ZODWA, NOW)).toBe(true);
+    const unlock = (raisedAt: number) => at("Active", [objection({ kind: "Unlock", target: W("E"), status: "Dismissed", raisedAt })]);
+    expect(mayRaise(unlock(500), "Unlock", W("E"), ZODWA, NOW)).toBe(true);
+    expect(mayRaise(unlock(1010), "Unlock", W("E"), ZODWA, NOW)).toBe(false);
+  });
+  it("never a second time on a hardship request, and on a fallback only for a later countdown", () => {
+    expect(mayRaise(at("Unlocked", [objection({ kind: "Hardship", status: "Dismissed", raisedAt: 500 })]), "Hardship", C1, ZODWA, NOW)).toBe(false);
+    const started = (startedAt: number) => at("Unlocked", [objection({ kind: "Fallback", target: W("F"), status: "Dismissed" })], 900,
+      { fallback: { recipients: [], startedAt, readyAt: startedAt + 120, done: false, canStart: false } });
+    expect(mayRaise(started(1500), "Fallback", W("F"), ZODWA, NOW)).toBe(true);
+    expect(mayRaise(started(1000), "Fallback", W("F"), ZODWA, NOW)).toBe(false);
+  });
+
+  it("a lapsed or voided objection pauses nothing and takes no vote", () => {
+    const o = objection({ lapsesAt: 1500 });
+    const g = guard({ objections: [o] });
+    expect(pausedBy(g, o.target, 1499)).toBe(o);
+    expect(pausedBy(g, o.target, 1500)).toBeNull();
+    expect(voterRole(g, o, snap("Unlocked", g), THANDI, 1499)).toBe("holder");
+    expect(voterRole(g, o, snap("Unlocked", g), THANDI, 1500)).toBeNull();
+  });
+  it("on the fallback the monitors vote, never whoever raised it and never a holder for it", () => {
+    const g = guard({ seats: [seat(0, THANDI, { monitors: [{ wallet: KAGISO, name: "Kagiso" }, { wallet: ZODWA, name: "Zodwa" }] }), seat(1, ANITA), seat(2, BONGANI)] });
+    const o = objection({ kind: "Fallback", seatIndex: null });
+    expect(voterRole(g, o, snap("Unlocked", g), KAGISO)).toBe("monitor");
+    expect(voterRole(g, o, snap("Unlocked", g), ZODWA)).toBeNull();
+    expect(voterRole(g, o, snap("Unlocked", g), THANDI)).toBeNull();
+  });
+});
+
+describe("the agent never takes a trusted person's place", () => {
+  it("refuses the agent's wallet, not somebody else's", () => {
+    const ctx = { owner: OWNER, holders: [THANDI, ANITA, BONGANI], agent: W("G") };
+    expect(checkReplacement({ name: "Agent", wallet: W("G") }, ctx)).toBe("agent");
+    expect(checkReplacement({ name: "Kagiso", wallet: KAGISO }, ctx)).toBeNull();
   });
 });

@@ -44,7 +44,7 @@ export function saleOf(snap: EstateSnapshot, asset: Base58): SaleFacts | null {
 /** The owner, a trusted person or a named family member of this estate. */
 export function isSellerSide(snap: EstateSnapshot, wallet: Base58): boolean {
   const e = snap.estate;
-  return wallet === e.owner || e.verifiers.includes(wallet) || snap.beneficiaries.some((b) => b.wallet === wallet);
+  return wallet === e.owner || e.verifiers.includes(wallet) || snap.beneficiaries.some((b) => b.wallet === wallet && b.active);
 }
 
 /** Road vehicles get the licensing-office steps (change of ownership); other kinds a plain handover note. */

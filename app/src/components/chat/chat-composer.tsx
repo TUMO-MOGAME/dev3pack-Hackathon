@@ -9,6 +9,7 @@ import clsx from "clsx";
 import { ArrowUp, FileText, HandCoins, Mic, Paperclip, Phone, Send, Square, X } from "@/components/ui/icons";
 import type { ChatAttachment } from "@/lib/chat/types";
 import { useEstate } from "@/lib/hooks/estate";
+import { wasRemoved } from "@/lib/guardians/decisions";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { ask as askEnglish } from "@/content/ask";
 import { useLocalized } from "@/lib/i18n/client";
@@ -37,10 +38,10 @@ const tool = "inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 
 export function ChatComposer({ onSend, disabled }: { onSend: (text: string, opts?: { attachment?: File; purpose?: Purpose }) => void; disabled?: boolean }) {
   const { assistant } = useCopy();
   const c = assistant.home.composer;
-  const { openAgent, notify, role, snap, setIntent } = useEstate();
+  const { openAgent, notify, role, session, snap, setIntent } = useEstate();
   const askLabel = useLocalized(askEnglish, (t) => t.ask).entry;
   // Family members can ask for money from the chat home (the sheet explains when nothing can be asked yet).
-  const canAsk = role === "beneficiary" && !!snap;
+  const canAsk = role === "beneficiary" && !!snap && !wasRemoved(snap, session?.address);
   const [value, setValue] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [purpose, setPurpose] = useState<Purpose>("general");
