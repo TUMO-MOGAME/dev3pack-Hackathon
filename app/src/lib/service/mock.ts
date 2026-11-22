@@ -943,12 +943,12 @@ export function createMockService(opts: MockOptions = {}): MockService {
     const { a, ranking, hardship } = rank(assetAddr);
     const e = est();
     need(a.status === "Listed", "BadStatus", "This car is not listed for sale.");
-    G.checkNotObjected(a.address);
-    if (hardship) for (const h of s.snap.hardships.filter((x) => x.asset === a.address && x.status === "Approved")) G.checkNotObjected(h.address);
     if (seen) {
       const now = s.snap.offers.find((x) => x.address === ranking.bestOffer);
       need(now?.address === seen.offer && now.amount === seen.amount, "OfferChanged", "The offer changed after you read it. Check the new one before you sign.");
     }
+    G.checkNotObjected(a.address);
+    if (hardship) for (const h of s.snap.hardships.filter((x) => x.asset === a.address && x.status === "Approved")) G.checkNotObjected(h.address);
     need(ranking.eligible.length + ranking.ineligible.length > 0, "InvalidAmount", "There are no offers yet.");
     const o = s.snap.offers.find((x) => x.address === ranking.bestOffer);
     need(o?.buyer !== e.agent, "BadAgent", "The agent cannot be the buyer.");
@@ -1000,7 +1000,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     const a = s.snap.assets.find((x) => x.address === h.asset) ?? fail("BadStatus", "That asset does not exist.");
     need(a.status !== "Sold", "BadStatus", "The asset has already been sold.");
     need(h.status === "Open", "BadStatus", "This request cannot be approved.");
-    need(!a.hardshipBeneficiary, "BadStatus", "Another hardship request already stands for this asset.");
+    need(!a.hardshipBeneficiary || a.hardshipBeneficiary === h.beneficiary, "BadStatus", "Another hardship request already stands for this asset.");
     need(openToPeople(h.agentVerdict), "AgentNotApproved", "The agent has not cleared this request.");
     notInterested(h.beneficiary);
     const firstTime = !h.approvals[i];

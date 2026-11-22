@@ -109,8 +109,10 @@ export function ownerMayApprove(snap: EstateSnapshot, c: Claim, now?: number | n
 }
 
 /** Another hardship already decides who gets the sale's money (R21). */
-export const hardshipStands = (snap: Pick<EstateSnapshot, "assets">, h: Hardship) =>
-  h.status === "Open" && !!snap.assets.find((a) => a.address === h.asset)?.hardshipBeneficiary;
+export function hardshipStands(snap: Pick<EstateSnapshot, "assets">, h: Hardship): boolean {
+  const to = snap.assets.find((a) => a.address === h.asset)?.hardshipBeneficiary;
+  return h.status === "Open" && !!to && to !== h.beneficiary;
+}
 
 export function hardshipVote(snap: EstateSnapshot, h: Hardship, me: Base58 | null | undefined): Vote | null {
   const e = snap.estate;

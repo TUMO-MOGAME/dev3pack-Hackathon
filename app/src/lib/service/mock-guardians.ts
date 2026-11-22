@@ -260,6 +260,11 @@ export function createMockGuardians(d: GuardDeps) {
     needGuard(); needOwnerActive();
     const s = seat(index);
     validMonitors(index, wallets);
+    // Someone watches this seat from now on, so a family member's confirmation gives way to theirs (R18).
+    if (s.succession?.confirmedBy && wallets.length && confirmRoute(est(), seatView(s)) === "family") {
+      s.succession = null;
+      d.log("SeatDeathReportCleared", "This seat has a monitor now, so the family's confirmation was cleared", d.tx());
+    }
     s.monitors = [...wallets];
     const t = d.tx();
     d.log("SeatMonitorsSet", wallets.length
@@ -463,7 +468,7 @@ export function createMockGuardians(d: GuardDeps) {
     const by = sc.confirmedBy!;
     const route = confirmRoute(e, view);
     const mayStillConfirm = e.verifiers.includes(by)
-      || (route !== "trusted" && (s.monitors.includes(by) || by === s.backups[1] || (route === "family" && isFamilyMember(by))));
+      || (route !== "trusted" && (s.monitors.includes(by) || by === s.backups[1] || (route === "family" && by !== e.agent && isFamilyMember(by))));
     if ((sc.confirmedAt ?? sc.pendingSince) <= e.lastHeartbeat && !mayStillConfirm) {
       return clear("The owner removed the person who confirmed this passing, so the report was cleared");
     }

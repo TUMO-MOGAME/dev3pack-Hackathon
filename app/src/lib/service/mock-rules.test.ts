@@ -852,6 +852,47 @@ describe("R18 the last holder that nobody watches", () => {
     expect((await t.snap()).guardians!.seats[2].holder).toBe(kagiso.wallet);
   });
 
+  it("giving the seat a monitor clears the family's confirmation", async () => {
+    const t = await lastHolder();
+    t.act("lerato"); await t.svc.confirmSeatDeath(t.estate, 2);
+    t.act("thabo"); await t.svc.setSeatMonitors(t.estate, 2, [{ wallet: who("zodwa"), name: "Aunt Zodwa" }]);
+    expect((await t.snap()).guardians!.seats[2].succession).toBeNull();
+    await expect(t.svc.finalizeSuccession(t.estate, 2)).rejects.toThrow(/^NoSuccessionPending/);
+  });
+
+  it("an empty monitor list, or a confirmation by another holder, clears nothing", async () => {
+    const t = await lastHolder();
+    t.act("lerato"); await t.svc.confirmSeatDeath(t.estate, 2);
+    t.act("thabo"); await t.svc.setSeatMonitors(t.estate, 2, []);
+    expect((await t.snap()).guardians!.seats[2].succession?.confirmedBy).toBe(who("lerato"));
+
+    const h = await start("funded", { guarded: true });
+    h.act("zodwa"); await h.svc.reportSeatDeath(h.estate, 2, pdf());
+    h.act("nomsa"); await h.svc.confirmSeatDeath(h.estate, 2);
+    h.act("thabo"); await h.svc.setSeatMonitors(h.estate, 2, [priya]);
+    expect((await h.snap()).guardians!.seats[2].succession?.confirmedBy).toBe(who("nomsa"));
+  });
+
+  it("the confirmation stands after a check-in while that person stays in the plan", async () => {
+    const t = await lastHolder();
+    t.act("lerato"); await t.svc.confirmSeatDeath(t.estate, 2);
+    advance(1);
+    t.act("thabo"); await t.svc.heartbeat(t.estate);
+    advance(60);
+    await t.svc.finalizeSuccession(t.estate, 2);
+    expect((await t.snap()).guardians!.seats[2].holder).toBe(kagiso.wallet);
+  });
+
+  it("and is cleared when the owner has since removed them", async () => {
+    const t = await lastHolder();
+    t.act("lerato"); await t.svc.confirmSeatDeath(t.estate, 2);
+    advance(1);
+    t.act("thabo"); await t.svc.removeMember(t.estate, { beneficiary: who("lerato"), newResidual: who("sipho") });
+    advance(60);
+    await t.svc.finalizeSuccession(t.estate, 2);
+    expect((await t.snap()).guardians!.seats[2]).toMatchObject({ holder: who("busi"), succession: null });
+  });
+
   it("not whoever reported it, the next holder or a stranger", async () => {
     const t = await lastHolder();
     for (const w of [who("sipho"), kagiso.wallet, who("zanele")]) {
@@ -950,12 +991,32 @@ describe("R21 one approved hardship", () => {
     expect(s.assets[0].hardshipBeneficiary).toBe(who("lerato"));
     expect(s.hardships[0].approvals).toEqual([false, false, false]);
   });
+
+  it("an upheld objection to the first frees it", async () => {
+    const saved = storage();
+    const first = await two();
+    first.svc.makeDue();
+    saved.edit((s) => {
+      s.snap.hardships[1].status = "Rejected";
+      s.snap.assets[0].hardshipBeneficiary = null;
+    });
+    const t = await open(createMockService({ instant: true }));
+    for (const key of ["nomsa", "david"]) { t.act(key); await t.svc.approveHardship(t.estate, first.second.address); }
+    expect((await t.snap()).assets[0].hardshipBeneficiary).toBe(who("sipho"));
+  });
 });
 
 describe("R22 only the living owner changes what buyers see", () => {
   it("the owner can", async () => {
     const t = await start();
     await t.svc.setAssetMedia(t.estate, (await t.snap()).assets[0].address, { kind: "Car", title: "Corolla", photos: [] });
+  });
+
+  it("nobody changes photos after the unlock, the agent included", async () => {
+    const t = await start("unlocked");
+    const s = await t.snap();
+    t.be(s.estate.agent, "Agent");
+    await expect(t.svc.setAssetMedia(t.estate, s.assets[0].address, { kind: "Car", title: "x", photos: [] })).rejects.toThrow(/^NotOwner/);
   });
 
   it("not the agent, and not the owner after the passing", async () => {
