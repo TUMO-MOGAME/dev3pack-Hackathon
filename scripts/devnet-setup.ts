@@ -73,7 +73,8 @@ async function main() {
   }
   const usdtMint = new PublicKey(w.usdtMint);
 
-  // 3b. Car digital title: decimals 0, mint exactly 1 to the dad, then remove the mint authority (supply fixed at 1).
+  // 3b. Car digital title: decimals 0, no freeze authority (null), mint exactly 1 to the dad, then remove the mint
+  //     authority (supply fixed at 1). register_asset refuses a title that kept either authority (R13).
   if (!w.carMint) {
     const car = Keypair.generate();
     const dadCar = getAssociatedTokenAddressSync(car.publicKey, dadKey);

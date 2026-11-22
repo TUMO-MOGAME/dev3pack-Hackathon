@@ -2,6 +2,7 @@
   "//": "Lets the scripts resolve packages from app/node_modules. Run from app/: npx tsx --tsconfig ../scripts/tsconfig.json ../scripts/<name>.ts",
   "compilerOptions": {
     "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,

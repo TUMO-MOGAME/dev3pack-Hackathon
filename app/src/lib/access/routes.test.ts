@@ -8,7 +8,7 @@ import { generateKeyPairSync, sign as edSign } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import bs58 from "bs58";
-import { Keypair } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 
 const h = vi.hoisted(() => ({
   signed: [] as { data: Uint8Array }[],
@@ -16,7 +16,7 @@ const h = vi.hoisted(() => ({
   reviews: [] as { facts?: string; untrusted?: string }[],
   verdict: "needs_human" as "approve" | "reject" | "needs_human",
   accounts: {} as Record<string, unknown>,
-  events: [] as Record<string, unknown>[],
+  refuse: null as string | null,
   snapshot: null as unknown,
   reports: 0,
   agent: "261pQudaK5J4v1WCtcGjWidWU9ww3KyYC4TiU8jDsjNg",
@@ -37,7 +37,18 @@ vi.mock("@/lib/chain/client", async (original: () => Promise<object>) => {
 vi.mock("@/lib/agent/agent-wallet", () => ({
   hasAgentWallet: () => true,
   agentAddress: async () => h.agent,
-  agentSignAndSend: async (ixs: { data: Uint8Array }[]) => { h.signed.push(...ixs); return { signature: "sig", explorerUrl: "url" }; },
+  agentSignAndSend: async (ixs: { data: Uint8Array }[]) => {
+    if (h.refuse) throw new Error(h.refuse);
+    h.signed.push(...ixs);
+    return { signature: "sig", explorerUrl: "url" };
+  },
+  agentCoSignSale: async (tx: { instructions: { data: Uint8Array }[] }) => {
+    h.signed.push(...tx.instructions);
+    return { signature: "sig", explorerUrl: "url" };
+  },
+}));
+vi.mock("@/lib/chain/tx", async (original: () => Promise<object>) => ({
+  ...(await original()), getConnection: () => ({ isBlockhashValid: async () => ({ value: true }) }),
 }));
 vi.mock("@/lib/server/agent-ledger", async (original: () => Promise<object>) => ({
   ...(await original()), agentLedger: () => ({ spend: async () => ({ hour: 0, day: 0, complete: true }) }),
@@ -66,12 +77,13 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/chain/reads", () => ({
   fetchAccountRaw: async (type: string, address: string) => h.accounts[`${type}:${address}`] ?? null,
-  findRecentEvent: async (_a: string, _n: string, match: (d: Record<string, unknown>) => boolean) => h.events.find(match) ?? null,
+  invalidateProgramAccounts: () => undefined,
 }));
 vi.mock("@/lib/server/estate", () => ({ loadPublicSnapshot: async () => h.snapshot, loadSnapshot: async () => h.snapshot }));
 
 const { getCoder, getIdl } = await import("@/lib/chain/idl");
-const { beneficiaryPda, estatePda, guardPda } = await import("@/lib/chain/pda");
+const { beneficiaryPda, estatePda, fallbackReportPda, guardPda, seatPda } = await import("@/lib/chain/pda");
+const { saleTransaction } = await import("@/lib/agent/sale");
 const { actionHeaders } = await import("./client");
 const { actionBody, READ_HEADER, readPassMessage } = await import("./messages");
 const { sha256Hex } = await import("@/lib/agent/hash");
@@ -86,7 +98,11 @@ const reports = await import("@/app/api/reports/route");
 function wallet() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const raw = Buffer.from((publicKey.export({ format: "jwk" }) as { x: string }).x, "base64url");
-  return { address: bs58.encode(raw), signMessage: async (m: string) => edSign(null, Buffer.from(m, "utf8"), privateKey).toString("hex") };
+  return {
+    address: bs58.encode(raw),
+    signMessage: async (m: string) => edSign(null, Buffer.from(m, "utf8"), privateKey).toString("hex"),
+    signBytes: (b: Uint8Array) => edSign(null, b, privateKey),
+  };
 }
 type W = ReturnType<typeof wallet>;
 
@@ -103,7 +119,7 @@ beforeEach(async () => {
   [claim, asset, rule] = [key(), key(), key()];
   sha = await sha256Hex(pdf);
   const bytes = Array.from(Buffer.from(sha, "hex"));
-  h.signed = []; h.reviews = []; h.events = []; h.stored = 0; h.reports = 0; h.verdict = "needs_human";
+  h.signed = []; h.reviews = []; h.refuse = null; h.stored = 0; h.reports = 0; h.verdict = "needs_human";
   h.accounts = {
     [`Estate:${estate}`]: {
       owner: owner.address, agent: h.agent, usdt_mint: h.mint, verifiers: [trusted.address, key(), key()],
@@ -170,8 +186,7 @@ describe("/api/review (S1, S2, S3, S7)", () => {
   });
 
   it("never skips a fallback recipient on an unsure review", async () => {
-    h.accounts[`Guard:${guardPda(programId, estate).toBase58()}`] = { fallback: [key(), key(), key(), key()] };
-    h.events = [{ index: 0, cert_hash: Array.from(Buffer.from(sha, "hex")), reported_by: claimant.address }];
+    fallbackReported();
     expect((await reviewAs(claimant, { purpose: "fallback-death", index: 0 })).status).toBe(200);
     expect(signedReview()).toBe("false");
   });
@@ -201,13 +216,89 @@ describe("/api/review (S1, S2, S3, S7)", () => {
   });
 });
 
+/** An open report by the claimant that fallback recipient 0 died, for the file these tests upload. */
+function fallbackReported(report: Record<string, unknown> = {}, guard: Record<string, unknown> = {}) {
+  const recipient = key(), rentTo = key();
+  h.accounts[`Guard:${guardPda(programId, estate).toBase58()}`] = { fallback: [recipient, key(), key(), key()], fallback_dead: 0, ...guard };
+  h.accounts[`FallbackReport:${fallbackReportPda(programId, estate, 0).toBase58()}`] = {
+    estate, index: 0, recipient, reporter: claimant.address, rent_payer: rentTo, cert_hash: Array.from(Buffer.from(sha, "hex")),
+    verdict: { pending: {} }, reported_at: 1, ...report,
+  };
+  return { rentTo };
+}
+
+describe("reviews of reports that can be replaced (§18.2 R4-R6)", () => {
+  const certOf = () => Buffer.from((getCoder().instruction.decode(Buffer.from(h.signed[0].data))!.data as { cert_hash: number[] }).cert_hash).toString("hex");
+
+  it("a death review carries the hash of the file that was read", async () => {
+    expect((await reviewAs(claimant, { purpose: "death" })).status).toBe(200);
+    expect(certOf()).toBe(sha);
+  });
+
+  it("so does a seat's", async () => {
+    h.accounts[`Seat:${seatPda(programId, estate, 1).toBase58()}`] = {
+      holder: key(), generation: 1, death_cert_hash: Array.from(Buffer.from(sha, "hex")), death_reported_by: claimant.address, death_verdict: { pending: {} },
+    };
+    expect((await reviewAs(claimant, { purpose: "seat-death", index: 1 })).status).toBe(200);
+    expect(certOf()).toBe(sha);
+  });
+
+  it("a fallback review reads the report account: its hash, and rent back to who paid it", async () => {
+    const { rentTo } = fallbackReported();
+    expect((await reviewAs(claimant, { purpose: "fallback-death", index: 0 })).status).toBe(200);
+    expect(certOf()).toBe(sha);
+    expect((h.signed[0] as unknown as { keys: { pubkey: PublicKey }[] }).keys.map((k) => k.pubkey.toBase58())).toContain(rentTo);
+  });
+
+  it("only the reporter of the report that stands now can ask", async () => {
+    fallbackReported({ reporter: outsider.address });
+    expect((await reviewAs(claimant, { purpose: "fallback-death", index: 0 })).status).toBe(403);
+  });
+
+  it.each([
+    ["replaced by another file", () => fallbackReported({ cert_hash: Array(32).fill(9) })],
+    ["void: the list names someone else now", () => fallbackReported({ recipient: key() })],
+    ["reviewed already", () => fallbackReported({ verdict: { approved: {} } })],
+    ["about a death already confirmed", () => fallbackReported({}, { fallback_dead: 1 })],
+    ["not there", () => { fallbackReported(); delete h.accounts[`FallbackReport:${fallbackReportPda(programId, estate, 0).toBase58()}`]; }],
+  ])("refuses a fallback report %s, before the model", async (_why, arrange) => {
+    arrange();
+    expect((await reviewAs(claimant, { purpose: "fallback-death", index: 0 })).status).toBe(409);
+    expect([h.reviews.length, h.signed.length]).toEqual([0, 0]);
+  });
+
+  it("a death claim replaced by another file is refused before the model", async () => {
+    (h.accounts[`Estate:${estate}`] as Record<string, unknown>).death_cert_hash = Array(32).fill(9);
+    expect((await reviewAs(claimant, { purpose: "death" })).status).toBe(409);
+    expect(h.reviews).toHaveLength(0);
+  });
+
+  it("replaced while the model read: the program refuses and the caller is told", async () => {
+    h.refuse = "Rejected by the Heirloom program: ReportChanged: Another report replaced this one";
+    const res = await reviewAs(claimant, { purpose: "death" });
+    expect([res.status, ((await res.json()) as { code: string }).code]).toEqual([409, "ReportChanged"]);
+  });
+});
+
 describe("/api/list-asset and /api/accept-offer (S1)", () => {
   const post = (p: string, body: unknown, headers?: Record<string, string>) =>
     new Request(`http://t/api/${p}`, { method: "POST", body: JSON.stringify(body), headers });
   const listing = async (who: W | null, durationSecs = 86_400) => list.POST(post("list-asset", { estate, asset, durationSecs },
     who ? await actionHeaders(who, "list-asset", estate, actionBody.listAsset({ asset, durationSecs })) : undefined));
-  const settling = async (who: W | null) => settle.POST(post("accept-offer", { estate, asset },
-    who ? await actionHeaders(who, "accept-offer", estate, actionBody.acceptOffer({ asset })) : undefined));
+  /** The sale as the trusted person's wallet signs it (lib/agent/sale.test.ts has every tampering case). */
+  const signedSale = (who: W) => {
+    const s = h.snapshot as { assets: Parameters<typeof saleTransaction>[1]["asset"][]; offers: { buyer: string; amount: bigint }[] };
+    const tx = saleTransaction({ programId: new PublicKey(programId), usdtMint: new PublicKey(h.mint) },
+      { estate, agent: h.agent, asset: s.assets[0], offer: s.offers[0], coSigner: who.address },
+      "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi");
+    tx.addSignature(new PublicKey(who.address), Buffer.from(who.signBytes(tx.serializeMessage())));
+    return tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString("base64");
+  };
+  const settling = async (who: W | null) => {
+    const tx = who ? signedSale(who) : undefined;
+    return settle.POST(post("accept-offer", { estate, asset, tx },
+      who ? await actionHeaders(who, "accept-offer", estate, actionBody.acceptOffer({ asset, tx })) : undefined));
+  };
 
   it("an anonymous caller cannot list", async () => {
     expect((await listing(null)).status).toBe(401);
@@ -291,6 +382,12 @@ describe("/api/reports (S5)", () => {
   it("refuses an expired pass and one that never ends", async () => {
     expect((await read(owner, Date.now() - 1)).status).toBe(403);
     expect((await read(owner, Date.now() + 90 * 86_400_000)).status).toBe(403);
+  });
+
+  it("a removed beneficiary is no longer a member (R16)", async () => {
+    const gone = wallet();
+    h.accounts[`Beneficiary:${beneficiaryPda(programId, estate, gone.address).toBase58()}`] = { label: "Family member 2", active: false };
+    expect((await read(gone)).status).toBe(403);
   });
 
   it("answers the owner, a beneficiary and a trusted person", async () => {

@@ -11,6 +11,7 @@
  *  - new WalletAccountReadOnlySolana(address, { provider }) for balances of locked wallets
  *  - account.dispose() / manager.dispose() to wipe keys from memory
  */
+import { programFailure } from "../chain/program-errors";
 import type WalletManagerSolanaT from "@tetherto/wdk-wallet-solana";
 import type { WalletAccountSolana as WalletAccountSolanaT, WalletAccountReadOnlySolana as ReadOnlyT } from "@tetherto/wdk-wallet-solana";
 
@@ -74,10 +75,8 @@ export async function wdkSignAndSend(account: WalletAccountSolanaT, base64Tx: st
 export function explainSendError(e: unknown): string {
   const logs = findLogs(e);
   if (logs) {
-    for (const l of logs) {
-      const m = l.match(/Error Code: (\w+)\. Error Number: \d+\. Error Message: (.*)$/);
-      if (m) return `Rejected by the Heirloom program: ${m[1]} (${m[2].replace(/\.$/, "")})`;
-    }
+    const refused = programFailure(logs);
+    if (refused) return `Rejected by the Heirloom program: ${refused}`;
     const failed = logs.find((l) => /failed/i.test(l));
     if (failed) return `Transaction failed: ${failed}`;
   }

@@ -16,7 +16,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID,
   assetPda, ata, beneficiaryPda, claimPda, estatePda, hardshipPda, nftEscrowAta, offerEscrowAta, offerPda,
   payeePda, rulePda, vaultAta, guardPda, mediaPda, objectionPda, seatPda, stampPda, yearCapPda,
-  agentVotePda, residualPda,
+  agentVotePda, fallbackReportPda, residualPda,
 } from "./pda";
 import type { AssetKind, TargetKind } from "../guardians/types";
 import type { ReviewOutcome } from "../verdict";
@@ -134,11 +134,10 @@ export function addPayee(ctx: Ctx, owner: PublicKey, wallet: PublicKey, k: Payee
 }
 
 /**
- * 5. `ruleId` must be the estate's current rule_count.
+ * 5. `ruleId`: the estate's current rule_count for a new slot, or the id of an ended rule whose slot is reused (its
+ * yearly cap then closes to the owner).
  * Living plans: `startsNow` lets the rule pay while the owner is alive; `recurring` makes it a scheduled payment
- * (fixed amount to a fixed payee every interval, first at `firstDue`). Args are passed in spec order
- * (…, valid_until, starts_now, recurring_amount, interval_secs, first_due). If the deployed IDL predates living
- * plans (5 args), plain rules still work and living-plan options fail with a clear error.
+ * (fixed amount to a fixed payee every interval, first at `firstDue`).
  */
 export function addRule(ctx: Ctx, owner: PublicKey, p: {
   ruleId: number; beneficiaryWallet: PublicKey; category: Category; allowedPayeeKind: PayeeKind;
@@ -146,17 +145,15 @@ export function addRule(ctx: Ctx, owner: PublicKey, p: {
   startsNow?: boolean; recurring?: { amount: bigint; intervalSecs: number; firstDue: number; payeeWallet: PublicKey };
 }) {
   const { estate } = estateAccounts(ctx, owner);
-  const base = [cat(p.category), kind(p.allowedPayeeKind), u64(p.maxPerClaim), u64(p.lifetimeCap), i64(p.validUntil)];
-  const living = [!!p.startsNow, u64(p.recurring?.amount ?? 0n), i64(p.recurring?.intervalSecs ?? 0), i64(p.recurring?.firstDue ?? 0)];
-  const idlArgs = findInstruction("add_rule").args.length;
-  if (idlArgs === base.length && (p.startsNow || p.recurring)) {
-    throw new Error("The deployed program does not support living plans yet (add_rule has no starts_now/recurring args).");
-  }
-  const payee = p.recurring ? payeePda(ctx.programId, estate, p.recurring.payeeWallet) : undefined;
-  return buildIx("add_rule", idlArgs === base.length ? base : [...base, ...living], {
-    owner, estate, rule: rulePda(ctx.programId, estate, p.ruleId),
-    beneficiary: beneficiaryPda(ctx.programId, estate, p.beneficiaryWallet), beneficiary_wallet: p.beneficiaryWallet,
-    ...(payee && p.recurring ? { payee, fixed_payee: payee, payee_account: payee, payee_wallet: p.recurring.payeeWallet } : {}),
+  const args = [
+    p.ruleId, cat(p.category), kind(p.allowedPayeeKind), u64(p.maxPerClaim), u64(p.lifetimeCap), i64(p.validUntil),
+    !!p.startsNow, u64(p.recurring?.amount ?? 0n), i64(p.recurring?.intervalSecs ?? 0), i64(p.recurring?.firstDue ?? 0),
+  ];
+  const rule = rulePda(ctx.programId, estate, p.ruleId);
+  return buildIx("add_rule", args, {
+    owner, estate, rule, year_cap: yearCapPda(ctx.programId, rule),
+    beneficiary: beneficiaryPda(ctx.programId, estate, p.beneficiaryWallet),
+    ...(p.recurring ? { payee: payeePda(ctx.programId, estate, p.recurring.payeeWallet) } : {}),
   });
 }
 
@@ -214,9 +211,9 @@ export function submitDeathClaim(ctx: Ctx, estate: PublicKey, signer: PublicKey,
   return buildIx("submit_death_claim", [hash32(certHashHex)], beneficiarySigner(ctx, estate, signer));
 }
 
-/** 11 (agent) */
-export function reviewDeath(estate: PublicKey, agent: PublicKey, outcome: ReviewOutcome, reportHashHex: string) {
-  return buildIx("review_death", [outcomeArg(outcome), hash32(reportHashHex)], { agent, estate });
+/** 11 (agent). `certHashHex`: the hash of the file the agent read (ReportChanged if another report replaced it). */
+export function reviewDeath(estate: PublicKey, agent: PublicKey, outcome: ReviewOutcome, reportHashHex: string, certHashHex: string) {
+  return buildIx("review_death", [outcomeArg(outcome), hash32(reportHashHex), hash32(certHashHex)], { agent, estate });
 }
 
 /** 12 */
@@ -263,14 +260,15 @@ export function approveClaim(estate: PublicKey, verifier: PublicKey, claim: Publ
   return buildIx("approve_claim", [], { verifier, payer: verifier, estate, claim, rule, approval_stamp: stampPda(programId, claim) });
 }
 
-/** 18 */
-export function executeClaim(ctx: Ctx, p: { estate: PublicKey; payer: PublicKey; rule: PublicKey; claim: PublicKey; payeeWallet: PublicKey }) {
+/** 18. `beneficiary` = claim.beneficiary, `payeeWallet` = claim.payee: both must still be in the plan. */
+export function executeClaim(ctx: Ctx, p: { estate: PublicKey; payer: PublicKey; rule: PublicKey; claim: PublicKey; beneficiary: PublicKey; payeeWallet: PublicKey }) {
   const payeeToken = ata(ctx.usdtMint, p.payeeWallet);
   const vault = vaultAta(ctx.usdtMint, p.estate);
   return buildIx("execute_claim", [], {
     payer: p.payer, signer: p.payer, caller: p.payer, authority: p.payer,
     estate: p.estate, rule: p.rule, claim: p.claim,
-    payee: payeePda(ctx.programId, p.estate, p.payeeWallet), payee_wallet: p.payeeWallet,
+    payee_account: payeePda(ctx.programId, p.estate, p.payeeWallet), payee_wallet: p.payeeWallet,
+    beneficiary_account: beneficiaryPda(ctx.programId, p.estate, p.beneficiary),
     payee_token: payeeToken, payee_ata: payeeToken, payee_usdt: payeeToken, payee_token_account: payeeToken,
     usdt_mint: ctx.usdtMint, mint: ctx.usdtMint, vault, estate_vault: vault, vault_ata: vault,
     // Guardians (may not exist; the program checks): objection window and objections.
@@ -284,14 +282,15 @@ export function ownerApproveClaim(ctx: Ctx, owner: PublicKey, claim: PublicKey, 
   return buildIx("owner_approve_claim", [], { owner, ...estateAccounts(ctx, owner), claim, rule });
 }
 
-/** Scheduled payment: anyone (agent scheduler, UI button) pays a due recurring rule to its fixed payee. */
-export function executeScheduled(ctx: Ctx, p: { estate: PublicKey; payer: PublicKey; rule: PublicKey; payeeWallet: PublicKey }) {
+/** Scheduled payment: anyone (agent scheduler, UI button) pays a due recurring rule to its fixed payee. `beneficiary` = rule.beneficiary. */
+export function executeScheduled(ctx: Ctx, p: { estate: PublicKey; payer: PublicKey; rule: PublicKey; beneficiary: PublicKey; payeeWallet: PublicKey }) {
   const payeeToken = ata(ctx.usdtMint, p.payeeWallet);
   const vault = vaultAta(ctx.usdtMint, p.estate);
   const payee = payeePda(ctx.programId, p.estate, p.payeeWallet);
   return buildIx("execute_scheduled", [], {
     payer: p.payer, signer: p.payer, caller: p.payer, authority: p.payer, cranker: p.payer,
-    estate: p.estate, rule: p.rule, payee, payee_account: payee, fixed_payee: p.payeeWallet, payee_wallet: p.payeeWallet,
+    estate: p.estate, rule: p.rule, payee_account: payee, payee_wallet: p.payeeWallet,
+    beneficiary_account: beneficiaryPda(ctx.programId, p.estate, p.beneficiary),
     payee_token: payeeToken, payee_ata: payeeToken, payee_usdt: payeeToken, payee_token_account: payeeToken,
     usdt_mint: ctx.usdtMint, mint: ctx.usdtMint, vault, estate_vault: vault, vault_ata: vault,
     year_cap: yearCapPda(ctx.programId, p.rule), // may not exist (no yearly cap)
@@ -341,9 +340,13 @@ export function approveHardship(estate: PublicKey, verifier: PublicKey, asset: P
   return buildIx("approve_hardship", [], { verifier, estate, asset, hardship });
 }
 
-/** 25 (agent). `recipient` = hardship beneficiary if set, else asset.proceeds_to. */
+/**
+ * 25 (agent, and the trusted person who co-signs). `recipient` = hardship beneficiary if set, else asset.proceeds_to.
+ * `expectedAmount`: the offer both of them agreed to (OfferChanged). `coSigner` null only when no seat has a holder.
+ */
 export function acceptOffer(ctx: Ctx, p: {
   estate: PublicKey; agent: PublicKey; asset: PublicKey; nftMint: PublicKey; buyer: PublicKey; recipient: PublicKey;
+  expectedAmount: bigint; coSigner: PublicKey | null;
   /** asset.hardship_beneficiary, when a hardship sale is approved: its hardship's objection is checked too. */
   hardshipBeneficiary?: PublicKey | null;
 }) {
@@ -351,8 +354,9 @@ export function acceptOffer(ctx: Ctx, p: {
   const recipientToken = ata(ctx.usdtMint, p.recipient);
   const escrowNft = nftEscrowAta(p.nftMint, p.estate);
   const buyerNft = ata(p.nftMint, p.buyer);
-  return buildIx("accept_offer", [], {
+  return buildIx("accept_offer", [u64(p.expectedAmount)], {
     ...o, agent: p.agent, nft_mint: p.nftMint,
+    ...(p.coSigner ? { co_signer: p.coSigner } : {}),
     recipient: p.recipient, proceeds_to: p.recipient, recipient_wallet: p.recipient,
     recipient_token: recipientToken, recipient_ata: recipientToken, recipient_usdt: recipientToken, proceeds_token: recipientToken,
     nft_escrow: escrowNft, escrow_nft: escrowNft, nft_vault: escrowNft,
@@ -417,19 +421,34 @@ export function ownerReplaceSeat(ctx: Ctx, owner: PublicKey, index: number, newH
   return buildIx("owner_replace_seat", [index, newHolder], { owner, estate, seat: seatPda(ctx.programId, estate, index) });
 }
 
-/** Anyone except the holder. */
-export function reportSeatDeath(ctx: Ctx, reporter: PublicKey, estate: PublicKey, index: number, certHashHex: string) {
-  return buildIx("report_seat_death", [index, hash32(certHashHex)], { reporter, estate, seat: seatPda(ctx.programId, estate, index) });
+/** The signer's own accounts that prove they take part: a seat they monitor, their Beneficiary PDA. */
+export interface ActingAs { monitorSeat?: number | null; beneficiary?: boolean }
+
+function actingAccounts(ctx: Ctx, estate: PublicKey, signer: PublicKey, as: ActingAs) {
+  return {
+    ...(as.monitorSeat !== undefined && as.monitorSeat !== null ? { signer_seat: seatPda(ctx.programId, estate, as.monitorSeat) } : {}),
+    ...(as.beneficiary ? { beneficiary_account: beneficiaryPda(ctx.programId, estate, signer) } : {}),
+  };
 }
 
-/** Agent: review the death certificate reported for seat `index`. */
-export function reviewSeatDeath(estate: PublicKey, agent: PublicKey, index: number, approve: boolean, reportHashHex: string) {
+/** A trusted person, the owner, this seat's monitor or backup, or an active beneficiary (`as.beneficiary`); never the holder. */
+export function reportSeatDeath(ctx: Ctx, reporter: PublicKey, estate: PublicKey, index: number, certHashHex: string, as: Pick<ActingAs, "beneficiary"> = {}) {
+  return buildIx("report_seat_death", [index, hash32(certHashHex)], {
+    reporter, estate, seat: seatPda(ctx.programId, estate, index), ...actingAccounts(ctx, estate, reporter, as),
+  });
+}
+
+/** Agent: review the death certificate reported for seat `index`. `certHashHex`: the file it read. */
+export function reviewSeatDeath(estate: PublicKey, agent: PublicKey, index: number, approve: boolean, reportHashHex: string, certHashHex: string) {
   const programId = new PublicKey(getIdl().address);
-  return buildIx("review_seat_death", [index, approve, hash32(reportHashHex)], { agent, estate, seat: seatPda(programId, estate, index) });
+  return buildIx("review_seat_death", [index, approve, hash32(reportHashHex), hash32(certHashHex)], { agent, estate, seat: seatPda(programId, estate, index) });
 }
 
-export function confirmSeatDeath(ctx: Ctx, confirmer: PublicKey, estate: PublicKey, index: number) {
-  return buildIx("confirm_seat_death", [index], { confirmer, estate, seat: seatPda(ctx.programId, estate, index) });
+/** `as.beneficiary`: the last holder has neither a monitor nor a second backup, so an active beneficiary confirms. */
+export function confirmSeatDeath(ctx: Ctx, confirmer: PublicKey, estate: PublicKey, index: number, as: Pick<ActingAs, "beneficiary"> = {}) {
+  return buildIx("confirm_seat_death", [index], {
+    confirmer, estate, seat: seatPda(ctx.programId, estate, index), ...actingAccounts(ctx, estate, confirmer, as),
+  });
 }
 
 /** The holder: "I'm still here". */
@@ -437,10 +456,17 @@ export function vetoSeatDeath(ctx: Ctx, holder: PublicKey, estate: PublicKey, in
   return buildIx("veto_seat_death", [index], { holder, estate, seat: seatPda(ctx.programId, estate, index) });
 }
 
-/** Anyone: `caller` is any wallet that signs (so the sponsor can pay the fee; it gains no rights). */
-export function finalizeSuccession(ctx: Ctx, estate: PublicKey, index: number, caller: PublicKey) {
+/**
+ * Anyone: `caller` is any wallet that signs (so the sponsor can pay the fee; it gains no rights).
+ * `confirmedBy` = seat.death_confirmed_by. Its Beneficiary PDA always goes as the remaining account, whether or not it
+ * exists: without it the one case where only a beneficiary could have confirmed fails (NotConfirmer). In every other
+ * case the program ignores it.
+ */
+export function finalizeSuccession(ctx: Ctx, estate: PublicKey, index: number, caller: PublicKey, confirmedBy: PublicKey) {
   const seat = seatPda(ctx.programId, estate, index);
-  return buildIx("finalize_succession", [index], { estate, guard: guardPda(ctx.programId, estate), seat, objection: objectionPda(ctx.programId, seat), caller });
+  const t = buildIx("finalize_succession", [index], { estate, guard: guardPda(ctx.programId, estate), seat, objection: objectionPda(ctx.programId, seat), caller });
+  t.keys.push({ pubkey: beneficiaryPda(ctx.programId, estate, confirmedBy), isSigner: false, isWritable: false });
+  return t;
 }
 
 /**
@@ -464,37 +490,56 @@ export function raiseObjection(ctx: Ctx, p: {
 }
 
 /**
- * A seat holder (not the watched one), or the owner while Active; Fallback objections: a monitor of `voterSeat`.
- * `target` = objection.target (passed for Claim, Sale, Hardship and Succession); `hardshipAsset` for Hardship.
+ * A seat holder (not the watched one), or the owner while Active; Fallback objections: a monitor of any seat, so
+ * those pass the three seats (one wallet, one vote).
+ * `target` = objection.target (passed for Claim, Sale, Hardship and Succession, whichever way the vote goes: a
+ * dismissal checks who gains); `hardshipAsset` for Hardship.
  */
 export function voteObjection(ctx: Ctx, p: {
-  voter: PublicKey; estate: PublicKey; kind: TargetKind; target: PublicKey; uphold: boolean; voterSeat?: number | null; hardshipAsset?: PublicKey;
+  voter: PublicKey; estate: PublicKey; kind: TargetKind; target: PublicKey; uphold: boolean; hardshipAsset?: PublicKey;
 }) {
   const needsTarget = p.kind === "Claim" || p.kind === "Sale" || p.kind === "Hardship" || p.kind === "Succession";
-  return buildIx("vote_objection", [p.uphold], {
+  const t = buildIx("vote_objection", [p.uphold], {
     voter: p.voter, estate: p.estate, guard: guardPda(ctx.programId, p.estate), objection: objectionPda(ctx.programId, p.target),
-    ...(p.voterSeat !== undefined && p.voterSeat !== null ? { voter_seat: seatPda(ctx.programId, p.estate, p.voterSeat) } : {}),
     ...(needsTarget ? { target_account: p.target } : {}),
     ...(p.hardshipAsset ? { asset: p.hardshipAsset } : {}),
   });
+  if (p.kind === "Fallback") {
+    for (const pubkey of Object.values(seatAccounts(ctx, p.estate))) t.keys.push({ pubkey, isSigner: false, isWritable: false });
+  }
+  return t;
 }
 
-/** Owner (estate Active) or the agent: records the asset's photo root (photos stay off-chain). */
+/** The owner only, estate Active (nobody after the unlock): records the asset's photo root (photos stay off-chain). */
 export function setAssetMedia(ctx: Ctx, p: { authority: PublicKey; estate: PublicKey; asset: PublicKey; kind: AssetKind; photosRootHex: string; photoCount: number }) {
   return buildIx("set_asset_media", [assetKind(p.kind), hash32(p.photosRootHex), p.photoCount], {
     authority: p.authority, payer: p.authority, estate: p.estate, asset: p.asset, media: mediaPda(ctx.programId, p.asset),
   });
 }
 
-/** Anyone: reports fallback recipient `index` as passed (the hash is recorded in the event only). */
-export function reportFallbackDeath(ctx: Ctx, reporter: PublicKey, estate: PublicKey, index: number, certHashHex: string) {
-  return buildIx("report_fallback_death", [index, hash32(certHashHex)], { reporter, estate, guard: guardPda(ctx.programId, estate) });
+/** A participant (see `ActingAs`) other than the recipient reports that slot `index` died, and pays the report's rent. */
+export function reportFallbackDeath(ctx: Ctx, reporter: PublicKey, estate: PublicKey, index: number, certHashHex: string, as: ActingAs = {}) {
+  return buildIx("report_fallback_death", [index, hash32(certHashHex)], {
+    reporter, estate, guard: guardPda(ctx.programId, estate), fallback_report: fallbackReportPda(ctx.programId, estate, index),
+    ...actingAccounts(ctx, estate, reporter, as),
+  });
 }
 
-/** Agent: review the death certificate reported for fallback recipient `index`. */
-export function reviewFallbackDeath(estate: PublicKey, agent: PublicKey, index: number, approve: boolean, reportHashHex: string) {
+/** Agent: sets the report's verdict; a rejection closes it to `rentTo` (= report.rent_payer). `certHashHex`: the file it read. */
+export function reviewFallbackDeath(estate: PublicKey, agent: PublicKey, index: number, approve: boolean, reportHashHex: string, certHashHex: string, rentTo: PublicKey) {
   const programId = new PublicKey(getIdl().address);
-  return buildIx("review_fallback_death", [index, approve, hash32(reportHashHex)], { agent, estate, guard: guardPda(programId, estate) });
+  return buildIx("review_fallback_death", [index, approve, hash32(reportHashHex), hash32(certHashHex)], {
+    agent, estate, guard: guardPda(programId, estate), fallback_report: fallbackReportPda(programId, estate, index), rent_to: rentTo,
+  });
+}
+
+/** `dead`: a second participant confirms after the wait. Otherwise the reported recipient refutes. Either closes the report to `rentTo`. */
+export function resolveFallbackDeath(ctx: Ctx, p: { signer: PublicKey; estate: PublicKey; index: number; dead: boolean; rentTo: PublicKey; as?: ActingAs }) {
+  return buildIx("resolve_fallback_death", [p.index, p.dead], {
+    signer: p.signer, estate: p.estate, guard: guardPda(ctx.programId, p.estate),
+    fallback_report: fallbackReportPda(ctx.programId, p.estate, p.index), rent_to: p.rentTo,
+    ...actingAccounts(ctx, p.estate, p.signer, p.as ?? {}),
+  });
 }
 
 /** Anyone: an Open Fallback objection not upheld within the fallback wait is marked dismissed (lapsed). */
@@ -508,13 +553,17 @@ export function startFallback(ctx: Ctx, estate: PublicKey, caller: PublicKey) {
   return buildIx("start_fallback", [], { estate, guard: guardPda(ctx.programId, estate), ...seatAccounts(ctx, estate), caller });
 }
 
-/** Anyone: after the wait, the whole vault goes to `recipient` (the first fallback recipient not proven dead). */
-export function executeFallback(ctx: Ctx, p: { payer: PublicKey; estate: PublicKey; recipient: PublicKey }) {
+/**
+ * Anyone: after the wait, the whole vault goes to `recipient`, the first fallback recipient not proven dead, at slot
+ * `recipientIndex` (whose open death report can hold the payment).
+ */
+export function executeFallback(ctx: Ctx, p: { payer: PublicKey; estate: PublicKey; recipient: PublicKey; recipientIndex: number }) {
   const guard = guardPda(ctx.programId, p.estate);
   const vault = vaultAta(ctx.usdtMint, p.estate);
   return buildIx("execute_fallback", [], {
     payer: p.payer, estate: p.estate, guard, ...seatAccounts(ctx, p.estate), objection: objectionPda(ctx.programId, guard),
     recipient: p.recipient, usdt_mint: ctx.usdtMint, vault, recipient_usdt: ata(ctx.usdtMint, p.recipient),
+    fallback_report: fallbackReportPda(ctx.programId, p.estate, p.recipientIndex),
   });
 }
 
@@ -562,12 +611,16 @@ export function setResidual(ctx: Ctx, owner: PublicKey, recipient: PublicKey) {
   return buildIx("set_residual", [recipient], { owner, estate, residual: residualPda(ctx.programId, estate) });
 }
 
-/** Anyone, estate Unlocked: pays the vault minus what live rules reserve. `rules`: every rule, in id order. */
-export function sweepResidual(ctx: Ctx, p: { payer: PublicKey; estate: PublicKey; recipient: PublicKey; rules: PublicKey[] }) {
+/**
+ * Anyone, estate Unlocked: pays the vault minus what live rules reserve. `rules`: every rule, in id order.
+ * `reportIndex`: the Guard's first living fallback slot, else 255 (also without a Guard).
+ */
+export function sweepResidual(ctx: Ctx, p: { payer: PublicKey; estate: PublicKey; recipient: PublicKey; reportIndex: number; rules: PublicKey[] }) {
   const t = buildIx("sweep_residual", [], {
     payer: p.payer, estate: p.estate, recipient: p.recipient, usdt_mint: ctx.usdtMint,
     residual: residualPda(ctx.programId, p.estate), guard: guardPda(ctx.programId, p.estate),
     vault: vaultAta(ctx.usdtMint, p.estate), recipient_usdt: ata(ctx.usdtMint, p.recipient),
+    fallback_report: fallbackReportPda(ctx.programId, p.estate, p.reportIndex),
   });
   for (const pubkey of p.rules) t.keys.push({ pubkey, isSigner: false, isWritable: false });
   return t;
@@ -577,6 +630,25 @@ export function sweepResidual(ctx: Ctx, p: { payer: PublicKey; estate: PublicKey
 export function setAgent(ctx: Ctx, owner: PublicKey, agent: PublicKey) {
   const { estate } = estateAccounts(ctx, owner);
   return buildIx("set_agent", [agent], { owner, estate });
+}
+
+/** Owner, estate Active, asset Held: the title back to the owner, whose token account must exist. Escrow and Asset close to the owner. */
+export function releaseAsset(ctx: Ctx, owner: PublicKey, asset: PublicKey, nftMint: PublicKey) {
+  const { estate } = estateAccounts(ctx, owner);
+  return buildIx("release_asset", [], {
+    owner, estate, asset, nft_mint: nftMint, nft_escrow: nftEscrowAta(nftMint, estate), owner_nft: ata(nftMint, owner),
+  });
+}
+
+/** Owner, estate Active: removes a beneficiary, a payee or both (wallets). Proof of life. */
+export function removeMember(ctx: Ctx, owner: PublicKey, p: { beneficiary?: PublicKey; payee?: PublicKey }) {
+  if (!p.beneficiary && !p.payee) throw new Error("BadStatus: name a family member or a payee to remove.");
+  const { estate } = estateAccounts(ctx, owner);
+  return buildIx("remove_member", [], {
+    owner, estate,
+    ...(p.beneficiary ? { beneficiary_account: beneficiaryPda(ctx.programId, estate, p.beneficiary) } : {}),
+    ...(p.payee ? { payee_account: payeePda(ctx.programId, estate, p.payee) } : {}),
+  });
 }
 
 /** A trusted person votes to replace the agent's key. */

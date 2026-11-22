@@ -1,4 +1,4 @@
-import { handler, HttpError, json, rateLimit } from "@/lib/api/http";
+import { handler, HttpError, json, rateLimitShared } from "@/lib/api/http";
 import { MAX_UPLOAD_BYTES, validateUpload } from "@/lib/storage";
 import { sha256Hex } from "@/lib/agent/hash";
 import { readInvoice } from "@/lib/agent/invoice";
@@ -13,7 +13,7 @@ export const maxDuration = 120;
  * Returns { reading, sha256, engine: "ai" | "none" }.
  */
 export const POST = handler(async (req) => {
-  rateLimit(req, "invoice", 8);
+  await rateLimitShared(req, "invoice", 8);
   if (Number(req.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES + 64_000) throw new HttpError(413, "The file is larger than 10 MB.");
   const form = await req.formData().catch(() => { throw new HttpError(400, "Expected a form upload with the invoice as `file`."); });
   const file = form.get("file");

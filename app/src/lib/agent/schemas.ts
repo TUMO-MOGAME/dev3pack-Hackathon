@@ -129,7 +129,10 @@ export const rankOffersBody = z.object({
   explain: z.boolean().optional(),
 });
 
-export const acceptOfferBody = z.object({ estate: base58, asset: base58 });
+/** `tx`: the sale the trusted person signed (base64). Left out only when no seat has a holder. */
+export const acceptOfferBody = z.object({
+  estate: base58, asset: base58, tx: z.string().min(1).max(1_700).regex(/^[A-Za-z0-9+/]+=*$/, "not base64").optional(),
+});
 export const listAssetBody = z.object({ estate: base58, asset: base58, durationSecs: z.number().int().min(60 * 60).max(60 * 60 * 24 * 60) });
 
 export const reviewFields = z.object({

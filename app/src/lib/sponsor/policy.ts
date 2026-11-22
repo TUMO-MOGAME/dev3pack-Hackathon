@@ -17,6 +17,9 @@
  *  - Heirloom program: instructions whose 8-byte discriminator is on the allow-list. The permissionless ones
  *    (finalize_unlock, finalize_succession, start_fallback, lapse_objection) take any wallet as a signing `caller`,
  *    so they too have a user signature to check and rate-limit; the sponsor can never be that caller.
+ *  - So the sponsor is never a reporter (who pays a report's rent), `rent_to`, a `payer` other than approve_claim's,
+ *    a `co_signer` or a close destination, as a named or a remaining account.
+ *  - Rent for one account per transaction: one token account or one approval stamp.
  *  - The sponsor's key may appear in no instruction at all, except as the rent payer of an allowed ATA creation, or as
  *    the `payer` of approve_claim (rent for the claim's small ApprovalStamp, once per tx, only when `sponsorPaysRent`):
  *    so it is never a source, authority, owner, or account any program can debit beyond that rent.
@@ -47,6 +50,8 @@ export const SPONSORED_HEIRLOOM_IXS = [
   "raise_dispute", "resolve_dispute", "set_yearly_cap",
   // Continuity (22 Nov 2026): the signer pays any rent.
   "end_rule", "set_residual", "sweep_residual", "set_agent", "vote_agent",
+  // Second security review (22 Nov 2026). Rent comes back to whoever paid it, never to or from the sponsor.
+  "resolve_fallback_death", "release_asset", "remove_member",
 ] as const;
 
 export interface SponsorPolicy {
@@ -231,6 +236,7 @@ export function validateSponsoredTx(wire: Uint8Array, p: SponsorPolicy): Sponsor
     reject("unknown_program", `Program ${ix.programId.toBase58()} is not eligible for sponsored fees.`);
   }
 
+  if (stampRents + ataCreates.filter((c) => c.sponsorPays).length > 1) reject("rent_not_allowed", "The sponsor pays rent for one new account per transaction.");
   let rentLamports = stampRents * APPROVAL_STAMP_RENT;
   for (const c of ataCreates) {
     if (!c.sponsorPays) continue;

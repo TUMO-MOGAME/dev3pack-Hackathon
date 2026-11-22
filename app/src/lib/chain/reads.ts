@@ -8,9 +8,10 @@ import { PublicKey, type Connection } from "@solana/web3.js";
 import type { ActivityItem, Base58 } from "../types";
 import { accountDiscriminator, accountName, getCoder, getIdl } from "./idl";
 import {
-  hex, key, ruleCount, decodeAsset, decodeBeneficiary, decodeClaim, decodeEstate, decodeHardship, decodeOffer, decodePayee, decodeRule,
-  type OffChainNames, type Raw,
+  hex, key, ruleCount, decodeAgentVotes, decodeAsset, decodeBeneficiary, decodeClaim, decodeEstate, decodeHardship, decodeOffer, decodePayee, decodeRule,
+  withClaimState, type OffChainNames, type Raw,
 } from "./decoders";
+import type { AgentVoteInfo } from "../continuity/types";
 import { estatePda, vaultAta } from "./pda";
 import { getConnection } from "./tx";
 import { describeEvent, paymentFromEvent, saleFromEvent } from "./events";
@@ -25,11 +26,15 @@ export interface RawSnapshot {
   assets: ReturnType<typeof decodeAsset>[];
   offers: ReturnType<typeof decodeOffer>[];
   hardships: ReturnType<typeof decodeHardship>[];
+  agentVotes: AgentVoteInfo[];
   /** claim / hardship address → agent_report_hash (hex), for joining the off-chain AgentReport. */
   reportHashes: Record<string, string>;
 }
 
 const programId = () => new PublicKey(getIdl().address);
+
+/** An account of this program from a scan, as raw IDL fields. */
+export const decodeScanned = (type: string, account: ProgramAccount): Raw => decode(type, account.data);
 
 function decode(name: string, data: Uint8Array): Raw {
   // Anchor's coder takes a Node-style Buffer; web3.js already gives us one.
@@ -79,13 +84,26 @@ export async function fetchEstateRaw(estate: Base58, names: OffChainNames = {}, 
   const vaultBal = await conn.getTokenAccountBalance(vault, "confirmed").then((b) => BigInt(b.value.amount)).catch(() => 0n);
   const estateObj = decodeEstate(estate, raw, vaultBal, names);
 
-  const [bens, payees, rules, claims, assets] = await Promise.all([
+  const [bens, payees, rules, claims, assets, votes, stamps] = await Promise.all([
     fetchChildren(conn, "Beneficiary", estateKey),
     fetchChildren(conn, "Payee", estateKey),
     fetchChildren(conn, "Rule", estateKey),
     fetchChildren(conn, "Claim", estateKey),
     fetchChildren(conn, "Asset", estateKey),
+    fetchChildren(conn, "AgentVote", estateKey),
+    // An ApprovalStamp names its claim, not the estate.
+    scanAccounts("ApprovalStamp", [], conn),
   ]);
+  const ruleObjs = rules.map((r) => decodeRule(r.address, r.raw)).sort((a, b) => a.id - b.id);
+  const stampData = new Map(stamps.map((s) => [new PublicKey(s.data.subarray(8, 40)).toBase58(), s.data]));
+  const claimObjs = claims.map((c) => {
+    const claim = decodeClaim(c.address, c.raw);
+    const stamp = stampData.get(c.address);
+    return withClaimState(claim, {
+      estate: estateObj, rule: ruleObjs.find((r) => r.address === claim.rule),
+      ...(stamp ? { stamp: decode("ApprovalStamp", stamp) } : {}),
+    });
+  });
   // A program scan returns accounts in no fixed order: list assets in the order their titles were recorded
   // (registration order), so the first asset (the car) stays first on every load; untitled ones go last.
   const titleOrder = Object.keys(names.assetTitles ?? {});
@@ -109,8 +127,9 @@ export async function fetchEstateRaw(estate: Base58, names: OffChainNames = {}, 
     ruleCount: ruleCount(raw),
     beneficiaries: bens.map((b) => decodeBeneficiary(b.address, b.raw)),
     payees: payees.map((p) => decodePayee(p.address, p.raw)),
-    rules: rules.map((r) => decodeRule(r.address, r.raw)).sort((a, b) => a.id - b.id),
-    claims: claims.map((c) => decodeClaim(c.address, c.raw)).sort((a, b) => b.createdAt - a.createdAt),
+    rules: ruleObjs,
+    claims: claimObjs.sort((a, b) => b.createdAt - a.createdAt),
+    agentVotes: decodeAgentVotes(votes.map((v) => v.raw), estateObj),
     assets: assetObjs,
     offers: perAsset.flatMap((x) => x.offers).sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0)),
     hardships: perAsset.flatMap((x) => x.hardships),
@@ -276,20 +295,28 @@ export async function fetchAccountRaw(type: string, address: Base58, conn = getC
 }
 
 /**
- * The newest program event `name` in the recent transactions touching `address` that passes `match` (raw IDL
- * fields), or null. Used where the program records a value only in an event (e.g. FallbackDeathReported.cert_hash).
+ * The report hash of the review that the report standing now got. `events` newest first. A report can be replaced, so
+ * an older review never speaks for a newer report: the search ends at the report's own event.
  */
-export async function findRecentEvent(address: Base58, name: string, match: (data: Raw) => boolean, limit = 25, conn = getConnection()): Promise<Raw | null> {
-  const sigs = (await conn.getSignaturesForAddress(new PublicKey(address), { limit }, "confirmed")).filter((s) => !s.err);
-  await fill(`event:${address}`, sigs.map((s) => s.signature), conn);
-  const parser = new EventParser(programId(), getCoder());
-  const want = name.toLowerCase();
-  for (const s of sigs) { // newest first
-    const logs = txMemo.get(s.signature)?.meta?.logMessages;
-    if (!logs) continue;
-    try {
-      for (const ev of parser.parseLogs(logs)) if (ev.name.toLowerCase() === want && match(ev.data as Raw)) return ev.data as Raw;
-    } catch { /* undecodable log: skip */ }
+export function standingReviewHash(
+  events: readonly ChainEvent[],
+  reportedEvent: string,
+  isReview: (e: ChainEvent) => boolean,
+  sameSubject: (data: Raw) => boolean = () => true,
+): string | undefined {
+  for (const e of events) {
+    if (e.name.toLowerCase() === reportedEvent.toLowerCase() && sameSubject(e.data)) return undefined;
+    if (!isReview(e)) continue;
+    try { return hex(e.data, "report_hash"); } catch { return undefined; }
   }
-  return null;
+  return undefined;
+}
+
+/** The owner's death review that stands: the one that gave the claim's current verdict. */
+export function deathReviewHash(events: readonly ChainEvent[], death: { certHash: string | null; verdict: string }): string | undefined {
+  if (!death.certHash || (death.verdict !== "Approved" && death.verdict !== "Referred")) return undefined;
+  const want = death.verdict === "Approved" ? "deathreviewed" : "reviewreferred";
+  return standingReviewHash(events, "DeathClaimSubmitted", (e) => e.name.toLowerCase() === want
+    // ReviewReferred also reports claims and hardships.
+    && (want === "deathreviewed" || Object.keys((e.data.kind as object | undefined) ?? {})[0]?.toLowerCase() === "unlock"));
 }

@@ -5,14 +5,16 @@
  */
 import { PublicKey, type Connection } from "@solana/web3.js";
 import type { AgentReport, Base58, Claim, Estate } from "../types";
-import type { AssetKind, FallbackRecipient, GuardiansSnapshot, Objection, ObjectionStatus, Seat, SeatApprovalItem, TargetKind } from "../guardians/types";
+import type { AssetKind, FallbackDeathReport, FallbackRecipient, GuardiansSnapshot, Objection, ObjectionStatus, Seat, SeatApprovalItem, TargetKind } from "../guardians/types";
+import { eligibleSeats, quorum, refuteWait } from "../death-rules";
+import { openToPeople } from "../verdict";
 import { formatUsdt, shortAddress } from "../format";
 import { accountName, getCoder, getIdl } from "./idl";
-import { bits, bool, enumOf, hex, key, num, type Raw } from "./decoders";
+import { bits, bool, enumOf, hex, key, keyArray, num, type Raw } from "./decoders";
 import { guardPda } from "./pda";
-import { scanAccounts, type ChainEvent } from "./reads";
+import { scanAccounts, standingReviewHash, type ChainEvent } from "./reads";
 import { getConnection } from "./tx";
-import { objectionLapsesAt } from "../disputes/types";
+import { disputeLapsesAt, objectionLapsesAt } from "../disputes/types";
 
 const DEFAULT_KEY = "11111111111111111111111111111111";
 /** Byte offsets of Seat.monitors[0] and [1] (8 discriminator + 32 estate + 1 index + 32 holder + 2×32 backups). */
@@ -26,11 +28,28 @@ const ASSET_KIND = ["Car", "Motorbike", "Furniture", "Jewellery", "Electronics",
 const VERDICT = ["Pending", "Approved", "Rejected"] as const;
 
 const set = (k: string) => !!k && k !== DEFAULT_KEY;
-const keys = (r: Raw, name: string): string[] => {
-  const v = r[name] ?? Object.entries(r).find(([k]) => k.replace(/_/g, "").toLowerCase() === name.replace(/_/g, "").toLowerCase())?.[1];
-  if (!Array.isArray(v)) throw new Error(`Field "${name}" is not a key array`);
-  return v.map((x) => (typeof x === "string" ? x : (x as { toBase58(): string }).toBase58()));
-};
+/** state.rs MAX_GUARD_WAIT_SECS: older guards are clamped when read. */
+const MAX_GUARD_WAIT = 180 * 86_400;
+const guardWait = (g: Raw, name: string) => Math.min(MAX_GUARD_WAIT, Math.max(0, num(g, name)));
+
+/** The Guard's first living fallback slot and who is in it; 255 and null when nobody is left (or no list was set). */
+export function nextFallback(guard: Raw | null): { index: number; wallet: Base58 | null } {
+  if (guard) {
+    const dead = num(guard, "fallback_dead");
+    const list = keyArray(guard, "fallback");
+    const index = list.findIndex((w, i) => set(w) && (dead & (1 << i)) === 0);
+    if (index >= 0) return { index, wallet: list[index] };
+  }
+  return { index: NO_SEAT, wallet: null };
+}
+
+/**
+ * The on-chain slot of the `position`th recipient on screen: the screens list only the slots that are set, so a list
+ * with a gap would otherwise name the wrong person. -1 when there is none.
+ */
+export function fallbackSlot(guard: Raw, position: number): number {
+  return keyArray(guard, "fallback").map((w, i) => (set(w) ? i : -1)).filter((i) => i >= 0)[position] ?? -1;
+}
 const countBits = (m: number) => bits(m, 8).filter(Boolean).length;
 
 /** Off-chain extras: display names by wallet, objection reasons by hash, fallback kinds by wallet, agent reports by hash. */
@@ -49,6 +68,8 @@ export interface RawGuardians {
   stamps: Record<Base58, Raw>;
   /** asset address → AssetMedia */
   media: Record<Base58, Raw>;
+  /** Open fallback death reports. */
+  fallbackReports?: Raw[];
 }
 
 const EMPTY: RawGuardians = { guard: null, seats: [], objections: [], stamps: {}, media: {} };
@@ -67,10 +88,11 @@ export async function fetchGuardiansRaw(estate: Base58, conn: Connection = getCo
   const guardAddr = guardPda(programId, estateKey);
   const children = async (type: string) =>
     (await scanAccounts(type, [{ offset: 8, key: estateKey }], conn)).map((a) => ({ address: a.pubkey.toBase58(), raw: decode(type, a.data) }));
-  const [guards, seats, objections, stampsAll, mediaAll] = await Promise.all([
+  const [guards, seats, objections, reports, stampsAll, mediaAll] = await Promise.all([
     scanAccounts("Guard", [{ offset: 8, key: estateKey }], conn),
     children("Seat"),
     children("Objection"),
+    children("FallbackReport"),
     scanAccounts("ApprovalStamp", [], conn),
     scanAccounts("AssetMedia", [], conn),
   ]);
@@ -83,6 +105,7 @@ export async function fetchGuardiansRaw(estate: Base58, conn: Connection = getCo
     objections,
     stamps: byTarget(stampsAll, "ApprovalStamp"),
     media: byTarget(mediaAll, "AssetMedia"),
+    fallbackReports: reports.map((r) => r.raw),
   };
 }
 
@@ -99,35 +122,45 @@ export function assembleGuardians(
   if (!raw.guard) return disabledGuardians();
   const { estate, claims, events, extras } = ctx;
   const g = raw.guard.raw;
-  const window = num(g, "objection_window_secs");
-  const successionWait = num(g, "succession_wait_secs");
-  const fallbackWait = num(g, "fallback_wait_secs");
+  const window = guardWait(g, "objection_window_secs");
+  const successionWait = guardWait(g, "succession_wait_secs");
+  const fallbackWait = guardWait(g, "fallback_wait_secs");
   const name = (w: Base58) => extras.names[w] ?? shortAddress(w);
   const named = (w: Base58) => ({ wallet: w, name: name(w) });
 
-  const latestReview = (seatIndex: number) => {
-    const ev = events.find((e) => e.name.toLowerCase() === "seatdeathreviewed" && num(e.data, "seat_index") === seatIndex);
-    if (!ev) return undefined;
-    try { return extras.reports[hex(ev.data, "report_hash")]; } catch { return undefined; }
+  /** The agent's report on the death report that stands now, never on one it replaced. */
+  const standingReport = (reported: string, reviewed: string, indexField: string, index: number) => {
+    const same = (d: Raw) => num(d, indexField) === index;
+    const hash = standingReviewHash(events, reported, (e) => e.name.toLowerCase() === reviewed.toLowerCase() && same(e.data), same);
+    return hash ? extras.reports[hash] : undefined;
   };
 
   const seats: Seat[] = raw.seats.map(({ address, raw: s }) => {
     const index = num(s, "index");
     const holder = key(s, "holder");
-    const backups = keys(s, "backups").filter(set);
-    const monitors = keys(s, "monitors").filter(set);
+    const backups = keyArray(s, "backups").filter(set);
+    const monitors = keyArray(s, "monitors").filter(set);
     const cert = hex(s, "death_cert_hash");
     const reportedBy = key(s, "death_reported_by");
     const confirmedBy = key(s, "death_confirmed_by");
-    const pendingSince = num(s, "death_pending_since");
-    // Mirrors finalize_succession: the first backup who is not the owner, a current holder, the reporter or the confirmer.
-    const next = backups.find((b) => b !== estate.owner && !estate.verifiers.includes(b) && b !== reportedBy && b !== confirmedBy);
+    const confirmed = set(confirmedBy);
+    const stored = num(s, "death_pending_since"); // the report's time, then the confirmation's
+    const pendingSince = confirmed ? stored : 0;
+    const reportedAt = confirmed
+      ? events.find((e) => e.name.toLowerCase() === "seatdeathreported" && num(e.data, "seat_index") === index)?.ts
+      : stored;
+    const verdict = enumOf(s, "death_verdict", VERDICT);
+    // Mirrors finalize_succession: the first backup who is not the owner, the agent, a current holder, the reporter
+    // or the confirmer.
+    const next = backups.find((b) => b !== estate.owner && b !== estate.agent && !estate.verifiers.includes(b) && b !== reportedBy && b !== confirmedBy);
     return {
       address, index, holder: set(holder) ? holder : null, holderName: set(holder) ? (extras.names[holder] ?? estate.verifierNames[index] ?? shortAddress(holder)) : "",
       backups: backups.map(named), monitors: monitors.map(named), generation: num(s, "generation"), vacant: bool(s, "vacant"),
       succession: cert === ZERO_HASH ? null : {
-        certHash: cert, reportedBy, verdict: enumOf(s, "death_verdict", VERDICT), report: latestReview(index),
-        confirmedBy: set(confirmedBy) ? confirmedBy : null, pendingSince, readyAt: pendingSince > 0 ? pendingSince + successionWait : 0,
+        certHash: cert, reportedBy, verdict,
+        report: verdict === "Pending" ? undefined : standingReport("SeatDeathReported", "SeatDeathReviewed", "seat_index", index),
+        confirmedBy: confirmed ? confirmedBy : null, ...(reportedAt !== undefined ? { reportedAt } : {}),
+        pendingSince, readyAt: confirmed ? pendingSince + successionWait : 0,
         nextHolder: next ? named(next) : null,
       },
     };
@@ -135,9 +168,14 @@ export function assembleGuardians(
 
   const stampOf = (claim: Base58) => raw.stamps[claim];
   const claimPayableAt: Record<Base58, number> = {};
-  for (const [claim, st] of Object.entries(raw.stamps)) {
+  for (const [address, st] of Object.entries(raw.stamps)) {
     const at = num(st, "approved_at");
-    if (at > 0 && claims.some((c) => c.address === claim)) claimPayableAt[claim] = at + window;
+    const c = claims.find((x) => x.address === address);
+    if (!c || at <= 0 || c.approvalsCount === false) continue;
+    if (!quorum({ verifiers: estate.verifiers, votes: c.approvals, threshold: estate.claimThreshold, verdict: c.agentVerdict, interested: c.beneficiary }).met) continue;
+    // A dispute held the one challenge account, so the monitors get their window after it.
+    const dispute = raw.objections.find(({ raw: o }) => num(o, "seat_index") === DISPUTE_SEAT && key(o, "target") === address);
+    claimPayableAt[address] = Math.max(at, dispute ? disputeLapsesAt(num(dispute.raw, "raised_at"), estate.waitingPeriodSecs) : 0) + window;
   }
 
   const feed: SeatApprovalItem[] = events
@@ -148,13 +186,13 @@ export function assembleGuardians(
       const approver = key(e.data, "approver");
       const claim = kind === "Claim" ? claims.find((c) => c.address === target) : undefined;
       const stamp = kind === "Claim" ? stampOf(target) : undefined;
-      const stampAt = stamp ? num(stamp, "approved_at") : 0;
+      const stampAt = stamp && claim?.approvalsCount !== false ? num(stamp, "approved_at") : 0;
       const summary = kind === "Claim"
         ? claim ? `Approved ${formatUsdt(claim.amount)} to ${name(claim.payee)} for ${name(claim.beneficiary)}` : "Approved a claim"
         : kind === "Unlock" ? `Confirmed ${estate.ownerName}'s passing`
           : kind === "Hardship" ? "Approved a request to sell below the minimum price" : "Approved";
       const deadline = kind === "Claim" ? (stampAt > 0 ? stampAt + window : null)
-        : kind === "Unlock" && estate.death.pendingSince ? estate.death.pendingSince + estate.waitingPeriodSecs : null;
+        : kind === "Unlock" && estate.status === "DeathPending" && estate.death.pendingSince ? estate.death.pendingSince + estate.waitingPeriodSecs : null;
       return {
         seatIndex: num(e.data, "seat_index"), approver, approverName: name(approver), kind, target, summary,
         ts: num(e.data, "ts") || e.ts, txSignature: e.signature, objectionDeadline: deadline,
@@ -169,32 +207,54 @@ export function assembleGuardians(
     const kind = enumOf(o, "kind", TARGET_KIND);
     const status = enumOf(o, "status", OBJECTION_STATUS);
     const raisedAt = num(o, "raised_at");
+    // Raised before the owner's last sign of life: void, with its votes. It reads as lapsed.
+    const voided = (kind === "Unlock" || kind === "Fallback") && raisedAt < estate.lastHeartbeat;
+    // Monitors' bits on the fallback are positions, one for each wallet; otherwise only held seats count.
+    const voting = kind === "Fallback" ? 0xff : eligibleSeats(estate.verifiers).reduce((mask, i) => mask | (1 << i), 0);
     return {
       address, kind, target: key(o, "target"), monitor, monitorName: name(monitor),
       seatIndex: seatIndex === NO_SEAT ? null : seatIndex, reason: extras.reasons[reasonHash] ?? "", reasonHash,
-      raisedAt, status, lapsesAt: status !== "Open" ? null : kind === "Fallback" ? raisedAt + fallbackWait : objectionLapsesAt(raisedAt, estate.waitingPeriodSecs),
-      votesUphold: countBits(num(o, "votes_uphold")), votesDismiss: countBits(num(o, "votes_dismiss")),
+      raisedAt, status,
+      lapsesAt: status !== "Open" ? null : voided ? raisedAt : kind === "Fallback" ? raisedAt + fallbackWait : objectionLapsesAt(raisedAt, estate.waitingPeriodSecs),
+      votesUphold: countBits(num(o, "votes_uphold") & voting), votesDismiss: countBits(num(o, "votes_dismiss") & voting),
     };
   }).sort((a, b) => b.raisedAt - a.raisedAt);
 
   const deadMask = num(g, "fallback_dead");
-  const recipients = keys(g, "fallback").map((w, i) => ({ w, dead: (deadMask & (1 << i)) !== 0 })).filter((r) => set(r.w));
+  const recipients = keyArray(g, "fallback").map((w, slot) => ({ w, slot, dead: (deadMask & (1 << slot)) !== 0 })).filter((r) => set(r.w));
   const startedAt = num(g, "fallback_started_at");
   const done = bool(g, "fallback_done");
   const allVacant = seats.length === 3 && seats.every((s) => s.vacant && !s.holder);
-  const ownerDeath = estate.status === "Unlocked" || estate.death.verdict === "Approved";
-  const restartable = startedAt === 0 || estate.lastHeartbeat >= startedAt;
+  const ownerDeath = estate.status === "Unlocked" || openToPeople(estate.death.verdict);
+  // A countdown counts only for this death, and while the owner has shown no life since it started.
+  const deathSince = (estate.status === "Active" ? estate.death.submittedAt : estate.death.pendingSince) ?? 0;
+  const counting = startedAt > 0 && (done || (estate.lastHeartbeat < startedAt && deathSince <= startedAt));
+  const times = estate.status === "Active" && estate.death.verdict === "Referred" ? 2 : 1;
+
+  function openReport(r: { w: Base58; slot: number; dead: boolean }): FallbackDeathReport | null {
+    if (done || r.dead) return null;
+    // Void once the list names someone else there.
+    const found = raw.fallbackReports?.find((x) => num(x, "index") === r.slot && key(x, "recipient") === r.w);
+    if (!found) return null;
+    const verdict = enumOf(found, "verdict", ["Pending", "Approved"] as const);
+    const reportedAt = num(found, "reported_at");
+    const report = verdict === "Approved" ? standingReport("FallbackDeathReported", "FallbackDeathReviewed", "index", r.slot) : undefined;
+    return {
+      reporter: key(found, "reporter"), certHash: hex(found, "cert_hash"), verdict, reportedAt,
+      confirmableAt: reportedAt + refuteWait(fallbackWait), ...(report ? { report } : {}),
+    };
+  }
 
   return {
     enabled: true, address: raw.guard.address,
     objectionWindowSecs: window, successionWaitSecs: successionWait, fallbackWaitSecs: fallbackWait,
     seats, feed, objections, claimPayableAt,
     fallback: {
-      recipients: recipients.map((r) => ({ wallet: r.w, name: name(r.w), kind: extras.fallbackKinds[r.w] ?? "heir", dead: r.dead })),
-      startedAt: startedAt > 0 ? startedAt : null,
-      readyAt: startedAt > 0 ? startedAt + fallbackWait : null,
+      recipients: recipients.map((r) => ({ wallet: r.w, name: name(r.w), kind: extras.fallbackKinds[r.w] ?? "heir", dead: r.dead, report: openReport(r) })),
+      startedAt: counting ? startedAt : null,
+      readyAt: counting ? startedAt + fallbackWait * times : null,
       done,
-      canStart: !done && restartable && allVacant && ownerDeath && recipients.some((r) => !r.dead),
+      canStart: !done && !counting && allVacant && ownerDeath && recipients.some((r) => !r.dead),
     },
   };
 }

@@ -215,7 +215,8 @@ export async function runDueSchedules(
       const result: TickResult = { rule: d.rule.address, estate: d.estate, ok: false };
       try {
         const ix = executeScheduled(ctx, {
-          estate: new PublicKey(d.estate), payer: agent, rule: new PublicKey(d.rule.address), payeeWallet: new PublicKey(d.rule.fixedPayee!),
+          estate: new PublicKey(d.estate), payer: agent, rule: new PublicKey(d.rule.address),
+          beneficiary: new PublicKey(d.rule.beneficiary), payeeWallet: new PublicKey(d.rule.fixedPayee!),
         });
         const tx = await withDeadline(agentSignAndSend([ix]), Math.min(TICK.attemptMs, left()), "Paying");
         Object.assign(result, tx, { ok: true });

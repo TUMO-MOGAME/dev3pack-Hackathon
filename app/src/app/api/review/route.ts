@@ -8,6 +8,7 @@ import { recordEvidence, saveReport } from "@/lib/db";
 import { sha256Hex } from "@/lib/agent/hash";
 import { agentAddress, agentSignAndSend, hasAgentWallet } from "@/lib/agent/agent-wallet";
 import { spendAgentAllowance } from "@/lib/agent/budget";
+import { refusedByProgram } from "@/lib/agent/refusal";
 import { assertServedEstate, verifyAction } from "@/lib/access/server";
 import { actionBody } from "@/lib/access/messages";
 import { outcomeOf, type ReviewOutcome } from "@/lib/verdict";
@@ -25,7 +26,8 @@ export const maxDuration = 90;
  *    estate is one this agent serves. Only then is the file stored and the model called;
  * 3. the reviewer gets facts built from the chain. The caller's `context` is passed only as untrusted text;
  * 4. the agent signs approve, reject or refer. An unsure agent never approves: death, claim and hardship go to
- *    people with a higher quorum; seat and fallback deaths, which have no such step, are rejected.
+ *    people with a higher quorum; seat and fallback deaths, which have no such step, are rejected. Death reviews
+ *    carry the hash of this file: if another report replaced it meanwhile the program refuses (409 ReportChanged).
  * Returns { report, evidence: { sha256 }, tx: { signature, explorerUrl } | null, onChain: string }.
  */
 export const POST = handler(async (req) => {
@@ -67,7 +69,7 @@ export const POST = handler(async (req) => {
   const storePurpose: "death" | "claim" | "hardship" = purpose === "seat-death" || purpose === "fallback-death" ? "death" : purpose;
   const stored = await storeEvidence(bytes, mime, storePurpose);
   await recordEvidence(stored.path, stored.sha256, storePurpose, stored.mime, stored.size);
-  const tx = await agentSignAndSend([target.instruction(new PublicKey(agent!), outcome, report.reportHash)]);
+  const tx = await agentSignAndSend([target.instruction(new PublicKey(agent!), outcome, report.reportHash)]).catch(refusedByProgram);
   await saveReport({
     reportHash: report.reportHash, purpose: storePurpose, estate, subject: subject ?? null,
     evidencePath: stored.path, evidenceSha256: stored.sha256, report, txSignature: tx.signature,
@@ -75,7 +77,7 @@ export const POST = handler(async (req) => {
 
   const onChain = outcome === "Reject" ? "agent rejected on-chain"
     : outcome === "Refer" ? "agent was not sure: referred on-chain to people, who need a higher quorum"
-      : purpose === "fallback-death" ? "agent approved on-chain; the recipient is skipped in the fallback order"
+      : purpose === "fallback-death" ? "agent approved on-chain; after the wait a second person confirms, unless the recipient says they are alive"
         : "agent approved on-chain; waiting for human verifiers";
   return json({ report, evidence: { sha256, storage: stored.backend }, tx, onChain });
 });

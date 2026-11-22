@@ -4,7 +4,7 @@
  *   his 2017 Toyota Corolla 1.8 Exclusive CVT (13,500 / 12,500 / 10,500 USD₮) and his 2025 Big Boy Mustang 250
  *   (2,000 / 1,800 / 1,500), each with a fresh title NFT and the media root of its bundled photos + spec sheet
  *   (DEMO_ASSETS), trusted people with a Guard and three seats (Uncle Bongani's seat: backups Cousin Kagiso and
- *   Adv. Priya Naidoo, Aunt Zodwa as monitor), the fallback plan (Lerato, Sipho, Naledi, then Ithemba Children's
+ *   Adv. Priya Naidoo, Aunt Zodwa as monitor; the other two seats are watched as well), the fallback plan (Lerato, Sipho, Naledi, then Ithemba Children's
  *   Charity) and a 3,000 USD₮ yearly cap on Naledi's school fees.
  *
  * Why a second estate: the first demo estate (owner `dad`, JBds…G9E) is Unlocked with its 2019 Corolla Sold, and
@@ -49,7 +49,8 @@ async function main() {
   const { chainCtx } = await import("../app/src/lib/chain/client");
   const { estatePda, beneficiaryPda, payeePda, rulePda, assetPda, mediaPda, guardPda, seatPda, yearCapPda, vaultAta } = await import("../app/src/lib/chain/pda");
   const { fetchAccountRaw, fetchEstateRaw } = await import("../app/src/lib/chain/reads");
-  const { num, hex, key, enumOf } = await import("../app/src/lib/chain/decoders");
+  const { num, hex, key, keyArray, enumOf } = await import("../app/src/lib/chain/decoders");
+  const { publicBeneficiaryLabel, publicPayeeName } = await import("../app/src/lib/chain/public-names");
   const { decodeMedia } = await import("../app/src/lib/chain/guardians");
   const { toBase } = await import("../app/src/lib/format");
   const { DEMO_ASSETS } = await import("../app/src/lib/service/demo-asset-photos");
@@ -137,8 +138,9 @@ async function main() {
 
   // 2. Beneficiaries
   const benIxs = [];
-  for (const b of draft.beneficiaries) {
-    if (!(await exists("Beneficiary", beneficiaryPda(ctx.programId, estate, b.wallet!)))) benIxs.push(ix.addBeneficiary(ctx, owner, new PublicKey(b.wallet!), b.label));
+  for (const [i, b] of draft.beneficiaries.entries()) {
+    // Roles only on the ledger: the people's names are off-chain (lib/chain/demo-estate.ts, the estate's names).
+    if (!(await exists("Beneficiary", beneficiaryPda(ctx.programId, estate, b.wallet!)))) benIxs.push(ix.addBeneficiary(ctx, owner, new PublicKey(b.wallet!), publicBeneficiaryLabel(i)));
   }
   if (benIxs.length) log(`Beneficiaries ×${benIxs.length} ${explorer(await send(me, benIxs))}`);
 
@@ -148,7 +150,7 @@ async function main() {
   ];
   const payeeIxs = [];
   for (const [id, kind, name] of payees) {
-    if (!(await exists("Payee", payeePda(ctx.programId, estate, A(id))))) payeeIxs.push(ix.addPayee(ctx, owner, A(id), kind, name));
+    if (!(await exists("Payee", payeePda(ctx.programId, estate, A(id))))) payeeIxs.push(ix.addPayee(ctx, owner, A(id), kind, publicPayeeName({ name, kind, wallet: w.addresses[id] }, new Set())));
   }
   if (payeeIxs.length) log(`Payees ×${payeeIxs.length} ${explorer(await send(me, payeeIxs))}`);
 
@@ -159,6 +161,8 @@ async function main() {
     const now = Math.floor(Date.now() / 1000);
     const ruleIxs = draft.rules.map((r) => {
       const payeeId = r.recurring ? byName[r.recurring.payeeName.toLowerCase()] : undefined;
+      // Never a claim rule in a schedule's place (plan §18.4 U2).
+      if (r.recurring && !payeeId) throw new Error(`recurring_payee: "${r.recurring.payeeName}" is not a seeded payee.`);
       const every = r.recurring ? intervalSecs(r.recurring.every) : 0;
       return ix.addRule(ctx, owner, {
         ruleId: ruleId++, beneficiaryWallet: new PublicKey(draft.beneficiaries.find((b) => b.label === r.beneficiaryLabel)!.wallet!),
@@ -175,7 +179,8 @@ async function main() {
   //     existing estate with add_payee + add_rule (Active), so no new estate or program upgrade is needed.
   const EVERYDAY = { maxPerClaimUsdt: 60, lifetimeCapUsdt: 720, validUntil: "2030-12-31" };
   if (!(await exists("Payee", payeePda(ctx.programId, estate, A("lerato"))))) {
-    log(`Payee: Lerato's own wallet ${explorer(await send(me, [ix.addPayee(ctx, owner, A("lerato"), "Other", "Lerato's own wallet")]))}`);
+    const ownWallet = publicPayeeName({ name: "", kind: "Other", wallet: w.addresses.lerato }, new Set([w.addresses.lerato]));
+    log(`Payee: Lerato's own wallet ${explorer(await send(me, [ix.addPayee(ctx, owner, A("lerato"), "Other", ownWallet)]))}`);
   } else log("Lerato's own wallet is already a payee");
   const ruleCount = num((await fetchAccountRaw("Estate", estate.toBase58()))!, "rule_count");
   let hasEveryday = false;
@@ -243,14 +248,18 @@ async function main() {
   if (!(await exists("Guard", guardPda(ctx.programId, estate)))) {
     log(`Guard (objection window ${GUARD_TIMINGS.objectionWindowSecs}s) ${explorer(await send(me, [ix.initGuard(ctx, owner, estate, GUARD_TIMINGS)]))}`);
   }
+  // Every seat has a monitor, and not one wallet for all three: a fallback objection takes two monitors to decide.
   const seatPlan: { index: number; backups: PersonaId[]; monitors: PersonaId[] }[] = [
-    { index: 0, backups: [], monitors: [] },
-    { index: 1, backups: [], monitors: [] },
+    { index: 0, backups: [], monitors: ["zodwa"] },
+    { index: 1, backups: [], monitors: ["priya"] },
     { index: 2, backups: ["kagiso", "priya"], monitors: ["zodwa"] },
   ];
   const seatIxs = [];
   for (const s of seatPlan) {
-    if (!(await exists("Seat", seatPda(ctx.programId, estate, s.index)))) seatIxs.push(ix.initSeat(ctx, owner, s.index, s.backups.map(A), s.monitors.map(A)));
+    const seat = await fetchAccountRaw("Seat", seatPda(ctx.programId, estate, s.index).toBase58());
+    if (!seat) seatIxs.push(ix.initSeat(ctx, owner, s.index, s.backups.map(A), s.monitors.map(A)));
+    // A seat seeded before every seat had a monitor gets one.
+    else if (keyArray(seat, "monitors").every((m) => m === PublicKey.default.toBase58())) seatIxs.push(ix.setSeatMonitors(ctx, owner, s.index, s.monitors.map(A)));
   }
   for (let i = 0; i < seatIxs.length; i += 2) log(`Seats ×${seatIxs.slice(i, i + 2).length} ${explorer(await send(me, seatIxs.slice(i, i + 2)))}`);
   const fallback = (["lerato", "sipho", "naledi", "charity"] as const).map(A);

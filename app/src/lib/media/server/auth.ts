@@ -10,15 +10,11 @@ import { loadSnapshot } from "@/lib/server/estate";
 import { AUTH_MAX_SKEW_MS } from "@/lib/legacy/auth-message";
 import { demoWritesAllowed, parseAuthHeader, verifyEd25519 } from "@/lib/legacy/server/auth";
 import { mediaAuthMessage, type MediaAction } from "../api";
+import { createNonces } from "@/lib/access/nonces";
 
 export interface PhotoOwner { wallet: string; estate: string; demo: boolean }
 
-const seen = new Map<string, number>();
-function once(sig: string, now: number) {
-  for (const [k, t] of seen) if (now - t > AUTH_MAX_SKEW_MS * 2) seen.delete(k);
-  if (seen.has(sig)) throw new HttpError(401, "This request was already used. Please try again.", "replay");
-  seen.set(sig, now);
-}
+const firstUse = createNonces("media", AUTH_MAX_SKEW_MS * 2);
 
 export const photosAvailable = () => isChainMode() || demoWritesAllowed();
 
@@ -32,7 +28,7 @@ export async function authorizeOwner(req: Request, action: MediaAction, bodyHash
   if (a.sig === "demo") throw new HttpError(401, "A wallet signature is required.", "unauthorized");
   if (Math.abs(now - a.ts) > AUTH_MAX_SKEW_MS) throw new HttpError(401, "This request has expired. Check your phone's clock and try again.", "expired");
   if (!verifyEd25519(a.wallet, mediaAuthMessage(action, a.estate, a.wallet, a.ts, bodyHash), a.sig)) throw new HttpError(401, "The wallet signature does not match.", "unauthorized");
-  once(a.sig, now);
+  if (!(await firstUse(a.sig, now))) throw new HttpError(401, "This request was already used. Please try again.", "replay");
 
   const snap = await loadSnapshot(a.estate).catch(() => null);
   if (!snap) throw new HttpError(404, "Estate not found on-chain.", "not_found");

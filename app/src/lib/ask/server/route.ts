@@ -17,6 +17,7 @@ import { ASK_MAX_SKEW_MS, askMessage, noteBody } from "../auth-message";
 import { cleanPurpose, PURPOSE_MAX } from "../types";
 import { declineAsk, getAsk, listAsks, saveAsk } from "./store";
 import { requireMember, type MemberCheck } from "@/lib/access/server";
+import { createNonces } from "@/lib/access/nonces";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 const sig = z.string().regex(/^[0-9a-f]{128}$/);
@@ -39,7 +40,7 @@ export interface AskRouteDeps {
 const defaults: AskRouteDeps = { fetchRaw: fetchAccountRaw, now: () => Date.now(), chain: isChainMode };
 
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
-const seen = new Map<string, number>();
+const firstUse = createNonces("ask", ASK_MAX_SKEW_MS * 2);
 
 export function askRoutes(deps: AskRouteDeps = defaults) {
   const GET = handler(async (req) => {
@@ -58,9 +59,7 @@ export function askRoutes(deps: AskRouteDeps = defaults) {
     const purpose = b.action === "note" ? cleanPurpose(b.purpose) : "";
     const hash = b.action === "note" ? sha(noteBody({ purpose, currency: b.currency, typed: b.typed, attachment: b.attachment })) : sha("");
     if (!verifyEd25519(b.wallet, askMessage(b.action, b.estate, b.claim, b.wallet, b.ts, hash), b.sig)) throw new HttpError(401, "The signature does not match this wallet.", "unauthorized");
-    for (const [k, t] of seen) if (now - t > ASK_MAX_SKEW_MS * 2) seen.delete(k);
-    if (seen.has(b.sig)) throw new HttpError(401, "This request was already used. Please try again.", "replay");
-    seen.set(b.sig, now);
+    if (!(await firstUse(b.sig, now))) throw new HttpError(401, "This request was already used. Please try again.", "replay");
 
     const claim = await deps.fetchRaw("Claim", b.claim);
     if (!claim) throw new HttpError(404, "That request was not found on-chain.");

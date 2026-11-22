@@ -7,6 +7,7 @@ import { Connection, PublicKey, Transaction, type TransactionInstruction } from 
 import { chainConfig } from "./config";
 import { explorerTx } from "../format";
 import { batched } from "./batch";
+import { programFailure } from "./program-errors";
 
 /**
  * The free devnet RPC throttles bursts with HTTP 429. web3.js retries those itself but logs every retry with
@@ -71,20 +72,15 @@ async function describeFailure(signature: string, connection: Connection, err: u
   try {
     const tx = await connection.getTransaction(signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
     const logs = tx?.meta?.logMessages ?? [];
-    return humanizeProgramError(logs) ?? `Transaction failed: ${JSON.stringify(err)}`;
+    return programFailure(logs) ?? programFailure(JSON.stringify(err)) ?? humanizeProgramError(logs) ?? `Transaction failed: ${JSON.stringify(err)}`;
   } catch {
-    return `Transaction failed: ${JSON.stringify(err)}`;
+    return programFailure(JSON.stringify(err)) ?? `Transaction failed: ${JSON.stringify(err)}`;
   }
 }
 
-/** Pulls the Anchor error name/message out of program logs. */
+/** The program's refusal from its logs, in plain words (program-errors.ts); else the line that says what failed. */
 export function humanizeProgramError(logs: string[]): string | null {
-  for (const l of logs) {
-    const m = l.match(/Error Code: (\w+)\. Error Number: \d+\. Error Message: (.*)$/);
-    if (m) return `${m[1]}: ${m[2].replace(/\.$/, "")}`;
-  }
-  const fail = logs.find((l) => /failed:/.test(l));
-  return fail ?? null;
+  return programFailure(logs) ?? logs.find((l) => /failed:/.test(l)) ?? null;
 }
 
 export class ChainTxError extends Error {

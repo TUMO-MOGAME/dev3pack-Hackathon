@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { handler, HttpError, isChainMode, json, parseJson, rateLimit } from "@/lib/api/http";
+import { handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
 import { chatMessageSchema, localeSchema } from "@/lib/agent/schemas";
 import { orchestrate, ROUTABLE } from "@/lib/agent/orchestrator";
 import { toEstateFacts, type EstateFacts } from "@/lib/agent/facts";
@@ -52,7 +52,7 @@ export const POST = handler(async (req) => {
   const secret = req.headers.get("x-heirloom-tool-secret");
   const channel = secret !== null ? "voice" : "text";
   if (secret !== null && !secretOk(secret)) throw new HttpError(401, "Bad tool secret", "unauthorized");
-  rateLimit(req, `orchestrate-${channel}`, channel === "voice" ? 120 : 20);
+  await rateLimitShared(req, `orchestrate-${channel}`, channel === "voice" ? 120 : 20);
 
   const b = await parseJson(req, body);
   const userText = b.text ?? b.message;

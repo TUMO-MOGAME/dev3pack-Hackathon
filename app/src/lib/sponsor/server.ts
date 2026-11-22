@@ -7,7 +7,7 @@ import "server-only";
  *  SPONSOR_ENABLED=0               turn sponsorship off (default on whenever AGENT_SEED_PHRASE is set)
  *  SPONSOR_MAX_FEE_LAMPORTS=20000  max network fee per sponsored tx
  *  SPONSOR_PAYS_RENT=1             sponsor pays rent for the recipient's new USD₮ account (0 = sender pays)
- *  SPONSOR_DAILY_BUDGET_LAMPORTS   total fees + rent per server instance per day (default 0.5 SOL)
+ *  SPONSOR_DAILY_BUDGET_LAMPORTS   fees + rent a day (default 0.1 SOL), across instances with the shared store
  *  SPONSOR_MIN_BALANCE_LAMPORTS    stop sponsoring below this sponsor balance (default 0.02 SOL)
  */
 import { PublicKey, VersionedTransaction, type Connection } from "@solana/web3.js";
@@ -15,8 +15,11 @@ import { agentAddress, agentCoSign, hasAgentWallet } from "../agent/agent-wallet
 import { chainConfig } from "../chain/config";
 import { findInstruction, getIdl } from "../chain/idl";
 import { base64ToBytes, getConnection } from "../chain/tx";
+import { programFailure } from "../chain/program-errors";
+import { chainBackstop } from "../agent/budget";
+import { takeShared } from "../server/shared-store";
 import { DEFAULT_LIMITS, SPONSOR_RENT_PAYER_ACCOUNTS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, validateSponsoredTx, type SponsorPolicy } from "./policy";
-import { DEFAULT_SPONSOR_LIMITS, SponsorLimiter } from "./limits";
+import { DEFAULT_SPONSOR_LIMITS, SponsorLimiter, sharedTakes, type SponsorLimits } from "./limits";
 
 const envInt = (name: string, dflt: number) => {
   const v = Number(process.env[name]);
@@ -28,8 +31,31 @@ export const minSponsorBalance = () => envInt("SPONSOR_MIN_BALANCE_LAMPORTS", 20
 
 let limiter: SponsorLimiter | null = null;
 function getLimiter(): SponsorLimiter {
-  if (!limiter) limiter = new SponsorLimiter({ ...DEFAULT_SPONSOR_LIMITS, dailyBudgetLamports: envInt("SPONSOR_DAILY_BUDGET_LAMPORTS", DEFAULT_SPONSOR_LIMITS.dailyBudgetLamports) });
+  if (!limiter) limiter = new SponsorLimiter(sponsorLimits());
   return limiter;
+}
+
+function sponsorLimits(): SponsorLimits {
+  return { ...DEFAULT_SPONSOR_LIMITS, dailyBudgetLamports: envInt("SPONSOR_DAILY_BUDGET_LAMPORTS", DEFAULT_SPONSOR_LIMITS.dailyBudgetLamports) };
+}
+
+/**
+ * One sponsored transaction from every allowance, or none: this instance's, then the shared ones, else (no shared
+ * store) the backstop read from the chain, as for the agent's own signatures. Always await it.
+ */
+async function spendSponsorAllowance(user: string, cost: number, rent: boolean, maxFeeLamports: number, now = Date.now()): Promise<void> {
+  const lim = getLimiter();
+  const limited = lim.check(user, cost, rent, now);
+  if (limited) throw new SponsorLimited(limited);
+  lim.record(user, cost, rent, now); // before any await, so requests arriving together can't all pass
+  try {
+    const taken = await takeShared(sharedTakes(user, rent, sponsorLimits(), maxFeeLamports));
+    if (!taken) await chainBackstop(now);
+    else if (!taken.ok) throw new SponsorLimited("The fee sponsor's limit for now is used up. Please try again later.");
+  } catch (e) {
+    lim.refund(user, cost, rent, now);
+    throw e;
+  }
 }
 
 export async function sponsorPolicy(): Promise<SponsorPolicy> {
@@ -98,8 +124,8 @@ export async function sponsorTransaction(wireBase64: string, opts: { submit: boo
   const user = decision.signers[0];
   const cost = decision.feeLamports + decision.rentLamports;
 
-  const lim = getLimiter();
-  const limited = lim.check(user, cost, decision.rentLamports > 0);
+  // Cheap, before any RPC call; the allowance itself is taken once the transaction is known to work.
+  const limited = getLimiter().check(user, cost, decision.rentLamports > 0);
   if (limited) throw new SponsorLimited(limited);
 
   const bal = await conn.getBalance(policy.sponsor, "confirmed");
@@ -109,14 +135,13 @@ export async function sponsorTransaction(wireBase64: string, opts: { submit: boo
     throw new SponsorRejection("malformed", `Could not simulate: ${e instanceof Error ? e.message : String(e)}`);
   });
   if (sim.value.err) {
-    const logs = sim.value.logs ?? [];
-    const anchor = logs.map((l) => l.match(/Error Code: (\w+)\. Error Number: \d+\. Error Message: (.*)$/)).find(Boolean);
-    const msg = anchor ? `Rejected by the Heirloom program: ${anchor[1]} (${anchor[2].replace(/\.$/, "")})` : `Simulation failed: ${JSON.stringify(sim.value.err)}`;
+    const why = programFailure(sim.value.logs ?? []) ?? programFailure(JSON.stringify(sim.value.err));
+    const msg = why ? `Rejected by the Heirloom program: ${why}` : `Simulation failed: ${JSON.stringify(sim.value.err)}`;
     throw new SimulationFailed(msg);
   }
 
+  await spendSponsorAllowance(user, cost, decision.rentLamports > 0, policy.maxFeeLamports);
   const { wireBase64: full, signature } = await agentCoSign(wireBase64);
-  lim.record(user, cost, decision.rentLamports > 0);
   let submitted = false;
   if (opts.submit) {
     await conn.sendRawTransaction(base64ToBytes(full), { skipPreflight: true, maxRetries: 3 });
