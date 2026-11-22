@@ -230,8 +230,9 @@ pub mod heirloom {
         index: u8,
         approve: bool,
         report_hash: [u8; 32],
+        cert_hash: [u8; 32],
     ) -> Result<()> {
-        instructions::guardians::review_seat_death_handler(ctx, index, approve, report_hash)
+        instructions::guardians::review_seat_death_handler(ctx, index, approve, report_hash, cert_hash)
     }
 
     pub fn confirm_seat_death(ctx: Context<ConfirmSeatDeath>, index: u8) -> Result<()> {
@@ -260,7 +261,7 @@ pub mod heirloom {
         instructions::guardians::raise_objection_handler(ctx, kind, target, seat_index, reason_hash)
     }
 
-    pub fn vote_objection(ctx: Context<VoteObjection>, uphold: bool) -> Result<()> {
+    pub fn vote_objection<'info>(ctx: Context<'info, VoteObjection<'info>>, uphold: bool) -> Result<()> {
         instructions::guardians::vote_objection_handler(ctx, uphold)
     }
 
@@ -282,8 +283,13 @@ pub mod heirloom {
         index: u8,
         approve: bool,
         report_hash: [u8; 32],
+        cert_hash: [u8; 32],
     ) -> Result<()> {
-        instructions::guardians::review_fallback_death_handler(ctx, index, approve, report_hash)
+        instructions::guardians::review_fallback_death_handler(ctx, index, approve, report_hash, cert_hash)
+    }
+
+    pub fn resolve_fallback_death(ctx: Context<ResolveFallbackDeath>, index: u8, dead: bool) -> Result<()> {
+        instructions::guardians::resolve_fallback_death_handler(ctx, index, dead)
     }
 
     pub fn start_fallback(ctx: Context<StartFallback>) -> Result<()> {

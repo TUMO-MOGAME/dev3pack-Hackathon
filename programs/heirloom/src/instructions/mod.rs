@@ -82,6 +82,16 @@ pub(crate) fn close_token_account_cpi<'info>(
     token::close_account(CpiContext::new_with_signer(token_program, accounts, signer_seeds))
 }
 
+/// Closes an account of this program: the rent goes to `destination`.
+pub(crate) fn close_program_account(info: &AccountInfo, destination: &AccountInfo) -> Result<()> {
+    let total = destination.lamports().checked_add(info.lamports()).ok_or(HeirloomError::MathOverflow)?;
+    **destination.try_borrow_mut_lamports()? = total;
+    **info.try_borrow_mut_lamports()? = 0;
+    info.assign(&anchor_lang::system_program::ID);
+    info.resize(0)?;
+    Ok(())
+}
+
 /// True if `info` holds an initialised account of this program (used for PDAs passed unchecked,
 /// e.g. the Guard, ApprovalStamp and Objection, which may not exist).
 pub(crate) fn account_exists(info: &AccountInfo) -> bool {

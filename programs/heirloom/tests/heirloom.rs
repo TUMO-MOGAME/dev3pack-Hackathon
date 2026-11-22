@@ -12,7 +12,7 @@ use anchor_lang::{
 use heirloom::{
     AssetStatus, ClaimStatus, Estate, EstateStatus, HeirloomError, PayeeKind, Category, Rule, Claim,
     Asset, AssetKind, AssetMedia, ApprovalStamp, Guard, HardshipStatus, Hardship, Objection,
-    ObjectionStatus, ReviewOutcome, Seat, TargetKind, Verdict, YearCap,
+    ObjectionStatus, ReviewOutcome, Seat, TargetKind, Verdict, YearCap, FallbackReport,
 };
 use litesvm::LiteSVM;
 use solana_account::Account;
@@ -91,6 +91,9 @@ fn objection_pda(target: &Pubkey) -> Pubkey {
 }
 fn media_pda(asset: &Pubkey) -> Pubkey {
     pda(&[b"media", asset.as_ref()])
+}
+fn fallback_report_pda(estate: &Pubkey, index: u8) -> Pubkey {
+    pda(&[b"fallbackreport", estate.as_ref(), &[index]])
 }
 fn year_cap_pda(rule: &Pubkey) -> Pubkey {
     pda(&[b"yearcap", rule.as_ref()])
@@ -1406,11 +1409,14 @@ impl Env {
     }
 
     fn report_seat_death(&mut self, reporter: &Keypair, index: u8) -> Result<(), String> {
+        let who = beneficiary_pda(&self.estate, &reporter.pubkey());
+        let beneficiary_account = self.svm.get_account(&who).map(|_| who);
         let i = ix(
             heirloom::accounts::ReportSeatDeath {
                 reporter: reporter.pubkey(),
                 estate: self.estate,
                 seat: seat_pda(&self.estate, index),
+                beneficiary_account,
             },
             heirloom::instruction::ReportSeatDeath { index, cert_hash: [8u8; 32] },
         );
@@ -1418,13 +1424,14 @@ impl Env {
     }
 
     fn review_seat_death(&mut self, index: u8, approve: bool) -> Result<(), String> {
+        let cert_hash = self.seat(index).death_cert_hash;
         let i = ix(
             heirloom::accounts::ReviewSeatDeath {
                 agent: self.agent.pubkey(),
                 estate: self.estate,
                 seat: seat_pda(&self.estate, index),
             },
-            heirloom::instruction::ReviewSeatDeath { index, approve, report_hash: [9u8; 32] },
+            heirloom::instruction::ReviewSeatDeath { index, approve, report_hash: [9u8; 32], cert_hash },
         );
         send(&mut self.svm, i, &[&self.agent])
     }
@@ -1519,23 +1526,30 @@ impl Env {
         voter: &Keypair,
         target: Pubkey,
         uphold: bool,
-        voter_seat: Option<Pubkey>,
+        seats: Option<[Pubkey; 3]>,
         target_account: Option<Pubkey>,
         asset: Option<Pubkey>,
     ) -> Result<(), String> {
-        let i = ix(
+        let mut i = ix(
             heirloom::accounts::VoteObjection {
                 voter: voter.pubkey(),
                 estate: self.estate,
                 guard: guard_pda(&self.estate),
                 objection: objection_pda(&target),
-                voter_seat,
                 target_account,
                 asset,
             },
             heirloom::instruction::VoteObjection { uphold },
         );
+        for seat in seats.into_iter().flatten() {
+            i.accounts.push(anchor_lang::solana_program::instruction::AccountMeta::new_readonly(seat, false));
+        }
         send(&mut self.svm, i, &[voter])
+    }
+
+    /// What a monitor passes to vote on a Fallback objection.
+    fn all_seats(&self) -> Option<[Pubkey; 3]> {
+        Some([0, 1, 2].map(|i| seat_pda(&self.estate, i)))
     }
 
     fn objection(&self, target: &Pubkey) -> Objection {
@@ -1569,29 +1583,69 @@ impl Env {
         send(&mut self.svm, i, &[&self.owner])
     }
 
-    fn report_fallback_death(&mut self, index: u8) -> Result<(), String> {
+    fn report_fallback_death_by(&mut self, who: &Keypair, index: u8, seat: Option<u8>, cert: [u8; 32]) -> Result<(), String> {
+        let ben = beneficiary_pda(&self.estate, &who.pubkey());
         let i = ix(
             heirloom::accounts::ReportFallbackDeath {
-                reporter: self.stranger.pubkey(),
+                reporter: who.pubkey(),
                 estate: self.estate,
                 guard: guard_pda(&self.estate),
+                fallback_report: fallback_report_pda(&self.estate, index),
+                signer_seat: seat.map(|i| seat_pda(&self.estate, i)),
+                beneficiary_account: self.svm.get_account(&ben).map(|_| ben),
+                system_program: system_program(),
             },
-            heirloom::instruction::ReportFallbackDeath { index, cert_hash: [7u8; 32] },
+            heirloom::instruction::ReportFallbackDeath { index, cert_hash: cert },
         );
-        let s = self.stranger.insecure_clone();
-        send(&mut self.svm, i, &[&s])
+        send(&mut self.svm, i, &[who])
     }
 
-    fn review_fallback_death(&mut self, index: u8, approve: bool) -> Result<(), String> {
+    /// kid2 reports recipient `index`.
+    fn report_fallback_death(&mut self, index: u8) -> Result<(), String> {
+        let kid2 = self.kid2.insecure_clone();
+        self.report_fallback_death_by(&kid2, index, None, [7u8; 32])
+    }
+
+    fn review_fallback_death_as(&mut self, index: u8, approve: bool, cert_hash: [u8; 32]) -> Result<(), String> {
+        let report = fallback_report_pda(&self.estate, index);
+        let rent_to = self
+            .svm
+            .get_account(&report)
+            .filter(|a| !a.data.is_empty())
+            .map_or(self.agent.pubkey(), |_| fetch::<FallbackReport>(&self.svm, &report).rent_payer);
         let i = ix(
             heirloom::accounts::ReviewFallbackDeath {
                 agent: self.agent.pubkey(),
                 estate: self.estate,
                 guard: guard_pda(&self.estate),
+                fallback_report: report,
+                rent_to,
             },
-            heirloom::instruction::ReviewFallbackDeath { index, approve, report_hash: [9u8; 32] },
+            heirloom::instruction::ReviewFallbackDeath { index, approve, report_hash: [9u8; 32], cert_hash },
         );
         send(&mut self.svm, i, &[&self.agent])
+    }
+
+    fn review_fallback_death(&mut self, index: u8, approve: bool) -> Result<(), String> {
+        self.review_fallback_death_as(index, approve, [7u8; 32])
+    }
+
+    fn resolve_fallback_death(&mut self, who: &Keypair, index: u8, seat: Option<u8>, dead: bool) -> Result<(), String> {
+        let report = fallback_report_pda(&self.estate, index);
+        let ben = beneficiary_pda(&self.estate, &who.pubkey());
+        let i = ix(
+            heirloom::accounts::ResolveFallbackDeath {
+                signer: who.pubkey(),
+                estate: self.estate,
+                guard: guard_pda(&self.estate),
+                fallback_report: report,
+                rent_to: fetch::<FallbackReport>(&self.svm, &report).rent_payer,
+                signer_seat: seat.map(|i| seat_pda(&self.estate, i)),
+                beneficiary_account: self.svm.get_account(&ben).map(|_| ben),
+            },
+            heirloom::instruction::ResolveFallbackDeath { index, dead },
+        );
+        send(&mut self.svm, i, &[who])
     }
 
     fn start_fallback(&mut self) -> Result<(), String> {
@@ -1637,6 +1691,7 @@ impl Env {
                 seat1: seat_pda(&e, 1),
                 seat2: seat_pda(&e, 2),
                 objection: objection_pda(&guard),
+                fallback_report: fallback_report_pda(&e, fetch::<Guard>(&self.svm, &guard).next_fallback_index()),
                 recipient,
                 usdt_mint: self.usdt_mint,
                 vault: self.vault(),
@@ -2147,6 +2202,10 @@ fn fallback_skips_a_recipient_proven_dead() {
     env.report_fallback_death(0).unwrap();
     warp(&mut env.svm, FALLBACK_WAIT / 2);
     env.review_fallback_death(0, true).unwrap();
+    assert_eq!(env.guard().fallback_dead, 0, "the agent's review alone changes nothing");
+    warp(&mut env.svm, FALLBACK_WAIT / 2);
+    let m0 = env.kp(&people.monitors[0]);
+    env.resolve_fallback_death(&m0, 0, Some(0), true).unwrap();
     let g = env.guard();
     assert_eq!(g.fallback_dead, 0b1);
     // The recipient changed, so the countdown restarted.
@@ -2184,7 +2243,7 @@ fn open_objection_blocks_execute_fallback() {
 
     // Every holder is gone, so monitors decide; the objector can't vote.
     let (m0, m1) = (env.kp(&people.monitors[0]), env.kp(&people.monitors[1]));
-    let (s0, s1) = (Some(seat_pda(&env.estate, 0)), Some(seat_pda(&env.estate, 1)));
+    let (s0, s1) = (env.all_seats(), env.all_seats());
     expect_err(env.vote_objection(&kid2, guard, false, None, None, None), HeirloomError::NotVerifier);
     expect_err(env.vote_objection(&m0, guard, true, None, None, None), HeirloomError::NotMonitor);
     env.vote_objection(&m0, guard, true, s0, None, None).unwrap();
@@ -2326,8 +2385,7 @@ fn tied_fallback_objection_lapses() {
     env.raise_objection(&kid2, TargetKind::Fallback, guard, 255, None, true, None, None).unwrap();
 
     let (m0, m1, m2) = (env.kp(&people.monitors[0]), env.kp(&people.monitors[1]), env.kp(&people.monitors[2]));
-    let seat = |i| Some(seat_pda(&env.estate, i));
-    let (s0, s1, s2) = (seat(0), seat(1), seat(2));
+    let (s0, s1, s2) = (env.all_seats(), env.all_seats(), env.all_seats());
     env.vote_objection(&m0, guard, true, s0, None, None).unwrap();
     env.vote_objection(&m1, guard, false, s1, None, None).unwrap();
     assert_eq!(env.objection(&guard).status, ObjectionStatus::Open);
@@ -2361,7 +2419,7 @@ fn fallback_objection_upheld_before_lapse_resets_the_fallback() {
 
     warp(&mut env.svm, FALLBACK_WAIT - 1);
     let (m0, m1) = (env.kp(&people.monitors[0]), env.kp(&people.monitors[1]));
-    let (s0, s1) = (Some(seat_pda(&env.estate, 0)), Some(seat_pda(&env.estate, 1)));
+    let (s0, s1) = (env.all_seats(), env.all_seats());
     env.vote_objection(&m0, guard, true, s0, None, None).unwrap();
     env.vote_objection(&m1, guard, true, s1, None, None).unwrap();
     assert_eq!(env.objection(&guard).status, ObjectionStatus::Upheld);
@@ -4034,4 +4092,452 @@ fn r11_a_monitors_objection_cannot_be_dismissed_by_the_claimant() {
     env.object(&people, TargetKind::Claim, claim, 0, Some(claim), None).unwrap();
     expect_err(env.vote_objection(&v2, claim, false, None, Some(claim), None), HeirloomError::OwnApproval);
     env.vote_objection(&v2, claim, true, None, Some(claim), None).unwrap();
+}
+
+// ------------------------------------------------------------------- R4 a fallback recipient's death
+
+#[test]
+fn r04_the_agent_alone_cannot_redirect_the_surplus() {
+    let (mut env, _people) = guardian_env();
+    let (k1, k2) = (env.kid1.pubkey(), env.kid2.pubkey());
+    env.set_fallback([k1, k2, d(), d()]).unwrap();
+    env.unlock();
+    assert!(env.review_fallback_death(0, true).is_err(), "there is no report to review");
+    env.report_fallback_death(0).unwrap();
+    env.review_fallback_death(0, true).unwrap();
+    assert_eq!(env.guard().fallback_dead, 0);
+    expect_err(env.sweep(k2, &[]), HeirloomError::NoResidualRecipient);
+}
+
+#[test]
+fn r04_a_second_person_confirms_after_the_fallback_wait() {
+    let (mut env, _people) = fallback_env();
+    env.report_fallback_death(0).unwrap();
+    let v0 = env.v(0);
+    expect_err(env.resolve_fallback_death(&v0, 0, None, true), HeirloomError::AgentNotApproved);
+    env.review_fallback_death(0, true).unwrap();
+    warp(&mut env.svm, FALLBACK_WAIT - 1);
+    expect_err(env.resolve_fallback_death(&v0, 0, None, true), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, 1);
+    env.resolve_fallback_death(&v0, 0, None, true).unwrap();
+    let g = env.guard();
+    assert_eq!((g.fallback_dead, g.next_fallback_recipient(), g.fallback_started_at), (0b1, env.kid2.pubkey(), 0));
+    assert!(is_closed(&env.svm, &fallback_report_pda(&env.estate, 0)));
+}
+
+#[test]
+fn r04_the_reporter_the_gainer_the_agent_and_strangers_cannot_confirm() {
+    let (mut env, _people) = fallback_env();
+    let v0 = env.v(0);
+    env.report_fallback_death_by(&v0, 0, None, [7u8; 32]).unwrap();
+    env.review_fallback_death(0, true).unwrap();
+    warp(&mut env.svm, FALLBACK_WAIT);
+    let (k1, k2, agent, stranger) =
+        (env.kid1.insecure_clone(), env.kid2.insecure_clone(), env.agent.insecure_clone(), env.stranger.insecure_clone());
+    for who in [&v0, &k2, &k1, &agent, &stranger] {
+        expect_err(env.resolve_fallback_death(who, 0, None, true), HeirloomError::NotConfirmer);
+    }
+    let v1 = env.v(1);
+    env.resolve_fallback_death(&v1, 0, None, true).unwrap();
+}
+
+#[test]
+fn r04_only_participants_report_and_never_the_recipient_or_the_agent() {
+    let (mut env, people) = fallback_env();
+    let (k1, agent, stranger) = (env.kid1.insecure_clone(), env.agent.insecure_clone(), env.stranger.insecure_clone());
+    for who in [&k1, &agent, &stranger] {
+        expect_err(env.report_fallback_death_by(who, 0, None, [7u8; 32]), HeirloomError::NotParticipant);
+    }
+    let (m0, executor) = (env.kp(&people.monitors[0]), env.executor.insecure_clone());
+    env.svm.airdrop(&executor.pubkey(), 1_000_000_000).unwrap();
+    expect_err(env.report_fallback_death_by(&m0, 0, None, [7u8; 32]), HeirloomError::NotParticipant);
+    env.report_fallback_death_by(&m0, 0, Some(0), [7u8; 32]).unwrap();
+    // A listed recipient may report another one.
+    env.report_fallback_death_by(&executor, 1, None, [7u8; 32]).unwrap();
+}
+
+#[test]
+fn r04_a_listed_recipient_or_a_monitor_confirms_when_every_seat_is_vacant() {
+    let (mut env, people) = fallback_env();
+    vacate_all(&mut env, &people);
+    env.report_fallback_death(0).unwrap();
+    env.review_fallback_death(0, true).unwrap();
+    warp(&mut env.svm, FALLBACK_WAIT);
+    let executor = env.executor.insecure_clone();
+    env.svm.airdrop(&executor.pubkey(), 1_000_000_000).unwrap();
+    env.resolve_fallback_death(&executor, 0, None, true).unwrap();
+    assert_eq!(env.guard().fallback_dead, 0b1);
+
+    env.report_fallback_death_by(&executor, 1, None, [7u8; 32]).unwrap();
+    env.review_fallback_death(1, true).unwrap();
+    warp(&mut env.svm, FALLBACK_WAIT);
+    let m2 = env.kp(&people.monitors[2]);
+    env.resolve_fallback_death(&m2, 1, Some(2), true).unwrap();
+    assert_eq!(env.guard().fallback_dead, 0b11);
+}
+
+#[test]
+fn r04_the_recipient_can_refute_at_any_time_before_confirmation() {
+    let (mut env, _people) = fallback_env();
+    let (k1, k2) = (env.kid1.insecure_clone(), env.kid2.insecure_clone());
+    let report = fallback_report_pda(&env.estate, 0);
+    env.report_fallback_death(0).unwrap();
+    env.resolve_fallback_death(&k1, 0, None, false).unwrap();
+    assert!(is_closed(&env.svm, &report));
+
+    env.report_fallback_death(0).unwrap();
+    env.review_fallback_death(0, true).unwrap();
+    warp(&mut env.svm, 3 * FALLBACK_WAIT);
+    expect_err(env.resolve_fallback_death(&k2, 0, None, false), HeirloomError::NotParticipant);
+    env.resolve_fallback_death(&k1, 0, None, false).unwrap();
+    assert_eq!(env.guard().fallback_dead, 0);
+}
+
+#[test]
+fn r04_a_rejection_closes_the_report() {
+    let (mut env, _people) = fallback_env();
+    env.report_fallback_death(0).unwrap();
+    expect_err(env.review_fallback_death_as(0, true, [1u8; 32]), HeirloomError::ReportChanged);
+    env.review_fallback_death(0, false).unwrap();
+    assert!(is_closed(&env.svm, &fallback_report_pda(&env.estate, 0)));
+    env.report_fallback_death(0).unwrap();
+}
+
+#[test]
+fn r04_a_stale_report_is_replaceable_and_its_rent_cannot_be_taken() {
+    let (mut env, _people) = fallback_env();
+    let (v0, k2) = (env.v(0), env.kid2.insecure_clone());
+    env.report_fallback_death_by(&v0, 0, None, [7u8; 32]).unwrap();
+    let report = fallback_report_pda(&env.estate, 0);
+    let rent = env.svm.get_account(&report).unwrap().lamports;
+    expect_err(env.report_fallback_death(0), HeirloomError::BadStatus);
+    warp(&mut env.svm, WAITING);
+    expect_err(env.report_fallback_death_by(&v0, 0, None, [7u8; 32]), HeirloomError::BadStatus);
+    env.report_fallback_death(0).unwrap();
+    let r: FallbackReport = fetch(&env.svm, &report);
+    assert_eq!((r.reporter, r.rent_payer, r.verdict), (k2.pubkey(), v0.pubkey(), Verdict::Pending));
+
+    let k1 = env.kid1.insecure_clone();
+    // The rent can't be redirected.
+    let i = ix(
+        heirloom::accounts::ResolveFallbackDeath {
+            signer: k1.pubkey(),
+            estate: env.estate,
+            guard: guard_pda(&env.estate),
+            fallback_report: report,
+            rent_to: k2.pubkey(),
+            signer_seat: None,
+            beneficiary_account: None,
+        },
+        heirloom::instruction::ResolveFallbackDeath { index: 0, dead: false },
+    );
+    assert!(send(&mut env.svm, i, &[&k1]).is_err());
+    let before = env.svm.get_account(&v0.pubkey()).unwrap().lamports;
+    env.resolve_fallback_death(&k1, 0, None, false).unwrap();
+    assert_eq!(env.svm.get_account(&v0.pubkey()).unwrap().lamports, before + rent);
+}
+
+#[test]
+fn r04_an_approved_report_is_replaceable_once_it_is_stale() {
+    let (mut env, _people) = fallback_env();
+    env.report_fallback_death(0).unwrap();
+    env.review_fallback_death(0, true).unwrap();
+    let v0 = env.v(0);
+    warp(&mut env.svm, 2 * FALLBACK_WAIT - 1);
+    expect_err(env.report_fallback_death_by(&v0, 0, None, [7u8; 32]), HeirloomError::BadStatus);
+    warp(&mut env.svm, 1);
+    env.report_fallback_death_by(&v0, 0, None, [7u8; 32]).unwrap();
+}
+
+#[test]
+fn r04_a_changed_list_voids_the_report() {
+    let (mut env, _people) = fallback_env();
+    env.report_fallback_death(0).unwrap();
+    let (k2, executor) = (env.kid2.pubkey(), env.executor.pubkey());
+    env.set_fallback([executor, k2, d(), d()]).unwrap();
+    expect_err(env.review_fallback_death(0, true), HeirloomError::NoFallbackRecipient);
+    let v0 = env.v(0);
+    env.report_fallback_death_by(&v0, 0, None, [7u8; 32]).unwrap();
+}
+
+#[test]
+fn r04_a_report_made_during_the_countdown_can_still_be_confirmed_in_time() {
+    let (mut env, people) = fallback_env();
+    vacate_all(&mut env, &people);
+    env.start_fallback().unwrap();
+    warp(&mut env.svm, FALLBACK_WAIT - 1);
+    env.report_fallback_death(0).unwrap();
+    env.review_fallback_death(0, true).unwrap();
+    warp(&mut env.svm, 1);
+    let (k1, k2) = (env.kid1.pubkey(), env.kid2.pubkey());
+    expect_err(env.execute_fallback(k1), HeirloomError::DeathReportOpen);
+    warp(&mut env.svm, FALLBACK_WAIT);
+    let m0 = env.kp(&people.monitors[0]);
+    env.resolve_fallback_death(&m0, 0, Some(0), true).unwrap();
+    assert_eq!(env.guard().fallback_started_at, now(&env.svm));
+    warp(&mut env.svm, FALLBACK_WAIT);
+    env.execute_fallback(k2).unwrap();
+}
+
+#[test]
+fn r04_an_unconfirmed_report_cannot_hold_the_fallback_for_ever() {
+    let (mut env, people) = fallback_env();
+    vacate_all(&mut env, &people);
+    env.start_fallback().unwrap();
+    warp(&mut env.svm, FALLBACK_WAIT - 1);
+    env.report_fallback_death(0).unwrap();
+    env.review_fallback_death(0, true).unwrap();
+    warp(&mut env.svm, 2 * FALLBACK_WAIT);
+    // A new report after the countdown ended holds nothing.
+    let m0 = env.kp(&people.monitors[0]);
+    env.report_fallback_death_by(&m0, 0, Some(0), [7u8; 32]).unwrap();
+    env.review_fallback_death(0, true).unwrap();
+    let k1 = env.kid1.pubkey();
+    env.execute_fallback(k1).unwrap();
+}
+
+#[test]
+fn r04_confirming_does_not_revive_a_countdown_the_owner_voided() {
+    let (mut env, people) = fallback_env();
+    vacate_all(&mut env, &people);
+    env.start_fallback().unwrap();
+    let started = env.guard().fallback_started_at;
+    env.report_fallback_death(0).unwrap();
+    env.review_fallback_death(0, true).unwrap();
+    warp(&mut env.svm, FALLBACK_WAIT);
+    env.heartbeat().unwrap();
+    let m0 = env.kp(&people.monitors[0]);
+    env.resolve_fallback_death(&m0, 0, Some(0), true).unwrap();
+    assert_eq!(env.guard().fallback_started_at, started);
+    let k2 = env.kid2.pubkey();
+    expect_err(env.execute_fallback(k2), HeirloomError::FallbackNotReady);
+}
+
+// ------------------------------------------------------------------- R6 a seat-death report cannot squat
+
+#[test]
+fn r06_a_stranger_cannot_report_a_seat_death() {
+    let (mut env, people) = guardian_env();
+    let (stranger, agent) = (env.stranger.insecure_clone(), env.agent.insecure_clone());
+    expect_err(env.report_seat_death(&stranger, 0), HeirloomError::NotParticipant);
+    expect_err(env.report_seat_death(&agent, 0), HeirloomError::NotParticipant);
+    let (backup, monitor) = (env.kp(&people.backups[1][0]), env.kp(&people.monitors[2]));
+    expect_err(env.report_seat_death(&backup, 0), HeirloomError::NotParticipant); // another seat's backup
+    env.report_seat_death(&backup, 1).unwrap();
+    env.report_seat_death(&monitor, 2).unwrap();
+    let v1 = env.v(1);
+    env.report_seat_death(&v1, 0).unwrap();
+}
+
+#[test]
+fn r06_the_owner_can_report_a_seat_death() {
+    let (mut env, _people) = guardian_env();
+    let owner = env.kp(&env.owner);
+    env.report_seat_death(&owner, 0).unwrap();
+}
+
+#[test]
+fn r06_an_unreviewed_report_can_be_replaced_after_a_grace() {
+    let (mut env, _people) = guardian_env();
+    let (v1, kid) = (env.v(1), env.kid1.insecure_clone());
+    env.report_seat_death(&v1, 0).unwrap();
+    assert_eq!(env.seat(0).death_pending_since, now(&env.svm));
+    warp(&mut env.svm, WAITING - 1);
+    expect_err(env.report_seat_death(&kid, 0), HeirloomError::SuccessionPending);
+    warp(&mut env.svm, 1);
+    // Whoever made it does not go first.
+    expect_err(env.report_seat_death(&v1, 0), HeirloomError::SuccessionPending);
+    env.report_seat_death(&kid, 0).unwrap();
+    assert_eq!(env.seat(0).death_reported_by, kid.pubkey());
+}
+
+#[test]
+fn r06_a_reviewed_report_is_replaceable_after_two_waiting_periods_until_confirmed() {
+    let (mut env, _people) = guardian_env();
+    let (v1, v2, kid) = (env.v(1), env.v(2), env.kid1.insecure_clone());
+    env.report_seat_death(&v1, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    warp(&mut env.svm, 2 * WAITING - 1);
+    expect_err(env.report_seat_death(&kid, 0), HeirloomError::SuccessionPending);
+    warp(&mut env.svm, 1);
+    env.report_seat_death(&kid, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    env.confirm_seat_death(&v2, 0).unwrap();
+    warp(&mut env.svm, 10 * WAITING);
+    expect_err(env.report_seat_death(&v1, 0), HeirloomError::SuccessionPending);
+}
+
+#[test]
+fn r06_a_stale_report_does_not_block_backup_changes() {
+    let (mut env, _people) = guardian_env();
+    let (v1, owner) = (env.v(1), env.kp(&env.owner));
+    env.report_seat_death(&v1, 0).unwrap();
+    expect_err(env.set_seat_backups(&owner, 0, [d(), d()]), HeirloomError::SuccessionPending);
+    warp(&mut env.svm, WAITING);
+    env.set_seat_backups(&owner, 0, [d(), d()]).unwrap();
+    let s = env.seat(0);
+    assert_eq!((s.death_cert_hash, s.backups), ([0u8; 32], [d(), d()]));
+}
+
+#[test]
+fn r06_a_legacy_report_with_time_zero_is_stale_at_once() {
+    let (mut env, _people) = guardian_env();
+    let (v1, kid) = (env.v(1), env.kid1.insecure_clone());
+    env.report_seat_death(&v1, 0).unwrap();
+    let mut s = env.seat(0);
+    s.death_pending_since = 0;
+    env.plant(seat_pda(&env.estate, 0), &s);
+    env.report_seat_death(&kid, 0).unwrap();
+}
+
+#[test]
+fn r06_the_agent_cannot_review_a_report_that_replaced_the_one_it_read() {
+    let (mut env, _people) = guardian_env();
+    let v1 = env.v(1);
+    env.report_seat_death(&v1, 0).unwrap();
+    let review = |env: &Env, cert_hash: [u8; 32]| {
+        ix(
+            heirloom::accounts::ReviewSeatDeath { agent: env.agent.pubkey(), estate: env.estate, seat: seat_pda(&env.estate, 0) },
+            heirloom::instruction::ReviewSeatDeath { index: 0, approve: true, report_hash: [9u8; 32], cert_hash },
+        )
+    };
+    let i = review(&env, [1u8; 32]);
+    expect_err(send(&mut env.svm, i, &[&env.agent]), HeirloomError::ReportChanged);
+    let i = review(&env, [8u8; 32]);
+    send(&mut env.svm, i, &[&env.agent]).unwrap();
+}
+
+#[test]
+fn r06_the_agent_cannot_confirm_a_seat_death() {
+    let (mut env, _people) = guardian_env();
+    let owner = env.kp(&env.owner);
+    for i in 0..2 {
+        env.set_seat_backups(&owner, i, [d(), d()]).unwrap();
+    }
+    let (v1, v2, kid, agent) = (env.v(1), env.v(2), env.kid1.insecure_clone(), env.agent.insecure_clone());
+    env.succeed(0, &v1);
+    env.succeed(1, &v2);
+    env.set_seat_monitors(2, [agent.pubkey(), d()]).unwrap();
+    env.report_seat_death(&kid, 2).unwrap();
+    env.review_seat_death(2, true).unwrap();
+    expect_err(env.confirm_seat_death(&agent, 2), HeirloomError::NotConfirmer);
+}
+
+// ------------------------------------------------------------------- R9 one wallet, one vote
+
+#[test]
+fn r09_one_monitor_of_two_seats_is_one_vote() {
+    let (mut env, people) = fallback_env();
+    let m0 = env.kp(&people.monitors[0]);
+    env.set_seat_monitors(1, [m0.pubkey(), d()]).unwrap();
+    vacate_all(&mut env, &people);
+    env.start_fallback().unwrap();
+    let (guard, kid2) = (guard_pda(&env.estate), env.kid2.insecure_clone());
+    env.raise_objection(&kid2, TargetKind::Fallback, guard, 0, None, true, None, None).unwrap();
+    let seats = env.all_seats();
+    env.vote_objection(&m0, guard, true, seats, None, None).unwrap();
+    expect_err(env.vote_objection(&m0, guard, true, seats, None, None), HeirloomError::AlreadyApproved);
+    expect_err(env.vote_objection(&m0, guard, false, seats, None, None), HeirloomError::AlreadyApproved);
+    let o = env.objection(&guard);
+    assert_eq!((o.status, o.votes_uphold), (ObjectionStatus::Open, 0b1));
+
+    let m2 = env.kp(&people.monitors[2]);
+    env.vote_objection(&m2, guard, true, seats, None, None).unwrap();
+    assert_eq!(env.objection(&guard).status, ObjectionStatus::Upheld);
+}
+
+#[test]
+fn r09_a_vote_already_cast_from_another_position_counts_as_the_vote() {
+    let (mut env, people) = fallback_env();
+    let m0 = env.kp(&people.monitors[0]);
+    env.set_seat_monitors(1, [m0.pubkey(), d()]).unwrap();
+    vacate_all(&mut env, &people);
+    env.start_fallback().unwrap();
+    let (guard, kid2) = (guard_pda(&env.estate), env.kid2.insecure_clone());
+    env.raise_objection(&kid2, TargetKind::Fallback, guard, 0, None, true, None, None).unwrap();
+    // As the older program recorded a vote from seat 1.
+    let mut o = env.objection(&guard);
+    o.votes_uphold = 0b100;
+    env.plant(objection_pda(&guard), &o);
+    let seats = env.all_seats();
+    expect_err(env.vote_objection(&m0, guard, true, seats, None, None), HeirloomError::AlreadyApproved);
+}
+
+#[test]
+fn r09_the_three_seats_are_required_in_order() {
+    let (mut env, people) = fallback_env();
+    vacate_all(&mut env, &people);
+    env.start_fallback().unwrap();
+    let (guard, kid2, m0) = (guard_pda(&env.estate), env.kid2.insecure_clone(), env.kp(&people.monitors[0]));
+    env.raise_objection(&kid2, TargetKind::Fallback, guard, 0, None, true, None, None).unwrap();
+    expect_err(env.vote_objection(&m0, guard, true, None, None, None), HeirloomError::NotMonitor);
+    let [s0, s1, s2] = env.all_seats().unwrap();
+    expect_err(env.vote_objection(&m0, guard, true, Some([s1, s0, s2]), None, None), HeirloomError::BadStatus);
+    expect_err(env.vote_objection(&m0, guard, true, Some([s0, s0, s2]), None, None), HeirloomError::BadStatus);
+    env.vote_objection(&m0, guard, true, Some([s0, s1, s2]), None, None).unwrap();
+}
+
+// ------------------------------------------------------------------- R10 succession never sticks
+
+#[test]
+fn r10_the_only_backup_reporting_clears_for_a_fresh_report() {
+    let (mut env, people) = guardian_env();
+    let (b, owner) = (env.kp(&people.backups[0][0]), env.kp(&env.owner));
+    env.set_seat_backups(&owner, 0, [b.pubkey(), d()]).unwrap();
+    let (v1, kid) = (env.v(1), env.kid1.insecure_clone());
+    env.report_seat_death(&b, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    env.confirm_seat_death(&v1, 0).unwrap();
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    env.finalize_succession(0).unwrap();
+    let s = env.seat(0);
+    assert_eq!((s.death_cert_hash, s.vacant, s.generation), ([0u8; 32], false, 0));
+    assert_eq!((s.holder, s.backups), (env.verifiers[0].pubkey(), [b.pubkey(), d()]));
+
+    env.report_seat_death(&kid, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    env.confirm_seat_death(&v1, 0).unwrap();
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    env.finalize_succession(0).unwrap();
+    assert_eq!(env.seat(0).holder, b.pubkey());
+}
+
+#[test]
+fn r10_the_only_backup_confirming_clears_for_a_fresh_report() {
+    let (mut env, people) = guardian_env();
+    env.leave_one_survivor();
+    let (b0, b1) = (env.kp(&people.backups[2][0]), env.kp(&people.backups[2][1]));
+    env.report_seat_death(&b0, 2).unwrap();
+    env.review_seat_death(2, true).unwrap();
+    env.confirm_seat_death(&b1, 2).unwrap();
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    env.finalize_succession(2).unwrap();
+    let s = env.seat(2);
+    assert_eq!((s.death_cert_hash, s.vacant), ([0u8; 32], false));
+}
+
+#[test]
+fn r10_a_seat_vacates_when_no_backup_could_ever_be_eligible() {
+    let (mut env, _people) = guardian_env();
+    let shared = funded(&mut env.svm);
+    let owner = env.kp(&env.owner);
+    env.set_seat_backups(&owner, 0, [shared.pubkey(), d()]).unwrap();
+    env.set_seat_backups(&owner, 2, [shared.pubkey(), d()]).unwrap();
+    let v1 = env.v(1);
+    env.succeed(2, &v1);
+    assert_eq!(env.seat(2).holder, shared.pubkey());
+    env.succeed(0, &v1);
+    assert!(env.seat(0).vacant);
+    assert_eq!(env.estate_state().verifiers[0], d());
+}
+
+#[test]
+fn r10_the_agent_is_never_promoted() {
+    let (mut env, people) = guardian_env();
+    let mut s = env.seat(0);
+    s.backups = [env.agent.pubkey(), people.backups[0][1].pubkey()];
+    env.plant(seat_pda(&env.estate, 0), &s);
+    let v1 = env.v(1);
+    env.succeed(0, &v1);
+    assert_eq!(env.seat(0).holder, people.backups[0][1].pubkey());
 }

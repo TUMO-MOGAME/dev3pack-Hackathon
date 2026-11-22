@@ -16,6 +16,7 @@ pub const MEDIA_SEED: &[u8] = b"media";
 pub const YEAR_CAP_SEED: &[u8] = b"yearcap";
 pub const RESIDUAL_SEED: &[u8] = b"residual";
 pub const AGENT_VOTE_SEED: &[u8] = b"agentvote";
+pub const FALLBACK_REPORT_SEED: &[u8] = b"fallbackreport";
 
 pub const MAX_WILL_URI_LEN: usize = 200;
 pub const MAX_LABEL_LEN: usize = 32;
@@ -386,7 +387,8 @@ pub struct Seat {
     pub death_reported_by: Pubkey,
     pub death_verdict: Verdict,
     pub death_confirmed_by: Pubkey,
-    /// Set when the death is confirmed (the succession wait runs from here); 0 = not confirmed.
+    /// When the death was reported; once `death_confirmed_by` is set, when it was confirmed (the succession wait
+    /// runs from there).
     pub death_pending_since: i64,
     pub bump: u8,
 }
@@ -402,6 +404,19 @@ impl Seat {
         self.death_verdict = Verdict::Pending;
         self.death_confirmed_by = Pubkey::default();
         self.death_pending_since = 0;
+    }
+
+    /// A pending report that nobody confirmed and that `who` may replace.
+    pub fn report_stale(&self, estate: &Estate, who: &Pubkey, ts: i64) -> bool {
+        self.death_confirmed_by == Pubkey::default()
+            && estate.report_replaceable(
+                self.death_verdict,
+                self.death_pending_since,
+                &self.death_reported_by,
+                who,
+                estate.reviewed_hold(),
+                ts,
+            )
     }
 
     pub fn is_monitor(&self, key: &Pubkey) -> bool {
@@ -442,14 +457,28 @@ impl Guard {
         self.fallback_wait_secs.clamp(0, MAX_GUARD_WAIT_SECS)
     }
 
+    /// How long a reported recipient has to refute before a second person can confirm.
+    pub fn refute_wait(&self) -> i64 {
+        self.fallback_wait().max(MIN_WAITING_SECS)
+    }
+
+    pub fn is_living_recipient(&self, index: usize) -> bool {
+        index < FALLBACK_COUNT && self.fallback[index] != Pubkey::default() && self.fallback_dead & (1u8 << index) == 0
+    }
+
+    /// The first living recipient at or after `from`.
+    pub fn living_recipient_from(&self, from: usize) -> Option<usize> {
+        (from..FALLBACK_COUNT).find(|i| self.is_living_recipient(*i))
+    }
+
+    /// Index of the next recipient; NO_SEAT if none.
+    pub fn next_fallback_index(&self) -> u8 {
+        self.living_recipient_from(0).map_or(NO_SEAT, |i| i as u8)
+    }
+
     /// First recipient that is set and not proven dead; Pubkey::default() if none.
     pub fn next_fallback_recipient(&self) -> Pubkey {
-        self.fallback
-            .iter()
-            .enumerate()
-            .find(|(i, k)| **k != Pubkey::default() && self.fallback_dead & (1u8 << i) == 0)
-            .map(|(_, k)| *k)
-            .unwrap_or_default()
+        self.living_recipient_from(0).map(|i| self.fallback[i]).unwrap_or_default()
     }
 }
 
@@ -591,5 +620,23 @@ pub struct AgentVote {
     pub replaces: Pubkey,
     /// The wallet that voted from each seat; counts only while it still holds that seat.
     pub voters: [Pubkey; 3],
+    pub bump: u8,
+}
+
+/// Seeds: ["fallbackreport", estate, &[index]]. An open report that fallback recipient `index` died. Closed,
+/// with the rent going back to `rent_payer`, when it is rejected, refuted or confirmed.
+#[account]
+#[derive(InitSpace)]
+pub struct FallbackReport {
+    pub estate: Pubkey,
+    pub index: u8,
+    /// The recipient reported; the report is void once the list names someone else there.
+    pub recipient: Pubkey,
+    pub reporter: Pubkey,
+    /// Who created the account. A report that replaces it never takes over the rent.
+    pub rent_payer: Pubkey,
+    pub cert_hash: [u8; 32],
+    pub verdict: Verdict,
+    pub reported_at: i64,
     pub bump: u8,
 }
