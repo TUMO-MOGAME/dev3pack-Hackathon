@@ -18,7 +18,7 @@ const body = z.object({
  * (`retryAfter`, seconds) or points to faucet.solana.com.
  */
 export const POST = handler(async (req) => {
-  await rateLimitShared(req, "starter-minute", 3);
+  await rateLimitShared(req, "starter-minute", 10);
   if (!isChainMode()) throw new HttpError(503, "The demo needs no starter funds.", "unavailable");
   const { wallet, proof } = await parseJson(req, body, 1_000);
   if ((await verifyAction(req, "starter", wallet, actionBody.starter())) !== wallet) {

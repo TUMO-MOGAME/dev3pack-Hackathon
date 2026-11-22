@@ -77,6 +77,12 @@ describe("the chain backstop, without a shared store", () => {
     await expect(spend(1)).rejects.toMatchObject({ status: 429, retryAfterSecs: 3_600 });
   });
 
+  it("the sponsor's whole day spent in one judging hour doesn't stop the agent", async () => {
+    const budgetLamports = 300_000_000;
+    h.spend = { hour: budgetLamports, day: budgetLamports, complete: true };
+    await expect(spend(1)).resolves.toBeUndefined();
+  });
+
   it("stops at the day's spend", async () => {
     h.spend = { hour: 0, day: budget.AGENT_SPEND.day, complete: true };
     await expect(spend(1)).rejects.toMatchObject({ status: 429, code: "agent_limit" });

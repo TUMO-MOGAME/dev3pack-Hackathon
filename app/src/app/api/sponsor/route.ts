@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { handler, HttpError, isChainMode, json, parseJson, rateLimit, rateLimitShared } from "@/lib/api/http";
+import { SPONSOR_PER_IP_MINUTE } from "@/lib/sponsor/limits";
 import { SponsorRejection } from "@/lib/sponsor/policy";
 import { SimulationFailed, SponsorLimited, SponsorUnavailable, sponsorInfo, sponsorTransaction } from "@/lib/sponsor/server";
 
@@ -7,7 +8,7 @@ export const maxDuration = 30;
 
 /** GET /api/sponsor → { available, feePayer, maxFeeLamports, paysRent } so the client can build sponsored txs. */
 export const GET = handler(async (req) => {
-  rateLimit(req, "sponsor-info", 60);
+  rateLimit(req, "sponsor-info", SPONSOR_PER_IP_MINUTE); // asked before a payment, so no tighter than paying
   if (!isChainMode()) return json({ available: false, feePayer: null, maxFeeLamports: 0, paysRent: false, reason: "mock mode" });
   const { balanceLamports: _b, ...info } = await sponsorInfo();
   void _b;
@@ -26,7 +27,7 @@ const body = z.object({
  * The agent's WDK wallet co-signs as fee payer only after lib/sponsor/policy.ts accepts the exact bytes.
  */
 export const POST = handler(async (req) => {
-  await rateLimitShared(req, "sponsor", 20);
+  await rateLimitShared(req, "sponsor", SPONSOR_PER_IP_MINUTE);
   if (!isChainMode()) throw new HttpError(503, "Fee sponsorship needs chain mode.", "unavailable");
   const { tx, submit } = await parseJson(req, body, 8_000);
   try {
