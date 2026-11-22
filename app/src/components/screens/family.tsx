@@ -227,7 +227,7 @@ function ReportForm({ copy, onAccepted }: { copy: Copy; onAccepted: (r: { report
     if (!consent) { setError(common.consentRequired); return; }
     setError(null);
     const res = await run("death", (s, est) => s.submitDeathClaim(est, file));
-    if (res.ok && res.value.report.verdict !== "approve") setRejected(res.value.report);
+    if (res.ok && res.value.report.verdict === "reject") setRejected(res.value.report);
     else if (res.ok) onAccepted({ report: res.value.report, tx: res.value.tx });
   };
 

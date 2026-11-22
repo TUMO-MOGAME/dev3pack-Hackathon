@@ -34,7 +34,8 @@ export function StarterBanner() {
   }, [isMock, ready, address, known, refreshBalances]);
   // Not while the recovery phrase is on screen.
   if (isMock || !session || !known || done === session.address || path?.startsWith("/start")) return null;
-  if (session.solBalance >= 0.02 || session.usdtBalance > BigInt(0)) return null;
+  // A practice family member holds a little SOL for rent and needs no grant of their own.
+  if (session.solBalance >= 0.002 || session.usdtBalance > BigInt(0)) return null;
   const get = async () => {
     const r = await run("starter", (s) => s.requestStarter(), t.starter.done, true);
     if (r.ok) {

@@ -31,7 +31,7 @@ import { useNow } from "@/lib/hooks/use-now";
 import { openDisputeOn } from "@/lib/disputes/types";
 import { openToPeople } from "@/lib/verdict";
 import { ReferredNote } from "@/components/continuity/continuity";
-import { quorumFor } from "@/lib/verdict";
+import { outcomeOf, quorumFor } from "@/lib/verdict";
 
 type Copy = ScreensCopy["claims"];
 
@@ -268,12 +268,15 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
 
   if (result) {
     const claim = snap.claims.find((c) => c.address === result.claim);
-    const ok = result.report.verdict === "approve";
+    // Only a rejection stops a claim: a referred one is submitted, and people decide it.
+    const outcome = outcomeOf(result.report.verdict);
+    const ok = outcome !== "Reject";
     return (
       <Card>
         <h2 className="text-h3" role="status">{ok ? copy.result.submitted : copy.result.declined}</h2>
-        <p className="mt-1 text-ink-2">{!ok ? copy.result.declinedBody : live === "Active" ? fmt(copy.result.submittedBodyOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : copy.result.submittedBody}</p>
-        {claim && <div className="mt-4"><ClaimTracker claim={claim} need={quorumFor(claim.agentVerdict, snap.estate.claimThreshold)} copy={copy} /></div>}
+        {outcome !== "Refer" && <p className="mt-1 text-ink-2">{!ok ? copy.result.declinedBody : live === "Active" ? fmt(copy.result.submittedBodyOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : copy.result.submittedBody}</p>}
+        {outcome === "Refer" && <ReferredNote verdict="Referred" />}
+        {claim && <div className="mt-4"><ClaimTracker claim={claim} need={live === "Active" ? 1 : quorumFor(claim.agentVerdict, snap.estate.claimThreshold)} copy={copy} /></div>}
         <div className="mt-4"><ReportCard report={result.report} /></div>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button onClick={onClose}>{copy.listTitle}</Button>

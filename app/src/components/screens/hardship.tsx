@@ -47,7 +47,7 @@ function HardshipView({ copy, snap, session, role }: { copy: Copy; snap: EstateS
     setError(null); setBlocked(null);
     const res = await run("hardship", (s, est) => s.submitHardship(est, { asset: car.address, evidence: file }), undefined, true);
     if (!res.ok) setBlocked({ code: res.code, message: res.message });
-    else if (res.value.report.verdict !== "approve") setRejected(res.value.report);
+    else if (res.value.report.verdict === "reject") setRejected(res.value.report);
   };
 
   const cannot = !car ? copy.noCar : car.status === "Sold" ? copy.sold : e.status !== "Unlocked" ? copy.locked : null;
