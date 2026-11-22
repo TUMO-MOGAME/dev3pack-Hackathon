@@ -531,7 +531,7 @@ after the confirmation), the confirmer is neither a holder, a monitor of the sea
 beneficiary route applies to the seat. Then the first remaining account must be
 `["beneficiary", estate, death_confirmed_by]`, whether or not it exists: active, the succession goes on; inactive
 or missing, the report is cleared. Not passed: NotConfirmer, so leaving it out can't revoke a confirmation.
-Passing it every time a beneficiary confirmed is harmless.
+In every other case it is ignored, so the simplest client always passes it.
 
 **How the sweep's hold is bounded:** each report holds for at most 2R from when it was made. A report that
 replaces it starts Pending and holds nothing until the agent approves it. The recipient can refute and sweep in

@@ -6251,3 +6251,17 @@ fn r22_the_owner_sets_the_photos_only_while_active() {
     env.death_pending();
     expect_err(set(&mut env, &owner), HeirloomError::NotOwner);
 }
+
+#[test]
+fn r18_the_confirmers_account_is_ignored_when_it_is_not_needed() {
+    let (mut env, people) = guardian_env();
+    let (k1, v0) = (env.kid1.insecure_clone(), env.v(0));
+    warp(&mut env.svm, 1);
+    env.report_seat_death(&k1, 2).unwrap();
+    env.review_seat_death(2, true).unwrap();
+    env.confirm_seat_death(&v0, 2).unwrap();
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    let not_needed = beneficiary_pda(&env.estate, &v0.pubkey());
+    env.finalize_succession_with(2, Some(not_needed)).unwrap();
+    assert_eq!(env.seat(2).holder, people.backups[2][0].pubkey());
+}
