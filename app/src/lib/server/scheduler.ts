@@ -15,7 +15,7 @@ import "server-only";
 import { PublicKey, type AccountInfo } from "@solana/web3.js";
 import bs58 from "bs58";
 import { accountDiscriminator, getCoder, getIdl } from "../chain/idl";
-import { big, bool, decodeRule, decodeEstate, key, num, type Raw } from "../chain/decoders";
+import { big, bool, decodeRule, decodeEstate, enumOf, key, num, type Raw } from "../chain/decoders";
 import { tokenAmount } from "../chain/balances";
 import { TOKEN_PROGRAM_ID, ata, beneficiaryPda, payeePda, vaultAta, yearCapPda } from "../chain/pda";
 import { getConnection } from "../chain/tx";
@@ -98,7 +98,8 @@ export function whyUnpayable(d: Payment, a: PaymentAccounts, now: number, progra
   const decode = (type: string, info: Account) => getCoder().accounts.decode(type, info!.data) as Raw;
 
   if (!usable(a.vault, d.estate) || tokenAmount(a.vault!.data) < amount) return "underfunded";
-  if (!ours(a.payee)) return "payee_removed";
+  // Removed (the account is closed), or put back as a kind the rule doesn't allow.
+  if (!ours(a.payee) || enumOf(decode("Payee", a.payee), "kind", [d.rule.allowedPayeeKind]) !== d.rule.allowedPayeeKind) return "payee_removed";
   if (!ours(a.beneficiary) || !bool(decode("Beneficiary", a.beneficiary), "active")) return "beneficiary_removed";
   // A payee without a token account gets one. One that exists must still be theirs (and the vault can't pay itself).
   if (payee === d.estate || (a.payeeToken?.data.length && !usable(a.payeeToken, payee))) return "payee_account";

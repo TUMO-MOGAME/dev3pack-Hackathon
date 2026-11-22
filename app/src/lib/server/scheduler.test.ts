@@ -115,7 +115,7 @@ async function addEstate(o: { vault?: bigint; status?: string; agent?: string; m
 
 async function addRule(estate: PublicKey, o: {
   due?: number; amount?: bigint; spent?: bigint; cap?: bigint; until?: number; startsNow?: boolean;
-  payee?: "removed"; beneficiary?: "inactive" | "removed"; fails?: boolean; yearly?: { cap: bigint; spent: bigint; start: number };
+  payee?: "removed" | "other-kind"; beneficiary?: "inactive" | "removed"; fails?: boolean; yearly?: { cap: bigint; spent: bigint; start: number };
 } = {}) {
   const address = key(), payee = key(), beneficiary = key();
   await program(address, "Rule", {
@@ -125,7 +125,7 @@ async function addRule(estate: PublicKey, o: {
     recurring_amount: bn(o.amount ?? 5n * ONE), interval_secs: bn(60), next_due: bn(o.due ?? NOW - 10), fixed_payee: payee, bump: 255,
   });
   if (o.payee !== "removed") {
-    await program(payeePda(programId, estate, payee), "Payee", { estate, wallet: payee, kind: { Landlord: {} }, name: "Approved landlord", bump: 255 });
+    await program(payeePda(programId, estate, payee), "Payee", { estate, wallet: payee, kind: o.payee === "other-kind" ? { School: {} } : { Landlord: {} }, name: "Approved landlord", bump: 255 });
   }
   if (o.beneficiary !== "removed") {
     await program(beneficiaryPda(programId, estate, beneficiary), "Beneficiary", {
@@ -281,6 +281,7 @@ describe("what can't pay is passed over without a transaction (S1)", () => {
     ["a date still to come", async () => addRule(await addEstate(), { due: NOW + 1 })],
     ["an amount too small to be worth the fee", async () => addRule(await addEstate(), { amount: ONE - 1n })],
     ["a payee that was removed", async () => addRule(await addEstate(), { payee: "removed" })],
+    ["a payee put back as another kind", async () => addRule(await addEstate(), { payee: "other-kind" })],
     ["a beneficiary that was removed", async () => addRule(await addEstate(), { beneficiary: "inactive" })],
     ["a beneficiary account that is gone", async () => addRule(await addEstate(), { beneficiary: "removed" })],
     ["a payee account handed to someone else", async () => { token((await addRule(await addEstate())).payee, 0n, { holder: key() }); }],
