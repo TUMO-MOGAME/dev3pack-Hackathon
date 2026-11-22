@@ -13,10 +13,10 @@ import {
   AuthorityType, MINT_SIZE, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createInitializeMint2Instruction,
   createMintToCheckedInstruction, createSetAuthorityInstruction, getAssociatedTokenAddressSync, getMinimumBalanceForRentExemptMint,
 } from "@solana/spl-token";
-import { loadEnv, loadOrCreateWallets, wdk, send, explorer, log, disposeAll, connection, rpcUrl, type PersonaId } from "./_shared";
+import { loadEnv, loadOrCreateWallets, wdk, send, sendCoSigned, explorer, log, disposeAll, connection, rpcUrl, type PersonaId } from "./_shared";
 
 loadEnv();
-const WAIT = 20; // seconds: the throwaway estate's waiting period
+const WAIT = 60; // seconds: the throwaway estate's waiting period (the program's minimum)
 
 async function main() {
   const w = await loadOrCreateWallets();
@@ -28,6 +28,7 @@ async function main() {
   const { toBase, fromBase } = await import("../app/src/lib/format");
   const { sha256Hex } = await import("../app/src/lib/agent/hash");
   const { newSeedPhrase, openAccount } = await import("../app/src/lib/wallet/wdk");
+  const { publicBeneficiaryLabel, publicPayeeName } = await import("../app/src/lib/chain/public-names");
 
   const ctx = chainCtx();
   const conn = connection();
@@ -57,8 +58,8 @@ async function main() {
     ix.setWill(ctx, owner, await sha256Hex(`rehearsal-will:${owner.toBase58()}`), "heirloom:rehearsal"),
   ]);
   await step("Child, university and tuition rule added", ownerAcc, [
-    ix.addBeneficiary(ctx, owner, A("lerato"), "Lerato (daughter)"),
-    ix.addPayee(ctx, owner, A("uct"), "University", "University of Cape Town"),
+    ix.addBeneficiary(ctx, owner, A("lerato"), publicBeneficiaryLabel(0)),
+    ix.addPayee(ctx, owner, A("uct"), "University", publicPayeeName({ name: "University of Cape Town", kind: "University", wallet: w.addresses.uct }, new Set())),
     ix.addRule(ctx, owner, { ruleId: 0, beneficiaryWallet: A("lerato"), category: "Tuition", allowedPayeeKind: "University", maxPerClaim: toBase(5), lifetimeCap: toBase(20), validUntil: Math.floor(Date.now() / 1000) + 365 * 86400 }),
   ]);
   await step("Vault funded with 20 USD₮", ownerAcc, [ix.deposit(ctx, owner, toBase(20))]);
@@ -79,8 +80,9 @@ async function main() {
   })]);
 
   // 3. The passing: reported by the child, reviewed by the agent, confirmed by two trusted people.
-  await step("Lerato reported the passing", lerato, [ix.submitDeathClaim(ctx, estate, A("lerato"), await sha256Hex(`rehearsal-cert:${estate.toBase58()}`))]);
-  await step("Agent reviewed the certificate: approved", agent, [ix.reviewDeath(estate, A("agent"), true, await sha256Hex("rehearsal-death-report"))]);
+  const cert = await sha256Hex(`rehearsal-cert:${estate.toBase58()}`);
+  await step("Lerato reported the passing", lerato, [ix.submitDeathClaim(ctx, estate, A("lerato"), cert)]);
+  await step("Agent reviewed the certificate: approved", agent, [ix.reviewDeath(estate, A("agent"), "Approve", await sha256Hex("rehearsal-death-report"), cert)]);
   await step("Adv. Ndlovu confirmed", ndlovu, [ix.attestDeath(estate, A("ndlovu"))]);
   await step("Ms. Pillay confirmed → waiting period starts", pillay, [ix.attestDeath(estate, A("pillay"))]);
   log(`Waiting ${WAIT + 8}s…`);
@@ -91,16 +93,19 @@ async function main() {
   const rule = (await fetchEstateRaw(estate.toBase58())).rules[0];
   const claim = claimPda(ctx.programId, rule.address, 0);
   await step("Lerato claimed 5 USD₮ for fees", lerato, [ix.submitClaim(ctx, { estate, signer: A("lerato"), ruleId: 0, claimId: 0, payeeWallet: A("uct"), amount: toBase(5), evidenceHashHex: await sha256Hex("rehearsal-invoice") })]);
-  await step("Agent reviewed the invoice: approved", agent, [ix.reviewClaim(estate, A("agent"), claim, new PublicKey(rule.address), true, await sha256Hex("rehearsal-claim-report"))]);
+  await step("Agent reviewed the invoice: approved", agent, [ix.reviewClaim(estate, A("agent"), claim, new PublicKey(rule.address), "Approve", await sha256Hex("rehearsal-claim-report"))]);
   await step("Adv. Ndlovu approved the claim", ndlovu, [ix.approveClaim(estate, A("ndlovu"), claim, new PublicKey(rule.address))]);
   const uctBefore = await conn.getTokenAccountBalance(getAssociatedTokenAddressSync(mint, A("uct"))).then((b) => Number(b.value.uiAmount)).catch(() => 0);
-  await step("Claim paid to the university", agent, [ix.executeClaim(ctx, { estate, payer: A("agent"), rule: new PublicKey(rule.address), claim, payeeWallet: A("uct") })]);
+  await step("Claim paid to the university", agent, [ix.executeClaim(ctx, { estate, payer: A("agent"), rule: new PublicKey(rule.address), claim, beneficiary: A("lerato"), payeeWallet: A("uct") })]);
 
   // 5. Car sale: listed by the agent, Pieter offers 11 (above the floor), the agent accepts, proceeds go to the vault.
   const asset = assetPda(ctx.programId, estate, car.publicKey);
   await step("Car listed", agent, [ix.listAsset(estate, A("agent"), asset, 3600)]);
   await step("Pieter offered 11 USD₮ (held in escrow)", pieter, [ix.placeOffer(ctx, estate, asset, A("pieter"), toBase(11))]);
-  await step("Agent accepted the best offer: car to Pieter, money to the vault", agent, [ix.acceptOffer(ctx, { estate, agent: A("agent"), asset, nftMint: car.publicKey, buyer: A("pieter"), recipient: estate })]);
+  const sold = await sendCoSigned(agent, [ndlovu], [ix.acceptOffer(ctx, {
+    estate, agent: A("agent"), asset, nftMint: car.publicKey, buyer: A("pieter"), recipient: estate, expectedAmount: toBase(11), coSigner: A("ndlovu"),
+  })]);
+  log(`Adv. Ndlovu co-signed, the agent accepted: car to Pieter, money to the vault ${explorer(sold)}`);
 
   // 6. Checks.
   const s = await fetchEstateRaw(estate.toBase58());

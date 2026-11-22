@@ -24,6 +24,7 @@ async function main() {
   const { estatePda, beneficiaryPda, payeePda, assetPda } = await import("../app/src/lib/chain/pda");
   const { fetchAccountRaw } = await import("../app/src/lib/chain/reads");
   const { num } = await import("../app/src/lib/chain/decoders");
+  const { publicBeneficiaryLabel, publicPayeeName } = await import("../app/src/lib/chain/public-names");
   const { toBase } = await import("../app/src/lib/format");
   const { intervalSecs } = await import("../app/src/lib/agent/schemas");
   const { sha256Hex } = await import("../app/src/lib/agent/hash");
@@ -65,8 +66,9 @@ async function main() {
 
   // 2. Beneficiaries
   const benIxs = [];
-  for (const b of draft.beneficiaries) {
-    if (!(await exists("Beneficiary", beneficiaryPda(ctx.programId, estate, b.wallet!)))) benIxs.push(ix.addBeneficiary(ctx, owner, new PublicKey(b.wallet!), b.label));
+  for (const [i, b] of draft.beneficiaries.entries()) {
+    // A role on the ledger, never a name; the names go to the estate's off-chain names (step 7).
+    if (!(await exists("Beneficiary", beneficiaryPda(ctx.programId, estate, b.wallet!)))) benIxs.push(ix.addBeneficiary(ctx, owner, new PublicKey(b.wallet!), publicBeneficiaryLabel(i)));
   }
   if (benIxs.length) log(`Beneficiaries ×${benIxs.length} ${explorer(await send(dad, benIxs))}`);
 
@@ -76,7 +78,7 @@ async function main() {
   ];
   const payeeIxs = [];
   for (const [id, kind, name] of payees) {
-    if (!(await exists("Payee", payeePda(ctx.programId, estate, A(id))))) payeeIxs.push(ix.addPayee(ctx, owner, A(id), kind, name));
+    if (!(await exists("Payee", payeePda(ctx.programId, estate, A(id))))) payeeIxs.push(ix.addPayee(ctx, owner, A(id), kind, publicPayeeName({ name, kind, wallet: w.addresses[id] }, new Set())));
   }
   if (payeeIxs.length) log(`Payees ×${payeeIxs.length} ${explorer(await send(dad, payeeIxs))}`);
 
@@ -86,18 +88,17 @@ async function main() {
   if (ruleId === 0) {
     const byName: Record<string, PersonaId> = Object.fromEntries(payees.map(([id, , name]) => [name.toLowerCase(), id]));
     const now = Math.floor(Date.now() / 1000);
-    const { findInstruction } = await import("../app/src/lib/chain/idl");
-    const living = findInstruction("add_rule").args.length > 5; // older program builds have no living plans
-    if (!living) log("Program has no living-plan support yet: rules are created as after-death, claim-based rules");
     const ruleIxs = draft.rules.map((r) => {
       const payeeId = r.recurring ? byName[r.recurring.payeeName.toLowerCase()] : undefined;
+      // Never a claim rule in a schedule's place (plan §18.4 U2).
+      if (r.recurring && !payeeId) throw new Error(`recurring_payee: "${r.recurring.payeeName}" is not a seeded payee.`);
       const every = r.recurring ? intervalSecs(r.recurring.every) : 0;
       return ix.addRule(ctx, owner, {
         ruleId: ruleId++, beneficiaryWallet: new PublicKey(draft.beneficiaries.find((b) => b.label === r.beneficiaryLabel)!.wallet!),
         category: r.category, allowedPayeeKind: r.allowedPayeeKind, maxPerClaim: toBase(r.maxPerClaimUsdt),
         lifetimeCap: toBase(r.lifetimeCapUsdt), validUntil: Math.floor(Date.parse(r.validUntil) / 1000),
-        startsNow: living && r.startsNow,
-        recurring: living && r.recurring && payeeId ? { amount: toBase(r.recurring.amountUsdt), intervalSecs: every, firstDue: now + every, payeeWallet: A(payeeId) } : undefined,
+        startsNow: r.startsNow,
+        recurring: r.recurring && payeeId ? { amount: toBase(r.recurring.amountUsdt), intervalSecs: every, firstDue: now + every, payeeWallet: A(payeeId) } : undefined,
       });
     });
     for (let i = 0; i < ruleIxs.length; i += 2) log(`Rules ${i}-${Math.min(i + 1, ruleIxs.length - 1)} ${explorer(await send(dad, ruleIxs.slice(i, i + 2)))}`);
@@ -126,7 +127,12 @@ async function main() {
     const { error } = await sb.from("estate_meta").upsert({
       estate: estate.toBase58(), owner_wallet: owner.toBase58(), owner_name: draft.ownerName,
       verifier_names: draft.verifiers.map((v) => v.name), asset_titles: { [w.carMint]: car.title },
-      buyer_names: { [w.addresses.pieter]: "Pieter", [w.addresses.ayesha]: "Ayesha" },
+      buyer_names: {
+        [w.addresses.pieter]: "Pieter", [w.addresses.ayesha]: "Ayesha",
+        // The ledger holds roles only, so the names the family sees live here.
+        ...Object.fromEntries(draft.beneficiaries.map((b) => [b.wallet!, b.label])),
+        ...Object.fromEntries(payees.map(([id, , name]) => [w.addresses[id], name])),
+      },
     });
     await sb.from("will_drafts").insert({ owner_wallet: owner.toBase58(), draft, will_hash: willHash });
     log(error ? `Supabase names not saved: ${error.message}` : "Display names saved to Supabase");

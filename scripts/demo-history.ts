@@ -53,25 +53,27 @@ async function main() {
 
   // 1. Scheduled payments that are due.
   for (const r of s.rules.filter((r) => r.startsNow && r.recurringAmount > 0n && r.fixedPayee && r.nextDue !== null && r.nextDue <= now)) {
-    const sig = await send(agent, [ix.executeScheduled(ctx, { estate, payer: A("agent"), rule: new PublicKey(r.address), payeeWallet: new PublicKey(r.fixedPayee!) })]);
+    const sig = await send(agent, [ix.executeScheduled(ctx, {
+      estate, payer: A("agent"), rule: new PublicKey(r.address), beneficiary: new PublicKey(r.beneficiary), payeeWallet: new PublicKey(r.fixedPayee!),
+    })]);
     log(`Scheduled payment, rule #${r.id}: ${fromBase(r.recurringAmount)} USD₮ to ${who(r.fixedPayee!)} ${explorer(sig)}`);
   }
 
   // 2. A fee claim under a "starts now" claim rule (not a scheduled one), paid to a matching approved payee.
-  const claimRule = s.rules.find((r) => r.startsNow && r.recurringAmount === 0n && s.payees.some((p) => p.kind === r.allowedPayeeKind));
+  const claimRule = s.rules.find((r) => r.startsNow && r.recurringAmount === 0n && r.validUntil > now && s.payees.some((p) => p.kind === r.allowedPayeeKind));
   if (claimRule && !s.claims.some((c) => c.rule === claimRule.address && c.status === "Paid")) {
     const child = who(claimRule.beneficiary);
     const payee = s.payees.find((p) => p.kind === claimRule.allowedPayeeKind)!;
     const amount = Math.min(350, fromBase(claimRule.maxPerClaim));
     const ruleKey = new PublicKey(claimRule.address);
     // Resume an open claim from an earlier run instead of submitting a second one.
-    let open = s.claims.find((c) => c.rule === claimRule.address && c.status === "Open");
+    let open = s.claims.find((c) => c.rule === claimRule.address && c.status === "Open" && !c.fromEndedRule);
     let claim: PublicKey;
     if (open) {
       claim = new PublicKey(open.address);
       log(`Resuming open claim #${open.id} (${fromBase(open.amount)} USD₮)`);
     } else {
-      const claimId = s.claims.filter((c) => c.rule === claimRule.address).length;
+      const claimId = claimRule.claimCount!; // a reused slot's ids don't start at 0
       claim = claimPda(ctx.programId, claimRule.address, claimId);
       const evidence = await sha256Hex(`heirloom-demo:invoice:${payee.name}:${amount}:${now}`);
       log(`Claim submitted by ${child}: ${amount} USD₮ to ${payee.name} ${explorer(await send(await wdk(w, child), [ix.submitClaim(ctx, {
@@ -81,12 +83,14 @@ async function main() {
     // The AI agent's review comes first: the program refuses any approval until the agent's verdict is Approved.
     if (open?.agentVerdict !== "Approved") {
       const report = await sha256Hex(`heirloom-demo:agent-report:${claim.toBase58()}:invoice matches the school, amount within the cap`);
-      log(`Agent reviewed the invoice: approved ${explorer(await send(agent, [ix.reviewClaim(estate, A("agent"), claim, ruleKey, true, report)]))}`);
+      log(`Agent reviewed the invoice: approved ${explorer(await send(agent, [ix.reviewClaim(estate, A("agent"), claim, ruleKey, "Approve", report)]))}`);
     }
     if (!open?.ownerApproved) log(`Claim approved by the dad ${explorer(await send(dad, [ix.ownerApproveClaim(ctx, A(OWNER), claim, ruleKey)]))}`);
     open = undefined;
     log(`Claim paid to ${payee.name} ${explorer(await send(agent, [ix.executeClaim(ctx, {
-      estate, payer: A("agent"), rule: new PublicKey(claimRule.address), claim, payeeWallet: new PublicKey(payee.wallet),
+      estate, payer: A("agent"), rule: new PublicKey(claimRule.address), claim, beneficiary: A(child),
+      // A resumed claim pays the payee it named.
+      payeeWallet: new PublicKey((await snap()).claims.find((c) => c.address === claim.toBase58())?.payee ?? payee.wallet),
     })]))}`);
   } else log(claimRule ? "A paid claim already exists" : "No starts-now claim rule found");
 
