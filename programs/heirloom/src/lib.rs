@@ -57,6 +57,7 @@ pub mod heirloom {
 
     pub fn add_rule(
         ctx: Context<AddRule>,
+        rule_id: u16,
         category: Category,
         allowed_payee_kind: PayeeKind,
         max_per_claim: u64,
@@ -69,6 +70,7 @@ pub mod heirloom {
     ) -> Result<()> {
         instructions::setup::add_rule_handler(
             ctx,
+            rule_id,
             category,
             allowed_payee_kind,
             max_per_claim,
@@ -117,8 +119,13 @@ pub mod heirloom {
         instructions::death::submit_death_claim_handler(ctx, cert_hash)
     }
 
-    pub fn review_death(ctx: Context<ReviewDeath>, outcome: ReviewOutcome, report_hash: [u8; 32]) -> Result<()> {
-        instructions::death::review_death_handler(ctx, outcome, report_hash)
+    pub fn review_death(
+        ctx: Context<ReviewDeath>,
+        outcome: ReviewOutcome,
+        report_hash: [u8; 32],
+        cert_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::death::review_death_handler(ctx, outcome, report_hash, cert_hash)
     }
 
     pub fn attest_death(ctx: Context<AttestDeath>) -> Result<()> {
@@ -225,8 +232,9 @@ pub mod heirloom {
         index: u8,
         approve: bool,
         report_hash: [u8; 32],
+        cert_hash: [u8; 32],
     ) -> Result<()> {
-        instructions::guardians::review_seat_death_handler(ctx, index, approve, report_hash)
+        instructions::guardians::review_seat_death_handler(ctx, index, approve, report_hash, cert_hash)
     }
 
     pub fn confirm_seat_death(ctx: Context<ConfirmSeatDeath>, index: u8) -> Result<()> {
@@ -255,7 +263,7 @@ pub mod heirloom {
         instructions::guardians::raise_objection_handler(ctx, kind, target, seat_index, reason_hash)
     }
 
-    pub fn vote_objection(ctx: Context<VoteObjection>, uphold: bool) -> Result<()> {
+    pub fn vote_objection<'info>(ctx: Context<'info, VoteObjection<'info>>, uphold: bool) -> Result<()> {
         instructions::guardians::vote_objection_handler(ctx, uphold)
     }
 
@@ -277,8 +285,13 @@ pub mod heirloom {
         index: u8,
         approve: bool,
         report_hash: [u8; 32],
+        cert_hash: [u8; 32],
     ) -> Result<()> {
-        instructions::guardians::review_fallback_death_handler(ctx, index, approve, report_hash)
+        instructions::guardians::review_fallback_death_handler(ctx, index, approve, report_hash, cert_hash)
+    }
+
+    pub fn resolve_fallback_death(ctx: Context<ResolveFallbackDeath>, index: u8, dead: bool) -> Result<()> {
+        instructions::guardians::resolve_fallback_death_handler(ctx, index, dead)
     }
 
     pub fn start_fallback(ctx: Context<StartFallback>) -> Result<()> {
@@ -332,5 +345,15 @@ pub mod heirloom {
 
     pub fn vote_agent(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<()> {
         instructions::continuity::vote_agent_handler(ctx, candidate)
+    }
+
+    // ------------------------------------------------------------------ second review (22 Nov 2026)
+
+    pub fn release_asset(ctx: Context<ReleaseAsset>) -> Result<()> {
+        instructions::setup::release_asset_handler(ctx)
+    }
+
+    pub fn remove_member(ctx: Context<RemoveMember>) -> Result<()> {
+        instructions::setup::remove_member_handler(ctx)
     }
 }

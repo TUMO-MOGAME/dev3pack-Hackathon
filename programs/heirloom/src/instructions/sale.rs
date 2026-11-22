@@ -1,5 +1,5 @@
-//! Asset sale: the estate sells the car's digital-title NFT. Offers escrow USD₮; the agent can
-//! accept only >= floor_price, or >= hardship_floor once a hardship request reached quorum.
+//! Asset sale: the estate sells the car's digital-title NFT. Offers escrow USD₮; the agent, with a trusted
+//! person's co-signature, can accept only >= floor_price, or >= hardship_floor once a hardship reached quorum.
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
@@ -364,7 +364,6 @@ pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
     let idx = estate
         .verifier_index(&verifier)
         .ok_or(HeirloomError::NotVerifier)?;
-    let threshold = estate.hardship_threshold;
     let estate_key = estate.key();
 
     let asset = &mut ctx.accounts.asset;
@@ -372,13 +371,18 @@ pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
     require!(asset.status != AssetStatus::Sold, HeirloomError::BadStatus);
     require!(hardship.status == HardshipStatus::Open, HeirloomError::BadStatus);
     require!(hardship.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
+    let claimant = hardship.beneficiary;
+    require!(verifier != claimant, HeirloomError::OwnApproval);
 
     let bit = 1u8 << idx;
-    require!(hardship.approvals & bit == 0, HeirloomError::AlreadyApproved);
+    let first_time = hardship.approvals & bit == 0;
     hardship.approvals |= bit;
 
-    let count = count_bits(hardship.approvals);
-    let quorum_reached = count >= hardship.agent_verdict.quorum(threshold);
+    let count = count_bits(hardship.approvals & estate.living_seats_except(&claimant));
+    let needed = hardship.agent_verdict.quorum(estate.hardship_threshold);
+    let quorum_reached = estate.quorum_met(hardship.approvals, &claimant, needed);
+    // Signing again only completes a quorum that has dropped since.
+    require!(first_time || quorum_reached, HeirloomError::AlreadyApproved);
     if quorum_reached {
         hardship.status = HardshipStatus::Approved;
         asset.hardship_beneficiary = Some(hardship.beneficiary);
@@ -481,6 +485,10 @@ pub struct AcceptOffer<'info> {
     /// PDA (address checked in the handler; blocks while Open). Otherwise it is not read: pass
     /// any account, e.g. the system program.
     pub hardship_objection: UncheckedAccount<'info>,
+
+    /// A living trusted person other than the buyer and the agent. None only when no seat has a holder, and
+    /// then the sale waits for the listing to end.
+    pub co_signer: Option<Signer<'info>>,
 }
 
 pub fn accept_offer_handler(ctx: Context<AcceptOffer>) -> Result<()> {
@@ -500,6 +508,20 @@ pub fn accept_offer_handler(ctx: Context<AcceptOffer>) -> Result<()> {
         require!(!objection_is_open(&info, &ctx.accounts.estate)?, HeirloomError::ObjectionOpen);
     }
 
+    // The agent alone never decides who the title goes to.
+    let (estate, agent, buyer) = (&ctx.accounts.estate, ctx.accounts.agent.key(), ctx.accounts.buyer.key());
+    require!(buyer != agent, HeirloomError::BadAgent);
+    let ts = now()?;
+    if estate.has_living_seat() {
+        let allowed = ctx.accounts.co_signer.as_ref().is_some_and(|c| {
+            let key = c.key();
+            key != buyer && key != agent && estate.verifier_index(&key).is_some()
+        });
+        require!(allowed, HeirloomError::CoSignerRequired);
+    } else {
+        require!(ts >= asset.listing_ends, HeirloomError::ListingStillOpen);
+    }
+
     let amount = ctx.accounts.offer.amount;
     let hardship = asset.hardship_beneficiary.is_some();
     if hardship {
@@ -509,7 +531,6 @@ pub fn accept_offer_handler(ctx: Context<AcceptOffer>) -> Result<()> {
     }
 
     let asset_key = asset.key();
-    let buyer = ctx.accounts.buyer.key();
     let recipient = ctx.accounts.recipient.key();
     // Everything in escrow goes to the recipient (>= offer.amount), so the close can't fail.
     let escrow_balance = ctx.accounts.offer_escrow.amount;
@@ -558,7 +579,7 @@ pub fn accept_offer_handler(ctx: Context<AcceptOffer>) -> Result<()> {
         recipient,
         amount,
         hardship,
-        ts: now()?,
+        ts,
     });
     // The Offer account is closed to the buyer by `close = buyer`.
     Ok(())

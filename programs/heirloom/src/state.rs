@@ -16,6 +16,7 @@ pub const MEDIA_SEED: &[u8] = b"media";
 pub const YEAR_CAP_SEED: &[u8] = b"yearcap";
 pub const RESIDUAL_SEED: &[u8] = b"residual";
 pub const AGENT_VOTE_SEED: &[u8] = b"agentvote";
+pub const FALLBACK_REPORT_SEED: &[u8] = b"fallbackreport";
 
 pub const MAX_WILL_URI_LEN: usize = 200;
 pub const MAX_LABEL_LEN: usize = 32;
@@ -43,6 +44,8 @@ pub const MAX_LISTING_SECS: i64 = 90 * 86_400;
 pub const MAX_RULES: u16 = 16;
 /// People needed for anything the agent referred instead of approving.
 pub const REFERRED_MIN_APPROVALS: u8 = 2;
+/// An unreviewed death report keeps its place for one waiting period, at least 60 s and at most this long.
+pub const MAX_REPORT_GRACE_SECS: i64 = 86_400;
 
 // ---------------------------------------------------------------- enums (Borsh order matters)
 
@@ -145,6 +148,8 @@ pub struct Estate {
     pub death_verdict: Verdict,
     /// Bitmap: verifier i sets bit 1 << i.
     pub death_attestations: u8,
+    /// While Active with a death claim: when it was submitted. Afterwards: when the quorum confirmed it.
+    /// Read the state from `status` and `death_cert_hash`, never from this being non-zero.
     pub death_pending_since: i64,
     pub last_heartbeat: i64,
     pub rule_count: u16,
@@ -160,6 +165,49 @@ impl Estate {
     /// The waiting period, clamped for estates created before the bound existed.
     pub fn waiting_secs(&self) -> i64 {
         self.waiting_period_secs.clamp(0, MAX_WAITING_SECS)
+    }
+
+    /// Bitmap of the seats someone holds, leaving out `who` (nobody decides in their own favour).
+    pub fn living_seats_except(&self, who: &Pubkey) -> u8 {
+        self.verifiers.iter().enumerate().fold(0u8, |mask, (i, v)| {
+            if *v != Pubkey::default() && v != who { mask | 1 << i } else { mask }
+        })
+    }
+
+    /// `votes` reach min(`needed`, the living seats that may decide), which is never zero. One seat, one vote:
+    /// a successor holds the seat's vote; a vacant seat's vote no longer counts.
+    pub fn quorum_met(&self, votes: u8, interested: &Pubkey, needed: u8) -> bool {
+        let eligible = self.living_seats_except(interested);
+        eligible != 0 && (votes & eligible).count_ones() >= u32::from(needed).min(eligible.count_ones())
+    }
+
+    pub fn has_living_seat(&self) -> bool {
+        self.living_seats_except(&Pubkey::default()) != 0
+    }
+
+    /// How long a reviewed death report keeps its place.
+    pub fn reviewed_hold(&self) -> i64 {
+        self.waiting_secs().max(MIN_WAITING_SECS).saturating_mul(2)
+    }
+
+    /// An unconfirmed death report (the estate's, a seat's or a fallback recipient's) may give way to one by
+    /// `who`. Whoever made it waits one grace longer, so nobody refreshes their own hold ahead of the others.
+    /// A report from before the times were stored (since = 0) is long stale.
+    pub fn report_replaceable(
+        &self,
+        verdict: Verdict,
+        since: i64,
+        reporter: &Pubkey,
+        who: &Pubkey,
+        reviewed_hold: i64,
+        ts: i64,
+    ) -> bool {
+        let grace = self.waiting_secs().clamp(MIN_WAITING_SECS, MAX_REPORT_GRACE_SECS);
+        let mut hold = if verdict == Verdict::Pending { grace } else { reviewed_hold };
+        if reporter == who {
+            hold = hold.saturating_add(grace);
+        }
+        ts >= since.saturating_add(hold)
     }
 
     pub fn clear_death_claim(&mut self) {
@@ -220,6 +268,29 @@ pub struct Rule {
     /// Payee wallet of the scheduled payment; Pubkey::default() = none.
     pub fixed_payee: Pubkey,
     pub bump: u8,
+}
+
+impl Rule {
+    /// A reused slot starts its claim ids at the next multiple of 65,536, so the high 16 bits of an id say
+    /// which of the slot's rules the claim was made under, and no claim address repeats.
+    fn generation(id: u32) -> u32 {
+        id >> 16
+    }
+
+    /// The claim was made under this rule, not under one that held the slot before it.
+    pub fn is_current_claim(&self, claim_id: u32) -> bool {
+        Self::generation(claim_id) == Self::generation(self.claim_count)
+    }
+
+    /// The id after `claim_count`, if it is still inside this rule's range.
+    pub fn next_claim_count(&self) -> Option<u32> {
+        self.claim_count.checked_add(1).filter(|next| self.is_current_claim(*next))
+    }
+
+    /// Where the claim ids of the slot's next rule start.
+    pub fn next_generation_start(&self) -> Option<u32> {
+        (self.claim_count | 0xffff).checked_add(1)
+    }
 }
 
 /// Seeds: ["claim", rule, id.to_le_bytes() (u32)]
@@ -339,7 +410,8 @@ pub struct Seat {
     pub death_reported_by: Pubkey,
     pub death_verdict: Verdict,
     pub death_confirmed_by: Pubkey,
-    /// Set when the death is confirmed (the succession wait runs from here); 0 = not confirmed.
+    /// When the death was reported; once `death_confirmed_by` is set, when it was confirmed (the succession wait
+    /// runs from there).
     pub death_pending_since: i64,
     pub bump: u8,
 }
@@ -355,6 +427,19 @@ impl Seat {
         self.death_verdict = Verdict::Pending;
         self.death_confirmed_by = Pubkey::default();
         self.death_pending_since = 0;
+    }
+
+    /// A pending report that nobody confirmed and that `who` may replace.
+    pub fn report_stale(&self, estate: &Estate, who: &Pubkey, ts: i64) -> bool {
+        self.death_confirmed_by == Pubkey::default()
+            && estate.report_replaceable(
+                self.death_verdict,
+                self.death_pending_since,
+                &self.death_reported_by,
+                who,
+                estate.reviewed_hold(),
+                ts,
+            )
     }
 
     pub fn is_monitor(&self, key: &Pubkey) -> bool {
@@ -395,14 +480,28 @@ impl Guard {
         self.fallback_wait_secs.clamp(0, MAX_GUARD_WAIT_SECS)
     }
 
+    /// How long a reported recipient has to refute before a second person can confirm.
+    pub fn refute_wait(&self) -> i64 {
+        self.fallback_wait().max(MIN_WAITING_SECS)
+    }
+
+    pub fn is_living_recipient(&self, index: usize) -> bool {
+        index < FALLBACK_COUNT && self.fallback[index] != Pubkey::default() && self.fallback_dead & (1u8 << index) == 0
+    }
+
+    /// The first living recipient at or after `from`.
+    pub fn living_recipient_from(&self, from: usize) -> Option<usize> {
+        (from..FALLBACK_COUNT).find(|i| self.is_living_recipient(*i))
+    }
+
+    /// Index of the next recipient; NO_SEAT if none.
+    pub fn next_fallback_index(&self) -> u8 {
+        self.living_recipient_from(0).map_or(NO_SEAT, |i| i as u8)
+    }
+
     /// First recipient that is set and not proven dead; Pubkey::default() if none.
     pub fn next_fallback_recipient(&self) -> Pubkey {
-        self.fallback
-            .iter()
-            .enumerate()
-            .find(|(i, k)| **k != Pubkey::default() && self.fallback_dead & (1u8 << i) == 0)
-            .map(|(_, k)| *k)
-            .unwrap_or_default()
+        self.living_recipient_from(0).map(|i| self.fallback[i]).unwrap_or_default()
     }
 }
 
@@ -413,9 +512,20 @@ pub struct ApprovalStamp {
     pub target: Pubkey,
     pub seat_index: u8,
     pub approver: Pubkey,
-    /// 0 = threshold not reached yet.
+    /// 0 = threshold not reached yet. Until it is, `seat_index` is NO_SEAT: the approvals being collected
+    /// were all given after the unlock.
     pub approved_at: i64,
     pub bump: u8,
+}
+
+impl ApprovalStamp {
+    /// The claim's approvals were given after the unlock. Those from before this death (an older program took
+    /// them) neither pay nor stand in the way of a fresh quorum.
+    pub fn votes_count(stamp: Option<&Self>, claim: &Claim, estate: &Estate) -> bool {
+        let since = estate.death_pending_since;
+        claim.created_at > since
+            || stamp.is_some_and(|s| if s.approved_at == 0 { s.seat_index == NO_SEAT } else { s.approved_at >= since })
+    }
 }
 
 /// Seeds: ["objection", target]. One per target; a resolved one can be re-raised (overwritten).
@@ -459,10 +569,15 @@ impl Objection {
             .saturating_add(estate.waiting_secs().max(DISPUTE_MIN_SECS))
     }
 
+    /// The owner showed life after it was raised, so the death it challenged, and any votes on it, are void.
+    pub fn voided_by_owner(&self, estate: &Estate) -> bool {
+        matches!(self.kind, TargetKind::Unlock | TargetKind::Fallback) && self.raised_at < estate.last_heartbeat
+    }
+
     /// Open and still binding: a challenge past its lapse time no longer blocks anything.
     pub fn is_effectively_open(&self, estate: &Estate, ts: i64) -> bool {
         self.status == ObjectionStatus::Open
-            && (self.kind == TargetKind::Fallback || ts < self.lapses_at(estate))
+            && (self.kind == TargetKind::Fallback || (ts < self.lapses_at(estate) && !self.voided_by_owner(estate)))
     }
 }
 
@@ -528,5 +643,23 @@ pub struct AgentVote {
     pub replaces: Pubkey,
     /// The wallet that voted from each seat; counts only while it still holds that seat.
     pub voters: [Pubkey; 3],
+    pub bump: u8,
+}
+
+/// Seeds: ["fallbackreport", estate, &[index]]. An open report that fallback recipient `index` died. Closed,
+/// with the rent going back to `rent_payer`, when it is rejected, refuted or confirmed.
+#[account]
+#[derive(InitSpace)]
+pub struct FallbackReport {
+    pub estate: Pubkey,
+    pub index: u8,
+    /// The recipient reported; the report is void once the list names someone else there.
+    pub recipient: Pubkey,
+    pub reporter: Pubkey,
+    /// Who created the account. A report that replaces it never takes over the rent.
+    pub rent_payer: Pubkey,
+    pub cert_hash: [u8; 32],
+    pub verdict: Verdict,
+    pub reported_at: i64,
     pub bump: u8,
 }

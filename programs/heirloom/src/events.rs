@@ -445,3 +445,57 @@ pub struct AgentChanged {
     pub agent: Pubkey,
     pub ts: i64,
 }
+
+// ---- second security review (2026-11-22)
+
+/// A seat's death report was cleared for a fresh one: it could not promote anyone who reported or confirmed it,
+/// the owner removed who confirmed it, or it was stale and gave way to new backups.
+#[event]
+pub struct SeatDeathReportCleared {
+    pub estate: Pubkey,
+    pub seat_index: u8,
+    pub ts: i64,
+}
+
+#[event]
+pub struct FallbackDeathConfirmed {
+    pub estate: Pubkey,
+    pub index: u8,
+    pub recipient: Pubkey,
+    pub confirmed_by: Pubkey,
+    pub ts: i64,
+}
+
+#[event]
+pub struct FallbackDeathRefuted {
+    pub estate: Pubkey,
+    pub index: u8,
+    pub recipient: Pubkey,
+    pub ts: i64,
+}
+
+#[event]
+pub struct AssetReleased {
+    pub estate: Pubkey,
+    pub asset: Pubkey,
+    pub nft_mint: Pubkey,
+    pub ts: i64,
+}
+
+#[event]
+pub struct MemberRemoved {
+    pub estate: Pubkey,
+    pub wallet: Pubkey,
+    /// True for a payee, false for a beneficiary.
+    pub payee: bool,
+    pub ts: i64,
+}
+
+#[event]
+pub struct RuleReused {
+    pub estate: Pubkey,
+    pub rule: Pubkey,
+    /// Claims with a lower id belong to the ended rule and can never pay.
+    pub first_claim_id: u32,
+    pub ts: i64,
+}

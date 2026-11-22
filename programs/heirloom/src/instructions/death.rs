@@ -30,20 +30,35 @@ pub fn submit_death_claim_handler(ctx: Context<SubmitDeathClaim>, cert_hash: [u8
     let submitted_by = ctx.accounts.beneficiary.key();
     let estate = &mut ctx.accounts.estate;
     require!(estate.status == EstateStatus::Active, HeirloomError::BadStatus);
-    // One open death claim at a time, so a second submission can't reset attestations.
-    require!(estate.death_cert_hash == [0u8; 32], HeirloomError::BadStatus);
+    let ts = now()?;
+    // One open death claim at a time, so a second submission can't reset attestations, until it is stale.
+    // With no trusted people left a reviewed claim is the fallback plan's proof and stays.
+    if estate.death_cert_hash != [0u8; 32] {
+        require!(
+            (estate.death_verdict == Verdict::Pending || estate.has_living_seat())
+                && estate.report_replaceable(
+                    estate.death_verdict,
+                    estate.death_pending_since,
+                    &estate.death_submitted_by,
+                    &submitted_by,
+                    estate.reviewed_hold(),
+                    ts,
+                ),
+            HeirloomError::BadStatus
+        );
+    }
 
     estate.death_cert_hash = cert_hash;
     estate.death_submitted_by = submitted_by;
     estate.death_verdict = Verdict::Pending;
     estate.death_attestations = 0;
-    estate.death_pending_since = 0;
+    estate.death_pending_since = ts;
 
     emit!(DeathClaimSubmitted {
         estate: estate.key(),
         submitted_by,
         cert_hash,
-        ts: now()?,
+        ts,
     });
     Ok(())
 }
@@ -58,11 +73,18 @@ pub struct ReviewDeath<'info> {
     pub estate: Account<'info, Estate>,
 }
 
-pub fn review_death_handler(ctx: Context<ReviewDeath>, outcome: ReviewOutcome, report_hash: [u8; 32]) -> Result<()> {
+/// `cert_hash` is the certificate the agent read: a claim that replaced it is not reviewed by mistake.
+pub fn review_death_handler(
+    ctx: Context<ReviewDeath>,
+    outcome: ReviewOutcome,
+    report_hash: [u8; 32],
+    cert_hash: [u8; 32],
+) -> Result<()> {
     let estate = &mut ctx.accounts.estate;
     require!(estate.death_cert_hash != [0u8; 32], HeirloomError::NoDeathClaim);
     require!(estate.status == EstateStatus::Active, HeirloomError::BadStatus);
     require!(estate.death_verdict == Verdict::Pending, HeirloomError::BadStatus);
+    require!(estate.death_cert_hash == cert_hash, HeirloomError::ReportChanged);
 
     let (key, ts) = (estate.key(), now()?);
     match outcome {
@@ -107,15 +129,21 @@ pub fn attest_death_handler(ctx: Context<AttestDeath>) -> Result<()> {
         HeirloomError::BadStatus
     );
     require!(estate.death_verdict.open_to_people(), HeirloomError::AgentNotApproved);
+    let submitter = estate.death_submitted_by;
+    require!(verifier != submitter, HeirloomError::OwnApproval);
 
     let bit = 1u8 << idx;
-    require!(estate.death_attestations & bit == 0, HeirloomError::AlreadyApproved);
+    let first_time = estate.death_attestations & bit == 0;
     estate.death_attestations |= bit;
 
     let ts = now()?;
-    let count = count_bits(estate.death_attestations);
+    let count = count_bits(estate.death_attestations & estate.living_seats_except(&submitter));
+    let needed = estate.death_verdict.quorum(estate.death_threshold);
+    let starts = estate.status == EstateStatus::Active && estate.quorum_met(estate.death_attestations, &submitter, needed);
+    // Signing again only completes a quorum that has dropped since.
+    require!(first_time || starts, HeirloomError::AlreadyApproved);
     // Only the attestation that reaches the threshold starts the timer; later ones don't reset it.
-    if estate.status == EstateStatus::Active && count >= estate.death_verdict.quorum(estate.death_threshold) {
+    if starts {
         estate.status = EstateStatus::DeathPending;
         estate.death_pending_since = ts;
     }

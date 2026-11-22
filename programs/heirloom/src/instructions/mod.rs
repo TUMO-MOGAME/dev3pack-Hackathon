@@ -20,7 +20,8 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{self, CloseAccount, TransferChecked};
 
 use crate::errors::HeirloomError;
-use crate::state::{Estate, Objection};
+use crate::events::DeathVetoed;
+use crate::state::{Estate, EstateStatus, Objection};
 
 pub(crate) fn now() -> Result<i64> {
     Ok(Clock::get()?.unix_timestamp)
@@ -29,6 +30,16 @@ pub(crate) fn now() -> Result<i64> {
 /// Number of set bits in an approval bitmap.
 pub(crate) fn count_bits(bitmap: u8) -> u8 {
     bitmap.count_ones() as u8
+}
+
+/// The owner signed in person: they are alive, so any death claim is void and the estate is Active again.
+pub(crate) fn record_proof_of_life(key: Pubkey, estate: &mut Estate, ts: i64) {
+    estate.last_heartbeat = ts;
+    if estate.death_cert_hash != [0u8; 32] || estate.status == EstateStatus::DeathPending {
+        estate.clear_death_claim();
+        estate.status = EstateStatus::Active;
+        emit!(DeathVetoed { estate: key, ts });
+    }
 }
 
 /// `transfer_checked` CPI. Pass `&[]` as `signer_seeds` when the authority signs the transaction.
@@ -69,6 +80,16 @@ pub(crate) fn close_token_account_cpi<'info>(
         authority,
     };
     token::close_account(CpiContext::new_with_signer(token_program, accounts, signer_seeds))
+}
+
+/// Closes an account of this program: the rent goes to `destination`.
+pub(crate) fn close_program_account(info: &AccountInfo, destination: &AccountInfo) -> Result<()> {
+    let total = destination.lamports().checked_add(info.lamports()).ok_or(HeirloomError::MathOverflow)?;
+    **destination.try_borrow_mut_lamports()? = total;
+    **info.try_borrow_mut_lamports()? = 0;
+    info.assign(&anchor_lang::system_program::ID);
+    info.resize(0)?;
+    Ok(())
 }
 
 /// True if `info` holds an initialised account of this program (used for PDAs passed unchecked,

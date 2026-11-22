@@ -16,6 +16,14 @@ fn rule_open_for(estate: &Estate, rule: &Rule) -> bool {
         || (estate.status == EstateStatus::Active && rule.starts_now)
 }
 
+/// Every payout: the beneficiary is still in the plan and the payee is still one the rule allows (a removed
+/// payee's account is closed, so it can't be passed at all).
+fn check_parties(rule: &Rule, beneficiary: &Beneficiary, payee: &Payee) -> Result<()> {
+    require!(beneficiary.active, HeirloomError::NotBeneficiary);
+    require!(payee.kind == rule.allowed_payee_kind, HeirloomError::WrongPayeeKind);
+    Ok(())
+}
+
 // ====================================================================== submit_claim
 
 #[derive(Accounts)]
@@ -82,6 +90,7 @@ pub fn submit_claim_handler(ctx: Context<SubmitClaim>, amount: u64, evidence_has
     check_year_cap(&ctx.accounts.year_cap.to_account_info(), &rule.key(), amount, false)?;
 
     let id = rule.claim_count;
+    let next_count = rule.next_claim_count().ok_or(HeirloomError::MathOverflow)?;
     let estate = ctx.accounts.estate.key();
     let rule_key = rule.key();
     let payee = ctx.accounts.payee.wallet;
@@ -103,7 +112,7 @@ pub fn submit_claim_handler(ctx: Context<SubmitClaim>, amount: u64, evidence_has
         owner_approved: false,
         bump,
     });
-    ctx.accounts.rule.claim_count = id.checked_add(1).ok_or(HeirloomError::MathOverflow)?;
+    ctx.accounts.rule.claim_count = next_count;
 
     emit!(ClaimSubmitted {
         estate,
@@ -197,32 +206,47 @@ pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
         .verifier_index(&verifier)
         .ok_or(HeirloomError::NotVerifier)?;
 
+    let estate = &ctx.accounts.estate;
     let claim = &mut ctx.accounts.claim;
+    // While the owner is alive only the owner approves; trusted people decide after the unlock.
+    require!(estate.status == EstateStatus::Unlocked, HeirloomError::BadStatus);
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
     require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
+    let claimant = claim.beneficiary;
+    require!(verifier != claimant, HeirloomError::OwnApproval);
 
-    let bit = 1u8 << idx;
-    require!(claim.approvals & bit == 0, HeirloomError::AlreadyApproved);
-    claim.approvals |= bit;
-
-    let ts = now()?;
-    let count = count_bits(claim.approvals);
     let claim_key = claim.key();
-    let estate_key = ctx.accounts.estate.key();
-    let threshold = claim.agent_verdict.quorum(ctx.accounts.estate.claim_threshold);
-
+    let estate_key = estate.key();
     let stamp = &mut ctx.accounts.approval_stamp;
-    if stamp.target == Pubkey::default() {
+    let new_stamp = stamp.target == Pubkey::default();
+    if !ApprovalStamp::votes_count((!new_stamp).then_some(&**stamp), claim, estate) {
+        claim.approvals = 0;
+        stamp.approved_at = 0;
+    }
+    if new_stamp {
         stamp.target = claim_key;
-        stamp.seat_index = idx as u8;
-        stamp.approver = verifier;
         stamp.bump = ctx.bumps.approval_stamp;
     }
-    // Only the approval that reaches the threshold starts the objection window.
-    if stamp.approved_at == 0 && count >= threshold {
+
+    let needed = claim.agent_verdict.quorum(estate.claim_threshold);
+    let was_met = estate.quorum_met(claim.approvals, &claimant, needed);
+    let bit = 1u8 << idx;
+    let first_time = claim.approvals & bit == 0;
+    claim.approvals |= bit;
+    // The approval that reaches the quorum starts the objection window, again if the quorum had been lost.
+    // Signing again only completes a quorum that has dropped since.
+    let starts = estate.quorum_met(claim.approvals, &claimant, needed) && (stamp.approved_at == 0 || !was_met);
+    require!(first_time || starts, HeirloomError::AlreadyApproved);
+
+    let ts = now()?;
+    let count = count_bits(claim.approvals & estate.living_seats_except(&claimant));
+    if starts {
         stamp.seat_index = idx as u8;
         stamp.approver = verifier;
         stamp.approved_at = ts;
+    } else if stamp.approved_at == 0 {
+        stamp.seat_index = NO_SEAT;
+        stamp.approver = verifier;
     }
 
     emit!(ClaimApproved {
@@ -290,7 +314,7 @@ pub struct ExecuteClaim<'info> {
     #[account(seeds = [GUARD_SEED, estate.key().as_ref()], bump)]
     pub guard: UncheckedAccount<'info>,
 
-    /// CHECK: the ["stamp", claim] PDA; may not exist. Read only when a Guard exists.
+    /// CHECK: the ["stamp", claim] PDA; may not exist. When the approvals were given (and, with a Guard, the window).
     #[account(seeds = [STAMP_SEED, claim.key().as_ref()], bump)]
     pub approval_stamp: UncheckedAccount<'info>,
 
@@ -301,6 +325,17 @@ pub struct ExecuteClaim<'info> {
     /// CHECK: the ["yearcap", rule] PDA; may not exist (the rule has no yearly cap). Updated when it does.
     #[account(mut, seeds = [YEAR_CAP_SEED, rule.key().as_ref()], bump)]
     pub year_cap: UncheckedAccount<'info>,
+
+    /// The claimant's Beneficiary PDA; must still be active.
+    #[account(
+        has_one = estate @ HeirloomError::NotBeneficiary,
+        constraint = beneficiary_account.wallet == claim.beneficiary @ HeirloomError::NotBeneficiary
+    )]
+    pub beneficiary_account: Box<Account<'info, Beneficiary>>,
+
+    /// The Payee PDA of claim.payee; gone once removed.
+    #[account(has_one = estate, constraint = payee_account.wallet == claim.payee @ HeirloomError::BadStatus)]
+    pub payee_account: Box<Account<'info, Payee>>,
 }
 
 pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
@@ -310,14 +345,17 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
 
     require!(rule_open_for(estate, rule), HeirloomError::BadStatus);
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
+    require!(rule.is_current_claim(claim.id), HeirloomError::ClaimFromEndedRule);
+    check_parties(rule, &ctx.accounts.beneficiary_account, &ctx.accounts.payee_account)?;
     require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
     // While the owner is alive (Active) only the owner can approve; after unlock the owner's
     // earlier approval or the verifier quorum counts.
-    let approved = if estate.status == EstateStatus::Active {
-        claim.owner_approved
-    } else {
-        claim.owner_approved || count_bits(claim.approvals) >= claim.agent_verdict.quorum(estate.claim_threshold)
-    };
+    let stamp_info = ctx.accounts.approval_stamp.to_account_info();
+    let stamp: Option<ApprovalStamp> = if account_exists(&stamp_info) { Some(read_account(&stamp_info)?) } else { None };
+    let approved = claim.owner_approved
+        || (estate.status == EstateStatus::Unlocked
+            && ApprovalStamp::votes_count(stamp.as_ref(), claim, estate)
+            && estate.quorum_met(claim.approvals, &claim.beneficiary, claim.agent_verdict.quorum(estate.claim_threshold)));
     require!(approved, HeirloomError::InsufficientApprovals);
 
     // Guardians: a monitor's open objection pauses the payment; with a Guard, a quorum approval
@@ -329,9 +367,7 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
     let guard_info = ctx.accounts.guard.to_account_info();
     if account_exists(&guard_info) && !claim.owner_approved {
         let guard: Guard = read_account(&guard_info)?;
-        let stamp_info = ctx.accounts.approval_stamp.to_account_info();
-        require!(account_exists(&stamp_info), HeirloomError::ObjectionWindowOpen);
-        let stamp: ApprovalStamp = read_account(&stamp_info)?;
+        let stamp = stamp.ok_or(HeirloomError::ObjectionWindowOpen)?;
         require!(stamp.approved_at > 0, HeirloomError::ObjectionWindowOpen);
         let window = guard.objection_window();
         let mut open_until = stamp
@@ -426,6 +462,7 @@ pub fn owner_approve_claim_handler(ctx: Context<OwnerApproveClaim>) -> Result<()
     let claim = &mut ctx.accounts.claim;
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
     require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
+    require!(ctx.accounts.rule.is_current_claim(claim.id), HeirloomError::ClaimFromEndedRule);
     require!(!claim.owner_approved, HeirloomError::AlreadyApproved);
     claim.owner_approved = true;
 
@@ -481,6 +518,17 @@ pub struct ExecuteScheduled<'info> {
     /// CHECK: the ["yearcap", rule] PDA; may not exist (the rule has no yearly cap). Updated when it does.
     #[account(mut, seeds = [YEAR_CAP_SEED, rule.key().as_ref()], bump)]
     pub year_cap: UncheckedAccount<'info>,
+
+    /// The rule's Beneficiary PDA; must still be active.
+    #[account(
+        has_one = estate @ HeirloomError::NotBeneficiary,
+        constraint = beneficiary_account.wallet == rule.beneficiary @ HeirloomError::NotBeneficiary
+    )]
+    pub beneficiary_account: Box<Account<'info, Beneficiary>>,
+
+    /// The Payee PDA of rule.fixed_payee; gone once removed.
+    #[account(has_one = estate, constraint = payee_account.wallet == rule.fixed_payee @ HeirloomError::BadStatus)]
+    pub payee_account: Box<Account<'info, Payee>>,
 }
 
 /// Pays one instalment of a recurring rule to its fixed payee once it is due.
@@ -490,6 +538,7 @@ pub fn execute_scheduled_handler(ctx: Context<ExecuteScheduled>) -> Result<()> {
 
     require!(rule.recurring_amount > 0, HeirloomError::BadStatus);
     require!(rule_open_for(estate, rule), HeirloomError::BadStatus);
+    check_parties(rule, &ctx.accounts.beneficiary_account, &ctx.accounts.payee_account)?;
     let ts = now()?;
     require!(ts >= rule.next_due, HeirloomError::NotDue);
     require!(ts <= rule.valid_until, HeirloomError::RuleExpired);
