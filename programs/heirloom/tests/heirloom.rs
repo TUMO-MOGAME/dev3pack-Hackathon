@@ -5633,3 +5633,68 @@ fn r16_only_members_of_this_estate_can_be_removed() {
     );
     expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::NotBeneficiary);
 }
+
+#[test]
+fn r02_a_replaced_persons_seat_death_confirmation_does_not_count() {
+    let (mut env, _people) = guardian_env();
+    let (v1, kid) = (env.v(1), env.kid1.insecure_clone());
+    env.report_seat_death(&kid, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    env.confirm_seat_death(&v1, 0).unwrap();
+    warp(&mut env.svm, 1);
+    let newbie = funded(&mut env.svm);
+    env.replace_seat(1, newbie.pubkey()).unwrap();
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    env.finalize_succession(0).unwrap();
+    let s = env.seat(0);
+    assert_eq!((s.holder, s.death_cert_hash, s.generation), (env.verifiers[0].pubkey(), [0u8; 32], 0));
+
+    env.report_seat_death(&kid, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    env.confirm_seat_death(&newbie, 0).unwrap();
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    env.finalize_succession(0).unwrap();
+    assert_eq!(env.seat(0).generation, 1);
+}
+
+#[test]
+fn r02_a_confirmer_who_died_keeps_their_confirmation() {
+    let (mut env, people) = guardian_env();
+    let (v1, v2, kid) = (env.v(1), env.v(2), env.kid1.insecure_clone());
+    warp(&mut env.svm, 1); // after the owner last checked in
+    env.report_seat_death(&kid, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    env.confirm_seat_death(&v1, 0).unwrap();
+    env.succeed(1, &v2);
+    env.finalize_succession(0).unwrap();
+    assert_eq!(env.seat(0).holder, people.backups[0][0].pubkey());
+}
+
+#[test]
+fn r02_replacing_the_agent_clears_the_death_claim_it_reviewed() {
+    let mut env = Env::configured();
+    env.submit_death_claim(1).unwrap();
+    env.review_death(true).unwrap();
+    warp(&mut env.svm, 1);
+    let owner = env.owner.insecure_clone();
+    env.set_agent(&owner, Keypair::new().pubkey()).unwrap();
+    let e = env.estate_state();
+    assert_eq!((e.death_cert_hash, e.death_verdict, e.last_heartbeat), ([0u8; 32], Verdict::Pending, now(&env.svm)));
+}
+
+#[test]
+fn set_will_works_only_while_active() {
+    let mut env = Env::configured();
+    let will = |env: &Env| {
+        ix(
+            heirloom::accounts::SetWill { owner: env.owner.pubkey(), estate: env.estate },
+            heirloom::instruction::SetWill { will_hash: [4u8; 32], will_uri: "ipfs://will".to_string() },
+        )
+    };
+    let i = will(&env);
+    send(&mut env.svm, i, &[&env.owner]).unwrap();
+    assert_eq!(env.estate_state().will_hash, [4u8; 32]);
+    env.unlock();
+    let i = will(&env);
+    expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::BadStatus);
+}

@@ -639,6 +639,19 @@ pub fn finalize_succession_handler(ctx: Context<FinalizeSuccession>, _index: u8)
     require!(ts >= ready_at, HeirloomError::WaitingPeriodNotOver);
     require!(!objection_open, HeirloomError::ObjectionOpen);
 
+    // The owner has since replaced or removed whoever confirmed this, which revokes the confirmation. A confirmer
+    // who died instead keeps it: their seat's successor holds that vote.
+    let by = seat.death_confirmed_by;
+    if seat.death_pending_since <= estate.last_heartbeat
+        && estate.verifier_index(&by).is_none()
+        && !seat.is_monitor(&by)
+        && by != seat.backups[1]
+    {
+        seat.clear_succession();
+        emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts });
+        return Ok(());
+    }
+
     // First backup that is still eligible: not the owner, the agent or already a holder, and not the
     // person who reported or confirmed this death (nobody promotes themselves).
     let mut eligible_next_time = false;

@@ -5,7 +5,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use super::{account_exists, now, read_account, transfer_checked_cpi};
+use super::{account_exists, now, read_account, record_proof_of_life, transfer_checked_cpi};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -211,7 +211,7 @@ pub struct SetAgent<'info> {
     pub estate: Account<'info, Estate>,
 }
 
-/// Owner, estate Active: replaces the agent.
+/// Owner, estate Active: replaces the agent. Proof of life, which also voids the old agent's death review.
 pub fn set_agent_handler(ctx: Context<SetAgent>, agent: Pubkey) -> Result<()> {
     let estate = &mut ctx.accounts.estate;
     require!(estate.status == EstateStatus::Active, HeirloomError::BadStatus);
@@ -219,7 +219,9 @@ pub fn set_agent_handler(ctx: Context<SetAgent>, agent: Pubkey) -> Result<()> {
     let previous = estate.agent;
     estate.agent = agent;
 
-    emit!(AgentChanged { estate: estate.key(), previous, agent, ts: now()? });
+    let (key, ts) = (estate.key(), now()?);
+    record_proof_of_life(key, estate, ts);
+    emit!(AgentChanged { estate: key, previous, agent, ts });
     Ok(())
 }
 
