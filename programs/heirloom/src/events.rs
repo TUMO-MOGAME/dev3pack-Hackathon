@@ -449,7 +449,8 @@ pub struct AgentChanged {
 // ---- second security review (2026-11-22)
 
 /// A seat's death report was cleared for a fresh one: it could not promote anyone who reported or confirmed it,
-/// the owner removed who confirmed it, or it was stale and gave way to new backups.
+/// the owner removed who confirmed it or gave an unwatched seat a monitor, or it was stale and gave way to new
+/// backups.
 #[event]
 pub struct SeatDeathReportCleared {
     pub estate: Pubkey,

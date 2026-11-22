@@ -346,7 +346,12 @@
           "optional": true
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "expected_amount",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "add_beneficiary",
@@ -847,7 +852,8 @@
         {
           "name": "confirmer",
           "docs": [
-            "Holder of another seat; if no other seat has a living holder: backups[1] or a monitor of this seat."
+            "Holder of another seat; if no other seat has a living holder: backups[1] or a monitor of this seat, or,",
+            "when it has neither, an active beneficiary."
           ],
           "signer": true
         },
@@ -860,6 +866,13 @@
         {
           "name": "seat",
           "writable": true
+        },
+        {
+          "name": "beneficiary_account",
+          "docs": [
+            "The confirmer's Beneficiary PDA when a beneficiary confirms; otherwise None."
+          ],
+          "optional": true
         }
       ],
       "args": [
@@ -3871,7 +3884,7 @@
         {
           "name": "authority",
           "docs": [
-            "The owner (estate Active) or the agent. Pays rent the first time."
+            "The owner, estate Active. Pays rent the first time."
           ],
           "writable": true,
           "signer": true
@@ -4924,6 +4937,12 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "fallback_report",
+          "docs": [
+            "Read only when paying by the fallback list: an agent-approved report on that recipient holds the sweep."
+          ]
         }
       ],
       "args": []
@@ -6673,6 +6692,11 @@
       "code": 6060,
       "name": "ClaimFromEndedRule",
       "msg": "The claim belongs to a rule that was ended and replaced"
+    },
+    {
+      "code": 6061,
+      "name": "OfferChanged",
+      "msg": "The offer is no longer the amount that was agreed"
     }
   ],
   "types": [
@@ -9228,7 +9252,8 @@
       "name": "SeatDeathReportCleared",
       "docs": [
         "A seat's death report was cleared for a fresh one: it could not promote anyone who reported or confirmed it,",
-        "the owner removed who confirmed it, or it was stale and gave way to new backups."
+        "the owner removed who confirmed it or gave an unwatched seat a monitor, or it was stale and gave way to new",
+        "backups."
       ],
       "type": {
         "kind": "struct",

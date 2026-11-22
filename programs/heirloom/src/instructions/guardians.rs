@@ -45,6 +45,23 @@ fn validate_monitors(holder: &Pubkey, monitors: [Pubkey; 2]) -> Result<[Pubkey; 
     Ok(m)
 }
 
+fn is_active_beneficiary(estate: &Pubkey, who: &Pubkey, beneficiary: Option<&Beneficiary>) -> bool {
+    beneficiary.is_some_and(|b| b.estate == *estate && b.wallet == *who && b.active)
+}
+
+/// No other seat is held and this one has neither a monitor nor a second backup: only then may an active
+/// beneficiary confirm its holder's death.
+fn beneficiary_may_confirm(estate: &Estate, seat: &Seat) -> bool {
+    estate.living_seats_except(&seat.holder) == 0 && !seat.monitors.iter().any(is_set) && !is_set(&seat.backups[1])
+}
+
+/// Whether `who` still is an active beneficiary, from their Beneficiary PDA (which may not exist).
+fn beneficiary_still_active(infos: &[AccountInfo], estate: &Pubkey, who: &Pubkey) -> Result<bool> {
+    let (expected, _) = Pubkey::find_program_address(&[BENEFICIARY_SEED, estate.as_ref(), who.as_ref()], &crate::ID);
+    let info = infos.first().filter(|i| i.key() == expected).ok_or(HeirloomError::NotConfirmer)?;
+    Ok(account_exists(info) && is_active_beneficiary(estate, who, Some(&read_account::<Beneficiary>(info)?)))
+}
+
 /// A living trusted person, a monitor (of `seat`) or an active beneficiary of this estate; never the agent,
 /// who already reviews every report.
 fn is_participant(estate: &Account<Estate>, who: &Pubkey, seat: Option<&Seat>, beneficiary: Option<&Beneficiary>) -> bool {
@@ -52,7 +69,7 @@ fn is_participant(estate: &Account<Estate>, who: &Pubkey, seat: Option<&Seat>, b
     *who != estate.agent
         && (estate.verifier_index(who).is_some()
             || seat.is_some_and(|s| s.estate == key && s.is_monitor(who))
-            || beneficiary.is_some_and(|b| b.estate == key && b.wallet == *who && b.active))
+            || is_active_beneficiary(&key, who, beneficiary))
 }
 
 /// Who may report or confirm a fallback recipient's death: a participant or a living listed recipient.
@@ -336,8 +353,15 @@ pub fn set_seat_monitors_handler(ctx: Context<SetSeatMonitors>, _index: u8, moni
         ctx.accounts.estate.status == EstateStatus::Active,
         HeirloomError::BadStatus
     );
+    let estate = &ctx.accounts.estate;
     let seat = &mut ctx.accounts.seat;
-    seat.monitors = validate_monitors(&seat.holder, monitors)?;
+    let monitors = validate_monitors(&seat.holder, monitors)?;
+    // Someone watches this seat from now on, so a beneficiary's confirmation gives way to theirs.
+    if is_set(&seat.death_confirmed_by) && is_set(&monitors[0]) && beneficiary_may_confirm(estate, seat) {
+        seat.clear_succession();
+        emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts: now()? });
+    }
+    seat.monitors = monitors;
     emit_seat_configured(seat)
 }
 
@@ -499,7 +523,8 @@ pub fn review_seat_death_handler(
 #[derive(Accounts)]
 #[instruction(index: u8)]
 pub struct ConfirmSeatDeath<'info> {
-    /// Holder of another seat; if no other seat has a living holder: backups[1] or a monitor of this seat.
+    /// Holder of another seat; if no other seat has a living holder: backups[1] or a monitor of this seat, or,
+    /// when it has neither, an active beneficiary.
     pub confirmer: Signer<'info>,
 
     pub estate: Account<'info, Estate>,
@@ -511,6 +536,9 @@ pub struct ConfirmSeatDeath<'info> {
         has_one = estate
     )]
     pub seat: Account<'info, Seat>,
+
+    /// The confirmer's Beneficiary PDA when a beneficiary confirms; otherwise None.
+    pub beneficiary_account: Option<Box<Account<'info, Beneficiary>>>,
 }
 
 pub fn confirm_seat_death_handler(ctx: Context<ConfirmSeatDeath>, _index: u8) -> Result<()> {
@@ -535,7 +563,10 @@ pub fn confirm_seat_death_handler(ctx: Context<ConfirmSeatDeath>, _index: u8) ->
         .filter(|j| *j != idx && is_set(&estate.verifiers[*j]))
         .collect();
     let allowed = if other_living.is_empty() {
-        (is_set(&seat.backups[1]) && confirmer == seat.backups[1]) || seat.is_monitor(&confirmer)
+        (is_set(&seat.backups[1]) && confirmer == seat.backups[1])
+            || seat.is_monitor(&confirmer)
+            || (beneficiary_may_confirm(estate, seat)
+                && is_active_beneficiary(&estate.key(), &confirmer, ctx.accounts.beneficiary_account.as_deref().map(|b| &**b)))
     } else {
         other_living.iter().any(|j| estate.verifiers[*j] == confirmer)
     };
@@ -619,6 +650,8 @@ pub struct FinalizeSuccession<'info> {
 
     /// Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer).
     pub caller: Signer<'info>,
+    // remaining_accounts: the confirmer's Beneficiary PDA, only when the owner showed life after a confirmation
+    // that could only have been a beneficiary's.
 }
 
 pub fn finalize_succession_handler(ctx: Context<FinalizeSuccession>, _index: u8) -> Result<()> {
@@ -646,9 +679,16 @@ pub fn finalize_succession_handler(ctx: Context<FinalizeSuccession>, _index: u8)
     let may_still_confirm = estate.verifier_index(&by).is_some()
         || (no_other_holder && (seat.is_monitor(&by) || by == seat.backups[1]));
     if seat.death_pending_since <= estate.last_heartbeat && !may_still_confirm {
-        seat.clear_succession();
-        emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts });
-        return Ok(());
+        // A beneficiary's confirmation stands while that route is open and they are still in the plan. Their
+        // account has to be passed, so that leaving it out can't revoke the confirmation.
+        let stands = by != estate.agent
+            && beneficiary_may_confirm(estate, seat)
+            && beneficiary_still_active(ctx.remaining_accounts, &estate.key(), &by)?;
+        if !stands {
+            seat.clear_succession();
+            emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts });
+            return Ok(());
+        }
     }
 
     // First backup that is still eligible: not the owner, the agent or already a holder, and not the
@@ -1175,7 +1215,7 @@ pub fn vote_objection_handler<'info>(ctx: Context<'info, VoteObjection<'info>>, 
 
 #[derive(Accounts)]
 pub struct SetAssetMedia<'info> {
-    /// The owner (estate Active) or the agent. Pays rent the first time.
+    /// The owner, estate Active. Pays rent the first time.
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -1204,8 +1244,8 @@ pub fn set_asset_media_handler(
 ) -> Result<()> {
     let authority = ctx.accounts.authority.key();
     let estate = &ctx.accounts.estate;
-    let is_owner = authority == estate.owner && estate.status == EstateStatus::Active;
-    require!(is_owner || authority == estate.agent, HeirloomError::NotOwner);
+    // Only the living owner decides what buyers see.
+    require!(authority == estate.owner && estate.status == EstateStatus::Active, HeirloomError::NotOwner);
     require!(photo_count <= MAX_PHOTOS, HeirloomError::InvalidAmount);
 
     let ts = now()?;
@@ -1616,11 +1656,10 @@ pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
     let report_info = ctx.accounts.fallback_report.to_account_info();
     if account_exists(&report_info) {
         let r: FallbackReport = read_account(&report_info)?;
-        let holds = r.recipient == recipient
-            && r.verdict == Verdict::Approved
-            && r.reported_at < runs_at
-            && ts < r.reported_at.saturating_add(guard.refute_wait().saturating_mul(2));
-        require!(!holds, HeirloomError::DeathReportOpen);
+        require!(
+            !(r.reported_at < runs_at && r.holds_payment(guard, &recipient, ts)),
+            HeirloomError::DeathReportOpen
+        );
     }
 
     let amount = ctx.accounts.vault.amount;
