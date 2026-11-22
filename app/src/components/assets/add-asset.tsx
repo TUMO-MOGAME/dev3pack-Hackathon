@@ -151,7 +151,7 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader eyebrow={copy.eyebrow} title={a.title} body={a.body} />
-      <div className="grid gap-4">
+      <div className="grid gap-4 *:min-w-0">
         <Card>
           <fieldset className="min-w-0">
             <legend className="text-small font-semibold">{a.kindLegend}</legend>
