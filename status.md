@@ -3,33 +3,45 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-22 (run-through videos of both sites; 30 bugs from them fixed: estate switcher, gen-3 own plan, signed estate-meta, Legacy Book without cloning, wording fixes)
-**Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
+**Last updated:** 2026-11-22 (judge-review fixes P1-P9, S1-S7, A1-A3 shipped: devnet program upgraded, both sites deployed, newcomer flow proven live)
+**Phase:** preparing for Dev3pack Global (27-29 Nov 2026; prework allowed and disclosed). Submitted to W3Node 13 Nov. Both sites deploy from `main`. The repo goes public on 27 Nov (Tumo).
 
 
-## JUDGE REVIEW (22 Nov 2026, Dev3pack rubric; review only, no code changed)
+## JUDGE REVIEW + FIXES (22 Nov 2026): SHIPPED
 ### Done
-- Reviewed HEAD 65640d4: vitest 913/913, program 65/65, tsc (after next typegen), eslint and build pass. The devnet binary equals the local anchor build whose source mirror matches HEAD.
-- Not checked: video content, Android/MWA on a phone, a signed end-to-end run of the live UI.
-### Blockers for a Dev3pack entry
-- The event is 27-29 Nov (this file says it ends 30 Nov). All 243 commits predate it: prework is allowed (Tumo, 22 Nov), so it must be disclosed.
-- The GitHub repo is private (404 for judges). README "Pre-existing code disclosure: None" is untrue for this event, and 162 commits postdate the 10-13 Nov window it claims.
-### Next up (found in review; nothing fixed)
-- Reproduced in LiteSVM: a claimant's self-dispute permanently blocks monitor objections on that claim; vault surplus is stranded after unlock; an expired listing cannot be relisted; missed instalments all pay out at once on unlock.
-- Reproduced with mocked route tests: /api/review signs needs_human as approve (fallback-death has no human step after it) and passes caller-supplied context as trusted; /api/list-asset signs for anonymous callers (60 s + no relist = stuck asset).
-- From reading the code: /api/accept-offer is unauthenticated (a buyer can settle their own floor offer at once); the SPECIMEN_NOTE footer relaxes review for any uploader; the agent key cannot be rotated; the agent can set an un-changeable Guard window; monitor objections other than fallback never lapse; a new devnet wallet has no SOL or test USDT path to create and fund an estate.
-- README is stale: 27 instructions (49), 25 program tests (65), 516 and 230 app tests (913).
+- Program: plan §17 P1-P9. 54 instructions, 89 LiteSVM tests. Devnet upgraded (tx 5pQ1yCmk...yaveb) and byte-identical to the build. Rollback binary: target/backup/ (local).
+- Server S1-S7: signed role-checked agent routes, chain-built review facts, referrals, members-only records, drain limits.
+- Product A1-A3 in both services: starter funds, practice wallets, residual, end rule, relist, referred verdict. A car is no longer required to sign.
+- Found while fixing: beneficiary and payee names were written on-chain (now roles; test added); plan signing stalled on RPC 429s (batched reads, packed txs: 19 s, resumable); a referred claim read as declined.
+- Checked live: fresh wallet start to payout with 0 errors; original exploits refused; 40 screen checks with 0 axe, overflow or page errors; Lighthouse 95-100 / 100 / 100 / 100 on the two pages measured; clean clone 965/965.
+- Agent stocked: 20,000 test USDT and +2 SOL from the deployer (which keeps about 5.4, enough for one upgrade buffer).
+### Not verified live (tests only)
+- sweep_residual, relist, agent rotation (no screen yet: builders only), referred death/hardship, the scheduler's new schedule, signed list/settle by a real trusted person, phone-wallet read pass.
+### Known limits
+- accept_offer: the program enforces the floor; "highest offer" is the server's choice.
+- Replay and rate limits are per server instance (the starter's cap and reserve are read from the chain).
+- Asset photos and the voice-session URL are readable without a wallet (rate limited).
+- Names already on devnet stay forever (seeded fictional personas and test runs). Seed scripts still write those fictional labels.
+- Old git history still shows local paths and key-file names (no secrets found). All commits carry the personal Gmail.
+### Blockers / next up (Tumo)
+- Supabase keys + migrations: without them every deploy or restart wipes names, reports and letters. The biggest live-demo risk.
+- Dedicated devnet RPC URL on both Vercel projects.
+- 5+ real interviews in docs/validation.md (never invent them).
+- New video + transcript: docs/dev3pack-video-script.md.
+- Physical-phone MWA test before claiming the mobile prize.
+- Before 27 Nov: decide on the 3 remote feature branches and old history; then make the repo public.
+- Starter capacity is about 20 grants (15/day, 8/hour per network): top up the agent's SOL before judging.
 ### Decisions log
-- 22 Nov (Tumo): prework is allowed by the organisers; fix every finding and deploy today; repo public on 27 Nov (Tumo does it).
-- 22 Nov: design changes for the fixes are plan.md §17 (why: the judge review findings above). In progress on fix/judge-review.
+- 22 Nov (Tumo): prework allowed; fix every finding and deploy today; repo public on 27 Nov.
+- 22 Nov: design in plan §17. No account layout change; objections lapse after two waiting periods (one would expire as an unlock becomes possible); names never on-chain, universities and schools excepted.
 
 ## OPEN ITEMS FOR TUMO (as of 19 Nov 2026)
-1. Pitch video: re-cut the "Dad's call" part (from 3:27); that feature is gone. Say "a stand-in voice" for the demo voice.
+1. (Superseded by the new Dev3pack video.) Pitch video: re-cut the "Dad's call" part (from 3:27); that feature is gone. Say "a stand-in voice" for the demo voice.
 2. ElevenLabs dashboard: delete the old "Heirloom legacy <hash>" call agents by hand.
 3. Supabase: keys + migrations 0005-0008, or devnet letters/voice data live in server memory and vanish on restart.
 4. A dedicated devnet RPC URL (rate limits are the biggest live-demo risk).
 5. Native-speaker read of the af/st/zu copy, including the new demo letters.
-6. The second hackathon's prize brief and rubric (ends 30 Nov 2026).
+6. Dev3pack (27-29 Nov 2026): check the official submission time and form.
 7. `app/.env.example`: remove `LEGACY_SPEAK_SECRET` (unused); `ELEVENLABS_HEIRLOOM_VOICE_ID` and new `ELEVENLABS_STANDIN_VOICE_ID` are optional overrides (.env* files are Tumo's to edit).
 8. Decide whether to clone a real voice for the demo Thabo (consenting speaker) instead of the stock stand-in.
 
