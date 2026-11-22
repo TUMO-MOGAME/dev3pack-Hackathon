@@ -6,6 +6,7 @@
 import { Connection, PublicKey, Transaction, type TransactionInstruction } from "@solana/web3.js";
 import { chainConfig } from "./config";
 import { explorerTx } from "../format";
+import { batched } from "./batch";
 
 /**
  * The free devnet RPC throttles bursts with HTTP 429. web3.js retries those itself but logs every retry with
@@ -22,7 +23,14 @@ export async function quietRetryFetch(input: Parameters<typeof fetch>[0], init?:
 
 let conn: Connection | null = null;
 export function getConnection(): Connection {
-  if (!conn) conn = new Connection(chainConfig.rpcUrl, { commitment: "confirmed", disableRetryOnRateLimit: true, fetch: quietRetryFetch });
+  if (!conn) {
+    const c = new Connection(chainConfig.rpcUrl, { commitment: "confirmed", disableRetryOnRateLimit: true, fetch: quietRetryFetch });
+    const single = c.getAccountInfo.bind(c);
+    const many = batched((keys: PublicKey[]) => c.getMultipleAccountsInfo(keys, "confirmed"));
+    // Plain confirmed reads share one getMultipleAccounts; anything with other options goes through as it was.
+    c.getAccountInfo = (key, options) => (options === undefined || options === "confirmed" ? many(key) : single(key, options));
+    conn = c;
+  }
   return conn;
 }
 

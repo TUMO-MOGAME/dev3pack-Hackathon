@@ -20,7 +20,7 @@ import { decryptSeed, encryptSeed, assertPin } from "./crypto";
 import { isPhoneWallet, loadActive, loadWallets, saveActive, saveWallets, withRole, type StoredWallet } from "./store";
 import { loadPhoneDriver } from "./phone";
 import type { PhoneSigner } from "./phone-signer";
-import { isValidSeed, newSeedPhrase, openAccount, readOnly, wdkPartialSign, wdkSign, wdkSignAndSend, type WdkAccount } from "./wdk";
+import { isValidSeed, newSeedPhrase, openAccount, wdkPartialSign, wdkSign, wdkSignAndSend, type WdkAccount } from "./wdk";
 import { mockSignature, personaSessions } from "./personas";
 import { setActiveSigner } from "./signer";
 import { ensureReadPass } from "../access/client";
@@ -70,18 +70,18 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
   }, [isMock]);
 
   const refreshBalances = useCallback(async () => {
-    if (isMock) return;
-    const mint = chainConfig.usdtMint;
-    const updated = await Promise.all(stored.current.map(async (w) => {
-      try {
-        const acc = unlocked.current.get(w.address)?.account ?? (await readOnly(w.address, chainConfig.rpcUrl));
-        const [lamports, usdt] = await Promise.all([acc.getBalance(), mint ? acc.getTokenBalance(mint) : Promise.resolve(0n)]);
-        return toSession(w, Number(lamports) / 1e9, usdt);
-      } catch {
-        return toSession(w);
-      }
-    }));
-    setSessions(updated);
+    if (isMock || !stored.current.length) return;
+    const wallets = [...stored.current];
+    try {
+      const { readBalances } = await import("../chain/balances");
+      const held = await readBalances(wallets.map((w) => w.address));
+      setSessions((prev) => stored.current.map((w) => {
+        const b = held.get(w.address);
+        return b ? { ...toSession(w, b.lamports / 1e9, b.usdt), balanceKnown: true } : prev.find((s) => s.address === w.address) ?? toSession(w);
+      }));
+    } catch {
+      // A rate-limited read keeps the last balances: showing zero would look like the money had gone.
+    }
   }, [isMock]);
 
   useEffect(() => { if (ready) void refreshBalances(); }, [ready, refreshBalances]);
@@ -123,14 +123,24 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
   const createPractice = useCallback(async (people: { label: string; role: Role }[]): Promise<Base58[]> => {
     if (!people.length) return [];
     if (isMock) throw new Error("The demo family already has wallets.");
-    const pin = await pinRef.current("create", people.map((p) => p.label).join(", "));
+    // Someone already on this device keeps their wallet, so trying again never makes a second family.
+    const onDevice = (p: { label: string; role: Role }) => stored.current.find((w) => w.label === p.label && w.role === p.role);
+    if (people.every(onDevice)) return people.map((p) => onDevice(p)!.address);
+    const pin = await pinRef.current("create", people.filter((p) => !onDevice(p)).map((p) => p.label).join(", "));
     if (!pin) throw new Error("A PIN is needed to keep the wallets safe on this device.");
     assertPin(pin);
     const made: { stored: StoredWallet; session: WalletSession }[] = [];
+    const addresses: Base58[] = [];
     for (const { label, role } of people) {
+      const have = onDevice({ label, role });
+      if (have) {
+        addresses.push(have.address);
+        continue;
+      }
       const phrase = await newSeedPhrase();
       const acc = await openAccount(phrase, chainConfig.rpcUrl);
       const address = acc.address;
+      addresses.push(address);
       made.push({
         stored: { kind: "wdk", address, label, role, enc: await encryptSeed(phrase, pin), createdAt: Date.now() },
         session: { address, label, role, solBalance: 0, usdtBalance: 0n },
@@ -140,7 +150,7 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
     }
     persist([...stored.current, ...made.map((m) => m.stored)]);
     setSessions((prev) => [...prev, ...made.map((m) => m.session)]);
-    return made.map((m) => m.session.address);
+    return addresses;
   }, [isMock]);
 
   const connectPhone = useCallback(async (label: string, role: Role, walletName: string): Promise<WalletSession> => {

@@ -55,6 +55,8 @@ import { practicePayees } from "../continuity/practice";
 import { residualPda as residualAddress, guardPda as guardAddress } from "../chain/pda";
 import { rulePda as rulePdaOf } from "../chain/pda";
 import type { PayeeKind } from "../types";
+import { pack } from "../chain/pack";
+import { rulesStillToAdd } from "../continuity/resume";
 
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
 function legacySigner(estate: Base58): LegacySigner {
@@ -490,23 +492,24 @@ export function createChainService(): HeirloomService {
         }));
       }
       setup.push(ix.setWill(ctx, owner, willHash, `heirloom:will:${willHash.slice(0, 16)}`));
-      txs.push(await send(setup));
 
-      const existingBens = new Set((exists ? (await fetchEstateRaw(estate.toBase58())).beneficiaries : []).map((b) => b.wallet));
+      const before = exists ? await fetchEstateRaw(estate.toBase58()) : null;
+      const existingBens = new Set((before?.beneficiaries ?? []).map((b) => b.wallet));
       const benIxs = draft.beneficiaries.filter((b) => !existingBens.has(b.wallet!)).map((b) => ix.addBeneficiary(ctx, owner, pk(b.wallet!), b.label));
-      for (const group of chunk(benIxs, 3)) txs.push(await send(group));
+      setup.push(...benIxs);
 
       let ruleId = exists ? num(exists, "rule_count") : 0;
       // Recurring rules pay a fixed payee, which must already be an approved payee (matched by name).
-      const payees: { name: string; kind: PayeeKind; wallet: Base58 }[] = exists ? [...(await fetchEstateRaw(estate.toBase58())).payees] : [];
+      const payees: { name: string; kind: PayeeKind; wallet: Base58 }[] = [...(before?.payees ?? [])];
       if (opts.practice) {
         // Practice institutions: fresh addresses on the test network, so every rule has someone to pay.
         const made = practicePayees(draft.rules, payees).map((p) => ({ ...p, wallet: Keypair.generate().publicKey.toBase58() }));
-        for (const group of chunk(made, 3)) txs.push(await send(group.map((p) => ix.addPayee(ctx, owner, pk(p.wallet), p.kind, p.name))));
+        for (const p of made) setup.push(ix.addPayee(ctx, owner, pk(p.wallet), p.kind, p.name));
         payees.push(...made);
       }
       const now = Math.floor(Date.now() / 1000);
-      const ruleIxs = draft.rules.map((r) => {
+      // Signing again after a dropped connection adds only the rules that are not there yet.
+      const ruleIxs = rulesStillToAdd(draft.rules, draft.beneficiaries, before?.rules ?? []).map((r) => {
         const ben = draft.beneficiaries.find((b) => b.label === r.beneficiaryLabel);
         if (!ben?.wallet) throw new Error(`Rule for unknown beneficiary "${r.beneficiaryLabel}".`);
         let recurring: Parameters<typeof ix.addRule>[2]["recurring"];
@@ -527,10 +530,11 @@ export function createChainService(): HeirloomService {
           startsNow: r.startsNow, recurring,
         });
       });
-      for (const group of chunk(ruleIxs, 2)) txs.push(await send(group));
+      setup.push(...ruleIxs);
 
       const heir = draft.beneficiaries.find((b) => b.label === opts.residualLabel) ?? draft.beneficiaries[0];
-      if (heir?.wallet && heir.wallet !== owner.toBase58()) txs.push(await send([ix.setResidual(ctx, owner, pk(heir.wallet))]));
+      if (heir?.wallet && heir.wallet !== owner.toBase58()) setup.push(ix.setResidual(ctx, owner, pk(heir.wallet)));
+      for (const group of pack(setup)) txs.push(await send(group));
 
       if (opts.practice) {
         const people = [...new Set([...draft.beneficiaries, ...draft.verifiers].map((p) => p.wallet!))].filter((w) => w !== owner.toBase58());

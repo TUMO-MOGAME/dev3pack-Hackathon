@@ -1,6 +1,7 @@
 "use client";
 /** Continuity (plan.md §17): starter funds, practice wallets, what is left, ending a rule, referrals. */
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { continuity } from "@/content/continuity";
 import { useLocale } from "@/lib/i18n/client";
 import { useEstate } from "@/lib/hooks/estate";
@@ -23,17 +24,16 @@ export function StarterBanner() {
   const t = useText();
   const { session, refreshBalances, ready } = useWallet();
   const { isMock, run, busy } = useEstate();
+  const path = usePathname();
   const [done, setDone] = useState<string | null>(null);
-  const [checked, setChecked] = useState<string | null>(null);
-  // Balances start at zero until read: look once before offering, so a funded wallet never sees this flash.
   const address = session?.address ?? null;
+  const known = !!session?.balanceKnown;
+  // Balances show as zero until read: offer only after a real read, so a funded wallet never sees this.
   useEffect(() => {
-    if (isMock || !ready || !address || checked === address) return;
-    let alive = true;
-    void refreshBalances().finally(() => { if (alive) setChecked(address); });
-    return () => { alive = false; };
-  }, [isMock, ready, address, checked, refreshBalances]);
-  if (isMock || !session || checked !== session.address || done === session.address) return null;
+    if (!isMock && ready && address && !known) void refreshBalances();
+  }, [isMock, ready, address, known, refreshBalances]);
+  // Not while the recovery phrase is on screen.
+  if (isMock || !session || !known || done === session.address || path?.startsWith("/start")) return null;
   if (session.solBalance >= 0.02 || session.usdtBalance > BigInt(0)) return null;
   const get = async () => {
     const r = await run("starter", (s) => s.requestStarter(), t.starter.done, true);
