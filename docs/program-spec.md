@@ -205,7 +205,7 @@ Succession → the Seat PDA; Fallback → the Guard PDA. Vote bitmaps: seat i se
 | `owner_replace_seat` | index, new_holder | owner | Active; new_holder set, ≠ owner, not already a holder (DuplicateVerifier); clears any pending succession; generation += 1 |
 | `raise_objection` | kind, target, seat_index, reason_hash | monitor of `seat` (for Fallback also an active beneficiary) | Guard required. Claim/Sale/Hardship/Succession: monitor of seat `seat_index` (NotMonitor). Unlock: any monitor (seat_index stored 255). Fallback: any monitor or beneficiary (255). Target checks (BadStatus): Claim Open **and approved by the watched holder**; Unlock: estate DeathPending or Active with a death claim; Sale: asset Listed; Hardship: Open/Approved, approved by the watched holder, asset not Sold; Succession: report pending (NoSuccessionPending); Fallback: started (FallbackNotReady), not done (FallbackDone). Existing objection Open → ObjectionOpen; a resolved one is overwritten (re-raise), except a Dismissed one on a Claim/Hardship (BadStatus). open_objections += 1 |
 | `vote_objection` | uphold bool | the owner while Active (decides alone); else a seat holder ≠ watched holder ≠ objector (NotVerifier); Fallback: a monitor of `voter_seat` ≠ objector (NotMonitor) | objection Open (BadStatus); one vote each (AlreadyApproved); 2 uphold → Upheld, 2 dismiss → Dismissed; open_objections −= 1. Upheld: Claim → Rejected; Unlock → death claim cleared, estate Active; Sale → asset back to Held (relist to sell); Hardship → Rejected and asset.hardship_beneficiary cleared; Succession → report cleared; Fallback → fallback_started_at = 0 |
-| `set_asset_media` | kind, photos_root, photo_count | owner (Active) or agent (pays first time) | NotOwner; photo_count ≤ 24 (InvalidAmount); creates/updates AssetMedia |
+| `set_asset_media` | kind, photos_root, photo_count | owner, Active only (pays first time) | NotOwner; photo_count ≤ 24 (InvalidAmount); creates/updates AssetMedia |
 | `report_fallback_death` | index u8, cert_hash | anyone | index < 4 (InvalidAmount); not done; recipient set (NoFallbackRecipient); not already dead (BadStatus); cert ≠ 0. Emits only (the agent reviews the certificate off-chain) |
 | `review_fallback_death` | index, approve, report_hash | agent | as above; approve sets the dead bit and, if the fallback already started, **restarts the countdown** |
 | `start_fallback` | – | anyone | not done; not started (or the owner showed life since: last_heartbeat ≥ started_at) (BadStatus); all 3 Seats vacant (SeatsNotVacant); estate Unlocked or death_verdict Approved (FallbackNotReady); a living recipient (NoFallbackRecipient) |
@@ -470,11 +470,11 @@ Participants of a fallback report: living trusted people, a monitor (passes `sig
 | `execute_claim` | same | payer(w,s), estate, rule(w), claim(w), payee_wallet, usdt_mint, vault(w), payee_usdt(w), token_program, associated_token_program, system_program, guard, approval_stamp, objection, year_cap(w), **beneficiary_account** `["beneficiary", estate, claim.beneficiary]`, **payee_account** `["payee", estate, claim.payee]` | current claim (ClaimFromEndedRule); beneficiary active (NotBeneficiary); payee present (Anchor 3012 when removed) and of the rule's kind (WrongPayeeKind) |
 | `execute_scheduled` | same | payer(w,s), estate, rule(w), payee_wallet, usdt_mint, vault(w), payee_usdt(w), token_program, associated_token_program, system_program, year_cap(w), **beneficiary_account** `["beneficiary", estate, rule.beneficiary]`, **payee_account** `["payee", estate, rule.fixed_payee]` | as execute_claim, without the claim check |
 | `approve_hardship` | same | same | quorum as above; OwnApproval |
-| `accept_offer` | same | as before, then **co_signer(s,o)** | buyer is not the agent (BadAgent). A living seat exists: co_signer is a holder, not the buyer or agent (CoSignerRequired). None left: now >= listing_ends (ListingStillOpen). The agent still signs and pays |
+| `accept_offer` | **expected_amount u64** (R19) | as before, then **co_signer(s,o)** | buyer is not the agent (BadAgent). A living seat exists: co_signer is a holder, not the buyer or agent (CoSignerRequired). None left: now >= listing_ends (ListingStillOpen). The agent still signs and pays |
 | `set_seat_backups` | same | same | never the agent; a stale report is cleared instead of blocking |
 | `report_seat_death` | same | reporter(s), estate, seat(w), **beneficiary_account(o)** | reporter: trusted person, owner, this seat's monitor or backup, active beneficiary; not the agent (NotParticipant). Replaces a stale unconfirmed report; stores the time |
 | `review_seat_death` | index, approve, report_hash, **cert_hash** | same | ReportChanged |
-| `confirm_seat_death` | same | same | never the agent |
+| `confirm_seat_death` | same | confirmer(s), estate, seat(w), **beneficiary_account(o)** (R18) | never the agent; the beneficiary route below |
 | `finalize_succession` | same | same | never BadBackup, and may succeed without promoting: clears the report (SeatDeathReportCleared) when the only possible backup reported or confirmed it, or the owner has since removed the confirmer (they confirmed at or before `last_heartbeat` and could not confirm now). Vacates when no backup could ever be eligible |
 | `owner_replace_seat` | same | same | proof of life; not the agent (BadAgent) |
 | `raise_objection` | same | same | not by whoever gains (OwnClaimDispute). Unlock: once per claim while Active and once per wait. Claim: one dismissed before this death doesn't use up the objection. Fallback: only on a valid countdown |
@@ -513,3 +513,28 @@ ReportChanged 6058, DeathReportOpen 6059, ClaimFromEndedRule 6060`.
 
 `[profile.release.package.heirloom] opt-level = "z"` in the root Cargo.toml: the upgrade budget caps the binary
 at 1,020,000 bytes. Without the program keypair build with `anchor build --ignore-keys`; never `anchor keys sync`.
+
+### Open items (plan.md 18.8: R18 to R22)
+
+| Instruction | Args | Accounts | Rules |
+|---|---|---|---|
+| `confirm_seat_death` | index | confirmer(s), estate, seat(w), **beneficiary_account(o)** | R18. When no other seat is held and this seat has neither a monitor nor `backups[1]`, an active beneficiary may confirm: never the reporter, the holder, `backups[0]` or the agent |
+| `finalize_succession` | index | same five accounts. **In one case, one remaining account** (below) | R18. Such a confirmation stands while that route applies and the confirmer is an active beneficiary |
+| `set_seat_monitors` | same | same | R18. Giving a seat a monitor closes the route: it clears a confirmation made by it (SeatDeathReportCleared) |
+| `accept_offer` | **expected_amount u64** | same | R19. Must equal `offer.amount` (OfferChanged) |
+| `sweep_residual` | none | payer(w,s), estate, residual, guard, recipient, usdt_mint, vault(w), recipient_usdt(w), token_program, associated_token_program, system_program, **fallback_report** `["fallbackreport", estate, [the Guard's first living index, else 255]]` (255 also without a Guard; may not exist). Remaining: the rules, in id order | R20. Only when paying by the fallback list: an Approved report on that recipient holds the sweep while now < reported_at + 2R (DeathReportOpen) |
+| `approve_hardship` | same | same | R21. BadStatus while another beneficiary's approved hardship stands on the asset. An upheld objection to that one frees it |
+| `set_asset_media` | same | same | R22. `estate.owner` while Active only (NotOwner) |
+
+**The one case for `finalize_succession`:** `death_pending_since <= last_heartbeat` (the owner showed life at or
+after the confirmation), the confirmer is neither a holder, a monitor of the seat nor `backups[1]`, and the
+beneficiary route applies to the seat. Then the first remaining account must be
+`["beneficiary", estate, death_confirmed_by]`, whether or not it exists: active, the succession goes on; inactive
+or missing, the report is cleared. Not passed: NotConfirmer, so leaving it out can't revoke a confirmation.
+Passing it every time a beneficiary confirmed is harmless.
+
+**How the sweep's hold is bounded:** each report holds for at most 2R from when it was made. A report that
+replaces it starts Pending and holds nothing until the agent approves it. The recipient can refute and sweep in
+the same transaction at any time.
+
+Error appended: `OfferChanged 6061`.

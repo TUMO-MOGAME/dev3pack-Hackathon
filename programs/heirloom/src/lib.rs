@@ -192,8 +192,8 @@ pub mod heirloom {
         instructions::sale::approve_hardship_handler(ctx)
     }
 
-    pub fn accept_offer(ctx: Context<AcceptOffer>) -> Result<()> {
-        instructions::sale::accept_offer_handler(ctx)
+    pub fn accept_offer(ctx: Context<AcceptOffer>, expected_amount: u64) -> Result<()> {
+        instructions::sale::accept_offer_handler(ctx, expected_amount)
     }
 
     // ------------------------------------------------------------------ guardians (2026-11-14)
