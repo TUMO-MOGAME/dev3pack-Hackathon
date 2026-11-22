@@ -293,7 +293,7 @@ describe("specimens (S4)", () => {
 });
 
 describe("the agent's SOL (S6)", () => {
-  it("the scheduler pays only for served estates, nothing trivial, a few per estate", () => {
+  it("the scheduler pays only for served estates and nothing trivial", () => {
     const due = (e: string, amount = 5_000_000n) => ({ estate: e, rule: { recurringAmount: amount } });
     const estates = new Map([
       ["ours", { agent: h.agent, usdtMint: h.mint }],
@@ -301,7 +301,8 @@ describe("the agent's SOL (S6)", () => {
       ["theirAgent", { agent: "x", usdtMint: h.mint }],
     ]);
     const all = [due("theirMint"), due("theirAgent"), due("unknown"), due("ours", 1n), due("ours"), due("ours"), due("ours"), due("ours")];
-    expect(servedPayments(all, estates, h.agent, h.mint)).toEqual([due("ours"), due("ours"), due("ours")]);
+    // A few per estate per tick, and fairness: lib/server/scheduler.test.ts.
+    expect(servedPayments(all, estates, h.agent, h.mint)).toEqual([due("ours"), due("ours"), due("ours"), due("ours")]);
   });
 
   it("starter funds: once per wallet, a daily cap and a reserve", () => {
