@@ -95,6 +95,7 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
             </div>
           </dl>
           <p className="mt-2 text-small text-ink-2">{staffed ? t.body : t.noSeats}</p>
+          {staffed && <p className="mt-1 text-small font-semibold">{t.expires}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="ghost" autoFocus onClick={() => { setSeen(null); setMoved(false); }}>{t.back}</Button>
             <Button className="flex-1" loading={busy === "settle"} disabled={!!busy} onClick={() => void sign(seen)}>

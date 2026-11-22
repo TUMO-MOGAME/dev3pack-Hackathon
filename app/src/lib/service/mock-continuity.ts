@@ -116,29 +116,29 @@ export function createMockContinuity(d: ContinuityDeps) {
     need(!!input.beneficiary || !!input.payee, "BadStatus", "Choose who to remove.");
     const sn = d.snap();
     const e = sn.estate;
-    const person = input.beneficiary
-      ? sn.beneficiaries.find((b) => b.wallet === input.beneficiary && b.active) ?? fail("NotBeneficiary", "That person is not in the plan.")
+    const named = input.beneficiary
+      ? sn.beneficiaries.find((b) => b.wallet === input.beneficiary) ?? fail("NotBeneficiary", "That person is not in the plan.")
       : null;
+    const person = named?.active ? named : null;
     const payee = input.payee
       ? sn.payees.find((p) => p.wallet === input.payee) ?? fail("AccountNotInitialized", "That payee has already been removed.")
       : null;
     const heir = input.newResidual;
-    const moves = !!person && d.residual() === person.wallet;
-    if (moves) {
-      need(!!heir && isHeld(heir) && heir !== person.wallet && heir !== e.owner && heir !== e.address, "residual",
-        "Choose who receives what is left instead.");
+    if (named) need(!!heir || d.residual() !== named.wallet, "residual", "Choose who receives what is left instead.");
+    if (named && heir) {
+      need(isHeld(heir) && heir !== named.wallet && heir !== e.owner && heir !== e.address && !sn.beneficiaries.some((b) => b.wallet === heir && !b.active),
+        "residual", "Choose someone else to receive what is left: not you, the plan itself, or someone who was removed.");
     }
     const ended = rulesEndedByRemoval(sn, input, d.now());
 
+    need(!!person || !!payee || !!(named && heir) || !!ended.length, "BadStatus", "They are already out of this plan.");
+
+    // The chain's order: name who receives what is left, remove (proof of life), then end the rules.
     const txs: TxResult[] = [];
     const step = (kind: string, text: string) => { const t = d.tx(); txs.push(t); d.log(kind, text, t); };
-    if (moves) {
+    if (named && heir) {
       sn.residual = heir;
-      step("ResidualSet", `${first(heir!)} will receive whatever no rule needs`);
-    }
-    for (const r of ended) {
-      r.validUntil = d.now() - 1;
-      step("RuleEnded", `A ${r.category.toLowerCase()} rule ended with the removal. It cannot pay any more`);
+      step("ResidualSet", `${first(heir)} will receive whatever no rule needs`);
     }
     if (person) {
       person.active = false;
@@ -149,7 +149,11 @@ export function createMockContinuity(d: ContinuityDeps) {
       d.names()[payee.wallet] ??= payee.name;
       step("MemberRemoved", `${payee.name} was removed as an approved payee. Nothing more can be paid to it`);
     }
-    proofOfLife(e, d.now(), d.log, d.tx);
+    if (person || payee) proofOfLife(e, d.now(), d.log, d.tx);
+    for (const r of ended) {
+      r.validUntil = d.now() - 1;
+      step("RuleEnded", `A ${r.category.toLowerCase()} rule ended with the removal. It cannot pay any more`);
+    }
     return txs;
   }
 

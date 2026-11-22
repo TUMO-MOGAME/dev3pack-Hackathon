@@ -33,6 +33,7 @@ function SetupCard({ snap }: { snap: EstateSnapshot }) {
     <Card className="md:col-span-2">
       <h2 className="flex items-center gap-2 text-h3"><UsersRound className="size-5" aria-hidden="true" />{c.setup.title}</h2>
       <p className="mt-1 text-ink-2">{owner ? c.setup.body : c.setup.off}</p>
+      {owner && <p className="mt-1 text-small text-ink-2">{c.rules.watch}</p>}
       {owner && (
         <Button className="mt-3" loading={busy === "guard-setup"}
           onClick={() => void act("guard-setup", (s, est) => s.setupGuardians(est, { seats: [0, 1, 2].map((index) => ({ index, backups: [], monitors: [] })), fallback: [] }), c.setup.done)}>

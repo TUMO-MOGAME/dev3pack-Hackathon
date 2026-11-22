@@ -82,6 +82,13 @@ export function RemoveMember({ snap, kind, wallet, name }: { snap: EstateSnapsho
       ...fallback.filter((r) => !r.dead).map((r) => [r.wallet, r.name] as const),
     ].filter(([w]) => w !== wallet && w !== e.owner))]
     : [];
+  // Removing someone from the family takes them off none of these lists (R16).
+  const seats = snap.guardians?.seats ?? [];
+  const seatNames = (list: "monitors" | "backups") => seats.filter((s) => s[list].some((p) => p.wallet === wallet))
+    .map((s) => s.holder ? shortName(s.holderName) : guardians.seats[s.index]).join(", ");
+  const watches = person ? seatNames("monitors") : "";
+  const backs = person ? seatNames("backups") : "";
+  const proceeds = person ? snap.assets.filter((a) => a.status !== "Sold" && a.proceedsTo === wallet).map((a) => a.title).join(", ") : "";
   const key = `remove-${kind}-${wallet}`;
   const close = () => { refocus.current = true; setAsking(false); setError(null); };
   const submit = async () => {
@@ -108,6 +115,18 @@ export function RemoveMember({ snap, kind, wallet, name }: { snap: EstateSnapsho
       ) : <p className="mt-2">{t.endsNone}</p>}
       {person && fallback.some((r) => r.wallet === wallet) && (
         <p className="mt-2">{t.stays} <Link href="/people#fallback" className="font-semibold underline underline-offset-4">{guardians.fallback.edit}</Link></p>
+      )}
+      {proceeds && (
+        <p className="mt-2">{fmt(t.staysProceeds, { assets: proceeds })} <Link href="/car" className="font-semibold underline underline-offset-4">{t.toAssets}</Link></p>
+      )}
+      {(watches || backs) && (
+        <p className="mt-2">
+          {watches && `${fmt(t.staysWatch, { names: watches })} `}{backs && `${fmt(t.staysBackup, { names: backs })} `}
+          <Link href="/people#guardians" className="font-semibold underline underline-offset-4">{t.toSeats}</Link>
+        </p>
+      )}
+      {person && e.verifiers.includes(wallet) && (
+        <p className="mt-2">{t.staysTrusted} <Link href="/people#guardians" className="font-semibold underline underline-offset-4">{t.toSeats}</Link></p>
       )}
       {person && <p className="mt-2">{t.noUndoPerson}</p>}
       {deathOpen(e) && <p className="mt-2 font-semibold">{t.cancels}</p>}

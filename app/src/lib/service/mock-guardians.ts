@@ -216,15 +216,36 @@ export function createMockGuardians(d: GuardDeps) {
 
   /* ----- owner setup ----- */
 
+  /** lib/service/chain-guardians.ts `defaultMonitor`: not who would take the seat, rather not a trusted person, spread out. */
+  function watcherFor(index: number, holder: Base58 | null, backup: Base58 | undefined): Base58 | null {
+    const { owner, verifiers } = est();
+    const able = d.snap().beneficiaries.filter((b) => b.active)
+      .sort((a, b) => a.label.localeCompare(b.label, "en", { numeric: true }) || a.wallet.localeCompare(b.wallet))
+      .map((b) => b.wallet).filter((w) => w !== holder && w !== backup && w !== owner);
+    const outside = able.filter((w) => !verifiers.includes(w));
+    const pool = outside.length ? outside : able;
+    return pool.length ? pool[index % pool.length] : null;
+  }
+
   function setup(input: {
     seats: { index: number; backups: Named[]; monitors: Named[] }[];
     fallback: FallbackInput[];
   }): TxResult[] {
     needCreated(); needOwnerActive();
     const txs: TxResult[] = [];
+    const watchers = new Map<number, Base58>();
     if (!g().enabled) {
       g().enabled = true;
       createSeats();
+      // A seat made without a monitor gets one from the active family, as on the chain.
+      for (const s of g().seats) {
+        const asked = input.seats.find((x) => x.index === s.index);
+        if (asked?.monitors.length) continue;
+        const watcher = watcherFor(s.index, s.holder, asked?.backups[0]?.wallet);
+        if (!watcher) continue;
+        watchers.set(s.index, watcher);
+        s.monitors = [watcher];
+      }
       const t = d.tx(); txs.push(t);
       d.log("GuardCreated", "Guardians switched on: approvals now wait for an objection window", t);
     }
@@ -232,7 +253,8 @@ export function createMockGuardians(d: GuardDeps) {
       need(s.index >= 0 && s.index <= 2, "BadStatus", "There are only three trusted people.");
       remember([...s.backups, ...s.monitors]);
       txs.push(setBackups(s.index, s.backups.map((b) => b.wallet)));
-      txs.push(setMonitors(s.index, s.monitors.map((m) => m.wallet)));
+      const watcher = watchers.get(s.index);
+      txs.push(setMonitors(s.index, watcher ? [watcher] : s.monitors.map((m) => m.wallet)));
     }
     if (input.fallback.length) txs.push(setFallback(input.fallback));
     return txs;

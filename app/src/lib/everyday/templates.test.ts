@@ -106,7 +106,9 @@ describe("bill templates: as rules", () => {
     fresh.setActor({ address: thabo.address, role: "owner", label: thabo.label });
     const { draft } = await fresh.willChat([{ role: "user", text: "a" }, { role: "user", text: "b" }, { role: "user", text: "c" }]);
     draft!.rules.push(toDraftRule(templateForm("funeral", { now: Date.now(), beneficiary: draft!.beneficiaries[0].label, payee: "Avbob Funeral Cover" }), "Funeral cover"));
-    const made = await fresh.createEstateFromWill(draft!);
+    // A payee the demo doesn't know: only practice makes it a wallet, as on the chain (plan §18.4 U2).
+    await expect(fresh.createEstateFromWill(draft!)).rejects.toThrow(/^recurring_payee/);
+    const made = await fresh.createEstateFromWill(draft!, { practice: true });
     const s2 = await fresh.getEstate(made.estate);
     const avbob = s2.payees.find((p) => p.name === "Avbob Funeral Cover");
     expect(avbob?.kind).toBe("Other");

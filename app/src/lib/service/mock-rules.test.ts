@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockService, DEMO_GUARDIANS, DEMO_MINTS, DEMO_PERSONAS, type DemoStage, type MockOptions } from "./mock";
 import { MOCK_STORE_KEY } from "./is-mock";
 import { NO_WALLET } from "../guardians/decisions";
+import { defaultMonitor } from "./chain-guardians";
 import { toBase } from "../format";
 import type { WillDraft } from "../types";
 
@@ -1101,5 +1102,76 @@ describe("a demo saved by an older build", () => {
     const { report } = await t.death("lerato", bad());
     expect(report.verdict).toBe("reject");
     expect((await t.snap()).estate.death.certHash).toBeNull();
+  });
+});
+
+describe("the same as the chain service", () => {
+  it("no practice answer is not practice: a schedule without its payee refuses", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("fresh");
+    const p = P("thabo");
+    svc.setActor({ address: p.address, role: p.role, label: p.label });
+    const { draft } = await svc.willChat([{ role: "user", content: "a" }, { role: "user", content: "b" }, { role: "user", content: "c" }] as never);
+    const rules = draft!.rules.map((r) => (r.recurring ? { ...r, recurring: { ...r.recurring, payeeName: "A payee nobody knows" } } : r));
+    await expect(svc.createEstateFromWill({ ...draft!, rules })).rejects.toThrow(/^recurring_payee/);
+    await svc.createEstateFromWill({ ...draft!, rules }, { practice: true });
+  });
+
+  it("a removal names the new recipient, removes, then ends the rules", async () => {
+    const t = await start("funded", { guarded: true });
+    const before = (await t.snap()).activity.length;
+    const newResidual = who("sipho");
+    t.act("thabo");
+    await expect(t.svc.removeMember(t.estate, { beneficiary: who("lerato") })).rejects.toThrow(/^residual/);
+    await t.svc.removeMember(t.estate, { beneficiary: who("lerato"), newResidual });
+    const s = await t.snap();
+    const kinds = s.activity.slice(0, s.activity.length - before).map((a) => a.kind).reverse()
+      .filter((k) => ["ResidualSet", "MemberRemoved", "RuleEnded"].includes(k));
+    expect([...new Set(kinds)]).toEqual(["ResidualSet", "MemberRemoved", "RuleEnded"]);
+    expect(kinds.lastIndexOf("MemberRemoved")).toBeLessThan(kinds.indexOf("RuleEnded"));
+    expect(s.residual).toBe(newResidual);
+    expect(s.beneficiaries.find((b) => b.wallet === who("lerato"))).toMatchObject({ active: false });
+    await expect(t.svc.removeMember(t.estate, { beneficiary: who("lerato") })).rejects.toThrow(/^BadStatus/);
+  });
+
+  it("never hands what is left to someone already removed", async () => {
+    const t = await start();
+    t.act("thabo");
+    await t.svc.removeMember(t.estate, { beneficiary: who("sipho") });
+    await expect(t.svc.removeMember(t.estate, { beneficiary: who("lerato"), newResidual: who("sipho") })).rejects.toThrow(/^residual/);
+  });
+
+  it("a seat made without a monitor gets the chain's: one from the active family", async () => {
+    const t = await start();
+    t.act("thabo");
+    await t.svc.setupGuardians(t.estate, { seats: [0, 1, 2].map((index) => ({ index, backups: [], monitors: index === 1 ? [{ wallet: who("zodwa"), name: "Aunt Zodwa" }] : [] })), fallback: [] });
+    const s = await t.snap();
+    const family = s.beneficiaries.filter((b) => b.active).sort((a, b) => a.label.localeCompare(b.label, "en", { numeric: true })).map((b) => b.wallet);
+    for (const i of [0, 2]) {
+      const expected = defaultMonitor(i, { holder: s.estate.verifiers[i], backups: [], family, verifiers: [...s.estate.verifiers], owner: s.estate.owner });
+      expect(s.guardians!.seats[i].monitors.map((m) => m.wallet)).toEqual([expected]);
+    }
+    expect(s.guardians!.seats[1].monitors.map((m) => m.wallet)).toEqual([who("zodwa")]);
+    await t.svc.setSeatMonitors(t.estate, 0, []);
+    expect((await t.snap()).guardians!.seats[0].monitors).toEqual([]);
+  });
+
+  it("with every seat empty the family may have a held asset listed; not while someone holds a seat", async () => {
+    const t = await start("guardians");
+    const car = (await t.snap()).assets[0].address;
+    t.act("lerato");
+    await expect(t.svc.listAsset(t.estate, car, 7 * 86400)).rejects.toThrow(/^NotVerifier/);
+    t.svc.simulateAllSeatsVacant();
+    t.act("zanele");
+    await expect(t.svc.listAsset(t.estate, car, 7 * 86400)).rejects.toThrow(/^NotVerifier/);
+    t.act("lerato");
+    await t.svc.listAsset(t.estate, car, 7 * 86400);
+    expect((await t.snap()).assets[0].status).toBe("Listed");
+  });
+
+  it("monitors, backups and the fallback list see the estate in their list; a stranger is only a buyer", async () => {
+    const t = await start("guardians");
+    for (const w of [who("zodwa"), kagiso.wallet, DEMO_GUARDIANS.charity.wallet]) expect((await t.svc.listEstatesFor(w))[0].role).toBe("monitor");
+    expect((await t.svc.listEstatesFor(NEW.wallet))[0].role).toBe("buyer");
   });
 });

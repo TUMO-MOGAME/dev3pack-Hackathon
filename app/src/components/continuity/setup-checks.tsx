@@ -62,7 +62,8 @@ export function SetupChecks({ draft, every, trusted, missing, made, refused, onF
           </ul>
           <Button small className="mt-3" onClick={onPractice}>{t.practice}</Button>
           <p className="mt-1 text-ink-2">{t.practiceNote}</p>
-          <p className="mt-2 text-ink-2">{t.later}</p>
+          <p className="mt-3 font-semibold">{t.stepsTitle}</p>
+          <ol className="mt-1 list-decimal space-y-1 pl-5 text-ink-2">{t.steps.map((step) => <li key={step}>{step}</li>)}</ol>
         </Notice>
       )}
       {!missing.length && made.length > 0 && <p className="text-small text-ink-2">{fmt(t.willMake, { names: made.join(", ") })}</p>}

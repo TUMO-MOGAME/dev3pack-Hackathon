@@ -77,7 +77,7 @@ import { MOCK_STORE_KEY } from "./is-mock";
 import { MAX_RULES, MIN_LISTING_SECS, listingEnded, nextDueAfter, ruleEnded, surplusOf } from "../continuity/logic";
 import { openToPeople, outcomeOf } from "../verdict";
 import { isCurrentClaim, replaceableAt, reviewedHold } from "../death-rules";
-import { claimTally, deathTally, hardshipTally, hasLivingSeat, isHeld } from "../guardians/decisions";
+import { claimTally, deathTally, hardshipTally, hasLivingSeat, isFamily, isHeld } from "../guardians/decisions";
 import { clearDeath, proofOfLife } from "./mock-rules";
 import { createMockContinuity, type MockAgentVotes } from "./mock-continuity";
 
@@ -393,7 +393,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
       need(r.recurring.amountUsdt <= r.maxPerClaimUsdt, "ExceedsPerClaimCap", "The scheduled payment is more than the rule's limit.");
       // Never downgraded to a rule paid on request: without practice payees the payee has to be an approved one.
       const known = PAYEES.some((p) => p.kind === r.allowedPayeeKind && p.name.toLowerCase() === r.recurring!.payeeName.trim().toLowerCase());
-      need(known || (practice !== false && !!r.recurring.payeeName.trim()), "recurring_payee", `"${r.recurring.payeeName}" is not an approved payee yet.`);
+      need(known || (practice === true && !!r.recurring.payeeName.trim()), "recurring_payee", `"${r.recurring.payeeName}" is not an approved payee yet.`);
     }
     e.owner = owner;
     e.ownerName = draft.ownerName || actor?.label || "Estate owner";
@@ -864,9 +864,11 @@ export function createMockService(opts: MockOptions = {}): MockService {
 
   function listAsset(address: Base58, durationSecs: number, withRivals: "both" | "low" | "none" = "both"): TxResult {
     needCreated();
-    need((isHeld(me()) && est().verifiers.includes(me())) || me() === est().agent, "NotVerifier", "A trusted person or the agent opens the sale.");
-    need(est().status === "Unlocked", "BadStatus", "The car can only be sold after the estate unlocks.");
     const a = s.snap.assets.find((x) => x.address === address) ?? fail("BadStatus", "That asset does not exist.");
+    // With every seat empty someone still in the family may ask the agent to list what the plan holds.
+    const family = !hasLivingSeat(est()) && a.status === "Held" && isFamily(s.snap, me());
+    need(family || (isHeld(me()) && est().verifiers.includes(me())) || me() === est().agent, "NotVerifier", "A trusted person or the agent opens the sale.");
+    need(est().status === "Unlocked", "BadStatus", "The car can only be sold after the estate unlocks.");
     need(a.status === "Held" || listingEnded(a, nowSecs()), "BadStatus", "This car is already listed or sold.");
     need(durationSecs >= MIN_LISTING_SECS && durationSecs <= MAX_LISTING_SECS, "TimeOutOfRange", "A listing lasts from an hour to 90 days.");
     const relisted = a.status === "Listed";
@@ -1463,7 +1465,9 @@ export function createMockService(opts: MockOptions = {}): MockService {
       await wait(80);
       if (!s.created) return [];
       const e = est();
-      const monitor = !!s.guard?.enabled && s.guard.seats.some((x) => x.monitors.includes(wallet));
+      // Backups and the fallback list see the estate in their list, as monitors do.
+      const monitor = !!s.guard?.enabled && (s.guard.seats.some((x) => x.monitors.includes(wallet) || x.backups.includes(wallet))
+        || s.guard.fallback.some((x) => x.wallet === wallet));
       const role = wallet === e.owner ? "owner" : e.verifiers.includes(wallet) ? "verifier" : s.snap.beneficiaries.some((b) => b.wallet === wallet && b.active) ? "beneficiary" : monitor ? "monitor" : "buyer";
       return [{ estate: e.address, role, ownerName: e.ownerName }];
     },
