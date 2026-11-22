@@ -324,13 +324,14 @@ describe("the agent's SOL (S6)", () => {
     expect(servedPayments(all, estates, h.agent, h.mint)).toEqual([due("ours"), due("ours"), due("ours"), due("ours")]);
   });
 
-  it("starter funds: once per wallet, a daily cap and a reserve", () => {
-    const ok = { walletLamports: 0, walletHasUsdtAccount: false, grantsToday: 0, agentLamports: 2e9, agentUsdt: 10_000_000_000n };
+  it("starter funds: once per wallet, a pace and a reserve", () => {
+    const now = 2_000_000;
+    const ok = { walletLamports: 0, walletHasUsdtAccount: false, grantedBefore: false, grantTimes: [], now, agentLamports: 2e9, agentUsdt: 10_000_000_000n };
     expect(starterRefusal(ok)).toBeNull();
-    expect(starterRefusal({ ...ok, walletHasUsdtAccount: true })).toBe("already_funded");
-    expect(starterRefusal({ ...ok, walletLamports: STARTER.alreadyFundedLamports })).toBe("already_funded");
-    expect(starterRefusal({ ...ok, grantsToday: STARTER.perDay })).toBe("daily_cap");
-    expect(starterRefusal({ ...ok, agentLamports: STARTER.reserveLamports })).toBe("empty");
-    expect(starterRefusal({ ...ok, agentUsdt: 0n })).toBe("empty");
+    expect(starterRefusal({ ...ok, walletHasUsdtAccount: true })?.code).toBe("already_funded");
+    expect(starterRefusal({ ...ok, grantedBefore: true })?.code).toBe("already_funded");
+    expect(starterRefusal({ ...ok, grantTimes: Array.from({ length: STARTER.perDay }, (_, i) => now - 7_200 - i) })?.code).toBe("daily_cap");
+    expect(starterRefusal({ ...ok, agentLamports: STARTER.reserveLamports })?.code).toBe("empty");
+    expect(starterRefusal({ ...ok, agentUsdt: 0n })?.code).toBe("empty");
   });
 });

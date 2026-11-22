@@ -640,8 +640,8 @@ export function createChainService(): HeirloomService {
     },
 
     async requestStarter() {
-      const wallet = getActiveSigner().address;
-      return signedPost<TxResult>("/api/starter", "starter", wallet, { wallet }, actionBody.starter());
+      const { requestStarterFunds } = await import("../starter/client");
+      return requestStarterFunds(getActiveSigner());
     },
 
     async ownerApproveClaim(estate, claim) {
