@@ -202,13 +202,14 @@ describe("listAsset: who may ask the agent", () => {
     ["a beneficiary while three seats are held", [v1, v2, v3], kid, true, "Held", false],
     ["a beneficiary while one seat is held", [none, v2, none], kid, true, "Held", false],
     ["a beneficiary when no seat is held", [none, none, none], kid, true, "Held", true],
-    ["a beneficiary relisting when no seat is held", [none, none, none], kid, true, "Listed", false],
+    ["a beneficiary relisting while the listing runs", [none, none, none], kid, true, "Listed", false],
+    ["a beneficiary relisting after it ended with no offer", [none, none, none], kid, true, "Ended", true],
     ["a removed beneficiary when no seat is held", [none, none, none], kid, false, "Held", false],
     ["a stranger when no seat is held", [none, none, none], res, true, "Held", false],
   ])("%s", async (_, verifiers, me, active, status, allowed) => {
     h.me = me;
     const asset = key();
-    h.estate = { estate: { verifiers }, beneficiaries: [{ wallet: kid, active }], assets: [{ address: asset, status }] };
+    h.estate = { estate: { verifiers }, beneficiaries: [{ wallet: kid, active }], assets: [{ address: asset, status: status === "Ended" ? "Listed" : status, listingEnds: status === "Ended" ? 1 : 4e9, floorPrice: 900n, hardshipFloor: 700n, hardshipBeneficiary: null }], offers: [] };
     const listed = createChainService().listAsset(estate, asset, 86_400);
     if (allowed) await listed;
     else await expect(listed).rejects.toMatchObject({ code: "NotVerifier" });

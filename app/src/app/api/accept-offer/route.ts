@@ -29,7 +29,7 @@ export const maxDuration = 60;
  * Returns { tx, ranking }. 409 if no offer is eligible, or the sale changed or went stale.
  */
 export const POST = handler(async (req) => {
-  await rateLimitShared(req, "accept-offer", 5);
+  await rateLimitShared(req, "accept-offer", 20);
   const b = await parseJson(req, acceptOfferBody);
   if (!isChainMode()) throw new HttpError(409, "On-chain sale runs in chain mode only.");
   const wallet = await verifyAction(req, "accept-offer", b.estate, actionBody.acceptOffer(b));

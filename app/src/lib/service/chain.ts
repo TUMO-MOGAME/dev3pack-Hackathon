@@ -802,8 +802,8 @@ export function createChainService(): HeirloomService {
     // ----- Car sale -----
     async listAsset(estate, asset, durationSecs) {
       const snap = await freshEstate(estate); // who holds a seat decides who may ask
-      must(mayAskToList(snap.estate.verifiers, snap.beneficiaries, getActiveSigner().address, snap.assets.find((a) => a.address === asset)),
-        "NotVerifier", "Only a trusted person can open the sale. Family can list a held asset when no trusted person is left.");
+      must(mayAskToList(snap.estate.verifiers, snap.beneficiaries, getActiveSigner().address, snap.assets.find((a) => a.address === asset), snap.offers),
+        "NotVerifier", "Only a trusted person can open the sale. Family can, when no trusted person is left, for an asset not yet listed or a listing that ended without an acceptable offer.");
       return signedPost<TxResult>("/api/list-asset", "list-asset", estate, { estate, asset, durationSecs }, actionBody.listAsset({ asset, durationSecs }))
         .finally(written);
     },

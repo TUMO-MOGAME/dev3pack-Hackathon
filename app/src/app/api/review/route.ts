@@ -31,7 +31,7 @@ export const maxDuration = 90;
  * Returns { report, evidence: { sha256 }, tx: { signature, explorerUrl } | null, onChain: string }.
  */
 export const POST = handler(async (req) => {
-  await rateLimitShared(req, "review", 8);
+  await rateLimitShared(req, "review", 30);
   if (Number(req.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES + 64_000) throw new HttpError(413, "The file is larger than 10 MB.");
   const form = await req.formData().catch(() => { throw new HttpError(400, "Expected a form upload with the document as `file`."); });
   const file = form.get("file");

@@ -32,14 +32,28 @@ export function mayAskForSale(
   return seats.length ? seats.some((i) => verifiers[i] === wallet) : beneficiaries.some((b) => b.active && b.wallet === wallet);
 }
 
-/** Who may ask for a listing: as for the sale, but a family member only for an asset the plan still holds. */
+type ListedAsset = Pick<Asset, "address" | "status" | "listingEnds" | "floorPrice" | "hardshipFloor" | "hardshipBeneficiary">;
+
+/**
+ * Who may ask for a listing: as for the sale, but a family member only for an asset the plan still holds, or whose
+ * listing ended with no offer the program would take. Not with such an offer: relisting would put off the lone sale
+ * (which waits for the listing to end) for as long as one person kept doing it.
+ */
 export function mayAskToList(
   verifiers: readonly (Base58 | null)[],
   beneficiaries: readonly Pick<Beneficiary, "wallet" | "active">[],
   wallet: Base58,
-  asset: Pick<Asset, "status"> | undefined,
+  asset: ListedAsset | undefined,
+  offers: readonly Pick<Offer, "asset" | "amount">[],
+  now = Math.floor(Date.now() / 1000),
 ): boolean {
-  return mayAskForSale(verifiers, beneficiaries, wallet) && (eligibleSeats(verifiers).length > 0 || asset?.status === "Held");
+  if (!mayAskForSale(verifiers, beneficiaries, wallet)) return false;
+  if (eligibleSeats(verifiers).length) return true;
+  if (!asset) return false;
+  if (asset.status === "Held") return true;
+  if (asset.status !== "Listed" || asset.listingEnds === null || now < asset.listingEnds) return false;
+  const least = asset.hardshipBeneficiary ? asset.hardshipFloor : asset.floorPrice;
+  return !offers.some((o) => o.asset === asset.address && o.amount >= least);
 }
 
 /** accept_offer exactly as both signers must see it. */
