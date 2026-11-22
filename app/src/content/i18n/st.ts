@@ -877,7 +877,7 @@ export const st: Bundle = {
       emptyBody: "Ha mong wa lefa a kenya koloi, thekiso ya yona le ditlhahiso di tla hlaha mona.",
       register: {
         title: "Kenya koloi ya lelapa",
-        body: "Lefa le tshwara tokomane ya beng ya dijithale ya koloi mme le e rekisetsa lelapa la hao, le ka mohla e seng ka tlase ho theko eo o e beileng.",
+        body: "Lefa le boloka setifikeiti sa dijithale sa koloi mme le ka e rekisetsa lelapa ka theko ya hao kapa ho feta. Ke kopo ya bothata e dumelletsweng feela e ka e theolang, le kgale ka tlase ho theko ya hao ya bothata.",
         make: "Moetsi",
         model: "Mohlala",
         year: "Selemo",
@@ -2175,7 +2175,7 @@ export const st: Bundle = {
 
     plan: {
       title: "Bathusi, bahlokomedi le moralo wa ho qetela",
-      body: "Etsa qeto ya hore na ke mang ya nkang sebaka ha motho ya tshepahalang a hlokahala, ke mang ya ba hlokomelang, le hore na ke mang ya fumanang tsohle ha ho se motho ya setseng.",
+      body: "Etsa qeto hore ke mang ya nkang sebaka ha motho ya tshepahalang a hlokahala, ya ba hlokomelang, le ya fumanang se ka polokelong ha ho se ya setseng.",
       cta: "Bula batho ba tshepahalang",
     },
   },

@@ -119,9 +119,9 @@ const en = {
     report: "I read {name} ({type}, {confidence}% sure). {verdict}\n\n{summary}",
     redFlags: "Things to check: {flags}.",
     next: {
-      death: "If this is right, you can report the passing with it. Two trusted people then confirm.",
+      death: "If this is right, you can report the passing with it. The trusted people then confirm.",
       claim: "If this is right, you can claim against your rule with it. The money goes straight to the institution.",
-      hardship: "If this is right, you can start a hardship request with it. Two trusted people must agree.",
+      hardship: "If this is right, you can start a hardship request with it. The trusted people decide.",
       verifier: "The family member submits it through their own claim; you'll see it in your inbox with this report.",
       other: "Only the family member it concerns can submit it.",
     },

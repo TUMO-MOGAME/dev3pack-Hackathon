@@ -335,7 +335,7 @@ export const screens = {
     emptyBody: "When the owner adds a vehicle, its listing and offers appear here.",
     register: {
       title: "Add the family car",
-      body: "The estate holds the car's digital title and sells it for your family, never below the price you set.",
+      body: "The estate holds the car's digital title and can sell it for your family at or above your price. Only an approved hardship request can lower that, never below your hardship floor.",
       make: "Make", model: "Model", year: "Year", mileage: "Mileage (km)", condition: "Condition",
       conditions: ["Excellent", "Good", "Fair"],
       defaults: { make: "Toyota", model: "Corolla 1.8 Exclusive CVT", year: "2017", mileage: "124455" },

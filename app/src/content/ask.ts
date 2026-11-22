@@ -23,7 +23,7 @@ export const ask = {
     noRate: "Rand amounts need today's rate, which is not available. Enter USD₮ instead.",
     amountError: "Enter an amount above zero.",
     payeeLabel: "Pay it to",
-    payeeHint: "Only places on the approved list. The money never goes anywhere else.",
+    payeeHint: "Only places on the approved list. A request can't be paid anywhere else.",
     ownWallet: "Your own wallet",
     limits: "Up to {max} at a time · {left} left",
     yearLeft: "{amount} left this year",

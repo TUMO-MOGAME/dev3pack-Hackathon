@@ -885,7 +885,7 @@ export const zu: Bundle = {
       emptyBody: "Uma umnikazi engeza imoto, okuthengiswayo nezinikezo kuzovela lapha.",
       register: {
         title: "Engeza imoto yomndeni",
-        body: "Ifa ligcina itayitela ledijithali lemoto futhi liyithengisele umndeni wakho, hhayi ngaphansi kwentengo oyibekile.",
+        body: "Ifa ligcina isihloko sedijithali semoto futhi lingayithengisela umndeni ngentengo yakho noma ngaphezulu. Yisicelo sobunzima esivunyiwe kuphela esingayehlisa, hhayi ngaphansi kwentengo yakho yobunzima.",
         make: "Uhlobo", model: "Imodeli", year: "Unyaka", mileage: "Amakhilomitha (km)", condition: "Isimo",
         conditions: ["Kuhle kakhulu", "Kuhle", "Kusesimweni esimaphakathi"],
         defaults: { make: "Toyota", model: "Corolla 1.8 Exclusive CVT", year: "2017", mileage: "124455" },
@@ -2116,7 +2116,7 @@ export const zu: Bundle = {
 
     plan: {
       title: "Abasekeli, ababheki nohlelo lokugcina",
-      body: "Nquma ozothatha indawo uma umuntu othembekile eshona, ozobabheka, nozothola konke uma kungasekho muntu.",
+      body: "Nquma ozothatha indawo uma umuntu othembekile eshona, ozobabheka, nozothola okusesisefweni uma kungasele muntu.",
       cta: "Vula abantu abathembekile",
     },
   },

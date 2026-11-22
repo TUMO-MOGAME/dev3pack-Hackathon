@@ -870,7 +870,7 @@ export const af: Bundle = {
       emptyBody: "Wanneer die eienaar 'n voertuig byvoeg, verskyn die lysting en aanbiedinge hier.",
       register: {
         title: "Voeg die gesinsmotor by",
-        body: "Die boedel hou die motor se digitale titel en verkoop dit vir jou gesin, nooit onder die prys wat jy stel nie.",
+        body: "Die boedel hou die motor se digitale titel en kan dit vir jou gesin teen of bo jou prys verkoop. Net 'n goedgekeurde noodversoek kan dit verlaag, nooit onder jou noodminimum nie.",
         make: "Fabrikaat",
         model: "Model",
         year: "Jaar",
@@ -2150,7 +2150,7 @@ export const af: Bundle = {
 
     plan: {
       title: "Rugsteun, waarnemers en die terugvalplan",
-      body: "Besluit wie oorneem as 'n vertroude persoon sterf, wie hulle dophou, en wie alles ontvang as niemand oor is nie.",
+      body: "Besluit wie oorneem as 'n vertroude persoon sterf, wie hulle dophou, en wie ontvang wat in die kluis is as niemand oor is nie.",
       cta: "Maak vertroude persone oop",
     },
   },

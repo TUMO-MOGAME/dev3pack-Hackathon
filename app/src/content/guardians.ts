@@ -292,7 +292,7 @@ export const guardians = {
 
   plan: {
     title: "Backups, monitors and the fallback plan",
-    body: "Decide who takes over if a trusted person dies, who watches them, and who receives everything if no one is left.",
+    body: "Decide who takes over if a trusted person dies, who watches them, and who receives what is in the vault if no one is left.",
     cta: "Open trusted people",
   },
 } as const;
