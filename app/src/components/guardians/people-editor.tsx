@@ -7,6 +7,7 @@ import { fmt, useCopy } from "@/components/shell/copy";
 import { checkPeople, type Person } from "./derive";
 import type { Seat } from "@/lib/guardians/types";
 import type { Base58 } from "@/lib/types";
+import { NamesNotice } from "@/components/continuity/names-notice";
 
 export function PeopleEditor({
   kind, seat, owner, holders, initial, suggestions, busy, onSave, onCancel,
@@ -53,6 +54,7 @@ export function PeopleEditor({
 
   return (
     <form onSubmit={submit} noValidate className="mt-3 flex flex-col gap-3 rounded-md border border-line bg-surface-2/50 p-3">
+      <NamesNotice />
       {rows.map((r, i) => (
         <fieldset key={i} className="flex flex-col gap-2 rounded-md border border-line bg-surface p-3">
           <legend className="px-1 text-small font-semibold">{fmt(label, { n: i + 1 })}</legend>

@@ -55,6 +55,9 @@ const en = {
     ended: "Ended",
     done: "Rule ended",
   },
+  names: {
+    notDurable: "Names are not stored permanently on this test site yet. They are kept in the owner's browser, never on-chain. If they go missing for the family, the owner opens Heirloom in that browser and unlocks the wallet, and they are put back.",
+  },
   referred: "The agent was not sure, so it did not approve. People decide: at least two trusted people, or the owner on a living plan.",
   relist: "The last listing ended. It can be listed again.",
 };
@@ -111,6 +114,9 @@ const af: ContinuityCopy = {
     ended: "Beëindig",
     done: "Reël beëindig",
   },
+  names: {
+    notDurable: "Name word nog nie permanent op hierdie toetswerf gestoor nie. Hulle word in die eienaar se blaaier gehou, nooit op die blokketting nie. As die familie hulle nie meer sien nie, maak die eienaar Heirloom in daardie blaaier oop en ontsluit die beursie, en dan word hulle teruggesit.",
+  },
   referred: "Die agent was onseker en het dus nie goedgekeur nie. Mense besluit: ten minste twee vertroude mense, of die eienaar by 'n lewende plan.",
   relist: "Die vorige lys het verval. Dit kan weer gelys word.",
 };
@@ -165,6 +171,9 @@ const st: ContinuityCopy = {
     ended: "O fedile",
     done: "Molao o fedisitswe",
   },
+  names: {
+    notDurable: "Mabitso ha a so bolokwe ka ho sa feleng webosaeteng ena ya teko. A bolokwa sebatling sa mong'a wona, e seng blockchaineng le kgale. Ha lelapa le sa a bone, mong'a moralo o bula Heirloom sebatling seo mme o notlolla sepatjhe, ebe a a kgutliswa.",
+  },
   referred: "Agent e ne e sa kgodiseha, kahoo ha e a dumela. Batho ba etsa qeto: bonyane batho ba babedi ba tshepuwang, kapa mong'a moralo o phelang.",
   relist: "Lenane le fetileng le fedile. E ka behwa thekisong hape.",
 };
@@ -218,6 +227,9 @@ const zu: ContinuityCopy = {
     warn: "Uyeka ukukhokha ngokushesha, futhi lokhu akunakuhlehliswa.",
     ended: "Uphelile",
     done: "Umthetho uqediwe",
+  },
+  names: {
+    notDurable: "Amagama awakagcinwa unomphela kule sayithi yokuhlola. Agcinwa esipheqululini somnikazi, hhayi ku-blockchain nanini. Uma umndeni ungasawaboni, umnikazi uvula i-Heirloom kuleso siphequluli avule isikhwama, bese ebuyiselwa.",
   },
   referred: "I-agent ibingaqiniseki, ngakho ayivumanga. Abantu bayanquma: okungenani abantu ababili abathembekile, noma umnikazi ohlelweni oluphilayo.",
   relist: "Uhlu lwangaphambilini luphelile. Ingafakwa futhi ukuze ithengiswe.",

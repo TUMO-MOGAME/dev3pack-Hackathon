@@ -15,6 +15,7 @@ import { useEstate } from "@/lib/hooks/estate";
 import { Button, Field, Notice, inputClass } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/client";
 import { fmt, useCopy } from "@/components/shell/copy";
+import { NamesNotice } from "@/components/continuity/names-notice";
 import { BILL_TEMPLATES, checkBill, templateForm, toAddRule, toDraftRule, type BillForm, type Every, type TemplateKey } from "@/lib/everyday/templates";
 import type { WillDraft } from "@/lib/types";
 
@@ -109,6 +110,7 @@ function BillFormView({ copy, template, target, onDone }: { copy: Copy; template
           </Field>
           {isNew && (
             <div className="grid gap-4 rounded-md border border-line p-3">
+              <NamesNotice />
               <Field label={f.newPayeeName} htmlFor={`${id}-pname`} error={show("payee")}>
                 <input id={`${id}-pname`} value={newName} maxLength={64} onChange={(e) => setNewName(e.target.value)} className={inputClass} aria-invalid={!!show("payee")} aria-describedby={described("pname", show("payee"))} />
               </Field>
