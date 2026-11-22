@@ -74,7 +74,7 @@ describe("assembleGuardians", () => {
     expect(g.feed[0]).toMatchObject({ seatIndex: 2, kind: "Claim", objectionDeadline: 460, txSignature: "sig" });
     expect(g.feed[0].summary).toContain("Lerato");
     expect(g.fallback.recipients).toEqual([
-      { wallet: lerato.toBase58(), name: "Lerato", kind: "family", dead: true },
+      { wallet: lerato.toBase58(), name: "Lerato", kind: "family", dead: true, report: null },
       expect.objectContaining({ wallet: sipho.toBase58(), dead: false }),
     ]);
     expect(g.fallback.canStart).toBe(false); // seats are filled

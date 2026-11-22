@@ -11,6 +11,7 @@ import type { Base58, Category } from "../types";
 import type { AssetKind, TargetKind } from "../guardians/types";
 import type { EstateSnapshot } from "../service/types";
 import type { Raw } from "../chain/decoders";
+import { isCurrentClaim } from "../death-rules";
 
 interface Base {
   estate: Base58;
@@ -110,6 +111,9 @@ export function mergeEvents(...lists: TreeEvent[][]): TreeEvent[] {
   return out.sort((a, b) => a.ts - b.ts);
 }
 
+/** The id of a rule that held a slot before it was reused (its claims' high 16 bits number it). Not an address. */
+const earlierRule = (rule: Base58, generation: number): string => `${rule}#${generation}`;
+
 /* ---------- from decoded program events (chain) ---------- */
 
 /** A decoded program event (lib/chain/reads ChainEvent). Declared here so tests need no RPC. */
@@ -181,6 +185,19 @@ export function treeEventsFromChain(events: RawChainEvent[], ctx: ChainDecodeCon
     const a = pk(ev.data, "asset"); const k = assetKindOf(ev.data);
     if (a && k) mediaKinds[a] = k;
   }
+  // A title the owner took back is no longer in the plan: only a registration after that still stands.
+  const released = new Map<Base58, number>();
+  // A reused rule slot keeps its address: what happened under the rule before it must not be read as the new rule's.
+  const reused: { rule: Base58; ts: number; generation: number }[] = [];
+  for (const ev of events) {
+    const n = ev.name.toLowerCase();
+    if (n === "assetreleased") { const a = pk(ev.data, "asset"); if (a) released.set(a, Math.max(ev.ts, released.get(a) ?? 0)); }
+    else if (n === "rulereused") { const rule = pk(ev.data, "rule"); if (rule) reused.push({ rule, ts: ev.ts, generation: int(ev.data, "first_claim_id") >>> 16 }); }
+  }
+  const ruleAt = (rule: Base58, ts: number): Base58 => {
+    const next = reused.filter((r) => r.rule === rule && ts < r.ts).sort((a, b) => a.ts - b.ts)[0];
+    return next ? earlierRule(rule, next.generation - 1) : rule;
+  };
   for (const ev of events) {
     const d = ev.data;
     const b = { estate: ctx.estate, ts: ev.ts, sig: ev.signature };
@@ -194,13 +211,13 @@ export function treeEventsFromChain(events: RawChainEvent[], ctx: ChainDecodeCon
       case "EstateUnlocked": push({ ...b, kind: n }); break;
       case "ClaimSubmitted": {
         const claim = pk(d, "claim"), rule = pk(d, "rule"), beneficiary = pk(d, "beneficiary");
-        if (claim && rule && beneficiary) push({ ...b, kind: n, claim, rule, beneficiary });
+        if (claim && rule && beneficiary) push({ ...b, kind: n, claim, rule: ruleAt(rule, ev.ts), beneficiary });
         break;
       }
       case "ClaimApproved": { const claim = pk(d, "claim"), v = pk(d, "verifier"); if (claim && v) push({ ...b, kind: n, claim, verifier: v }); break; }
       case "ClaimOwnerApproved": { const claim = pk(d, "claim"), owner = pk(d, "owner"); if (claim && owner) push({ ...b, kind: n, claim, owner }); break; }
-      case "ClaimPaid": { const claim = pk(d, "claim"), rule = pk(d, "rule"); if (claim && rule) push({ ...b, kind: n, claim, rule }); break; }
-      case "ScheduledPaid": { const rule = pk(d, "rule"); if (rule) push({ ...b, kind: n, rule }); break; }
+      case "ClaimPaid": { const claim = pk(d, "claim"), rule = pk(d, "rule"); if (claim && rule) push({ ...b, kind: n, claim, rule: ruleAt(rule, ev.ts) }); break; }
+      case "ScheduledPaid": { const rule = pk(d, "rule"); if (rule) push({ ...b, kind: n, rule: ruleAt(rule, ev.ts) }); break; }
       case "HardshipSubmitted": {
         const hardship = pk(d, "hardship"), asset = pk(d, "asset"), beneficiary = pk(d, "beneficiary");
         if (hardship && asset && beneficiary) push({ ...b, kind: n, hardship, asset, beneficiary });
@@ -224,6 +241,8 @@ export function treeEventsFromChain(events: RawChainEvent[], ctx: ChainDecodeCon
       case "SeatDeathReported": { const holder = pk(d, "holder"); if (holder) push({ ...b, kind: n, seat: int(d, "seat_index"), holder }); break; }
       case "SeatDeathConfirmed": { const by = pk(d, "confirmed_by"); if (by) push({ ...b, kind: n, seat: int(d, "seat_index"), by }); break; }
       case "SeatDeathVetoed": push({ ...b, kind: n, seat: int(d, "seat_index") }); break;
+      // Cleared for a fresh report: like a veto, nobody is credited and nobody has passed.
+      case "SeatDeathReportCleared": push({ ...b, kind: "SeatDeathVetoed", seat: int(d, "seat_index") }); break;
       case "SuccessionFinalized": {
         const previous = pk(d, "previous_holder"), next = pk(d, "new_holder");
         if (previous && next) push({ ...b, kind: n, seat: int(d, "seat_index"), previous, next });
@@ -254,7 +273,7 @@ export function treeEventsFromChain(events: RawChainEvent[], ctx: ChainDecodeCon
       }
       case "AssetRegistered": {
         const asset = pk(d, "asset");
-        if (!asset) break;
+        if (!asset || ev.ts < (released.get(asset) ?? -Infinity)) break;
         const title = ctx.assetTitles?.[asset] ?? "";
         push({ ...b, kind: n, asset, title, assetKind: ctx.assetKinds?.[asset] ?? mediaKinds[asset] ?? assetKindFromTitle(title) });
         break;
@@ -296,8 +315,12 @@ export function snapshotFacts(snap: EstateSnapshot, history: TreeEvent[] = [], o
   for (const r of snap.rules) out.push({ ...b(created), kind: "RuleSet", rule: r.address, category: r.category, beneficiary: r.beneficiary });
 
   // Claims: who asked, who approved (the approvals bitmap; times approximated by the claim's creation).
+  const ruleOf = (c: EstateSnapshot["claims"][number]) => {
+    const count = snap.rules.find((r) => r.address === c.rule)?.claimCount;
+    return count === undefined || isCurrentClaim(c.id, count) ? c.rule : earlierRule(c.rule, c.id >>> 16);
+  };
   for (const c of snap.claims) {
-    out.push({ ...b(c.createdAt), kind: "ClaimSubmitted", claim: c.address, rule: c.rule, beneficiary: c.beneficiary });
+    out.push({ ...b(c.createdAt), kind: "ClaimSubmitted", claim: c.address, rule: ruleOf(c), beneficiary: c.beneficiary });
     c.approvals.forEach((ok, i) => { if (ok && real(e.verifiers[i])) out.push({ ...b(c.createdAt), kind: "ClaimApproved", claim: c.address, verifier: e.verifiers[i] }); });
     if (c.ownerApproved) out.push({ ...b(c.createdAt), kind: "ClaimOwnerApproved", claim: c.address, owner: e.owner });
   }
@@ -309,7 +332,7 @@ export function snapshotFacts(snap: EstateSnapshot, history: TreeEvent[] = [], o
   }
   // A paid claim the activity lines don't show (older than the feed): its own record of payment.
   for (const c of snap.claims) {
-    if (c.status === "Paid" && !out.some((x) => x.kind === "ClaimPaid" && x.claim === c.address)) out.push({ ...b(c.createdAt, c.txSignature ?? ""), kind: "ClaimPaid", claim: c.address, rule: c.rule });
+    if (c.status === "Paid" && !out.some((x) => x.kind === "ClaimPaid" && x.claim === c.address)) out.push({ ...b(c.createdAt, c.txSignature ?? ""), kind: "ClaimPaid", claim: c.address, rule: ruleOf(c) });
   }
 
   // The owner's passing: who confirmed it (it counts on the tree only once the estate unlocked, promises.ts).

@@ -31,23 +31,23 @@ const built: Record<string, () => ReturnType<typeof ix.buildIx>> = {
   heartbeat: () => ix.heartbeat(ctx, owner),
   register_asset: () => ix.registerAsset(ctx, owner, { nftMint: nft, floorPrice: 9n, hardshipFloor: 7n, askingPrice: 10n, proceedsTo: owner, docHashHex: H }),
   submit_death_claim: () => ix.submitDeathClaim(ctx, estate, ben, H),
-  review_death: () => ix.reviewDeath(estate, agent, "Approve", H),
+  review_death: () => ix.reviewDeath(estate, agent, "Approve", H, H),
   attest_death: () => ix.attestDeath(estate, v[0]),
   veto_death: () => ix.vetoDeath(ctx, owner),
   finalize_unlock: () => ix.finalizeUnlock(estate, ben),
   submit_claim: () => ix.submitClaim(ctx, { estate, signer: ben, ruleId: 0, claimId: 0, payeeWallet: payee, amount: 1n, evidenceHashHex: H }),
   review_claim: () => ix.reviewClaim(estate, agent, claimPda(programId, rule0, 0), rule0, "Reject", H),
   approve_claim: () => ix.approveClaim(estate, v[1], k(), k()),
-  execute_claim: () => ix.executeClaim(ctx, { estate, payer: ben, rule: k(), claim: k(), payeeWallet: payee }),
+  execute_claim: () => ix.executeClaim(ctx, { estate, payer: ben, rule: k(), claim: k(), beneficiary: ben, payeeWallet: payee }),
   list_asset: () => ix.listAsset(estate, agent, asset, 3600),
   place_offer: () => ix.placeOffer(ctx, estate, asset, buyer, 9n),
   withdraw_offer: () => ix.withdrawOffer(ctx, estate, asset, buyer),
   submit_hardship: () => ix.submitHardship(ctx, estate, asset, ben, H),
   review_hardship: () => ix.reviewHardship(estate, agent, asset, hardshipPda(programId, asset, ben), "Refer", H),
   approve_hardship: () => ix.approveHardship(estate, v[2], asset, k()),
-  accept_offer: () => ix.acceptOffer(ctx, { estate, agent, asset, nftMint: nft, buyer, recipient: owner }),
+  accept_offer: () => ix.acceptOffer(ctx, { estate, agent, asset, nftMint: nft, buyer, recipient: owner, expectedAmount: 9n, coSigner: v[0] }),
   owner_approve_claim: () => ix.ownerApproveClaim(ctx, owner, k(), rule0),
-  execute_scheduled: () => ix.executeScheduled(ctx, { estate, payer: agent, rule: rule0, payeeWallet: payee }),
+  execute_scheduled: () => ix.executeScheduled(ctx, { estate, payer: agent, rule: rule0, beneficiary: ben, payeeWallet: payee }),
   // guardians
   init_guard: () => ix.initGuard(ctx, owner, estate, { objectionWindowSecs: 60, successionWaitSecs: 60, fallbackWaitSecs: 120 }),
   init_seat: () => ix.initSeat(ctx, owner, 2, [k(), k()], [k()]),
@@ -56,7 +56,7 @@ const built: Record<string, () => ReturnType<typeof ix.buildIx>> = {
   set_fallback: () => ix.setFallback(ctx, owner, [ben, k(), k(), k()]),
   owner_replace_seat: () => ix.ownerReplaceSeat(ctx, owner, 1, k()),
   report_seat_death: () => ix.reportSeatDeath(ctx, ben, estate, 2, H),
-  review_seat_death: () => ix.reviewSeatDeath(estate, agent, 2, true, H),
+  review_seat_death: () => ix.reviewSeatDeath(estate, agent, 2, true, H, H),
   confirm_seat_death: () => ix.confirmSeatDeath(ctx, v[0], estate, 2),
   veto_seat_death: () => ix.vetoSeatDeath(ctx, v[2], estate, 2),
   finalize_succession: () => ix.finalizeSuccession(ctx, estate, 2, ben),
@@ -64,10 +64,13 @@ const built: Record<string, () => ReturnType<typeof ix.buildIx>> = {
   vote_objection: () => ix.voteObjection(ctx, { voter: v[0], estate, kind: "Claim", target: k(), uphold: true }),
   set_asset_media: () => ix.setAssetMedia(ctx, { authority: owner, estate, asset, kind: "Car", photosRootHex: H, photoCount: 3 }),
   report_fallback_death: () => ix.reportFallbackDeath(ctx, ben, estate, 0, H),
-  review_fallback_death: () => ix.reviewFallbackDeath(estate, agent, 0, true, H),
+  review_fallback_death: () => ix.reviewFallbackDeath(estate, agent, 0, true, H, H, ben),
+  resolve_fallback_death: () => ix.resolveFallbackDeath(ctx, { signer: ben, estate, index: 0, dead: false, rentTo: ben }),
+  release_asset: () => ix.releaseAsset(ctx, owner, asset, nft),
+  remove_member: () => ix.removeMember(ctx, owner, { beneficiary: ben }),
   start_fallback: () => ix.startFallback(ctx, estate, ben),
   lapse_objection: () => ix.lapseObjection(ctx, estate, ben),
-  execute_fallback: () => ix.executeFallback(ctx, { payer: ben, estate, recipient: ben }),
+  execute_fallback: () => ix.executeFallback(ctx, { payer: ben, estate, recipient: ben, recipientIndex: 0 }),
   // disputes and yearly caps
   raise_dispute: () => ix.raiseDispute(ctx, { disputer: ben, estate, kind: "Claim", target: k(), reasonHashHex: H, beneficiary: true }),
   resolve_dispute: () => ix.resolveDispute(ctx, { verifier: v[0], estate, kind: "Unlock", target: estate, uphold: true }),
@@ -75,12 +78,11 @@ const built: Record<string, () => ReturnType<typeof ix.buildIx>> = {
   // continuity
   end_rule: () => ix.endRule(ctx, owner, rule0),
   set_residual: () => ix.setResidual(ctx, owner, ben),
-  sweep_residual: () => ix.sweepResidual(ctx, { payer: ben, estate, recipient: ben, rules: [] }),
+  sweep_residual: () => ix.sweepResidual(ctx, { payer: ben, estate, recipient: ben, reportIndex: 255, rules: [] }),
   set_agent: () => ix.setAgent(ctx, owner, k()),
   vote_agent: () => ix.voteAgent(ctx, estate, v[0], k()),
 };
 const idlNames = new Set(getIdl().instructions.map((i) => i.name));
-const livingPlans = findInstruction("add_rule").args.length > 5;
 
 describe("instruction builders vs IDL", () => {
   it("covers every IDL instruction", () => {
@@ -107,17 +109,13 @@ describe("instruction builders vs IDL", () => {
     expect(built.place_offer().keys.some((m) => m.pubkey.equals(offerPda(programId, asset, buyer)))).toBe(true);
   });
 
-  it("living-plan add_rule: recurring + starts_now (only when the IDL supports it)", () => {
+  it("living-plan add_rule: recurring + starts_now", () => {
     const make = () => ix.addRule(ctx, owner, {
       ruleId: 1, beneficiaryWallet: ben, category: "Accommodation", allowedPayeeKind: "Landlord", maxPerClaim: 5n, lifetimeCap: 50n,
       validUntil: 2e9, startsNow: true, recurring: { amount: 5n, intervalSecs: 60, firstDue: 1e9, payeeWallet: payee },
     });
-    if (livingPlans) {
-      const decoded = getCoder().instruction.decode(Buffer.from(make().data)) as { data: Record<string, unknown> } | null;
-      expect(Object.values(decoded!.data)).toContain(true);
-    } else {
-      expect(make).toThrow(/living plans/);
-    }
+    const decoded = getCoder().instruction.decode(Buffer.from(make().data)) as { data: Record<string, unknown> } | null;
+    expect(Object.values(decoded!.data)).toContain(true);
   });
 
   it("guardians: PDAs land in the right account slots", () => {
@@ -127,7 +125,7 @@ describe("instruction builders vs IDL", () => {
     const ap = ix.approveClaim(estate, v[1], claim, k());
     expect(at("approve_claim", ap, "approval_stamp").equals(stampPda(programId, claim))).toBe(true);
     expect(at("approve_claim", ap, "payer").equals(v[1])).toBe(true);
-    const ex = ix.executeClaim(ctx, { estate, payer: ben, rule: k(), claim, payeeWallet: payee });
+    const ex = ix.executeClaim(ctx, { estate, payer: ben, rule: k(), claim, beneficiary: ben, payeeWallet: payee });
     expect(at("execute_claim", ex, "guard").equals(guardPda(programId, estate))).toBe(true);
     expect(at("execute_claim", ex, "objection").equals(objectionPda(programId, claim))).toBe(true);
     expect(at("finalize_unlock", ix.finalizeUnlock(estate, ben), "objection").equals(objectionPda(programId, estate))).toBe(true);
@@ -135,12 +133,12 @@ describe("instruction builders vs IDL", () => {
     expect(at("finalize_succession", ix.finalizeSuccession(ctx, estate, 2, ben), "objection").equals(objectionPda(programId, seat))).toBe(true);
     const guard = guardPda(programId, estate);
     expect(at("lapse_objection", ix.lapseObjection(ctx, estate, ben), "objection").equals(objectionPda(programId, guard))).toBe(true);
-    const exf = ix.executeFallback(ctx, { payer: ben, estate, recipient: ben });
+    const exf = ix.executeFallback(ctx, { payer: ben, estate, recipient: ben, recipientIndex: 0 });
     expect(exf.keys[names("execute_fallback").indexOf("objection")]).toMatchObject({ isWritable: true });
     // accept_offer: the hardship objection only when a hardship sale is approved, else the system program
-    const plain = ix.acceptOffer(ctx, { estate, agent, asset, nftMint: nft, buyer, recipient: owner });
+    const plain = ix.acceptOffer(ctx, { estate, agent, asset, nftMint: nft, buyer, recipient: owner, expectedAmount: 9n, coSigner: v[0] });
     expect(at("accept_offer", plain, "hardship_objection").toBase58()).toBe("11111111111111111111111111111111");
-    const hs = ix.acceptOffer(ctx, { estate, agent, asset, nftMint: nft, buyer, recipient: ben, hardshipBeneficiary: ben });
+    const hs = ix.acceptOffer(ctx, { estate, agent, asset, nftMint: nft, buyer, recipient: ben, expectedAmount: 7n, coSigner: v[0], hardshipBeneficiary: ben });
     expect(at("accept_offer", hs, "hardship_objection").equals(objectionPda(programId, hardshipPda(programId, asset, ben)))).toBe(true);
     // raise_objection: optional accounts not passed become the program id (Anchor's None)
     const un = ix.raiseObjection(ctx, { objector: ben, estate, kind: "Unlock", target: estate, seatIndex: null, reasonHashHex: H, monitorSeat: 1 });
@@ -171,8 +169,8 @@ describe("instruction builders vs IDL", () => {
     const rule = k();
     const yc = yearCapPda(programId, rule);
     expect(slot("set_yearly_cap", ix.setYearlyCap(ctx, { owner, rule, cap: 1n, periodStart: 0 }), "year_cap").pubkey.equals(yc)).toBe(true);
-    expect(slot("execute_claim", ix.executeClaim(ctx, { estate, payer: ben, rule, claim, payeeWallet: payee }), "year_cap")).toMatchObject({ pubkey: yc, isWritable: true });
-    expect(slot("execute_scheduled", ix.executeScheduled(ctx, { estate, payer: ben, rule, payeeWallet: payee }), "year_cap")).toMatchObject({ pubkey: yc, isWritable: true });
+    expect(slot("execute_claim", ix.executeClaim(ctx, { estate, payer: ben, rule, claim, beneficiary: ben, payeeWallet: payee }), "year_cap")).toMatchObject({ pubkey: yc, isWritable: true });
+    expect(slot("execute_scheduled", ix.executeScheduled(ctx, { estate, payer: ben, rule, beneficiary: ben, payeeWallet: payee }), "year_cap")).toMatchObject({ pubkey: yc, isWritable: true });
     const sc = ix.submitClaim(ctx, { estate, signer: ben, ruleId: 0, claimId: 0, payeeWallet: payee, amount: 1n, evidenceHashHex: H });
     expect(slot("submit_claim", sc, "year_cap").pubkey.equals(yearCapPda(programId, rule0))).toBe(true);
     // The permissionless calls take any wallet as a signing caller, so the sponsor can pay their fee.

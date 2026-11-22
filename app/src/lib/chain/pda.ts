@@ -104,3 +104,7 @@ export const residualPda = (programId: Key, estate: Key) =>
 /** ["agentvote", estate, candidate]: the trusted people's votes to replace the agent's key. */
 export const agentVotePda = (programId: Key, estate: Key, candidate: Key) =>
   find(programId, [new TextEncoder().encode("agentvote"), pk(estate).toBytes(), pk(candidate).toBytes()]);
+
+/** ["fallbackreport", estate, &[index]]: an open report that fallback recipient `index` died (255: there is none). */
+export const fallbackReportPda = (programId: Key, estate: Key, index: number) =>
+  find(programId, [enc.encode("fallbackreport"), pk(estate).toBytes(), u8(index)]);
