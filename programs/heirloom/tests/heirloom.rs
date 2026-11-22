@@ -5698,3 +5698,18 @@ fn set_will_works_only_while_active() {
     let i = will(&env);
     expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::BadStatus);
 }
+
+#[test]
+fn r02_watching_the_seat_does_not_save_a_replaced_confirmers_confirmation() {
+    let (mut env, _people) = guardian_env();
+    let (v1, kid) = (env.v(1), env.kid1.insecure_clone());
+    env.set_seat_monitors(0, [v1.pubkey(), d()]).unwrap();
+    env.report_seat_death(&kid, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    env.confirm_seat_death(&v1, 0).unwrap();
+    warp(&mut env.svm, 1);
+    env.replace_seat(1, Keypair::new().pubkey()).unwrap();
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    env.finalize_succession(0).unwrap();
+    assert_eq!((env.seat(0).death_cert_hash, env.seat(0).generation), ([0u8; 32], 0));
+}

@@ -642,11 +642,10 @@ pub fn finalize_succession_handler(ctx: Context<FinalizeSuccession>, _index: u8)
     // The owner has since replaced or removed whoever confirmed this, which revokes the confirmation. A confirmer
     // who died instead keeps it: their seat's successor holds that vote.
     let by = seat.death_confirmed_by;
-    if seat.death_pending_since <= estate.last_heartbeat
-        && estate.verifier_index(&by).is_none()
-        && !seat.is_monitor(&by)
-        && by != seat.backups[1]
-    {
+    let no_other_holder = estate.living_seats_except(&seat.holder) == 0;
+    let may_still_confirm = estate.verifier_index(&by).is_some()
+        || (no_other_holder && (seat.is_monitor(&by) || by == seat.backups[1]));
+    if seat.death_pending_since <= estate.last_heartbeat && !may_still_confirm {
         seat.clear_succession();
         emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts });
         return Ok(());
