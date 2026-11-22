@@ -78,6 +78,8 @@ pub fn raise_dispute_handler(
             let claim: Claim = read_account(&info)?;
             require!(claim.estate == estate_key, HeirloomError::BadStatus);
             require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
+            // Otherwise a claimant could use the one challenge on their own claim and shut everyone else out.
+            require!(claim.beneficiary != disputer, HeirloomError::OwnClaimDispute);
         }
         TargetKind::Unlock => {
             require_keys_eq!(target, estate_key, HeirloomError::BadStatus);
@@ -119,7 +121,7 @@ pub fn raise_dispute_handler(
         votes_dismiss: 0,
         bump,
     });
-    let lapses_at = objection.dispute_lapses_at(estate);
+    let lapses_at = objection.lapses_at(estate);
 
     emit!(DisputeRaised {
         estate: estate_key,

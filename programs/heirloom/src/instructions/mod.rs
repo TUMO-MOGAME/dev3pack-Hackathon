@@ -1,5 +1,6 @@
 pub mod caps;
 pub mod claims;
+pub mod continuity;
 pub mod death;
 pub mod disputes;
 pub mod guardians;
@@ -8,6 +9,7 @@ pub mod setup;
 
 pub use caps::*;
 pub use claims::*;
+pub use continuity::*;
 pub use death::*;
 pub use disputes::*;
 pub use guardians::*;

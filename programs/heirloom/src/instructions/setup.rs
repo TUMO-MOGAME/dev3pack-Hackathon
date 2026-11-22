@@ -55,7 +55,10 @@ pub fn create_estate_handler(
     for t in [death_threshold, claim_threshold, hardship_threshold] {
         require!((1..=3).contains(&t), HeirloomError::InvalidThreshold);
     }
-    require!(waiting_period_secs >= 0, HeirloomError::InvalidThreshold);
+    require!(
+        (MIN_WAITING_SECS..=MAX_WAITING_SECS).contains(&waiting_period_secs),
+        HeirloomError::TimeOutOfRange
+    );
 
     for i in 0..VERIFIER_COUNT {
         require!(verifiers[i] != owner, HeirloomError::DuplicateVerifier);
@@ -282,6 +285,7 @@ pub fn add_rule_handler(
         HeirloomError::BadStatus
     );
     require!(ctx.accounts.beneficiary.active, HeirloomError::NotBeneficiary);
+    require!(ctx.accounts.estate.rule_count < MAX_RULES, HeirloomError::TooManyRules);
     require!(
         max_per_claim > 0 && lifetime_cap > 0 && max_per_claim <= lifetime_cap,
         HeirloomError::InvalidAmount
@@ -289,6 +293,10 @@ pub fn add_rule_handler(
 
     let (interval_secs, next_due, fixed_payee) = if recurring_amount > 0 {
         require!(interval_secs > 0, HeirloomError::InvalidAmount);
+        require!(
+            interval_secs <= MAX_INTERVAL_SECS && first_due >= 0,
+            HeirloomError::TimeOutOfRange
+        );
         require!(recurring_amount <= max_per_claim, HeirloomError::ExceedsPerClaimCap);
         let payee = ctx
             .accounts

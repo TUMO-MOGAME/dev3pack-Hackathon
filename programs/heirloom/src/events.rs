@@ -394,3 +394,54 @@ pub struct YearlyCapSet {
     pub period_start: i64,
     pub ts: i64,
 }
+
+// ---- judge-review fixes (2026-11-22). ReviewReferred replaces *Reviewed for referrals, whose layouts stay as deployed.
+
+#[event]
+pub struct ReviewReferred {
+    pub estate: Pubkey,
+    pub target: Pubkey,
+    pub kind: TargetKind,
+    pub report_hash: [u8; 32],
+    pub ts: i64,
+}
+
+#[event]
+pub struct RuleEnded {
+    pub estate: Pubkey,
+    pub rule: Pubkey,
+    pub ts: i64,
+}
+
+#[event]
+pub struct ResidualSet {
+    pub estate: Pubkey,
+    pub recipient: Pubkey,
+    pub ts: i64,
+}
+
+#[event]
+pub struct ResidualSwept {
+    pub estate: Pubkey,
+    pub recipient: Pubkey,
+    pub amount: u64,
+    pub reserved: u64,
+    pub ts: i64,
+}
+
+#[event]
+pub struct AgentVoted {
+    pub estate: Pubkey,
+    pub candidate: Pubkey,
+    pub verifier: Pubkey,
+    pub count: u8,
+    pub ts: i64,
+}
+
+#[event]
+pub struct AgentChanged {
+    pub estate: Pubkey,
+    pub previous: Pubkey,
+    pub agent: Pubkey,
+    pub ts: i64,
+}

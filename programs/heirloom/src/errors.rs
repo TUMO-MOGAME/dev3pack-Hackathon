@@ -95,4 +95,21 @@ pub enum HeirloomError {
     DisputeLapsed,
     #[msg("Payment would exceed the rule's cap for this year")]
     ExceedsYearlyCap,
+    // ---- judge-review fixes (added 2026-11-22; append only, never reorder)
+    #[msg("You cannot dispute your own claim")]
+    OwnClaimDispute,
+    #[msg("That length of time is outside the allowed range")]
+    TimeOutOfRange,
+    #[msg("An estate can have at most 16 rules")]
+    TooManyRules,
+    #[msg("Invalid agent: must be a new wallet that is neither the owner nor a trusted person")]
+    BadAgent,
+    #[msg("Every rule of the estate must be passed, in order")]
+    RulesIncomplete,
+    #[msg("The owner did not name anyone to receive what is left")]
+    NoResidualRecipient,
+    #[msg("Nothing is left over: the rules still need what is in the vault")]
+    NothingToSweep,
+    #[msg("It is too soon to object to this again")]
+    ObjectionCooldown,
 }

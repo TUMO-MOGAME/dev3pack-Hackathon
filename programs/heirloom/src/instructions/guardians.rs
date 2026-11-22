@@ -100,7 +100,7 @@ fn emit_seat_configured(seat: &Seat) -> Result<()> {
 
 #[derive(Accounts)]
 pub struct InitGuard<'info> {
-    /// The owner, or the agent at setup (estate Active). Pays rent.
+    /// The owner (estate Active): the waits can't be changed later, so never the agent. Pays rent.
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -126,15 +126,11 @@ pub fn init_guard_handler(
 ) -> Result<()> {
     let estate = &ctx.accounts.estate;
     let authority = ctx.accounts.authority.key();
-    require!(
-        authority == estate.owner || authority == estate.agent,
-        HeirloomError::NotOwner
-    );
+    require!(authority == estate.owner, HeirloomError::NotOwner);
     require!(estate.status == EstateStatus::Active, HeirloomError::BadStatus);
-    require!(
-        objection_window_secs >= 0 && succession_wait_secs >= 0 && fallback_wait_secs >= 0,
-        HeirloomError::InvalidThreshold
-    );
+    for wait in [objection_window_secs, succession_wait_secs, fallback_wait_secs] {
+        require!((0..=MAX_GUARD_WAIT_SECS).contains(&wait), HeirloomError::TimeOutOfRange);
+    }
 
     let estate_key = estate.key();
     let bump = ctx.bumps.guard;
@@ -553,7 +549,7 @@ pub struct FinalizeSuccession<'info> {
 }
 
 pub fn finalize_succession_handler(ctx: Context<FinalizeSuccession>, _index: u8) -> Result<()> {
-    let wait = ctx.accounts.guard.succession_wait_secs;
+    let wait = ctx.accounts.guard.succession_wait();
     let objection_open = objection_is_open(&ctx.accounts.objection.to_account_info(), &ctx.accounts.estate)?;
     let estate = &mut ctx.accounts.estate;
     let seat = &mut ctx.accounts.seat;
@@ -821,17 +817,33 @@ pub fn raise_objection_handler(
     let objection = &mut ctx.accounts.objection;
     if is_set(&objection.target) {
         require!(!objection.is_effectively_open(estate, ts), HeirloomError::ObjectionOpen);
-        // Still Open here means a lapsed dispute, which counts as dismissed.
+        // Still Open here means it lapsed, which counts as dismissed.
+        let was_dispute = objection.is_dispute();
         let prev = if objection.status == ObjectionStatus::Open {
+            if !was_dispute {
+                let guard = &mut ctx.accounts.guard;
+                guard.open_objections = guard.open_objections.saturating_sub(1);
+            }
             ObjectionStatus::Dismissed
         } else {
             objection.status
         };
-        require!(
-            !(prev == ObjectionStatus::Dismissed
-                && matches!(kind, TargetKind::Claim | TargetKind::Hardship)),
-            HeirloomError::BadStatus
-        );
+        // A finished dispute never uses up the monitors' objection. A monitors' objection that was dismissed
+        // does: once per claim, hardship and waiting period; with a cooldown for sales and successions.
+        if prev == ObjectionStatus::Dismissed && !was_dispute {
+            match kind {
+                TargetKind::Claim | TargetKind::Hardship => return err!(HeirloomError::BadStatus),
+                TargetKind::Unlock => require!(
+                    objection.raised_at < estate.death_pending_since,
+                    HeirloomError::BadStatus
+                ),
+                TargetKind::Sale | TargetKind::Succession => require!(
+                    ts >= objection.reraise_at(estate),
+                    HeirloomError::ObjectionCooldown
+                ),
+                TargetKind::Fallback => {}
+            }
+        }
         // One fallback objection per countdown: a dismissed or lapsed one can't be re-raised until the
         // countdown restarts (upheld objection, new recipient), or objections could delay it forever.
         require!(
@@ -924,10 +936,14 @@ pub fn vote_objection_handler(ctx: Context<VoteObjection>, uphold: bool) -> Resu
     require!(!objection.is_dispute(), HeirloomError::BadStatus);
     let kind = objection.kind;
     require!(
-        !fallback_objection_lapsed(objection, ctx.accounts.guard.fallback_wait_secs, now()?)?,
+        !fallback_objection_lapsed(objection, ctx.accounts.guard.fallback_wait(), now()?)?,
         HeirloomError::ObjectionLapsed
     );
 
+    require!(
+        kind == TargetKind::Fallback || objection.is_effectively_open(&ctx.accounts.estate, now()?),
+        HeirloomError::ObjectionLapsed
+    );
     let estate = &ctx.accounts.estate;
     let owner_decides = voter == estate.owner && estate.status == EstateStatus::Active;
     let decision: Option<bool> = if owner_decides {
@@ -1219,7 +1235,7 @@ pub fn start_fallback_handler(ctx: Context<StartFallback>) -> Result<()> {
     let ts = now()?;
     guard.fallback_started_at = ts;
     let runs_at = ts
-        .checked_add(guard.fallback_wait_secs)
+        .checked_add(guard.fallback_wait())
         .ok_or(HeirloomError::MathOverflow)?;
 
     emit!(FallbackStarted {
@@ -1285,7 +1301,7 @@ pub struct ExecuteFallback<'info> {
 
 pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
     let ts = now()?;
-    let wait = ctx.accounts.guard.fallback_wait_secs;
+    let wait = ctx.accounts.guard.fallback_wait();
     let obj_info = ctx.accounts.objection.to_account_info();
     let mut lapsed: Option<Objection> = None;
     let objection_open = if account_exists(&obj_info) {
@@ -1330,7 +1346,7 @@ pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
     );
     let runs_at = guard
         .fallback_started_at
-        .checked_add(guard.fallback_wait_secs)
+        .checked_add(guard.fallback_wait())
         .ok_or(HeirloomError::MathOverflow)?;
     require!(ts >= runs_at, HeirloomError::WaitingPeriodNotOver);
     require!(!objection_open, HeirloomError::ObjectionOpen);
@@ -1387,17 +1403,19 @@ pub struct LapseObjection<'info> {
     pub caller: Signer<'info>,
 }
 
-/// Anyone: an Open Fallback objection not upheld within `fallback_wait_secs` of being raised is
-/// marked Dismissed. The fallback countdown is not restarted (it kept running during the objection).
+/// Anyone: marks a lapsed monitors' objection Dismissed. Fallback objections lapse after the fallback wait,
+/// the others after two of the estate's waiting periods. The fallback countdown is not restarted (it kept running during the objection).
 pub fn lapse_objection_handler(ctx: Context<LapseObjection>) -> Result<()> {
     let objection = &mut ctx.accounts.objection;
-    require!(objection.kind == TargetKind::Fallback, HeirloomError::BadStatus);
+    require!(!objection.is_dispute(), HeirloomError::BadStatus);
     require!(objection.status == ObjectionStatus::Open, HeirloomError::BadStatus);
     let ts = now()?;
-    require!(
-        fallback_objection_lapsed(objection, ctx.accounts.guard.fallback_wait_secs, ts)?,
-        HeirloomError::ObjectionNotLapsed
-    );
+    let lapsed = if objection.kind == TargetKind::Fallback {
+        fallback_objection_lapsed(objection, ctx.accounts.guard.fallback_wait(), ts)?
+    } else {
+        !objection.is_effectively_open(&ctx.accounts.estate, ts)
+    };
+    require!(lapsed, HeirloomError::ObjectionNotLapsed);
 
     objection.status = ObjectionStatus::Dismissed;
     let guard = &mut ctx.accounts.guard;

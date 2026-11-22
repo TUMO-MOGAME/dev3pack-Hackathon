@@ -30,12 +30,19 @@ pub fn list_asset_handler(ctx: Context<ListAsset>, duration_secs: i64) -> Result
         HeirloomError::NotAgent
     );
     require!(estate.status == EstateStatus::Unlocked, HeirloomError::BadStatus);
-    require!(duration_secs > 0, HeirloomError::InvalidAmount);
+    require!(
+        (MIN_LISTING_SECS..=MAX_LISTING_SECS).contains(&duration_secs),
+        HeirloomError::TimeOutOfRange
+    );
 
     let asset = &mut ctx.accounts.asset;
-    require!(asset.status == AssetStatus::Held, HeirloomError::BadStatus);
-
     let ts = now()?;
+    // A listing that ran out can be listed again.
+    require!(
+        asset.status == AssetStatus::Held
+            || (asset.status == AssetStatus::Listed && ts >= asset.listing_ends),
+        HeirloomError::BadStatus
+    );
     asset.listing_ends = ts
         .checked_add(duration_secs)
         .ok_or(HeirloomError::MathOverflow)?;
@@ -299,7 +306,7 @@ pub struct ReviewHardship<'info> {
     pub hardship: Account<'info, Hardship>,
 }
 
-pub fn review_hardship_handler(ctx: Context<ReviewHardship>, approve: bool, report_hash: [u8; 32]) -> Result<()> {
+pub fn review_hardship_handler(ctx: Context<ReviewHardship>, outcome: ReviewOutcome, report_hash: [u8; 32]) -> Result<()> {
     let hardship = &mut ctx.accounts.hardship;
     require!(
         hardship.status == HardshipStatus::Open && hardship.agent_verdict == Verdict::Pending,
@@ -307,18 +314,31 @@ pub fn review_hardship_handler(ctx: Context<ReviewHardship>, approve: bool, repo
     );
 
     hardship.agent_report_hash = report_hash;
-    if approve {
-        hardship.agent_verdict = Verdict::Approved;
-    } else {
-        hardship.agent_verdict = Verdict::Rejected;
-        hardship.status = HardshipStatus::Rejected;
+    let ts = now()?;
+    match outcome {
+        ReviewOutcome::Approve => hardship.agent_verdict = Verdict::Approved,
+        ReviewOutcome::Reject => {
+            hardship.agent_verdict = Verdict::Rejected;
+            hardship.status = HardshipStatus::Rejected;
+        }
+        ReviewOutcome::Refer => {
+            hardship.agent_verdict = Verdict::Referred;
+            emit!(ReviewReferred {
+                estate: ctx.accounts.estate.key(),
+                target: hardship.key(),
+                kind: TargetKind::Hardship,
+                report_hash,
+                ts,
+            });
+            return Ok(());
+        }
     }
 
     emit!(HardshipReviewed {
         hardship: hardship.key(),
-        approved: approve,
+        approved: outcome == ReviewOutcome::Approve,
         report_hash,
-        ts: now()?,
+        ts,
     });
     Ok(())
 }
@@ -351,14 +371,14 @@ pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
     let hardship = &mut ctx.accounts.hardship;
     require!(asset.status != AssetStatus::Sold, HeirloomError::BadStatus);
     require!(hardship.status == HardshipStatus::Open, HeirloomError::BadStatus);
-    require!(hardship.agent_verdict == Verdict::Approved, HeirloomError::AgentNotApproved);
+    require!(hardship.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
 
     let bit = 1u8 << idx;
     require!(hardship.approvals & bit == 0, HeirloomError::AlreadyApproved);
     hardship.approvals |= bit;
 
     let count = count_bits(hardship.approvals);
-    let quorum_reached = count >= threshold;
+    let quorum_reached = count >= hardship.agent_verdict.quorum(threshold);
     if quorum_reached {
         hardship.status = HardshipStatus::Approved;
         asset.hardship_beneficiary = Some(hardship.beneficiary);

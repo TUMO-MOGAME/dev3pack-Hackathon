@@ -58,23 +58,28 @@ pub struct ReviewDeath<'info> {
     pub estate: Account<'info, Estate>,
 }
 
-pub fn review_death_handler(ctx: Context<ReviewDeath>, approve: bool, report_hash: [u8; 32]) -> Result<()> {
+pub fn review_death_handler(ctx: Context<ReviewDeath>, outcome: ReviewOutcome, report_hash: [u8; 32]) -> Result<()> {
     let estate = &mut ctx.accounts.estate;
     require!(estate.death_cert_hash != [0u8; 32], HeirloomError::NoDeathClaim);
     require!(estate.status == EstateStatus::Active, HeirloomError::BadStatus);
     require!(estate.death_verdict == Verdict::Pending, HeirloomError::BadStatus);
 
-    if approve {
-        estate.death_verdict = Verdict::Approved;
-    } else {
-        estate.clear_death_claim();
+    let (key, ts) = (estate.key(), now()?);
+    match outcome {
+        ReviewOutcome::Approve => estate.death_verdict = Verdict::Approved,
+        ReviewOutcome::Reject => estate.clear_death_claim(),
+        ReviewOutcome::Refer => {
+            estate.death_verdict = Verdict::Referred;
+            emit!(ReviewReferred { estate: key, target: key, kind: TargetKind::Unlock, report_hash, ts });
+            return Ok(());
+        }
     }
 
     emit!(DeathReviewed {
-        estate: estate.key(),
-        approved: approve,
+        estate: key,
+        approved: outcome == ReviewOutcome::Approve,
         report_hash,
-        ts: now()?,
+        ts,
     });
     Ok(())
 }
@@ -101,7 +106,7 @@ pub fn attest_death_handler(ctx: Context<AttestDeath>) -> Result<()> {
         estate.status == EstateStatus::Active || estate.status == EstateStatus::DeathPending,
         HeirloomError::BadStatus
     );
-    require!(estate.death_verdict == Verdict::Approved, HeirloomError::AgentNotApproved);
+    require!(estate.death_verdict.open_to_people(), HeirloomError::AgentNotApproved);
 
     let bit = 1u8 << idx;
     require!(estate.death_attestations & bit == 0, HeirloomError::AlreadyApproved);
@@ -110,7 +115,7 @@ pub fn attest_death_handler(ctx: Context<AttestDeath>) -> Result<()> {
     let ts = now()?;
     let count = count_bits(estate.death_attestations);
     // Only the attestation that reaches the threshold starts the timer; later ones don't reset it.
-    if estate.status == EstateStatus::Active && count >= estate.death_threshold {
+    if estate.status == EstateStatus::Active && count >= estate.death_verdict.quorum(estate.death_threshold) {
         estate.status = EstateStatus::DeathPending;
         estate.death_pending_since = ts;
     }
@@ -190,7 +195,7 @@ pub fn finalize_unlock_handler(ctx: Context<FinalizeUnlock>) -> Result<()> {
     let ts = now()?;
     let unlock_at = estate
         .death_pending_since
-        .checked_add(estate.waiting_period_secs)
+        .checked_add(estate.waiting_secs())
         .ok_or(HeirloomError::MathOverflow)?;
     require!(ts >= unlock_at, HeirloomError::WaitingPeriodNotOver);
     require!(!objection_open, HeirloomError::ObjectionOpen);

@@ -7,6 +7,22 @@
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
 
 
+## JUDGE REVIEW (22 Nov 2026, Dev3pack rubric; review only, no code changed)
+### Done
+- Reviewed HEAD 65640d4: vitest 913/913, program 65/65, tsc (after next typegen), eslint and build pass. The devnet binary equals the local anchor build whose source mirror matches HEAD.
+- Not checked: video content, Android/MWA on a phone, a signed end-to-end run of the live UI.
+### Blockers for a Dev3pack entry
+- The event is 27-29 Nov (this file says it ends 30 Nov). All 243 commits predate it: prework is allowed (Tumo, 22 Nov), so it must be disclosed.
+- The GitHub repo is private (404 for judges). README "Pre-existing code disclosure: None" is untrue for this event, and 162 commits postdate the 10-13 Nov window it claims.
+### Next up (found in review; nothing fixed)
+- Reproduced in LiteSVM: a claimant's self-dispute permanently blocks monitor objections on that claim; vault surplus is stranded after unlock; an expired listing cannot be relisted; missed instalments all pay out at once on unlock.
+- Reproduced with mocked route tests: /api/review signs needs_human as approve (fallback-death has no human step after it) and passes caller-supplied context as trusted; /api/list-asset signs for anonymous callers (60 s + no relist = stuck asset).
+- From reading the code: /api/accept-offer is unauthenticated (a buyer can settle their own floor offer at once); the SPECIMEN_NOTE footer relaxes review for any uploader; the agent key cannot be rotated; the agent can set an un-changeable Guard window; monitor objections other than fallback never lapse; a new devnet wallet has no SOL or test USDT path to create and fund an estate.
+- README is stale: 27 instructions (49), 25 program tests (65), 516 and 230 app tests (913).
+### Decisions log
+- 22 Nov (Tumo): prework is allowed by the organisers; fix every finding and deploy today; repo public on 27 Nov (Tumo does it).
+- 22 Nov: design changes for the fixes are plan.md §17 (why: the judge review findings above). In progress on fix/judge-review.
+
 ## OPEN ITEMS FOR TUMO (as of 19 Nov 2026)
 1. Pitch video: re-cut the "Dad's call" part (from 3:27); that feature is gone. Say "a stand-in voice" for the demo voice.
 2. ElevenLabs dashboard: delete the old "Heirloom legacy <hash>" call agents by hand.

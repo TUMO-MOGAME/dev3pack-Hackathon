@@ -14,6 +14,8 @@ pub const STAMP_SEED: &[u8] = b"stamp";
 pub const OBJECTION_SEED: &[u8] = b"objection";
 pub const MEDIA_SEED: &[u8] = b"media";
 pub const YEAR_CAP_SEED: &[u8] = b"yearcap";
+pub const RESIDUAL_SEED: &[u8] = b"residual";
+pub const AGENT_VOTE_SEED: &[u8] = b"agentvote";
 
 pub const MAX_WILL_URI_LEN: usize = 200;
 pub const MAX_LABEL_LEN: usize = 32;
@@ -30,6 +32,17 @@ pub const DISPUTE_SEAT: u8 = 254;
 pub const DISPUTE_MIN_SECS: i64 = 60;
 /// Length of a yearly-cap period (365 days).
 pub const YEAR_SECS: i64 = 365 * 86_400;
+/// Every wait is bounded, so no setting can lock funds forever.
+pub const MIN_WAITING_SECS: i64 = 60;
+pub const MAX_WAITING_SECS: i64 = YEAR_SECS;
+pub const MAX_GUARD_WAIT_SECS: i64 = 180 * 86_400;
+pub const MAX_INTERVAL_SECS: i64 = 10 * YEAR_SECS;
+pub const MIN_LISTING_SECS: i64 = 3_600;
+pub const MAX_LISTING_SECS: i64 = 90 * 86_400;
+/// sweep_residual passes every rule in one legacy transaction.
+pub const MAX_RULES: u16 = 16;
+/// People needed for anything the agent referred instead of approving.
+pub const REFERRED_MIN_APPROVALS: u8 = 2;
 
 // ---------------------------------------------------------------- enums (Borsh order matters)
 
@@ -63,6 +76,29 @@ pub enum Verdict {
     Pending,
     Approved,
     Rejected,
+    /// The agent could not decide: people do, with a higher quorum (appended 2026-11-22).
+    Referred,
+}
+
+impl Verdict {
+    /// The agent looked and did not reject: people may now decide.
+    pub fn open_to_people(&self) -> bool {
+        matches!(self, Verdict::Approved | Verdict::Referred)
+    }
+
+    /// The approvals needed, given the estate's threshold.
+    pub fn quorum(&self, threshold: u8) -> u8 {
+        if *self == Verdict::Referred { threshold.max(REFERRED_MIN_APPROVALS) } else { threshold }
+    }
+}
+
+/// The agent's answer to review_death, review_claim and review_hardship. The first two values encode
+/// like the bool they replace.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ReviewOutcome {
+    Reject,
+    Approve,
+    Refer,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
@@ -119,6 +155,11 @@ impl Estate {
     /// Index (0..3) of `key` in the verifier list.
     pub fn verifier_index(&self, key: &Pubkey) -> Option<usize> {
         self.verifiers.iter().position(|v| v == key)
+    }
+
+    /// The waiting period, clamped for estates created before the bound existed.
+    pub fn waiting_secs(&self) -> i64 {
+        self.waiting_period_secs.clamp(0, MAX_WAITING_SECS)
     }
 
     pub fn clear_death_claim(&mut self) {
@@ -342,6 +383,18 @@ pub struct Guard {
 }
 
 impl Guard {
+    pub fn objection_window(&self) -> i64 {
+        self.objection_window_secs.clamp(0, MAX_GUARD_WAIT_SECS)
+    }
+
+    pub fn succession_wait(&self) -> i64 {
+        self.succession_wait_secs.clamp(0, MAX_GUARD_WAIT_SECS)
+    }
+
+    pub fn fallback_wait(&self) -> i64 {
+        self.fallback_wait_secs.clamp(0, MAX_GUARD_WAIT_SECS)
+    }
+
     /// First recipient that is set and not proven dead; Pubkey::default() if none.
     pub fn next_fallback_recipient(&self) -> Pubkey {
         self.fallback
@@ -390,15 +443,26 @@ impl Objection {
         self.seat_index == DISPUTE_SEAT
     }
 
-    /// Unix time an Open dispute lapses (counts as Dismissed): raised_at + max(waiting period, 60 s).
-    pub fn dispute_lapses_at(&self, estate: &Estate) -> i64 {
+    /// Unix time this challenge lapses (counts as Dismissed). A dispute: one waiting period (at least 60 s).
+    /// A monitors' objection: two, so one raised as an unlock starts still holds when the wait ends.
+    /// Fallback objections lapse on the Guard's fallback wait instead.
+    pub fn lapses_at(&self, estate: &Estate) -> i64 {
+        let periods = if self.is_dispute() { 1 } else { 2 };
         self.raised_at
-            .saturating_add(estate.waiting_period_secs.max(DISPUTE_MIN_SECS))
+            .saturating_add(estate.waiting_secs().max(DISPUTE_MIN_SECS).saturating_mul(periods))
     }
 
-    /// Open and still binding: a dispute past its lapse time no longer blocks anything.
+    /// When a dismissed Sale or Succession objection may be raised again: the action gets as much free
+    /// time as the objection could take.
+    pub fn reraise_at(&self, estate: &Estate) -> i64 {
+        self.lapses_at(estate)
+            .saturating_add(estate.waiting_secs().max(DISPUTE_MIN_SECS))
+    }
+
+    /// Open and still binding: a challenge past its lapse time no longer blocks anything.
     pub fn is_effectively_open(&self, estate: &Estate, ts: i64) -> bool {
-        self.status == ObjectionStatus::Open && !(self.is_dispute() && ts >= self.dispute_lapses_at(estate))
+        self.status == ObjectionStatus::Open
+            && (self.kind == TargetKind::Fallback || ts < self.lapses_at(estate))
     }
 }
 
@@ -441,4 +505,28 @@ impl YearCap {
         let periods = (ts - self.period_start) / YEAR_SECS;
         (self.period_start.saturating_add(periods.saturating_mul(YEAR_SECS)), 0)
     }
+}
+
+// ================================================================ continuity (added 2026-11-22)
+
+/// Seeds: ["residual", estate]. Who receives what no live rule still needs after the unlock.
+#[account]
+#[derive(InitSpace)]
+pub struct Residual {
+    pub estate: Pubkey,
+    pub recipient: Pubkey,
+    pub bump: u8,
+}
+
+/// Seeds: ["agentvote", estate, candidate]. The trusted people's votes to replace a lost agent key.
+#[account]
+#[derive(InitSpace)]
+pub struct AgentVote {
+    pub estate: Pubkey,
+    pub candidate: Pubkey,
+    /// The agent these votes replace; they are void once it is no longer the agent.
+    pub replaces: Pubkey,
+    /// The wallet that voted from each seat; counts only while it still holds that seat.
+    pub voters: [Pubkey; 3],
+    pub bump: u8,
 }

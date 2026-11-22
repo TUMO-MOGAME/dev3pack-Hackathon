@@ -1014,3 +1014,50 @@ no live call in a parent's voice after death. This answers §16.13 "Legacy Voice
   voice, an ElevenLabs stock voice reads the owner's words and is labelled as a stand-in; the disclosure is spoken in
   Heirloom's own ElevenLabs voice (`{ disclosure: true }`). The demo uses GET /api/legacy/demo-voice, which speaks
   only the demo book's fixed lines. With no ElevenLabs key the app shows the words instead of playing anything.
+
+## 17. Judge-review fixes (22 Nov 2026, for Dev3pack 27-29 Nov)
+
+Target: 95/100 on the judge rubric. Every finding gets a test that fails on 65640d4 and passes after the fix.
+The program and both sites ship together: no push to main before the devnet upgrade is ready.
+
+### 17.1 Program (no existing account layout changes)
+| ID | Finding | Fix | Test |
+|---|---|---|---|
+| P1 | A claimant's self-dispute blocks monitors for good | A claimant can't dispute their own claim; a finished dispute never uses up the monitors' objection; a guarded claim gets a fresh window after a dispute | self-dispute refused; monitor can object after a lapsed dispute |
+| P2 | Surplus stranded after unlock | Owner names a residual recipient (`set_residual`); `sweep_residual` pays only vault minus what live rules still reserve | sweep leaves reserves; needs every rule |
+| P3 | Expired listing can't be relisted | `list_asset` accepts an expired listing; listings last at least 1 hour | relist works; early relist refused |
+| P4 | Missed instalments pay at once | One instalment, then the next date on the schedule after now; missed money stays inside the cap | 12 missed months pay once |
+| P5 | Agent key can't be rotated | Owner `set_agent` while Active; verifiers `vote_agent` (all three while Active, two afterwards) | both paths, stale votes |
+| P6 | Agent could set an unchangeable Guard window | Only the owner creates a Guard; all waits bounded, and clamped for existing guards | agent refused; bounds |
+| P7 | Monitor objections could freeze forever | Every objection lapses; re-raising has a cooldown | lapse; cooldown |
+| P8 | "Unsure" signed as "approve" | Third on-chain verdict `Referred`; referred items need at least two trusted people | referred quorum |
+| P9 | A living plan can't end a rule | Owner `end_rule` while Active | ended rule can't pay |
+
+### 17.2 Server
+| ID | Finding | Fix |
+|---|---|---|
+| S1 | Anonymous callers make the agent sign | Signed, role-checked requests for review, list and settle; a buyer can't settle their own offer |
+| S2 | Caller context treated as trusted | Facts built from the chain; caller text passed only as untrusted |
+| S3 | needs_human became approve | Referred for death, claim and hardship; never an approval for seat or fallback deaths |
+| S4 | Anyone could use the specimen footer | Relaxed review only for the SHA-256 of our own demo documents |
+| S5 | Family data readable by anyone (reports, names, asks, tree, child photos, agent facts) | Members only, through a signed read session |
+| S6 | Agent SOL drainable through arbitrary estates | Agent acts only for estates with our agent and mint; per-estate limits and a balance reserve |
+| S7 | Evidence stored before any check | Check first, store after; previews are never stored |
+
+### 17.3 Product, both services
+- A1: newcomer starter funds (devnet only; once per wallet; daily cap and reserve read from the chain).
+- A2: practice wallets for family and trusted people from the plan builder.
+- A3: residual recipient, end rule, relist, referred verdict and settle rules in mock and chain, in four languages.
+
+### 17.4 Release gates
+1. cargo test, vitest, tsc, eslint, build.
+2. Back up the live binary; check buffer SOL; upgrade; compare hashes.
+3. Push main; check both sites at 360 px and desktop, axe, Lighthouse.
+4. A fresh wallet on the devnet site completes create, fund and pay with no scripts.
+5. The original exploits are refused on the live deployment (own throwaway estates only).
+
+### 17.5 Presentation
+- README: honest prework disclosure, true numbers, judge path; transcript; no local key paths in public docs.
+
+### 17.6 Only Tumo can do
+- Real user interviews (never invent them), a physical-phone wallet test, a new video, Supabase keys, making the repo public on 27 Nov.

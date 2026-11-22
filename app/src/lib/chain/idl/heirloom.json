@@ -1095,6 +1095,58 @@
       ]
     },
     {
+      "name": "end_rule",
+      "discriminator": [
+        89,
+        4,
+        126,
+        9,
+        29,
+        117,
+        64,
+        147
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          },
+          "relations": [
+            "rule"
+          ]
+        },
+        {
+          "name": "rule",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "execute_claim",
       "discriminator": [
         186,
@@ -1972,7 +2024,7 @@
         {
           "name": "authority",
           "docs": [
-            "The owner, or the agent at setup (estate Active). Pays rent."
+            "The owner (estate Active): the waits can't be changed later, so never the agent. Pays rent."
           ],
           "writable": true,
           "signer": true
@@ -3088,8 +3140,12 @@
       ],
       "args": [
         {
-          "name": "approve",
-          "type": "bool"
+          "name": "outcome",
+          "type": {
+            "defined": {
+              "name": "ReviewOutcome"
+            }
+          }
         },
         {
           "name": "report_hash",
@@ -3129,8 +3185,12 @@
       ],
       "args": [
         {
-          "name": "approve",
-          "type": "bool"
+          "name": "outcome",
+          "type": {
+            "defined": {
+              "name": "ReviewOutcome"
+            }
+          }
         },
         {
           "name": "report_hash",
@@ -3251,8 +3311,12 @@
       ],
       "args": [
         {
-          "name": "approve",
-          "type": "bool"
+          "name": "outcome",
+          "type": {
+            "defined": {
+              "name": "ReviewOutcome"
+            }
+          }
         },
         {
           "name": "report_hash",
@@ -3313,6 +3377,57 @@
               32
             ]
           }
+        }
+      ]
+    },
+    {
+      "name": "set_agent",
+      "discriminator": [
+        154,
+        74,
+        121,
+        91,
+        137,
+        19,
+        101,
+        166
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "agent",
+          "type": "pubkey"
         }
       ]
     },
@@ -3474,6 +3589,86 @@
               4
             ]
           }
+        }
+      ]
+    },
+    {
+      "name": "set_residual",
+      "discriminator": [
+        34,
+        76,
+        175,
+        107,
+        125,
+        244,
+        162,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "residual",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  115,
+                  105,
+                  100,
+                  117,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "recipient",
+          "type": "pubkey"
         }
       ]
     },
@@ -4106,6 +4301,210 @@
       ]
     },
     {
+      "name": "sweep_residual",
+      "discriminator": [
+        230,
+        118,
+        35,
+        155,
+        165,
+        110,
+        141,
+        19
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Anyone; pays the recipient's ATA rent if missing."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "estate"
+        },
+        {
+          "name": "residual",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  115,
+                  105,
+                  100,
+                  117,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "guard",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "recipient"
+        },
+        {
+          "name": "usdt_mint"
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "estate"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdt_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "recipient_usdt",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "recipient"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "usdt_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "veto_death",
       "discriminator": [
         232,
@@ -4186,6 +4585,70 @@
         {
           "name": "index",
           "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "vote_agent",
+      "discriminator": [
+        89,
+        46,
+        218,
+        180,
+        4,
+        93,
+        206,
+        239
+      ],
+      "accounts": [
+        {
+          "name": "verifier",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "writable": true
+        },
+        {
+          "name": "agent_vote",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116,
+                  118,
+                  111,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              },
+              {
+                "kind": "arg",
+                "path": "candidate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "candidate",
+          "type": "pubkey"
         }
       ]
     },
@@ -4549,6 +5012,19 @@
   ],
   "accounts": [
     {
+      "name": "AgentVote",
+      "discriminator": [
+        220,
+        51,
+        114,
+        184,
+        194,
+        29,
+        176,
+        108
+      ]
+    },
+    {
       "name": "ApprovalStamp",
       "discriminator": [
         223,
@@ -4692,6 +5168,19 @@
       ]
     },
     {
+      "name": "Residual",
+      "discriminator": [
+        2,
+        202,
+        44,
+        147,
+        115,
+        240,
+        25,
+        130
+      ]
+    },
+    {
       "name": "Rule",
       "discriminator": [
         82,
@@ -4732,6 +5221,32 @@
     }
   ],
   "events": [
+    {
+      "name": "AgentChanged",
+      "discriminator": [
+        248,
+        6,
+        169,
+        87,
+        197,
+        255,
+        16,
+        191
+      ]
+    },
+    {
+      "name": "AgentVoted",
+      "discriminator": [
+        248,
+        125,
+        100,
+        240,
+        0,
+        87,
+        30,
+        175
+      ]
+    },
     {
       "name": "AssetListed",
       "discriminator": [
@@ -5149,6 +5664,58 @@
       ]
     },
     {
+      "name": "ResidualSet",
+      "discriminator": [
+        113,
+        143,
+        44,
+        18,
+        221,
+        82,
+        244,
+        217
+      ]
+    },
+    {
+      "name": "ResidualSwept",
+      "discriminator": [
+        72,
+        205,
+        219,
+        77,
+        249,
+        124,
+        150,
+        130
+      ]
+    },
+    {
+      "name": "ReviewReferred",
+      "discriminator": [
+        129,
+        215,
+        97,
+        21,
+        97,
+        128,
+        251,
+        123
+      ]
+    },
+    {
+      "name": "RuleEnded",
+      "discriminator": [
+        246,
+        117,
+        240,
+        134,
+        144,
+        23,
+        52,
+        159
+      ]
+    },
+    {
       "name": "ScheduledPaid",
       "discriminator": [
         143,
@@ -5517,9 +6084,143 @@
       "code": 6044,
       "name": "ExceedsYearlyCap",
       "msg": "Payment would exceed the rule's cap for this year"
+    },
+    {
+      "code": 6045,
+      "name": "OwnClaimDispute",
+      "msg": "You cannot dispute your own claim"
+    },
+    {
+      "code": 6046,
+      "name": "TimeOutOfRange",
+      "msg": "That length of time is outside the allowed range"
+    },
+    {
+      "code": 6047,
+      "name": "TooManyRules",
+      "msg": "An estate can have at most 16 rules"
+    },
+    {
+      "code": 6048,
+      "name": "BadAgent",
+      "msg": "Invalid agent: must be a new wallet that is neither the owner nor a trusted person"
+    },
+    {
+      "code": 6049,
+      "name": "RulesIncomplete",
+      "msg": "Every rule of the estate must be passed, in order"
+    },
+    {
+      "code": 6050,
+      "name": "NoResidualRecipient",
+      "msg": "The owner did not name anyone to receive what is left"
+    },
+    {
+      "code": 6051,
+      "name": "NothingToSweep",
+      "msg": "Nothing is left over: the rules still need what is in the vault"
+    },
+    {
+      "code": 6052,
+      "name": "ObjectionCooldown",
+      "msg": "It is too soon to object to this again"
     }
   ],
   "types": [
+    {
+      "name": "AgentChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "previous",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentVote",
+      "docs": [
+        "Seeds: [\"agentvote\", estate, candidate]. The trusted people's votes to replace a lost agent key."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "candidate",
+            "type": "pubkey"
+          },
+          {
+            "name": "replaces",
+            "docs": [
+              "The agent these votes replace; they are void once it is no longer the agent."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "voters",
+            "docs": [
+              "The wallet that voted from each seat; counts only while it still holds that seat."
+            ],
+            "type": {
+              "array": [
+                "pubkey",
+                3
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentVoted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "candidate",
+            "type": "pubkey"
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "count",
+            "type": "u8"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
     {
       "name": "ApprovalStamp",
       "docs": [
@@ -7288,6 +7989,135 @@
       }
     },
     {
+      "name": "Residual",
+      "docs": [
+        "Seeds: [\"residual\", estate]. Who receives what no live rule still needs after the unlock."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ResidualSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ResidualSwept",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "reserved",
+            "type": "u64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReviewOutcome",
+      "docs": [
+        "The agent's answer to review_death, review_claim and review_hardship. The first two values encode",
+        "like the bool they replace."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Reject"
+          },
+          {
+            "name": "Approve"
+          },
+          {
+            "name": "Refer"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReviewReferred",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "target",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "TargetKind"
+              }
+            }
+          },
+          {
+            "name": "report_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Rule",
       "docs": [
         "Seeds: [\"rule\", estate, id.to_le_bytes() (u16)]"
@@ -7381,6 +8211,26 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RuleEnded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "rule",
+            "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
           }
         ]
       }
@@ -7819,6 +8669,9 @@
           },
           {
             "name": "Rejected"
+          },
+          {
+            "name": "Referred"
           }
         ]
       }

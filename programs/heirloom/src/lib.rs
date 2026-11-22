@@ -117,8 +117,8 @@ pub mod heirloom {
         instructions::death::submit_death_claim_handler(ctx, cert_hash)
     }
 
-    pub fn review_death(ctx: Context<ReviewDeath>, approve: bool, report_hash: [u8; 32]) -> Result<()> {
-        instructions::death::review_death_handler(ctx, approve, report_hash)
+    pub fn review_death(ctx: Context<ReviewDeath>, outcome: ReviewOutcome, report_hash: [u8; 32]) -> Result<()> {
+        instructions::death::review_death_handler(ctx, outcome, report_hash)
     }
 
     pub fn attest_death(ctx: Context<AttestDeath>) -> Result<()> {
@@ -139,8 +139,8 @@ pub mod heirloom {
         instructions::claims::submit_claim_handler(ctx, amount, evidence_hash)
     }
 
-    pub fn review_claim(ctx: Context<ReviewClaim>, approve: bool, report_hash: [u8; 32]) -> Result<()> {
-        instructions::claims::review_claim_handler(ctx, approve, report_hash)
+    pub fn review_claim(ctx: Context<ReviewClaim>, outcome: ReviewOutcome, report_hash: [u8; 32]) -> Result<()> {
+        instructions::claims::review_claim_handler(ctx, outcome, report_hash)
     }
 
     pub fn approve_claim(ctx: Context<ApproveClaim>) -> Result<()> {
@@ -177,8 +177,8 @@ pub mod heirloom {
         instructions::sale::submit_hardship_handler(ctx, evidence_hash)
     }
 
-    pub fn review_hardship(ctx: Context<ReviewHardship>, approve: bool, report_hash: [u8; 32]) -> Result<()> {
-        instructions::sale::review_hardship_handler(ctx, approve, report_hash)
+    pub fn review_hardship(ctx: Context<ReviewHardship>, outcome: ReviewOutcome, report_hash: [u8; 32]) -> Result<()> {
+        instructions::sale::review_hardship_handler(ctx, outcome, report_hash)
     }
 
     pub fn approve_hardship(ctx: Context<ApproveHardship>) -> Result<()> {
@@ -310,5 +310,27 @@ pub mod heirloom {
 
     pub fn set_yearly_cap(ctx: Context<SetYearlyCap>, cap: u64, period_start: i64) -> Result<()> {
         instructions::caps::set_yearly_cap_handler(ctx, cap, period_start)
+    }
+
+    // ------------------------------------------------------------------ continuity (22 Nov 2026)
+
+    pub fn end_rule(ctx: Context<EndRule>) -> Result<()> {
+        instructions::continuity::end_rule_handler(ctx)
+    }
+
+    pub fn set_residual(ctx: Context<SetResidual>, recipient: Pubkey) -> Result<()> {
+        instructions::continuity::set_residual_handler(ctx, recipient)
+    }
+
+    pub fn sweep_residual<'info>(ctx: Context<'info, SweepResidual<'info>>) -> Result<()> {
+        instructions::continuity::sweep_residual_handler(ctx)
+    }
+
+    pub fn set_agent(ctx: Context<SetAgent>, agent: Pubkey) -> Result<()> {
+        instructions::continuity::set_agent_handler(ctx, agent)
+    }
+
+    pub fn vote_agent(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<()> {
+        instructions::continuity::vote_agent_handler(ctx, candidate)
     }
 }

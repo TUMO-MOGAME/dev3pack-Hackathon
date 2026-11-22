@@ -130,7 +130,7 @@ pub struct ReviewClaim<'info> {
     pub claim: Account<'info, Claim>,
 }
 
-pub fn review_claim_handler(ctx: Context<ReviewClaim>, approve: bool, report_hash: [u8; 32]) -> Result<()> {
+pub fn review_claim_handler(ctx: Context<ReviewClaim>, outcome: ReviewOutcome, report_hash: [u8; 32]) -> Result<()> {
     let claim = &mut ctx.accounts.claim;
     require!(
         claim.status == ClaimStatus::Open && claim.agent_verdict == Verdict::Pending,
@@ -138,18 +138,25 @@ pub fn review_claim_handler(ctx: Context<ReviewClaim>, approve: bool, report_has
     );
 
     claim.agent_report_hash = report_hash;
-    if approve {
-        claim.agent_verdict = Verdict::Approved;
-    } else {
-        claim.agent_verdict = Verdict::Rejected;
-        claim.status = ClaimStatus::Rejected;
+    let ts = now()?;
+    match outcome {
+        ReviewOutcome::Approve => claim.agent_verdict = Verdict::Approved,
+        ReviewOutcome::Reject => {
+            claim.agent_verdict = Verdict::Rejected;
+            claim.status = ClaimStatus::Rejected;
+        }
+        ReviewOutcome::Refer => {
+            claim.agent_verdict = Verdict::Referred;
+            emit!(ReviewReferred { estate: claim.estate, target: claim.key(), kind: TargetKind::Claim, report_hash, ts });
+            return Ok(());
+        }
     }
 
     emit!(ClaimReviewed {
         claim: claim.key(),
-        approved: approve,
+        approved: outcome == ReviewOutcome::Approve,
         report_hash,
-        ts: now()?,
+        ts,
     });
     Ok(())
 }
@@ -192,7 +199,7 @@ pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
 
     let claim = &mut ctx.accounts.claim;
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
-    require!(claim.agent_verdict == Verdict::Approved, HeirloomError::AgentNotApproved);
+    require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
 
     let bit = 1u8 << idx;
     require!(claim.approvals & bit == 0, HeirloomError::AlreadyApproved);
@@ -202,7 +209,7 @@ pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
     let count = count_bits(claim.approvals);
     let claim_key = claim.key();
     let estate_key = ctx.accounts.estate.key();
-    let threshold = ctx.accounts.estate.claim_threshold;
+    let threshold = claim.agent_verdict.quorum(ctx.accounts.estate.claim_threshold);
 
     let stamp = &mut ctx.accounts.approval_stamp;
     if stamp.target == Pubkey::default() {
@@ -303,13 +310,13 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
 
     require!(rule_open_for(estate, rule), HeirloomError::BadStatus);
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
-    require!(claim.agent_verdict == Verdict::Approved, HeirloomError::AgentNotApproved);
+    require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
     // While the owner is alive (Active) only the owner can approve; after unlock the owner's
     // earlier approval or the verifier quorum counts.
     let approved = if estate.status == EstateStatus::Active {
         claim.owner_approved
     } else {
-        claim.owner_approved || count_bits(claim.approvals) >= estate.claim_threshold
+        claim.owner_approved || count_bits(claim.approvals) >= claim.agent_verdict.quorum(estate.claim_threshold)
     };
     require!(approved, HeirloomError::InsufficientApprovals);
 
@@ -326,10 +333,19 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
         require!(account_exists(&stamp_info), HeirloomError::ObjectionWindowOpen);
         let stamp: ApprovalStamp = read_account(&stamp_info)?;
         require!(stamp.approved_at > 0, HeirloomError::ObjectionWindowOpen);
-        let open_until = stamp
+        let window = guard.objection_window();
+        let mut open_until = stamp
             .approved_at
-            .checked_add(guard.objection_window_secs)
+            .checked_add(window)
             .ok_or(HeirloomError::MathOverflow)?;
+        // A dispute held the objection PDA, so the monitors get their window after it.
+        let objection_info = ctx.accounts.objection.to_account_info();
+        if account_exists(&objection_info) {
+            let o: Objection = read_account(&objection_info)?;
+            if o.is_dispute() {
+                open_until = open_until.max(o.lapses_at(&ctx.accounts.estate).saturating_add(window));
+            }
+        }
         require!(now()? >= open_until, HeirloomError::ObjectionWindowOpen);
     }
 
@@ -409,7 +425,7 @@ pub fn owner_approve_claim_handler(ctx: Context<OwnerApproveClaim>) -> Result<()
 
     let claim = &mut ctx.accounts.claim;
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
-    require!(claim.agent_verdict == Verdict::Approved, HeirloomError::AgentNotApproved);
+    require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
     require!(!claim.owner_approved, HeirloomError::AlreadyApproved);
     claim.owner_approved = true;
 
@@ -486,9 +502,16 @@ pub fn execute_scheduled_handler(ctx: Context<ExecuteScheduled>) -> Result<()> {
     require!(new_total <= rule.lifetime_cap, HeirloomError::ExceedsLifetimeCap);
     // Yearly cap: an instalment over it waits (next_due unchanged) until the next period.
     check_year_cap(&ctx.accounts.year_cap.to_account_info(), &rule.key(), amount, true)?;
-    let next_due = rule
-        .next_due
-        .checked_add(rule.interval_secs)
+    // One instalment, then the next date on the schedule after now: missed dates never pay out together
+    // (that money stays inside the lifetime cap for later dates).
+    let periods = ts
+        .checked_sub(rule.next_due)
+        .and_then(|late| late.checked_div(rule.interval_secs))
+        .and_then(|n| n.checked_add(1))
+        .ok_or(HeirloomError::MathOverflow)?;
+    let next_due = periods
+        .checked_mul(rule.interval_secs)
+        .and_then(|d| rule.next_due.checked_add(d))
         .ok_or(HeirloomError::MathOverflow)?;
 
     let owner = estate.owner;
