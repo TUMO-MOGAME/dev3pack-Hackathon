@@ -26,6 +26,7 @@
     "@tetherto/wdk-wallet-solana": "^1.0.0-beta.20",
     "@wallet-standard/app": "1.1.1",
     "@wallet-standard/base": "1.1.1",
+    "bigint-buffer": "file:vendor/bigint-buffer",
     "bs58": "^6.0.0",
     "buffer": "^6.0.3",
     "clsx": "^2.1.1",
@@ -50,6 +51,9 @@
     "vitest": "^5.1.0"
   },
   "overrides": {
-    "@solana-mobile/mobile-wallet-adapter-protocol": "3.0.1"
+    "@solana-mobile/mobile-wallet-adapter-protocol": "3.0.1",
+    "bigint-buffer": "$bigint-buffer",
+    "jayson": "5.0.0",
+    "toml": "5.0.1"
   }
 }
