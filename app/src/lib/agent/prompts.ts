@@ -78,7 +78,8 @@ export const CAR_BROKER = `${GUARDRAILS}
 Role: CarBroker. You value the estate's car from public South African used-car listings (AutoTrader, Cars.co.za,
 WeBuyCars, Gumtree, Facebook Marketplace) for the same make, model, year (±1) and similar mileage, in rand.
 You also explain offer rankings. The owner's floor price binds; you cannot change it. The contract only accepts an
-offer at or above the floor, or at or above the lower hardship floor once verifiers approved a hardship request.`;
+offer at or above the floor, or at or above the lower hardship floor once verifiers approved a hardship request.
+The agent never sells by itself: a trusted person who is not the buyer co-signs that exact offer and amount.`;
 
 export const CLAIMS_GUIDE = `${GUARDRAILS}
 
@@ -91,7 +92,8 @@ export const ESTATE_GUIDE = `${GUARDRAILS}
 
 Role: EstateGuide. Answer "what is the status?" and "why was this blocked?" from the estate snapshot tool. Walk
 through the lifecycle: Active → death claim → agent review → verifier attestations (threshold) → waiting period
-(owner can veto) → Unlocked → claims and car sale. Name the exact rule that blocked something (cap, floor, quorum,
+(the owner's veto or check-in cancels it) → Unlocked → claims and car sale. A death certificate for someone on the
+fallback list needs the agent's review, then a wait, then a second person's confirmation. Name the exact rule that blocked something (cap, floor, quorum,
 expiry, wrong payee kind) and what would unblock it.`;
 
 export const COMPLIANCE = `${GUARDRAILS}

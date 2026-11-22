@@ -55,7 +55,8 @@ as the demo site: the will above (same children, trusted people, payees, rules, 
 a fresh title NFT and the media root of its bundled photos + spec sheet (`DEMO_ASSETS`; the chain service shows the
 bundled set when the on-chain root matches, devnet only), a Guard and three seats (Uncle Bongani: backups Kagiso and
 Priya, monitor Zodwa), the fallback plan (Lerato, Sipho, Naledi, Ithemba Children's Charity) and a 3,000 USD₮ yearly cap
-on Naledi's school fees. It also adds the personas `thabo`, `zodwa`, `kagiso`, `priya`, `charity`, gives the helpers a
+on Naledi's school fees. Since the second review every seat has a monitor (Zodwa; Priya for the second seat), the
+labels on-chain are roles only and a schedule without its payee stops the script. It also adds the personas `thabo`, `zodwa`, `kagiso`, `priya`, `charity`, gives the helpers a
 little SOL and tops up the buyers' test USD₮. Idempotent; signed by WDK; prints Explorer links, never seeds.
 The owner needs ~0.3 devnet SOL first (it stops and prints the address if not).
 
@@ -79,6 +80,20 @@ Set `NEXT_PUBLIC_DATA_MODE=chain`, start the app, and import each persona's seed
 
 Run the .ts scripts from `app/` with the devnet env loaded (Git Bash):
 `set -a; . ../scripts/.env.devnet; set +a; npx tsx --tsconfig ../scripts/tsconfig.json ../scripts/demo-history.ts`
+
+## 4c. `rehearse-second-review.ts`: the second security review, rehearsed on devnet
+On throwaway estates only: a living claim, a death to payout, a co-signed sale, and the refusals R1-R9 and R18-R20.
+Each is asserted on the chain. A refusal lands as a failed transaction, so it has an Explorer link too.
+
+```bash
+cd app
+npx tsx --tsconfig ../scripts/tsconfig.json ../scripts/rehearse-second-review.ts <payer keypair path>          # dry run: the plan
+npx tsx --tsconfig ../scripts/tsconfig.json ../scripts/rehearse-second-review.ts <payer keypair path> --send   # after the upgrade
+```
+- Dry by default: it checks the cluster and prints the plan, without reading the keypair.
+- `--send` takes about five minutes (real waiting periods) and needs 0.6 SOL in the payer; most comes back.
+  `--rpc <url>` uses another devnet RPC. Any other cluster is refused by its genesis hash. No env file is loaded.
+- It prints JSON with the estates and an Explorer link for every transaction, and exits 1 if any assertion fails.
 
 ## 5. Voice agent
 See [`elevenlabs-agent.md`](elevenlabs-agent.md) for the ElevenLabs dashboard configuration.

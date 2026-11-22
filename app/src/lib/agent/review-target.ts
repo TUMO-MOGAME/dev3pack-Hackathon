@@ -6,8 +6,8 @@ import "server-only";
 import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import { HttpError } from "../api/http";
 import { big, bool, enumOf, hex, key, num, str, type Raw } from "../chain/decoders";
-import { fetchAccountRaw, findRecentEvent } from "../chain/reads";
-import { beneficiaryPda, guardPda, payeePda, seatPda } from "../chain/pda";
+import { fetchAccountRaw } from "../chain/reads";
+import { beneficiaryPda, fallbackReportPda, guardPda, payeePda, seatPda } from "../chain/pda";
 import { reviewClaim, reviewDeath, reviewFallbackDeath, reviewHardship, reviewSeatDeath } from "../chain/instructions";
 import { getIdl } from "../chain/idl";
 import { getEstateMeta } from "../db";
@@ -66,7 +66,8 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
       facts: meta?.ownerName
         ? `Estate owner's name: ${meta.ownerName}.`
         : "Estate owner's name: not on record, so the name on the certificate cannot be checked: use needs_human.",
-      instruction: (agent, outcome, hash) => reviewDeath(estateKey, agent, outcome, hash),
+      // The file that was read, so a claim that replaced it meanwhile is refused (ReportChanged).
+      instruction: (agent, outcome, hash) => reviewDeath(estateKey, agent, outcome, hash, p.sha256),
     };
   }
 
@@ -134,28 +135,28 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
         `Trusted person whose death is reported: seat ${index + 1}, wallet ${holder}${name ? `, name: ${name}` : ""}. This is not the estate owner.`,
         ...(name ? [] : ["Their name is not on record: judge the document itself. A second trusted person confirms who it is before anything changes."]),
       ].join("\n"),
-      instruction: (agent, outcome, hash) => reviewSeatDeath(estateKey, agent, index, outcome === "Approve", hash),
+      instruction: (agent, outcome, hash) => reviewSeatDeath(estateKey, agent, index, outcome === "Approve", hash, p.sha256),
     };
   }
 
   const guardAddr = guardPda(programId, p.estate).toBase58();
   const guard = await fetchAccountRaw("Guard", guardAddr);
   if (!guard) throw new HttpError(404, "This estate has no fallback plan on-chain.", "not_found");
-  // The Guard keeps no certificate hash: the report's hash and reporter are in its FallbackDeathReported event.
-  let reporter = NOBODY;
-  const reported = await findRecentEvent(guardAddr, "FallbackDeathReported", (d) => {
-    if (Number(d.index) !== index || hex(d, "cert_hash") !== p.sha256) return false;
-    reporter = key(d, "reported_by");
-    return true;
-  });
-  if (!reported || reporter === NOBODY) throw new HttpError(409, "This file does not match a death certificate reported on-chain for this person.", "hash_mismatch");
+  const report = await fetchAccountRaw("FallbackReport", fallbackReportPda(programId, p.estate, index).toBase58());
   const recipient = keyAt(guard, "fallback", index);
+  // Void once the list names someone else at that place, or the death is already proven.
+  if (!report || key(report, "recipient") !== recipient || recipient === NOBODY || (num(guard, "fallback_dead") & (1 << index)) !== 0) {
+    throw new HttpError(409, "No death certificate is reported on-chain for this person.", "hash_mismatch");
+  }
+  sameFile(hex(report, "cert_hash"), p.sha256);
+  pending(report, "verdict");
+  const rentTo = new PublicKey(key(report, "rent_payer"));
   const name = named(recipient);
   return {
-    estate, canRefer: false, submitter: reporter,
+    estate, canRefer: false, submitter: key(report, "reporter"),
     facts: name
       ? `Fallback recipient whose death is reported: ${name} (wallet ${recipient}). This is not the estate owner.`
       : `Fallback recipient whose death is reported: wallet ${recipient}. Their name is not on record, so the certificate cannot be matched to them: use needs_human.`,
-    instruction: (agent, outcome, hash) => reviewFallbackDeath(estateKey, agent, index, outcome === "Approve", hash),
+    instruction: (agent, outcome, hash) => reviewFallbackDeath(estateKey, agent, index, outcome === "Approve", hash, p.sha256, rentTo),
   };
 }

@@ -15,10 +15,13 @@ import type { TxResult } from "./types";
 import type { EstateMeta } from "../db";
 import { chainCtx } from "../chain/client";
 import * as ix from "../chain/instructions";
-import { guardPda, seatPda } from "../chain/pda";
-import { fetchAccountRaw, type ChainEvent } from "../chain/reads";
-import { assembleGuardians, decodeMedia, disabledGuardians, fetchGuardiansRaw, type GuardianExtras } from "../chain/guardians";
-import { enumOf, key, num } from "../chain/decoders";
+import { beneficiaryPda, fallbackReportPda, guardPda, seatPda } from "../chain/pda";
+import { decodeScanned, fetchAccountRaw, scanAccounts, type ChainEvent } from "../chain/reads";
+import { assembleGuardians, decodeMedia, disabledGuardians, fallbackSlot, fetchGuardiansRaw, nextFallback, type GuardianExtras } from "../chain/guardians";
+import { bool, enumOf, key, keyArray, num, str, type Raw } from "../chain/decoders";
+import { eligibleSeats } from "../death-rules";
+import { ChainServiceError, must } from "./chain-errors";
+import { confirmableFrom, fallbackReportStep, seatReportStep } from "./chain-reports";
 import { getActiveSigner } from "../wallet/signer";
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, foreignSpecKeys, mediaRootHex } from "../assets/spec";
@@ -32,7 +35,8 @@ type ReviewPurpose = "seat-death" | "fallback-death";
 
 export interface ChainGuardianDeps {
   send(ixs: Ixs): Promise<TxResult>;
-  review(file: File, purpose: ReviewPurpose, estate: Base58, context: string, index: number): Promise<{ report: AgentReport }>;
+  /** `tx`: the agent's review transaction. */
+  review(file: File, purpose: ReviewPurpose, estate: Base58, context: string, index: number): Promise<{ report: AgentReport; tx?: TxResult | null }>;
   getMeta(estate: Base58): Promise<EstateMeta | null>;
   saveMeta(meta: EstateMeta): Promise<void>;
   /** The real names, for changing and saving back (chain.ts). */
@@ -57,8 +61,19 @@ export async function loadGuardians(estate: Base58, base: { estate: Estate; clai
 
 const pk = (a: string) => new PublicKey(a);
 const DEFAULT_KEY = PublicKey.default.toBase58();
-const toB58 = (v: unknown) => (typeof v === "string" ? v : (v as { toBase58(): string }).toBase58());
-const keyList = (v: unknown): string[] => (Array.isArray(v) ? v.map(toB58) : []);
+const now = () => Math.floor(Date.now() / 1000);
+
+/**
+ * Who watches a seat the owner set up without choosing a monitor: someone in the family, never the holder or the
+ * backup who would take the seat, rather not a trusted person, and spread over the seats (plan §18.8). Without a
+ * monitor a last holder's death needs the beneficiary route (R18) and the fallback plan has nobody to vote.
+ */
+export function defaultMonitor(index: number, p: { holder: Base58; backups: Base58[]; family: Base58[]; verifiers: Base58[]; owner: Base58 }): Base58 | null {
+  const able = p.family.filter((w) => w !== p.holder && w !== p.backups[0] && w !== p.owner);
+  const outside = able.filter((w) => !p.verifiers.includes(w));
+  const pool = outside.length ? outside : able;
+  return pool.length ? pool[index % pool.length] : null;
+}
 const DEMO_WAIT = Number(process.env.NEXT_PUBLIC_DEMO_WAITING_SECS ?? "");
 /** Demo deployments (NEXT_PUBLIC_DEMO_WAITING_SECS set) get the short demo timings; real estates 2 days / 7 days / 90 days. */
 export const guardTimings = () => Number.isFinite(DEMO_WAIT) && DEMO_WAIT >= 0
@@ -106,8 +121,40 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
   /** Index of the first seat whose monitors include `wallet`, or null. */
   async function monitoredSeat(estate: Base58, wallet: PublicKey): Promise<number | null> {
     const raw = await fetchGuardiansRaw(estate);
-    const s = raw.seats.find((x) => keyList(x.raw.monitors).includes(wallet.toBase58()));
+    const s = raw.seats.find((x) => keyArray(x.raw, "monitors").includes(wallet.toBase58()));
     return s ? num(s.raw, "index") : null;
+  }
+
+  async function estateRaw(estate: Base58): Promise<Raw> {
+    const e = await fetchAccountRaw("Estate", estate);
+    must(e, "NoEstate", "That estate was not found on-chain.");
+    return e;
+  }
+
+  async function activeBeneficiary(estate: Base58, wallet: PublicKey): Promise<boolean> {
+    const b = await fetchAccountRaw("Beneficiary", beneficiaryPda(chainCtx().programId, estate, wallet).toBase58());
+    return !!b && bool(b, "active");
+  }
+
+  /** The accounts that show the signer takes part in a fallback report: none for trusted people and listed recipients. */
+  async function participantAccounts(estate: Base58, e: Raw, guard: Raw, who: PublicKey): Promise<ix.ActingAs> {
+    const me58 = who.toBase58();
+    if (keyArray(e, "verifiers").includes(me58)) return {};
+    const monitorSeat = await monitoredSeat(estate, who);
+    if (monitorSeat !== null) return { monitorSeat };
+    if (await activeBeneficiary(estate, who)) return { beneficiary: true };
+    const dead = num(guard, "fallback_dead");
+    must(keyArray(guard, "fallback").some((w, i) => w === me58 && (dead & (1 << i)) === 0),
+      "NotParticipant", "Only the trusted people, their monitors, the family and the people on the fallback list can do this.");
+    return {};
+  }
+
+  /** The active family, in a fixed order. */
+  async function familyOf(estate: Base58): Promise<Base58[]> {
+    const rows = (await scanAccounts("Beneficiary", [{ offset: 8, key: pk(estate) }])).map((a) => decodeScanned("Beneficiary", a));
+    return rows.filter((b) => bool(b, "active"))
+      .sort((a, b) => str(a, "label").localeCompare(str(b, "label"), "en", { numeric: true }) || key(a, "wallet").localeCompare(key(b, "wallet")))
+      .map((b) => key(b, "wallet"));
   }
 
   return {
@@ -122,13 +169,22 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       const txs: TxResult[] = [];
       if (!(await guardRaw(estate))) txs.push(await d.send([ix.initGuard(ctx, owner, estateKey, guardTimings())]));
       const seatIxs: TransactionInstruction[] = [];
+      let known: { verifiers: Base58[]; family: Base58[] } | null = null;
       for (const i of [0, 1, 2]) {
         // Every seat must exist (the fallback checks all three), so seats the owner did not list are created empty.
         const s = input.seats.find((x) => x.index === i);
         const backups = (s?.backups ?? []).map((b) => pk(b.wallet));
         const monitors = (s?.monitors ?? []).map((m) => pk(m.wallet));
-        if (!(await seatRaw(estate, i))) seatIxs.push(ix.initSeat(ctx, owner, i, backups, monitors));
-        else if (s) seatIxs.push(ix.setSeatBackups(ctx, owner, estateKey, i, backups), ix.setSeatMonitors(ctx, owner, i, monitors));
+        if (!(await seatRaw(estate, i))) {
+          if (!monitors.length) {
+            known ??= { verifiers: keyArray(await estateRaw(estate), "verifiers"), family: await familyOf(estate) };
+            const watcher = defaultMonitor(i, {
+              holder: known.verifiers[i], backups: backups.map((b) => b.toBase58()), family: known.family, verifiers: known.verifiers, owner: owner.toBase58(),
+            });
+            if (watcher) monitors.push(pk(watcher));
+          }
+          seatIxs.push(ix.initSeat(ctx, owner, i, backups, monitors));
+        } else if (s) seatIxs.push(ix.setSeatBackups(ctx, owner, estateKey, i, backups), ix.setSeatMonitors(ctx, owner, i, monitors));
       }
       for (const group of chunk(seatIxs, 2)) txs.push(await d.send(group));
       if (input.fallback.length) txs.push(await d.send([ix.setFallback(ctx, owner, input.fallback.map((r) => pk(r.wallet)))]));
@@ -158,11 +214,20 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       if (!seat) throw new Error("This trusted person's seat is not set up.");
       const holder = key(seat, "holder");
       const h = await sha256Hex(new Uint8Array(await certificate.arrayBuffer()));
-      const tx = await d.send([ix.reportSeatDeath(chainCtx(), me(), pk(estate), index, h)]);
+      const reporter = me();
+      const who = reporter.toBase58();
+      const e = await estateRaw(estate);
+      let tx: TxResult | null = null;
+      if (seatReportStep(e, seat, who, h, now()) === "send") {
+        const named = key(e, "owner") === who
+          || [...keyArray(e, "verifiers"), ...keyArray(seat, "monitors"), ...keyArray(seat, "backups")].includes(who);
+        const beneficiary = !named && (await activeBeneficiary(estate, reporter));
+        tx = await d.send([ix.reportSeatDeath(chainCtx(), reporter, pk(estate), index, h, { beneficiary })]);
+      }
       const person = await nameOf(estate, holder);
       const r = await d.review(certificate, "seat-death", estate,
         `Trusted person whose death is reported: ${person} (seat ${index + 1}, wallet ${holder}). This is not the estate owner.`, index);
-      return { tx, report: r.report };
+      return { tx: (tx ?? r.tx)!, report: r.report };
     },
     async ownerReplaceSeat(estate, index, newHolder) {
       const owner = d.requireOwnerOf(estate);
@@ -174,9 +239,23 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       return d.send([ix.ownerReplaceSeat(chainCtx(), owner, index, holder)]);
     },
 
-    confirmSeatDeath: (estate, index) => d.send([ix.confirmSeatDeath(chainCtx(), me(), pk(estate), index)]),
+    async confirmSeatDeath(estate, index) {
+      const confirmer = me();
+      const seat = await seatRaw(estate, index);
+      must(seat, "NoSuccessionPending", "This trusted person's seat is not set up.");
+      const holder = key(seat, "holder");
+      // R18: only when nobody else could confirm does an active beneficiary pass their account.
+      const lastAndUnwatched = !eligibleSeats(keyArray(await estateRaw(estate), "verifiers"), holder).length
+        && keyArray(seat, "monitors").every((m) => m === DEFAULT_KEY) && keyArray(seat, "backups")[1] === DEFAULT_KEY;
+      const beneficiary = lastAndUnwatched && (await activeBeneficiary(estate, confirmer));
+      return d.send([ix.confirmSeatDeath(chainCtx(), confirmer, pk(estate), index, { beneficiary })]);
+    },
     vetoSeatDeath: (estate, index) => d.send([ix.vetoSeatDeath(chainCtx(), me(), pk(estate), index)]),
-    finalizeSuccession: (estate, index) => d.send([ix.finalizeSuccession(chainCtx(), pk(estate), index, me())]),
+    async finalizeSuccession(estate, index) {
+      const seat = await seatRaw(estate, index);
+      must(seat, "NoSuccessionPending", "This trusted person's seat is not set up.");
+      return d.send([ix.finalizeSuccession(chainCtx(), pk(estate), index, me(), pk(key(seat, "death_confirmed_by")))]);
+    },
 
     async raiseObjection(estate, input) {
       const objector = me();
@@ -204,26 +283,61 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       const kind = enumOf(o, "kind", TARGET_KINDS);
       const target = key(o, "target");
       const voter = me();
-      const voterSeat = kind === "Fallback" ? await monitoredSeat(estate, voter) : null;
       let hardshipAsset: PublicKey | undefined;
       if (kind === "Hardship") {
         const h = await fetchAccountRaw("Hardship", target);
         if (h) hardshipAsset = pk(key(h, "asset"));
       }
-      return d.send([ix.voteObjection(chainCtx(), { voter, estate: pk(estate), kind, target: pk(target), uphold, voterSeat, hardshipAsset })]);
+      return d.send([ix.voteObjection(chainCtx(), { voter, estate: pk(estate), kind, target: pk(target), uphold, hardshipAsset })]);
     },
 
     async reportFallbackDeath(estate, recipientIndex, certificate) {
       const g = await guardRaw(estate);
       if (!g) throw new Error("This estate has no fallback plan.");
-      const wallet = keyList(g.fallback)[recipientIndex];
-      if (!wallet || wallet === DEFAULT_KEY) throw new Error("That fallback recipient does not exist.");
+      // The screens' position is not the slot when the list has a gap.
+      const slot = fallbackSlot(g, recipientIndex);
+      const wallet = slot < 0 ? null : keyArray(g, "fallback")[slot];
+      if (!wallet) throw new Error("That fallback recipient does not exist.");
+      const reporter = me();
+      must(reporter.toBase58() !== wallet, "NotParticipant", "You can't report your own passing.");
       const h = await sha256Hex(new Uint8Array(await certificate.arrayBuffer()));
-      const tx = await d.send([ix.reportFallbackDeath(chainCtx(), me(), pk(estate), recipientIndex, h)]);
+      const ctx = chainCtx();
+      const [e, standing] = await Promise.all([
+        estateRaw(estate), fetchAccountRaw("FallbackReport", fallbackReportPda(ctx.programId, estate, slot).toBase58()),
+      ]);
+      let tx: TxResult | null = null;
+      if (fallbackReportStep(e, g, slot, standing, reporter.toBase58(), h, now()) === "send") {
+        const as = await participantAccounts(estate, e, g, reporter);
+        tx = await d.send([ix.reportFallbackDeath(ctx, reporter, pk(estate), slot, h, as)]);
+      }
       const person = await nameOf(estate, wallet);
       const r = await d.review(certificate, "fallback-death", estate,
-        `Fallback recipient whose death is reported: ${person} (wallet ${wallet}). This is not the estate owner.`, recipientIndex);
-      return { tx, report: r.report };
+        `Fallback recipient whose death is reported: ${person} (wallet ${wallet}). This is not the estate owner.`, slot);
+      return { tx: (tx ?? r.tx)!, report: r.report };
+    },
+
+    async resolveFallbackDeath(estate, recipientIndex, dead) {
+      const guard = await guardRaw(estate);
+      must(guard, "NoFallbackRecipient", "This estate has no fallback plan.");
+      const ctx = chainCtx();
+      const index = fallbackSlot(guard, recipientIndex);
+      must(index >= 0, "NoFallbackRecipient", "That fallback recipient does not exist.");
+      const report = await fetchAccountRaw("FallbackReport", fallbackReportPda(ctx.programId, estate, index).toBase58());
+      must(report, "BadStatus", "There is no open report about this person.");
+      const signer = me();
+      const who = signer.toBase58();
+      let as: ix.ActingAs = {};
+      if (!dead) {
+        must(key(report, "recipient") === who, "NotParticipant", "Only the person who was reported can say they are alive.");
+      } else {
+        must(enumOf(report, "verdict", ["Pending", "Approved"] as const) === "Approved", "AgentNotApproved", "The agent has not cleared this certificate.");
+        must(key(report, "reporter") !== who && key(report, "recipient") !== who, "NotConfirmer", "A second person has to confirm this.");
+        const from = confirmableFrom(guard, report);
+        if (now() < from) throw new ChainServiceError("WaitingPeriodNotOver", "They still have time to say they are alive.", from);
+        as = await participantAccounts(estate, await estateRaw(estate), guard, signer);
+      }
+      const rentTo = pk(key(report, "rent_payer"));
+      return d.send([ix.resolveFallbackDeath(ctx, { signer, estate: pk(estate), index, dead, rentTo, as })]);
     },
 
     startFallback: (estate) => d.send([ix.startFallback(chainCtx(), pk(estate), me())]),
@@ -232,10 +346,9 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
     async executeFallback(estate) {
       const g = await guardRaw(estate);
       if (!g) throw new Error("This estate has no fallback plan.");
-      const dead = num(g, "fallback_dead");
-      const next = keyList(g.fallback).find((w, i) => w !== DEFAULT_KEY && (dead & (1 << i)) === 0);
-      if (!next) throw new Error("Every fallback recipient has passed away.");
-      return d.send([ix.executeFallback(chainCtx(), { payer: me(), estate: pk(estate), recipient: pk(next) })]);
+      const next = nextFallback(g);
+      if (!next.wallet) throw new Error("Every fallback recipient has passed away.");
+      return d.send([ix.executeFallback(chainCtx(), { payer: me(), estate: pk(estate), recipient: pk(next.wallet), recipientIndex: next.index })]);
     },
 
     async getAssetMedia(estate) {
@@ -261,8 +374,12 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       const { parseSpec } = await import("../assets/spec-schema");
       if (foreignSpecKeys(input.kind, parseSpec(input.spec)).length) throw new Error("Some details do not belong on this kind of asset.");
       const root = await mediaRootHex(input.photos, parseSpec(input.spec));
+      const owner = d.requireOwnerOf(estate);
+      // R22: what buyers see is the living owner's. Nobody changes it after the unlock, the agent never.
+      must(enumOf(await estateRaw(estate), "status", ["Active", "DeathPending", "Unlocked", "Frozen"] as const) === "Active",
+        "BadStatus", "Only the living owner changes an asset's photos, while the plan is active.");
       return d.send([ix.setAssetMedia(chainCtx(), {
-        authority: me(), estate: pk(estate), asset: pk(asset), kind: input.kind, photosRootHex: root, photoCount: input.photos.length,
+        authority: owner, estate: pk(estate), asset: pk(asset), kind: input.kind, photosRootHex: root, photoCount: input.photos.length,
       })]);
     },
   };

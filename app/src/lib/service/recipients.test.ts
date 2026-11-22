@@ -27,4 +27,12 @@ describe("estateRecipients", () => {
     expect(mergeRecipients([{ label: "Lerato", address: "LERATO" }], [{ label: "My test wallet", address: "LERATO" }, { label: "Pieter", address: "P" }]))
       .toEqual([{ label: "Lerato", address: "LERATO" }, { label: "Pieter", address: "P" }]);
   });
+
+  it("never offers a removed person or an empty seat (R16)", () => {
+    const snap = {
+      estate: { owner: "O", ownerName: "Owner", verifiers: ["V", "11111111111111111111111111111111", "W"], verifierNames: ["One", "Two", "Three"] },
+      beneficiaries: [{ wallet: "B", label: "Left (son)", active: false }],
+    } as unknown as Parameters<typeof estateRecipients>[0];
+    expect(estateRecipients(snap, "me").map((r) => r.address)).toEqual(["V", "W", "O"]);
+  });
 });

@@ -6,7 +6,7 @@ import "server-only";
  * AI error, the answer is the rules' warnings (source "rules") or the template (source "template"). Letter text is
  * never stored or logged here.
  */
-import { handler, HttpError, isChainMode, json, rateLimit } from "@/lib/api/http";
+import { handler, HttpError, isChainMode, json, rateLimitShared } from "@/lib/api/http";
 import { canonicalJson } from "@/lib/agent/hash";
 import { aiReviewLetter, aiSuggestLetter, lettersAiAvailable } from "@/lib/agent/letters";
 import { getUsdtZar } from "@/lib/fx";
@@ -32,7 +32,7 @@ const defaults: ReviewRouteDeps = {
 
 export function reviewRoutes(deps: ReviewRouteDeps = defaults) {
   const POST = handler(async (req) => {
-    rateLimit(req, "letters-review", 10);
+    await rateLimitShared(req, "letters-review", 10);
     const b = await readSigned(req, (raw) => reviewBodySchema.parse(raw), deps, (x) => ({
       action: x.action, text: canonicalJson(x.action === "review" ? x.draft : x.input),
     }));

@@ -20,6 +20,7 @@ export function assembleSnapshot(raw: RawSnapshot, activity: ActivityItem[], rep
     assets: raw.assets,
     offers: raw.offers,
     hardships: raw.hardships.map((h) => ({ ...h, agentReport: reportFor(h.address) })),
+    agentVotes: raw.agentVotes,
     activity,
   };
 }

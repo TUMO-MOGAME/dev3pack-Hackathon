@@ -2,7 +2,7 @@ import "server-only";
 /**
  * Authorises /api/legacy/* requests. Stronger than /api/estate-meta (which trusts the claimed owner wallet):
  *  1. the request carries a WDK ed25519 signature over (action, estate, wallet, time, body hash), max 5 min old,
- *     single use (replays within the window are refused on this instance);
+ *     single use (across instances when the shared store is there);
  *  2. the estate is read from Solana: the wallet must be its owner, or an active beneficiary.
  * Demo deployments without the chain (NEXT_PUBLIC_DATA_MODE=mock) are refused unless LEGACY_DEMO_WRITES=1,
  * in which case the role is taken from the demo persona (documented as demo-only; never enable in production).
@@ -14,6 +14,7 @@ import { HttpError, isChainMode } from "@/lib/api/http";
 import { loadSnapshot } from "@/lib/server/estate";
 import type { EstateSnapshot } from "@/lib/service/types";
 import { AUTH_HEADER, AUTH_MAX_SKEW_MS, authMessage, type LegacyAction } from "../auth-message";
+import { createNonces } from "@/lib/access/nonces";
 
 // 32–48: the mock demo addresses are base58-looking but not always 44 chars; chain mode decodes the key anyway.
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,48}$/);
@@ -50,12 +51,7 @@ export function verifyEd25519(wallet: string, message: string, sigHex: string): 
   }
 }
 
-const seen = new Map<string, number>();
-function once(sig: string, now: number) {
-  for (const [k, t] of seen) if (now - t > AUTH_MAX_SKEW_MS * 2) seen.delete(k);
-  if (seen.has(sig)) throw new HttpError(401, "This request was already used. Please try again.", "replay");
-  seen.set(sig, now);
-}
+const firstUse = createNonces("legacy", AUTH_MAX_SKEW_MS * 2);
 
 export const demoWritesAllowed = () => !isChainMode() && process.env.LEGACY_DEMO_WRITES === "1";
 
@@ -82,7 +78,7 @@ export async function authorize(
   if (a.sig === "demo") throw new HttpError(401, "A wallet signature is required.", "unauthorized");
   if (Math.abs(now - a.ts) > AUTH_MAX_SKEW_MS) throw new HttpError(401, "This request has expired. Check your phone's clock and try again.", "expired");
   if (!verifyEd25519(a.wallet, authMessage(action, a.estate, a.wallet, a.ts, bodyHash), a.sig)) throw new HttpError(401, "The wallet signature does not match.", "unauthorized");
-  once(a.sig, now);
+  if (!(await firstUse(a.sig, now))) throw new HttpError(401, "This request was already used. Please try again.", "replay");
 
   const snap = await loadSnapshot(a.estate).catch(() => null);
   if (!snap) throw new HttpError(404, "Estate not found on-chain.", "not_found");

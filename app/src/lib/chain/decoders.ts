@@ -7,6 +7,8 @@ import type {
   Asset, AssetStatus, Beneficiary, Category, Claim, ClaimStatus, Estate, EstateStatus, Hardship, HardshipStatus,
   Offer, Payee, PayeeKind, Rule, Verdict,
 } from "../types";
+import type { AgentVoteInfo } from "../continuity/types";
+import { isCurrentClaim } from "../death-rules";
 
 export type Raw = Record<string, unknown>;
 
@@ -81,6 +83,15 @@ const CLAIM_STATUS = ["Open", "Paid", "Rejected"] as const satisfies readonly Cl
 const ASSET_STATUS = ["Held", "Listed", "Sold"] as const satisfies readonly AssetStatus[];
 const HARDSHIP_STATUS = ["Open", "Approved", "Rejected"] as const satisfies readonly HardshipStatus[];
 
+const DEFAULT_KEY = "11111111111111111111111111111111";
+
+/** A list of wallets (`[Pubkey; n]`). */
+export function keyArray(o: Raw, name: string): string[] {
+  const v = field(o, name);
+  if (!Array.isArray(v)) throw new Error(`Field "${name}" is not a key array`);
+  return v.map((x) => (isKey(x) ? x.toBase58() : String(x)));
+}
+
 export interface OffChainNames {
   ownerName?: string;
   verifierNames?: [string, string, string];
@@ -92,7 +103,11 @@ export function decodeEstate(address: string, r: Raw, vaultBalance: bigint, name
   const verifiers = field(r, "verifiers");
   if (!Array.isArray(verifiers) || verifiers.length !== 3) throw new Error("Estate.verifiers must have 3 entries");
   const v = verifiers.map((x) => (isKey(x) ? x.toBase58() : String(x))) as [string, string, string];
-  const pendingSince = num(r, "death_pending_since");
+  const since = num(r, "death_pending_since");
+  const status = enumOf(r, "status", ESTATE_STATUS);
+  const certHash = nullIfZero(hex(r, "death_cert_hash"));
+  // One stored time, two meanings: while Active a claim's submission, afterwards when the death took effect.
+  const active = status === "Active";
   return {
     address,
     owner: key(r, "owner"),
@@ -105,15 +120,16 @@ export function decodeEstate(address: string, r: Raw, vaultBalance: bigint, name
     claimThreshold: num(r, "claim_threshold"),
     hardshipThreshold: num(r, "hardship_threshold"),
     waitingPeriodSecs: num(r, "waiting_period_secs"),
-    status: enumOf(r, "status", ESTATE_STATUS),
+    status,
     willHash: nullIfZero(hex(r, "will_hash")),
     vaultBalance,
     death: {
-      certHash: nullIfZero(hex(r, "death_cert_hash")),
-      submittedBy: (() => { const s = key(r, "death_submitted_by"); return s === "11111111111111111111111111111111" ? null : s; })(),
+      certHash,
+      submittedBy: (() => { const s = key(r, "death_submitted_by"); return s === DEFAULT_KEY ? null : s; })(),
       verdict: enumOf(r, "death_verdict", VERDICT),
       attestations: bits(num(r, "death_attestations")),
-      pendingSince: pendingSince > 0 ? pendingSince : null,
+      pendingSince: !active && since > 0 ? since : null,
+      submittedAt: active && certHash ? since : null,
     },
     lastHeartbeat: num(r, "last_heartbeat"),
   };
@@ -128,8 +144,6 @@ export const decodeBeneficiary = (address: string, r: Raw): Beneficiary => ({
 export const decodePayee = (address: string, r: Raw): Payee => ({
   address, wallet: key(r, "wallet"), kind: enumOf(r, "kind", PAYEE_KIND), name: str(r, "name"),
 });
-
-const DEFAULT_KEY = "11111111111111111111111111111111";
 
 export const decodeRule = (address: string, r: Raw): Rule => {
   // Living-plan fields are optional so older IDLs/accounts still decode.
@@ -146,6 +160,7 @@ export const decodeRule = (address: string, r: Raw): Rule => {
     intervalSecs: has(r, "interval_secs") ? num(r, "interval_secs") : 0,
     nextDue: recurringAmount > 0n && nextDue > 0 ? nextDue : null,
     fixedPayee: fixed && fixed !== DEFAULT_KEY ? fixed : null,
+    ...(has(r, "claim_count") ? { claimCount: num(r, "claim_count") } : {}),
   };
 };
 
@@ -155,6 +170,38 @@ export const decodeClaim = (address: string, r: Raw): Claim => ({
   approvals: bits(num(r, "approvals")), ownerApproved: has(r, "owner_approved") ? bool(r, "owner_approved") : false,
   status: enumOf(r, "status", CLAIM_STATUS), createdAt: num(r, "created_at"),
 });
+
+const COLLECTING = 255;
+
+/** ApprovalStamp::votes_count: the approvals were given after this death, or are being collected since the unlock. */
+function votesCount(stamp: Raw | undefined, createdAt: number, deathSince: number): boolean {
+  if (createdAt > deathSince) return true;
+  if (!stamp) return false;
+  const at = num(stamp, "approved_at");
+  return at === 0 ? num(stamp, "seat_index") === COLLECTING : at >= deathSince;
+}
+
+/**
+ * A claim beside its rule and stamp: whether the rule that held the slot when it was made is gone (`fromEndedRule`),
+ * and whether the approvals it carries count (`approvalsCount`). Approvals count only once Unlocked, and only those
+ * from after this death: older ones neither pay nor stand in the way.
+ */
+export function withClaimState(claim: Claim, ctx: { estate: Pick<Estate, "status" | "death">; rule?: Pick<Rule, "claimCount">; stamp?: Raw }): Claim {
+  const count = ctx.rule?.claimCount;
+  const fromEndedRule = count !== undefined && !isCurrentClaim(claim.id, count);
+  const approvalsCount = !claim.approvals.some(Boolean)
+    || (ctx.estate.status === "Unlocked" && votesCount(ctx.stamp, claim.createdAt, ctx.estate.death.pendingSince ?? 0));
+  return { ...claim, fromEndedRule, approvalsCount };
+}
+
+/** Open votes to replace the agent: for replacing the current one, by people who still hold the seat they voted from. */
+export function decodeAgentVotes(votes: Raw[], estate: Pick<Estate, "agent" | "verifiers">): AgentVoteInfo[] {
+  return votes.flatMap((v) => {
+    if (key(v, "replaces") !== estate.agent) return [];
+    const voters = keyArray(v, "voters").filter((w, i) => w !== DEFAULT_KEY && w === estate.verifiers[i]);
+    return voters.length ? [{ candidate: key(v, "candidate"), voters }] : [];
+  }).sort((a, b) => b.voters.length - a.voters.length || a.candidate.localeCompare(b.candidate));
+}
 
 export const decodeAsset = (address: string, r: Raw, title?: string): Asset => {
   const listingEnds = num(r, "listing_ends");

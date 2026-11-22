@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
   sendMs: 0,
   readFails: 0,
   ruleSlot: 0,
+  ixs: [] as { keys: { pubkey: { toBase58(): string } }[] }[],
 }));
 
 vi.mock("../chain/config", async (original: () => Promise<{ chainConfig: object }>) => {
@@ -36,6 +37,7 @@ vi.mock("../chain/client", async () => {
 vi.mock("../agent/agent-wallet", () => ({
   agentAddress: async () => h.agent,
   agentSignAndSend: async ([ix]: TransactionInstruction[]) => {
+    h.ixs.push(ix);
     const rule = ix.keys[h.ruleSlot].pubkey.toBase58();
     h.sent.push(rule);
     h.clock += h.sendMs;
@@ -138,7 +140,7 @@ async function addRule(estate: PublicKey, o: {
     });
   }
   if (o.fails) h.failing.add(address.toBase58());
-  return { address: address.toBase58(), payee };
+  return { address: address.toBase58(), payee, beneficiary };
 }
 
 const tick = (seed = 1) => runDueSchedules(NOW, { random: seeded(seed), clock: () => h.clock });
@@ -147,7 +149,7 @@ const paidIn = (results: { rule: string; ok: boolean }[]) => results.filter((r) 
 beforeEach(() => {
   h.agent = key().toBase58();
   h.accounts.clear(); h.failing.clear(); h.hanging.clear();
-  h.sent = []; h.reads = []; h.clock = 0; h.sendMs = 0; h.readFails = 0;
+  h.sent = []; h.ixs = []; h.reads = []; h.clock = 0; h.sendMs = 0; h.readFails = 0;
 });
 
 const rule = (over: Partial<Rule> = {}): Rule => ({
@@ -311,6 +313,15 @@ describe("what can't pay is passed over without a transaction (S1)", () => {
     await addRule(estate);
     expect(await tick()).toHaveLength(1);
     expect(h.sent).toHaveLength(1);
+  });
+
+  it("its one call passes the Beneficiary and Payee accounts every payout re-checks (R16)", async () => {
+    const estate = await addEstate();
+    const r = await addRule(estate);
+    expect(await tick()).toHaveLength(1);
+    expect(h.ixs[0].keys.slice(-2).map((k) => k.pubkey.toBase58())).toEqual([
+      beneficiaryPda(programId, estate, r.beneficiary).toBase58(), payeePda(programId, estate, r.payee).toBase58(),
+    ]);
   });
 
   it("servedPayments keeps only this agent's estates", () => {

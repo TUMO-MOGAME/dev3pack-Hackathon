@@ -9,7 +9,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Connection, Keypair, PublicKey, Transaction, type TransactionInstruction } from "@solana/web3.js";
-import { openAccount, newSeedPhrase, wdkSignAndSend, type WdkAccount } from "../app/src/lib/wallet/wdk";
+import { openAccount, newSeedPhrase, wdkPartialSign, wdkSignAndSend, type WdkAccount } from "../app/src/lib/wallet/wdk";
 
 export const ROOT = dirname(fileURLToPath(import.meta.url));
 export const WALLETS_FILE = join(ROOT, ".demo-wallets.json");
@@ -100,6 +100,19 @@ export async function send(payer: WdkAccount, ixs: TransactionInstruction[], ext
   const sig = await wdkSignAndSend(payer.account, b64);
   await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
   return sig;
+}
+
+/** Like `send`, for a transaction someone co-signs (a sale: the trusted person, then the agent who pays). */
+export async function sendCoSigned(payer: WdkAccount, coSigners: WdkAccount[], ixs: TransactionInstruction[]): Promise<string> {
+  const conn = connection();
+  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+  const tx = new Transaction({ feePayer: new PublicKey(payer.address), blockhash, lastValidBlockHeight }).add(...ixs);
+  let b64 = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString("base64");
+  for (const c of coSigners) b64 = (await wdkPartialSign(c.account, b64)).wireBase64;
+  const signed = await wdkPartialSign(payer.account, b64);
+  await conn.sendRawTransaction(Buffer.from(signed.wireBase64, "base64"), { maxRetries: 3 });
+  await conn.confirmTransaction({ signature: signed.signature, blockhash, lastValidBlockHeight }, "confirmed");
+  return signed.signature;
 }
 
 export const explorer = (sig: string) => `https://explorer.solana.com/tx/${sig}?cluster=devnet`;

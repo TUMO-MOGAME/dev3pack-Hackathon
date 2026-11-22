@@ -6,6 +6,7 @@
 import { PublicKey, type Connection } from "@solana/web3.js";
 import type { Base58, Estate, Rule } from "../types";
 import { DISPUTE_SEAT, YEAR_SECS, disputeLapsesAt, type Dispute, type DisputeKind, type YearlyCap } from "../disputes/types";
+import { eligibleSeats } from "../death-rules";
 import { shortAddress } from "../format";
 import { accountName, getCoder, getIdl } from "./idl";
 import { big, bits, enumOf, hex, key, num, type Raw } from "./decoders";
@@ -40,11 +41,15 @@ export function decodeDispute(address: Base58, o: Raw, estate: Estate, names: Re
   const up = num(o, "votes_uphold");
   const down = num(o, "votes_dismiss");
   const voted = bits(up | down, 3).map((b, i) => (b ? i : -1)).filter((i) => i >= 0);
+  // A vacant seat's vote no longer counts. A challenge to an unlock from before the owner's last sign of life is void.
+  const seats = eligibleSeats(estate.verifiers);
+  const counted = (mask: number) => seats.filter((i) => mask & (1 << i)).length;
+  const voided = kind === "Unlock" && raisedAt < estate.lastHeartbeat;
   return {
     address, kind: kind as DisputeKind, target: key(o, "target"), disputer,
     disputerName: names[disputer] ?? (estate.verifiers.includes(disputer) ? estate.verifierNames[estate.verifiers.indexOf(disputer)] : shortAddress(disputer)),
-    reason: reasons[reasonHash] ?? "", reasonHash, raisedAt, lapsesAt: disputeLapsesAt(raisedAt, estate.waitingPeriodSecs),
-    status: enumOf(o, "status", STATUS), votesUphold: bits(up, 3).filter(Boolean).length, votesDismiss: bits(down, 3).filter(Boolean).length, voted,
+    reason: reasons[reasonHash] ?? "", reasonHash, raisedAt, lapsesAt: voided ? raisedAt : disputeLapsesAt(raisedAt, estate.waitingPeriodSecs),
+    status: enumOf(o, "status", STATUS), votesUphold: counted(up), votesDismiss: counted(down), voted,
   };
 }
 

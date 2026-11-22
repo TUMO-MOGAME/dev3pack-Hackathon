@@ -39,6 +39,11 @@ describe("rankOffers (mirrors accept_offer)", () => {
     expect(rankOffers(asset(), [offer("late", 9500, 20), offer("early", 9500, 10)]).bestOffer).toBe("early");
   });
 
+  it("the same offer whatever order the scan gave", () => {
+    const [a, b] = [offer("a", 9500, 5), offer("b", 9500, 5)];
+    expect(rankOffers(asset(), [b, a]).bestOffer).toBe(rankOffers(asset(), [a, b]).bestOffer);
+  });
+
   it("nothing is eligible unless the car is listed", () => {
     const r = rankOffers(asset({ status: "Held" }), [offer("a", 20000)]);
     expect(r.bestOffer).toBeNull();

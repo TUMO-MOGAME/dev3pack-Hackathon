@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { handler, json, rateLimit } from "@/lib/api/http";
+import { handler, json, rateLimitShared } from "@/lib/api/http";
 import { speak } from "@/lib/legacy/server/service";
 import { authJson } from "@/lib/legacy/server/http";
 
@@ -21,7 +21,7 @@ const body = z.union([
  * Rate limits: 20/min per IP, 200/day per estate.
  */
 export const POST = handler(async (req) => {
-  rateLimit(req, "legacy-speak", 20);
+  await rateLimitShared(req, "legacy-speak", 20);
   const { body: b, viewer } = await authJson(req, "speak", body);
   const out = await speak(viewer, b);
   if (!out.audio) return json({ simulated: true, text: out.text });

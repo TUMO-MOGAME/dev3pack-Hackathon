@@ -43,7 +43,8 @@ let blind: number[] = [];
 const limitReached = (retryAfterSecs: number) =>
   new HttpError(429, "The agent reached today's limit for this. Please try again tomorrow.", "agent_limit", retryAfterSecs);
 
-async function chainBackstop(now: number): Promise<void> {
+/** Also the fee sponsor's: the same wallet pays. Throws when the agent spent too much lately. Always await it. */
+export async function chainBackstop(now: number): Promise<void> {
   if (!reading || now - reading.at > AGENT_SPEND.freshMs) {
     try {
       const agent = await agentAddress();

@@ -2,7 +2,8 @@
  * Letters for later (plan.md §16.11): Naledi's 500 USD₮ 18th-birthday gift on the seeded devnet demo estate, so her
  * letter "For your 18th birthday" opens with a real payment from the plan, like on the demo site.
  *
- *   1. add_payee: Naledi's own wallet as an approved "Other" payee ("Naledi Mokoena"), unless it already is one;
+ *   1. add_payee: Naledi's own wallet as an approved "Other" payee (on the ledger a role, never her name), unless it
+ *      already is one;
  *   2. add_rule:  General, Other, starts now, 500 USD₮ once (recurring 500 every year, lifetime cap 500), first due
  *                 14 Aug 2029 at 00:00 SAST, valid until 31 Dec 2030, paid to Naledi's own wallet.
  * Signed by the owner persona's Tether WDK wallet (`--owner thabo2` by default: the estate the app opens). No program
@@ -42,6 +43,7 @@ async function main() {
   const { fetchAccountRaw } = await import("../app/src/lib/chain/reads");
   const { num, key, big, enumOf } = await import("../app/src/lib/chain/decoders");
   const { toBase } = await import("../app/src/lib/format");
+  const { publicPayeeName } = await import("../app/src/lib/chain/public-names");
 
   // Never creates wallets: the demo personas must already exist (scripts/.demo-wallets.json, git-ignored).
   if (!existsSync(WALLETS_FILE)) throw new Error("scripts/.demo-wallets.json not found: run this from the checkout that seeded the devnet demo.");
@@ -68,7 +70,10 @@ async function main() {
   }
 
   const plan: { what: string; ixs: ReturnType<typeof ix.addPayee>[] }[] = [];
-  if (!payeeExists) plan.push({ what: "add_payee: Naledi's own wallet (Other, \"Naledi Mokoena\")", ixs: [ix.addPayee(ctx, owner, naledi, "Other", "Naledi Mokoena")] });
+  if (!payeeExists) {
+    const label = publicPayeeName({ name: "", kind: "Other", wallet: naledi.toBase58() }, new Set([naledi.toBase58()]));
+    plan.push({ what: `add_payee: Naledi's own wallet (Other, "${label}")`, ixs: [ix.addPayee(ctx, owner, naledi, "Other", label)] });
+  }
   else console.log("Naledi's own wallet is already a payee.");
   if (existing === null) {
     plan.push({
