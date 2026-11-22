@@ -1,5 +1,8 @@
 # Heirloom: 5-minute pitch + Q&A prep
 
+> **Historical: the W3Node pitch of 13 November 2026.** Its numbers and claims describe that version, and "written
+> during the hackathon" refers to W3Node. For Dev3pack see [dev3pack-submission.md](dev3pack-submission.md).
+
 > Live judging, Sat 14 Nov 2026: **5:00 pitch + 3:00 Q&A**. Rehearse with a timer at least 3 times.
 > Numbers on stage must come from `landing-facts.md`. Anything marked [fill] comes from `validation.md`.
 > Updated 2026-11-13 (after submission): the demo uses the public site's guided demo (12 steps, resettable), then the

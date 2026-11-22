@@ -267,3 +267,8 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
     },
   };
 }
+
+/** The owner's device keeps the family's names too: they are never on-chain, and the server may not keep them. */
+export function rememberOnDevice(names: Record<string, string>): void {
+  saveLocal((l) => { Object.assign(l.names, names); });
+}

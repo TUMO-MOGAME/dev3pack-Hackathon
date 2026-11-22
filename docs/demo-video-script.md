@@ -1,5 +1,8 @@
 # Heirloom: demo video script (2:58, hard limit 3:00)
 
+> **Historical: the W3Node video script of 13 November 2026.** Its numbers and claims describe that version, and "written
+> during the hackathon" refers to W3Node. For Dev3pack see [dev3pack-submission.md](dev3pack-submission.md).
+
 > Updated 2026-11-12 for the chat-first shell: the app opens on the chat home (`/chat`), the sidebar holds the
 > screens (Plan, Family, Trusted people, Money) and **Demo mode**, and "Needs your attention" cards drive the story.
 > Button names below are the real labels from `app/src/content/*` and `app/src/lib/chat/nudge-copy.ts`.

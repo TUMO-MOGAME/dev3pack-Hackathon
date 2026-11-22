@@ -1,6 +1,6 @@
 # Guardians, monitors, succession, fallback plan and asset photos: design and build spec
 
-> Branch `feature/guardians` (worktree `C:\Users\tumom\Hackathons\heirloom-guardians`). Started 14 Nov 2026, judging day.
+> Branch `feature/guardians`. Started 14 Nov 2026, judging day.
 > **Nothing here touches `main`, the live site or the deployed devnet program until after judging.** The program is
 > built and tested locally (LiteSVM); a devnet upgrade happens only when Tumo says so.
 > Decisions (Tumo, 14 Nov): monitors are notified AND can object; succession = death certificate + AI check +

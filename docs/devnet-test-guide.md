@@ -13,7 +13,7 @@ Open it: "Success" / "Finalized" means the transaction really happened on-chain.
 1. Free disk space: at least 3 GB (`Get-PSDrive C`).
 2. Start the app on devnet (keep this window open):
    ```powershell
-   cd "C:\Users\tumom\Hackathons\W3Node Hacathon"
+   cd <repo root>
    powershell -ExecutionPolicy Bypass -File scripts\demo-devnet.ps1
    ```
    Wait for `Ready`, then open **http://localhost:3000**. The first page takes about a minute to compile.

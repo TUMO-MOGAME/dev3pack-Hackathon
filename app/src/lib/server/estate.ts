@@ -4,6 +4,7 @@ import type { EstateSnapshot } from "../service/types";
 import { fetchActivity, fetchEstateRaw } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
 import { getEstateMeta, getReports } from "../db";
+import { withPrivateNames } from "../chain/public-names";
 
 /**
  * What anyone may know: chain state plus asset titles (things for sale). No family names, no agent reports.
@@ -25,5 +26,5 @@ export async function loadSnapshot(estate: string): Promise<EstateSnapshot> {
     fetchActivity(estate).catch(() => []),
     getReports(Object.values(raw.reportHashes)),
   ]);
-  return assembleSnapshot(raw, activity, reports);
+  return withPrivateNames(assembleSnapshot(raw, activity, reports), meta?.buyerNames ?? {});
 }

@@ -19,7 +19,7 @@
 | **Chain client** | IDL-driven instruction builders (accounts resolved by name), PDAs, decoders, unsigned tx builder | `app/src/lib/chain/{instructions,pda,decoders,reads,tx,client,config}.ts`, `idl/heirloom.json` |
 | **API routes** | Agent orchestrate, will chat, document review, valuation, offers, list/accept, scheduler tick, fee sponsor, health, QVAC wallet assistant, legacy voice (voice, book, speak, demo-voice: the parent's own messages only, ElevenLabs voices only), letters (signed list/write/delete + review), FX, off-ramp, reports, estate metadata, voice session | `app/src/app/api/**/route.ts`, shared guards in `app/src/lib/api/http.ts` |
 | **AI agent** | Gemini orchestrator (forced `route_to` function call; keyword fallback) + 6 specialists with zod-typed tools | `app/src/lib/agent/{orchestrator,specialists,prompts,gemini,will,review,offers,valuation,facts}.ts` |
-| **Agent wallet** | Server-side WDK wallet; allow-list `review_death`, `review_claim`, `review_hardship`, `list_asset`, `accept_offer`, `execute_scheduled` | `app/src/lib/agent/agent-wallet.ts` |
+| **Agent wallet** | Server-side WDK wallet; allow-list of `review_*`, `list_asset`, `accept_offer`, `execute_scheduled`; signs only for signed, role-checked requests (`app/src/lib/access`) | `app/src/lib/agent/agent-wallet.ts` |
 | **Scheduler** | Finds due recurring rules, calls `execute_scheduled` (agent pays only the fee) | `app/src/lib/server/scheduler.ts`, `POST /api/scheduler/tick`, `scripts/run-scheduler.ts` |
 | **Voice** | ElevenLabs Agents Platform; webhook tool `heirloom_orchestrate` → our orchestrator; client tools → UI actions | `app/src/lib/voice/useHeirloomVoice.ts`, `app/src/app/api/voice/session/route.ts`, `scripts/elevenlabs-agent.md` |
 | **Legacy voice** | Owner's consented ElevenLabs voice clone reads only the owner's own messages; no clone → an ElevenLabs stock voice, labelled "Stand-in voice"; Heirloom's own voice speaks the disclosure; never the browser's voice | `app/src/lib/legacy/server/{service,elevenlabs,standin}.ts`, `app/src/lib/legacy/demo-voice.ts`, `app/src/components/legacy/use-player.ts` |
@@ -27,7 +27,7 @@
 | **Off-chain data** | Supabase Postgres (names, will drafts, full agent reports, transcripts) + private `evidence` bucket; in-memory fallback | `app/src/lib/{db,storage,supabase}.ts`, `supabase/migrations/0001_init.sql` |
 | **FX** | VALR public USDT/ZAR market summary, mid price, 60 s cache, labelled fallback | `app/src/lib/fx.ts`, `/api/fx` |
 | **ZAR off-ramp** | `SimulatedZarPayout`: describes the PayShap/EFT payout a licensed partner would make. **Simulated** | `app/src/lib/offramp.ts`, `/api/offramp` |
-| **Program** | Anchor 1.2.2, 27 instructions, 25 LiteSVM tests | `programs/heirloom/src/**`, `programs/heirloom/tests/heirloom.rs` |
+| **Program** | Anchor 1.2.2, 54 instructions, 89 LiteSVM tests | `programs/heirloom/src/**`, `programs/heirloom/tests/heirloom.rs` |
 
 ```mermaid
 flowchart TB

@@ -1,5 +1,8 @@
 # Heirloom: BuilderBase submission
 
+> **Historical: the W3Node submission of 13 November 2026.** Its numbers and claims describe that version, and "written
+> during the hackathon" refers to W3Node. For Dev3pack see [dev3pack-submission.md](dev3pack-submission.md).
+
 > Deadline: **Fri 13 Nov 2026, 23:59 SAST** on BuilderBase. Copy each field below as-is. Replace every
 > `<!-- ... -->` placeholder first. Character and word counts are noted so nothing gets cut off.
 

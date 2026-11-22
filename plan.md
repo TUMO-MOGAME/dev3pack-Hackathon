@@ -394,23 +394,7 @@ design tokens, tests for every rule check.
 Not needed for judging: both live sites read their keys from Vercel, not from local files. Do these after 30 Nov,
 unless there is spare time before.
 
-**Keys in Infisical** (project "W3Node Heirloom keys", US cloud; started 16 Nov):
-1. Upload the three env files into the dev environment's folders: root `.env.local` → `/root`, `app/.env.local` →
-   `/app`, `scripts/.env.devnet` → `/devnet-scripts` (Tumo pastes or drags them in; Claude never sees values).
-   Consider `scripts/.demo-wallets.json` (devnet persona seeds) too, as `DEMO_WALLETS_JSON_BASE64` in `/devnet-scripts`.
-2. Claude checks every key name with list-secrets (masked) against what the code reads (`process.env.*` in `app/` and
-   `scripts/`, plus `app/.env.example`).
-3. Run the app with `infisical run` (from `app/`, env `dev`, path `/app`). The scripts load root → app → devnet
-   (later wins), so either nest `infisical run` calls or use Infisical secret imports so `/devnet-scripts` imports
-   `/root` and `/app`.
-4. Update CLAUDE.md and status.md so sessions use Infisical, then delete the local env files and the two `INFISICAL_*`
-   lines in the root `.env.local`.
-5. Maybe later: fill `prod` from Vercel and sync Infisical → Vercel, so there is one source of truth.
-6. Bring Tumo's other projects in the same way (one Infisical project each, with the `claude-pc` identity added).
-
-**Android keystore** (done 16 Nov: the password was rotated; keystore + password are in `/android`): back them up to a
-USB stick and a password manager, delete `keys\heirloom-release.keystore.before-rotation.bak` after a release build
-works, and consider deleting `keys\KEYSTORE-PASSWORD.txt`.
+**Key management and backups:** tracked privately, outside this repo.
 
 **Also after the hackathon:** the P2 list in §8 (ZAR off-ramp, ID/deceased check, valuations, encrypted documents,
 audit, mainnet, the full Tumoolo launch standard), Supabase on devnet (migration 0005), an Android phone wallet test,

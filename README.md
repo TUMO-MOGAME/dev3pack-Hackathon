@@ -1,9 +1,11 @@
 # Heirloom
 
-**A living estate plan in USD₮: pay your children's school fees, allowances and family today, and keep
-paying them after you're gone, under rules a Solana program enforces and Tether WDK wallets sign.**
+**A living estate plan on Solana: pay your children's school fees and allowances today, and keep paying them after
+you're gone, under rules a program enforces.**
 
-> W3Node Node Engine Hackathon, Cape Town, November 2026 · **Tether track: Mobile Money & Peer-to-Peer**
+> Dev3pack Global Hackathon, 27–29 November 2026 · Best App Overall on Solana · [submission](docs/dev3pack-submission.md)
+>
+> Built before the event and first submitted to W3Node on 13 November 2026. See [work done before the event](#work-done-before-the-event).
 
 **The problem.** 66% of South Africans have no will ([Sanlam Legacy Wills Survey 2025, via TimesLIVE](https://www.timeslive.co.za/news/south-africa/2025-09-19-66-of-south-africans-risk-family-feuds-by-dying-without-wills-sanlam-survey/)).
 When a parent dies, the estate freezes: a simple estate used to take 6–9 months to wind up and now takes about
@@ -11,16 +13,42 @@ twice as long ([Moneyweb / The Citizen, Dec 2024](https://www.citizen.co.za/busi
 The money for next term's fees exists. It just can't reach the school, and when it finally arrives as a lump sum,
 nothing makes sure it is spent on the children.
 
+## Try it in three minutes (real devnet, no faucet, no scripts)
+
+1. Open **https://heirloom.tumoolo.tech/start**, create a wallet and tap **Get test money** (500 test USD₮ and SOL for rent).
+2. Open **Plan** and describe a family in your own words, for example: *"Pay my daughter Zanele's university fees from
+   now, at most 50 USDT a claim and 200 in total, until 2029. My trusted people are Nomsa, David and Busi."*
+3. Tap **Review in plain language**, then **Make practice wallets**, then **Sign and lock**.
+4. Open **Vault** and add 120 USD₮.
+5. Switch to the child (the person card in the sidebar), open **Claims** and claim 40 with any
+   [demo document](docs/demo-documents). The agent approves it, rejects it or, when unsure, refers it to people.
+6. Switch back to the parent and tap **Approve and pay**. The program pays the institution.
+
+To see the whole story, death and asset sale included, without waiting, use the **simulated** demo:
+**https://heirloom-one-iota.vercel.app**. Its money movements are labelled "Simulated".
+
+## Proof: one newcomer, start to payout
+
+Done through the live app on 22 November 2026 by a fresh wallet, with no scripts.
+
+| Step | Transaction |
+|---|---|
+| Plan signed: estate, will hash, family, payee, rule and residual recipient, all in one transaction | [create_estate + 5 more](https://explorer.solana.com/tx/V3sEhGD9pdMm4zPHCEQEj6txezD8s6eK9aLCQ3cthPRj9LT4nhvohhEEcX3w88Rx3fBJGiPVsYPTxz71NRfi767?cluster=devnet) |
+| Vault funded | [deposit](https://explorer.solana.com/tx/4vggqXqugMRLicwQgm4oMjqyQ6aj2UJv77ZNhCaH6Qp1DtiX3W37rNSkvUxnS6CGfHBVvouZYTxVKQU9wtrZEiHx?cluster=devnet) |
+| Child claims | [submit_claim](https://explorer.solana.com/tx/2XDFeKWndCp8g3ALcBXw8HL4QhYkcKLGBkbetBJWZmCKqA6i9ALKJscDDW1nkgjxHd2meQMH4SyiFbXfLQL49KNo?cluster=devnet) |
+| The agent is unsure (wrong student on the statement) and refers it, so it does not approve | [review_claim: Refer](https://explorer.solana.com/tx/23iGynqLGFUxGu5sTb29CksHjDZRWkxJ5yJ6TZL3dFxkeykkFvsRmCVcV8vQzAAtBf4fhK2rUPVAzcfc2rn2pkpC?cluster=devnet) |
+| Parent approves | [owner_approve_claim](https://explorer.solana.com/tx/2wJB3SdZYPYQkDjM4hTuj59r5VCuEnd1FzMV6fu5qYt6KP3ajN57Lhsp3XXMAW2GE2iSrrnDsQBTxcJ3hNaYp5ZE?cluster=devnet) |
+| Program pays the institution | [execute_claim](https://explorer.solana.com/tx/NRCRhEixQ8nUk6XVPTitqDtiyqxNDLSxbKZpg7vayiuV683tUbtMEsh81KqLVAEozivZPgsvuGDaTBSw4ikymqb?cluster=devnet) |
+
 | | |
 |---|---|
-| **Live demo** | **https://heirloom-one-iota.vercel.app** *(works on a phone; installable as an app)*. Runs in **mock mode**: the money story is simulated in your browser with "Simulated" badges; the AI agent (Gemini) and the voices (ElevenLabs) are real. The on-chain proof is in the devnet links below |
-| **Live on devnet** | **https://heirloom.tumoolo.tech** (also https://heirloom-devnet.vercel.app): the same app in **chain mode** on Solana devnet with Tether WDK wallets. Create a wallet or bring a recovery phrase; the demo family lives on the demo site |
-| **Android app** | A Solana Mobile build of the devnet site (package `tech.tumoolo.heirloom`), for the Solana dApp Store. Build notes: [`docs/android-build.md`](docs/android-build.md); store assets: [`docs/store`](docs/store) |
-| **Demo video (≤ 3 min)** | [Watch on YouTube](https://youtu.be/N67LrkpVAmw) (2:58) |
-| **Pitch deck** | [`docs/pitch.md`](docs/pitch.md) |
-| **Program on devnet** | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet) |
-| **Real WDK USD₮ transfer** | [`nNUMsVDq…D6DvBEpKSCj`](https://explorer.solana.com/tx/nNUMsVDqmAbHxKYqTVXz1kggi2wfYXJawGod7gsXFpsysXFxBpnKG1vdL7m26UCm7hxwLc7cnDxpD6DvBEpKSCj?cluster=devnet) |
-| **Tests** | 25/25 program tests (LiteSVM) · 516 app tests (Vitest) |
+| **App on devnet** | https://heirloom.tumoolo.tech (also https://heirloom-devnet.vercel.app) |
+| **Simulated demo** | https://heirloom-one-iota.vercel.app |
+| **Program** | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet): 54 instructions, upgraded 22 Nov 2026 |
+| **Tests** | 89 program tests (LiteSVM) · 965 app tests (Vitest) |
+| **Why Solana** | The rules and the money must outlive the owner and the company. They live in program-owned accounts anyone can audit |
+| **Android** | A Solana Mobile WebView shell with Mobile Wallet Adapter ([build notes](docs/android-build.md)). Not yet verified with a wallet app on a physical phone |
+| **Video** | [W3Node video, 13 Nov](https://youtu.be/N67LrkpVAmw) (2:58). It predates the 22 Nov changes |
 
 ---
 
@@ -42,7 +70,7 @@ person, collapses to an icon rail on desktop and becomes a drawer on phones.
 4. **The same plan continues after death.** A death claim needs an AI document check, 2 of 3 verifiers (including the
    executor from the paper will) and a waiting period during which the owner can veto. Then the rules simply keep
    running, with the verifiers taking Thabo's place as approvers.
-5. **The car sells at a fair price.** Buyers escrow USD₮; the agent settles the best offer **at or above the floor**,
+5. **The car sells at a fair price.** Buyers escrow USD₮; when a trusted person asks, the agent settles the highest offer **at or above the floor**,
    swapping money and digital title atomically. Below the floor only with a sworn hardship affidavit and 2 verifiers,
    and never below the hardship floor.
 6. **Send to family.** A plain peer-to-peer USD₮ send to a saved family member, with the full Tether review → approve →
@@ -182,6 +210,9 @@ Deeper diagrams (sequence diagrams for every money path) are in [`docs/architect
   types, end dates, floors, quorums and waiting periods are checked by the Solana program, so even a fully
   compromised agent cannot overpay, pay the wrong payee or sell below the floor. The agent's wallet can only sign an
   allow-list of instructions ([`agent-wallet.ts`](app/src/lib/agent/agent-wallet.ts)).
+- **No names on-chain (POPIA).** Family members and personal payees are written as roles ("Family member 1"); the
+  names stay off-chain for members only ([`public-names.ts`](app/src/lib/chain/public-names.ts)). Demo estates seeded
+  before 22 November carry fictional names.
 - **Only hashes on-chain (POPIA).** Death certificates, fee statements and affidavits stay off-chain in a private
   Supabase bucket; the chain stores their SHA-256 and the SHA-256 of the agent's report
   ([`lib/agent/hash.ts`](app/src/lib/agent/hash.ts), canonical JSON).
@@ -199,38 +230,42 @@ Deeper diagrams (sequence diagrams for every money path) are in [`docs/architect
 
 Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`docs/program-spec.md`](docs/program-spec.md)
 
-**27 instructions** in five groups:
+**54 instructions:**
 
 | Group | Instructions |
 |---|---|
-| Setup | `create_estate`, `set_will`, `add_beneficiary`, `add_payee`, `add_rule`, `deposit`, `withdraw`, `heartbeat`, `register_asset` |
-| Death | `submit_death_claim`, `review_death` (agent), `attest_death` (verifiers), `veto_death` (owner), `finalize_unlock` |
-| Claims | `submit_claim`, `review_claim` (agent), `approve_claim` (verifiers), `owner_approve_claim` (living plan), `execute_claim` |
-| Scheduled | `execute_scheduled` (anyone may call once due; the program decides) |
-| Car sale | `list_asset`, `place_offer`, `withdraw_offer`, `submit_hardship`, `review_hardship`, `approve_hardship`, `accept_offer` |
+| Setup | `create_estate`, `set_will`, `add_beneficiary`, `add_payee`, `add_rule`, `set_yearly_cap`, `deposit`, `withdraw`, `heartbeat`, `register_asset`, `set_asset_media` |
+| Death | `submit_death_claim`, `review_death`, `attest_death`, `veto_death`, `finalize_unlock` |
+| Payments | `submit_claim`, `review_claim`, `approve_claim`, `owner_approve_claim`, `execute_claim`, `execute_scheduled` |
+| Asset sale | `list_asset`, `place_offer`, `withdraw_offer`, `submit_hardship`, `review_hardship`, `approve_hardship`, `accept_offer` |
+| Guardians | `init_guard`, `init_seat`, `set_seat_backups`, `set_seat_monitors`, `owner_replace_seat`, `report_seat_death`, `review_seat_death`, `confirm_seat_death`, `veto_seat_death`, `finalize_succession` |
+| Fallback | `set_fallback`, `report_fallback_death`, `review_fallback_death`, `start_fallback`, `execute_fallback` |
+| Challenges | `raise_objection`, `vote_objection`, `lapse_objection`, `raise_dispute`, `resolve_dispute` |
+| Continuity | `end_rule`, `set_residual`, `sweep_residual`, `set_agent`, `vote_agent` |
 
-**Guarantees the program enforces** (each has a test):
-- Only the estate's USD₮ mint is accepted (`WrongMint`).
-- A claim must be by the rule's beneficiary, to a payee of the rule's kind, within the per-claim cap, the lifetime cap
-  (re-checked at payout) and the end date (`ExceedsPerClaimCap`, `ExceedsLifetimeCap`, `WrongPayeeKind`, `RuleExpired`).
-- No payout without the agent's approval **and** the owner (while alive) or the verifier quorum (after unlock)
-  (`AgentNotApproved`, `InsufficientApprovals`).
-- Unlock needs an agent-approved death claim, `death_threshold` verifier attestations and the waiting period; the
-  owner can veto until then (`WaitingPeriodNotOver`).
-- Scheduled payments go only to the rule's fixed payee, only when due, within caps (`NotDue`, `ExceedsLifetimeCap`).
-- The car sells only at or above the floor; below it only to an approved hardship beneficiary and never below the
-  hardship floor (`BelowFloor`, `BelowHardshipFloor`). USD₮ and title NFT swap atomically.
+**What the program enforces:**
+- Only the estate's USD₮ mint is accepted.
+- A claim is by the rule's beneficiary, to a payee of the rule's kind, within the per-claim, yearly and lifetime caps
+  and before the end date. Caps are checked again at payout.
+- The agent can approve, reject or **refer**. Referred items need at least two trusted people, or the living owner.
+- An unlock needs the agent's review, a quorum of trusted people and a bounded waiting period, with an owner veto.
+- A claimant can't dispute their own claim, and a finished dispute never uses up the monitors' objection.
+- Every challenge lapses and every wait is bounded, so no one person can freeze the money forever.
+- Missed instalments never pay out together: one payment, then back to the schedule.
+- After the unlock, a sweep can take only what no live rule still needs, and only to the named recipient or the first
+  living fallback recipient.
+- An asset sells only at or above its floor, or the hardship floor after an approved request. An expired listing can
+  be listed again.
+- A lost agent key can be replaced by the owner, or by the trusted people.
 
-**Tests:** 25 LiteSVM tests in [`programs/heirloom/tests/heirloom.rs`](programs/heirloom/tests/heirloom.rs), e.g.
-`claim_over_per_claim_cap_fails`, `lifetime_cap_rechecked_at_execution`, `death_flow_unlocks_after_quorum_and_waiting_period`,
-`offer_below_floor_rejected_and_best_offer_settles_atomically`, `scheduled_payment_pays_when_due_and_stops_at_lifetime_cap`,
-`living_plan_claim_needs_owner_approval_while_active`.
+**Tests:** 89 LiteSVM tests in [`programs/heirloom/tests/heirloom.rs`](programs/heirloom/tests/heirloom.rs). The last
+section holds regression tests for attacks that worked on the version deployed before 22 November.
 
 ## What's real and what's simulated
 
 | Part | Status |
 |---|---|
-| Heirloom Solana program (27 instructions) | **Real**, deployed to devnet, 25/25 tests. **Not audited.** |
+| Heirloom Solana program (54 instructions) | **Real**, deployed to devnet, 89 tests. **Not audited.** |
 | USD₮ transfers signed by Tether WDK wallets (owner, family, verifiers, buyers, agent) | **Real** on devnet (chain mode) |
 | USD₮ token | **Test mint** on devnet (6 decimals, same as USD₮); mainnet mint is a config change |
 | Pay-once payment pipeline, reconnect re-check | **Real** (unit-tested in `payments.test.ts`) |
@@ -241,7 +276,8 @@ Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`doc
 | Rand settlement to the university (PayShap/EFT) | **Simulated** and labelled ([`lib/offramp.ts`](app/src/lib/offramp.ts)). Next step: a licensed partner |
 | Institutions (UCT, residence, school, bookstore) | **Demo wallets** we control, not the real institutions |
 | Death certificate, fee statement, affidavit | **Sample documents** marked SAMPLE |
-| Waiting period and payment intervals | **60 seconds** for the demo instead of weeks / months |
+| Waiting period and payment intervals | **Shortened** on the test sites (seconds or minutes instead of weeks or months), and shown as such |
+| Off-chain storage on the hosted sites | **Server memory**: Supabase is not connected, so names, reports and letters can be lost when the server restarts. Money and rules are on-chain and unaffected |
 | Mock mode (default) | Whole story **simulated** in the browser, with a "Simulated" badge; Explorer will not find mock receipts |
 | Hosted demo (heirloom-one-iota.vercel.app) | **Mock mode** for the money story, with real Gemini and ElevenLabs keys (agent answers, voice call, Legacy voice) and no Supabase. The devnet links in this README are the on-chain proof |
 
@@ -308,10 +344,10 @@ All names are in [`app/.env.example`](app/.env.example). Only `NEXT_PUBLIC_*` re
 ## Tests
 
 ```bash
-cd app && npm test                 # 230 Vitest tests: payments (pay-once), WDK errors, PDAs, IDL ↔ client, agent schemas,
+cd app && npm test                 # 965 Vitest tests: payments (pay-once), WDK errors, PDAs, IDL ↔ client, agent schemas,
                                    # offers, scheduler, hashing, fee-sponsor policy, QVAC intent parser, chat, legacy voice, i18n, icons
-cd app && npx tsc --noEmit         # type check
-anchor build && cargo test -p heirloom   # 25 LiteSVM program tests (Linux / WSL, Anchor 1.2.2)
+cd app && npx next typegen && npx tsc --noEmit   # type check (typegen first on a clean clone)
+anchor build && cargo test -p heirloom   # 89 LiteSVM program tests (Linux / WSL, Anchor 1.2.2)
 ```
 `bash scripts/build-program.sh test` does the same inside WSL: it copies the program to the Linux disk for a faster build, then runs the tests.
 
@@ -326,6 +362,13 @@ anchor build && cargo test -p heirloom   # 25 LiteSVM program tests (Linux / WSL
 - **Web:** HTTPS with HSTS and a Content-Security-Policy ([`app/next.config.ts`](app/next.config.ts)); per-IP rate limits and
   zod-validated bodies on API routes ([`lib/api/http.ts`](app/src/lib/api/http.ts)); scheduler and voice webhook protected by
   shared secrets; Supabase tables have RLS on with no public policies; evidence bucket is private.
+- **The agent signs only on request:** review, list and settle need a fresh single-use signature from the right
+  person, and the agent serves only estates that name it and use our mint
+  ([`lib/access`](app/src/lib/access/server.ts), [route tests](app/src/lib/access/routes.test.ts)).
+- **Family records are for members:** names, reports, notes, relationships and tree photos need a wallet-signed read
+  pass from someone the chain lists in that estate.
+- **The reviewer's facts come from the chain:** what the uploader types is passed as untrusted text. The relaxed
+  review for demo specimens applies only to those exact files, by SHA-256, and never on mainnet.
 - **Prompt injection:** uploaded documents are passed to the model as data, and the system prompt tells it to ignore
   instructions inside them. A manipulated verdict still can't break a cap or a quorum.
 - **Legacy voice:** the rule is **the voice only ever says the parent's own words**: words its owner wrote or approved
@@ -360,10 +403,18 @@ Solo project.
 |---|---|
 | Tumo Mogame | Founder: product, design, full-stack, Solana program |
 
-## Pre-existing code disclosure
+## Work done before the event
 
-**None.** All code in this repository was written during the hackathon (10–13 November 2026). It uses the
-open-source libraries listed below under their own licences.
+Heirloom is not new on 27 November. The Dev3pack organisers allow prework, and this is all of it:
+
+| When | What |
+|---|---|
+| 11–13 Nov 2026 | First version, built for and submitted to the W3Node hackathon (Tether track) |
+| 14–21 Nov 2026 | Guardians, disputes, yearly caps, Android shell, Trust Tree, Letters, translations |
+| 22 Nov 2026 | Security and completeness pass: program upgrade, signed agent routes, private family records, newcomer onboarding ([plan §17](plan.md)) |
+| 27–29 Nov 2026 | Dev3pack event: see `git log --since=2026-11-27` |
+
+It uses these open-source libraries under their own licences:
 
 | Area | Libraries |
 |---|---|

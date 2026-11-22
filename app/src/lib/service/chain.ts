@@ -32,7 +32,7 @@ import { hashJson, sha256Hex } from "../agent/hash";
 import type { EstateMeta } from "../db";
 import { signedMetaRequest } from "../estate-meta/signed";
 import { legacyApi, type LegacySigner } from "../legacy/client";
-import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-guardians";
+import { createChainGuardians, guardianExtras, loadGuardians, rememberOnDevice } from "./chain-guardians";
 import { createChainDisputes, loadDisputes } from "./chain-disputes";
 import { createChainAsk } from "./chain-ask";
 import { estateRecipients, mergeRecipients } from "./recipients";
@@ -57,6 +57,7 @@ import { rulePda as rulePdaOf } from "../chain/pda";
 import type { PayeeKind } from "../types";
 import { pack } from "../chain/pack";
 import { rulesStillToAdd } from "../continuity/resume";
+import { publicBeneficiaryLabel, publicPayeeName, withPrivateNames } from "../chain/public-names";
 
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
 function legacySigner(estate: Base58): LegacySigner {
@@ -439,7 +440,7 @@ export function createChainService(): HeirloomService {
       const withBuyers = out.activity.map((a) => (a.sale && !a.sale.buyerName && names[a.sale.buyer] ? { ...a, sale: { ...a.sale, buyerName: names[a.sale.buyer] } } : a));
       const bills = billActivity(estate, out.estate.ownerName);
       const withBills = bills.length ? [...withBuyers, ...bills].sort((a, b) => b.ts - a.ts) : withBuyers;
-      return { ...out, activity: withBills, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names, asks: askNotes, residual };
+      return { ...withPrivateNames(out, names), activity: withBills, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names, asks: askNotes, residual };
     },
 
     listEstatesFor(wallet) {
@@ -493,9 +494,14 @@ export function createChainService(): HeirloomService {
       }
       setup.push(ix.setWill(ctx, owner, willHash, `heirloom:will:${willHash.slice(0, 16)}`));
 
-      const before = exists ? await fetchEstateRaw(estate.toBase58()) : null;
+      const savedMeta = exists ? await getMetaForWrite(estate.toBase58()) : null;
+      const privateNames: Record<Base58, string> = { ...guardianExtras(savedMeta, {}).names };
+      const before = exists ? withPrivateNames(await fetchEstateRaw(estate.toBase58()), privateNames) : null;
+      // Names never go on-chain (POPIA): the ledger gets roles, the names stay with the estate's off-chain names.
+      const family = new Set(draft.beneficiaries.map((b) => b.wallet!));
+      for (const b of draft.beneficiaries) privateNames[b.wallet!] = b.label.slice(0, 64);
       const existingBens = new Set((before?.beneficiaries ?? []).map((b) => b.wallet));
-      const benIxs = draft.beneficiaries.filter((b) => !existingBens.has(b.wallet!)).map((b) => ix.addBeneficiary(ctx, owner, pk(b.wallet!), b.label));
+      const benIxs = draft.beneficiaries.filter((b) => !existingBens.has(b.wallet!)).map((b, i) => ix.addBeneficiary(ctx, owner, pk(b.wallet!), publicBeneficiaryLabel(existingBens.size + i)));
       setup.push(...benIxs);
 
       let ruleId = exists ? num(exists, "rule_count") : 0;
@@ -504,7 +510,10 @@ export function createChainService(): HeirloomService {
       if (opts.practice) {
         // Practice institutions: fresh addresses on the test network, so every rule has someone to pay.
         const made = practicePayees(draft.rules, payees).map((p) => ({ ...p, wallet: Keypair.generate().publicKey.toBase58() }));
-        for (const p of made) setup.push(ix.addPayee(ctx, owner, pk(p.wallet), p.kind, p.name));
+        for (const p of made) {
+          privateNames[p.wallet] = p.name;
+          setup.push(ix.addPayee(ctx, owner, pk(p.wallet), p.kind, publicPayeeName(p, family)));
+        }
         payees.push(...made);
       }
       const now = Math.floor(Date.now() / 1000);
@@ -549,9 +558,11 @@ export function createChainService(): HeirloomService {
         }
       }
 
+      rememberOnDevice(privateNames);
       await saveMeta({
         estate: estate.toBase58(), ownerWallet: owner.toBase58(), ownerName: draft.ownerName,
-        verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string], assetTitles: {}, buyerNames: {},
+        verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string],
+        assetTitles: savedMeta?.assetTitles ?? {}, buyerNames: { ...savedMeta?.buyerNames, ...privateNames },
       }, draft).catch(() => undefined); // names are cosmetic; the estate itself is already on-chain
       return { estate: estate.toBase58(), txs };
     },
@@ -585,7 +596,16 @@ export function createChainService(): HeirloomService {
 
     async addPayee(estate, input) {
       const o = requireOwnerOf(estate);
-      return send([ix.addPayee(chainCtx(), o, pk(input.wallet), input.kind, input.name)]);
+      const family = new Set((await fetchEstateRaw(estate)).beneficiaries.map((b) => b.wallet));
+      const tx = await send([ix.addPayee(chainCtx(), o, pk(input.wallet), input.kind, publicPayeeName(input, family))]);
+      // A person's name stays off-chain. A family member keeps the name the family already uses for them.
+      if (!family.has(input.wallet)) {
+        const name = input.name.trim().slice(0, 64);
+        rememberOnDevice({ [input.wallet]: name });
+        const meta = await getMetaForWrite(estate);
+        if (meta) await saveMeta({ ...meta, buyerNames: { ...meta.buyerNames, [input.wallet]: name } }).catch(() => undefined);
+      }
+      return tx;
     },
 
     async addRule(estate, input) {

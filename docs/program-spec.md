@@ -337,3 +337,42 @@ still apply. `raise_dispute`, `resolve_dispute`, `set_yearly_cap` are on the spo
 Events: `DisputeRaised {estate, objection, target, kind, disputer, reason_hash, lapses_at, ts}`, `DisputeVoted {objection, verifier, uphold, ts}`,
 `DisputeResolved {estate, objection, target, kind, upheld, ts}`, `YearlyCapSet {estate, rule, cap, period_start, ts}`.
 Errors (appended): `NotDisputer 6042`, `DisputeLapsed 6043`, `ExceedsYearlyCap 6044`.
+
+## Judge-review fixes (added 2026-11-22, plan.md §17)
+
+No existing account layout changed. This section overrides anything above it that disagrees.
+
+### Changed instructions
+| Instruction | Change |
+|---|---|
+| `review_death`, `review_claim`, `review_hardship` | `approve: bool` became `outcome: ReviewOutcome {Reject, Approve, Refer}` (same encoding for the first two). Refer sets `Verdict::Referred` and emits `ReviewReferred` in place of `*Reviewed` |
+| `attest_death`, `approve_claim`, `approve_hardship`, `execute_claim` | Referred is open to people, with quorum max(threshold, 2). The owner's approval still suffices on a living plan |
+| `create_estate` | waiting period 60 s to 365 days |
+| `add_rule` | at most 16 rules; interval at most 10 years; `first_due` ≥ 0 |
+| `init_guard` | owner only; each wait 0 to 180 days (clamped on read for older guards) |
+| `execute_scheduled` | one instalment, then the first schedule date after now |
+| `list_asset` | 1 hour to 90 days; an expired listing can be listed again |
+| `raise_dispute` | a claimant cannot dispute their own claim |
+| `raise_objection` | a finished dispute doesn't use up the objection. A dismissed objection: once per claim, hardship or waiting period; Sale and Succession after a cooldown of one waiting period |
+| `execute_claim` | with a Guard, the window restarts after a dispute lapses |
+| `lapse_objection` | any monitors' objection. Non-fallback ones lapse after two waiting periods (at least 120 s); disputes still after one |
+
+### New accounts
+- `Residual ["residual", estate]` `{estate, recipient, bump}`
+- `AgentVote ["agentvote", estate, candidate]` `{estate, candidate, replaces, voters[3], bump}`
+
+### New instructions
+| Instruction | Who, when | Effect |
+|---|---|---|
+| `end_rule` | owner, Active | `valid_until = now - 1` |
+| `set_residual(recipient)` | owner, Active | names who receives what is left |
+| `sweep_residual` | anyone, Unlocked; remaining accounts = every Rule in id order | pays vault minus the live rules' remaining caps, to Residual, else the first living fallback recipient |
+| `set_agent(agent)` | owner, Active | replaces the agent |
+| `vote_agent(candidate)` | trusted people | replaces the agent: all of them (at least two) while Active, otherwise two or the only one left |
+
+### Labels
+`add_beneficiary` and `add_payee` labels are public forever. Clients write roles, never personal names (`app/src/lib/chain/public-names.ts`).
+
+### Errors (appended)
+`OwnClaimDispute 6045`, `TimeOutOfRange 6046`, `TooManyRules 6047`, `BadAgent 6048`, `RulesIncomplete 6049`,
+`NoResidualRecipient 6050`, `NothingToSweep 6051`, `ObjectionCooldown 6052`.

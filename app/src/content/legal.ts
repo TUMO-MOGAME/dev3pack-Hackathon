@@ -37,6 +37,7 @@ export const privacy = {
         "Vehicle details (make, model, year, mileage): to suggest a fair asking price.",
         "Letters for later that an estate owner writes to their family (the text, occasion, who it is for and when it opens): to deliver the owner's own words at the moment they chose (section 15).",
         "Your IP address and basic request details: for spam and abuse checks and rate limiting on forms and agent requests.",
+        "On the test network, a request for starter funds (your wallet address and IP address): to give test money once per wallet and to limit abuse. The transfer itself is public on the ledger.",
         "Cookie-free visitor statistics (page, referrer, device type, with no cookies and no cross-site identifiers): to understand which pages are used.",
       ],
     },
@@ -49,7 +50,7 @@ export const privacy = {
     {
       heading: "5. What goes on the public ledger",
       paragraphs: [
-        "The Solana ledger is public and permanent. Heirloom writes only wallet addresses, amounts, rule limits and SHA-256 fingerprints (hashes) of documents and reports. No names, ID numbers or document contents are written on-chain. A fingerprint cannot be turned back into the document.",
+        "The Solana ledger is public and permanent. Heirloom writes only wallet addresses, amounts, rule limits, roles (for example \"Family member 1\" or \"Approved payee\"), the public names of universities and schools, and SHA-256 fingerprints (hashes) of documents and reports. No personal names, ID numbers or document contents are written on-chain. Family names, reports and notes are shown only to that estate's members, who prove it with their wallet's signature. A fingerprint cannot be turned back into the document.",
       ],
     },
     {

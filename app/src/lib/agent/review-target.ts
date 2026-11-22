@@ -14,6 +14,7 @@ import { getEstateMeta } from "../db";
 import { fromBase } from "../format";
 import type { ReviewOutcome } from "../verdict";
 import type { ReviewPurpose } from "./review";
+import { isRoleOnly } from "../chain/public-names";
 
 const VERDICTS = ["Pending", "Approved", "Rejected", "Referred"] as const;
 const NOBODY = PublicKey.default.toBase58();
@@ -52,6 +53,9 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
   const programId = new PublicKey(getIdl().address);
   const meta = await getEstateMeta(p.estate);
   const named = (wallet: string): string | null => meta?.buyerNames[wallet] ?? null;
+  // The ledger holds roles, not names (chain/public-names.ts): without the off-chain name nobody can be matched.
+  const personOf = (wallet: string, label: string): string =>
+    named(wallet) ?? (isRoleOnly(label) ? `${label} (their name is not on record, so a name on the document cannot be checked: use needs_human)` : label);
 
   if (p.purpose === "death") {
     sameFile(hex(raw, "death_cert_hash"), p.sha256);
@@ -80,7 +84,7 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
     ]);
     const lines = [
       `Claim for ${fromBase(big(claim, "amount"))} USD₮ under rule #${rule ? num(rule, "id") : "?"}. The program has already checked the rule's limits.`,
-      `Claimed by: ${ben ? str(ben, "label") : "a beneficiary"}.`,
+      `Claimed by: ${personOf(who, ben ? str(ben, "label") : "a beneficiary")}.`,
       `Approved payee on-chain: ${payee ? str(payee, "name") : "unknown"} (wallet ${payeeWallet}).`,
     ];
     if (rule && bool(rule, "starts_now")) {
@@ -107,7 +111,7 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
     const ben = await fetchAccountRaw("Beneficiary", beneficiaryPda(programId, p.estate, who).toBase58());
     return {
       estate, canRefer: true, submitter: who,
-      facts: `Hardship request by ${ben ? str(ben, "label") : "a beneficiary"} to sell an estate asset below its floor price.`,
+      facts: `Hardship request by ${personOf(who, ben ? str(ben, "label") : "a beneficiary")} to sell an estate asset below its floor price.`,
       instruction: (agent, outcome, hash) => reviewHardship(estateKey, agent, new PublicKey(assetAddr), new PublicKey(p.subject!), outcome, hash),
     };
   }

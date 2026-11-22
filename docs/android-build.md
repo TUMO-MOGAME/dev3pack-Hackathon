@@ -23,9 +23,8 @@ the shell itself changes (name, icon, colours, package settings, a newer CLI tem
 ## Where things live (outside git)
 
 ```
-C:\Users\tumom\Hackathons\heirloom-android\          NOT a git repo, never commit any of it
+<android build folder>\                             NOT a git repo, never commit any of it
   keys\heirloom-release.keystore                     the signing key (PKCS12)
-  keys\KEYSTORE-PASSWORD.txt                         its password (store and key use the same one)
   android\                                           the generated Android project (Gradle)
     twa-manifest.json                                CLI config: package id, host, start URL, key path + alias
     gradle.properties                                SOLANA_MOBILE_URL / _APPLICATION_ID / _VERSION_CODE / _VERSION_NAME
@@ -33,7 +32,7 @@ C:\Users\tumom\Hackathons\heirloom-android\          NOT a git repo, never commi
   build.log                                          the last build's output
 ```
 
-> **BACK UP BOTH KEY FILES NOW** (`heirloom-release.keystore` and `KEYSTORE-PASSWORD.txt`): copy them to a password
+> **BACK UP BOTH KEY FILES NOW** (the keystore and its password): copy them to a password
 > manager or an encrypted USB drive, and keep a second copy somewhere else. Every update to the dApp Store listing must
 > be signed with this same key. **If the keystore or its password is lost, the app can never be updated**; it would
 > have to be published again as a new app under a new package id. Never put either file in the repo, a chat, an email
@@ -53,7 +52,7 @@ Needs JDK 17+ and the Android SDK (`%LOCALAPPDATA%\Android\Sdk`; the build downl
 # Git Bash
 cd /c/Users/tumom/Hackathons/heirloom-android
 export ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"
-export SOLANA_MOBILE_KEYSTORE_PASSWORD="$(head -1 keys/KEYSTORE-PASSWORD.txt)"
+read -rs SOLANA_MOBILE_KEYSTORE_PASSWORD && export SOLANA_MOBILE_KEYSTORE_PASSWORD   # from the password manager
 export SOLANA_MOBILE_KEY_PASSWORD="$SOLANA_MOBILE_KEYSTORE_PASSWORD"
 npx solana-mobile@0.6.0 webshell build android
 ```
