@@ -425,6 +425,7 @@ export const af: Bundle = {
       title: "Deur die kontrak geblokkeer",
       body: "Dit is die boedel se reël op Solana wat sy werk doen. Die agent kan dit nie omseil nie.",
       code: "Reël",
+      failed: "Kyk voordat jy weer probeer",
     },
     consent: { before: "Ek stem in dat Heirloom hierdie inligting verwerk soos beskryf in die", link: "privaatheidsbeleid", after: "." },
     consentRequired: "Merk asseblief die blokkie om voort te gaan.",
@@ -449,7 +450,7 @@ export const af: Bundle = {
     toast: { dismiss: "Maak boodskap toe" },
     time: { justNow: "nou net", minutes: "{n} min gelede", hours: "{n} uur gelede", days: "{n} dae gelede", never: "nooit" },
     errors: {
-      generic: "Iets het skeefgeloop en niks is verander nie. Probeer asseblief weer.",
+      generic: "Iets het skeefgeloop. Kyk wat verander het voordat jy weer probeer.",
       NoWallet: "Kies eers as wie jy optree.",
       NoEstate: "Daar is nog geen plan nie. Die eienaar teken dit eerste.",
       NotOwner: "Net die boedeleienaar kan dit doen.",

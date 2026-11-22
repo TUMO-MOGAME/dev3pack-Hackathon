@@ -192,6 +192,7 @@ export const common = {
     title: "Blocked by the contract",
     body: "This is the estate's rule on Solana doing its job. The agent can't override it.",
     code: "Rule",
+    failed: "Check before you try again",
   },
   consent: { before: "I agree to Heirloom processing this information as described in the", link: "privacy policy", after: "." },
   consentRequired: "Please tick the box to continue.",
@@ -216,7 +217,7 @@ export const common = {
   toast: { dismiss: "Dismiss message" },
   time: { justNow: "just now", minutes: "{n} min ago", hours: "{n} h ago", days: "{n} d ago", never: "never" },
   errors: {
-    generic: "Something went wrong and nothing was changed. Please try again.",
+    generic: "Something went wrong. Check what changed before you try again.",
     NoWallet: "Choose who you are acting as first.",
     NoEstate: "There is no plan yet. The owner signs it first.",
     NotOwner: "Only the estate owner can do this.",

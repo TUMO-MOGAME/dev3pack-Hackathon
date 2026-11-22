@@ -425,6 +425,7 @@ export const zu: Bundle = {
       title: "Kuvinjwe yinkontileka",
       body: "Lona ngumthetho wefa ku-Solana owenza umsebenzi wawo. I-agent ayikwazi ukuweqa.",
       code: "Umthetho",
+      failed: "Bheka ngaphambi kokuzama futhi",
     },
     consent: { before: "Ngiyavuma ukuthi i-Heirloom isebenzise lolu lwazi njengoba kuchaziwe", link: "kunqubomgomo yobumfihlo", after: "." },
     consentRequired: "Sicela umake ibhokisi ukuze uqhubeke.",
@@ -449,7 +450,7 @@ export const zu: Bundle = {
     toast: { dismiss: "Vala umlayezo" },
     time: { justNow: "manje nje", minutes: "imizuzu engu-{n} edlule", hours: "amahora angu-{n} edlule", days: "izinsuku ezingu-{n} ezedlule", never: "akukaze" },
     errors: {
-      generic: "Kukhona okungahambanga kahle futhi akukho okushintshiwe. Sicela uzame futhi.",
+      generic: "Kukhona okungahambanga kahle. Bheka okushintshile ngaphambi kokuzama futhi.",
       NoWallet: "Khetha kuqala ukuthi usebenza njengobani.",
       NoEstate: "Alukabikhona uhlelo. Umnikazi uyalusayina kuqala.",
       NotOwner: "Umnikazi wefa kuphela ongakwenza lokhu.",

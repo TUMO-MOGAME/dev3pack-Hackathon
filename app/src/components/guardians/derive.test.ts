@@ -4,7 +4,7 @@ import { NO_WALLET } from "@/lib/guardians/decisions";
 import type { GuardiansSnapshot, Objection, Seat, SeatApprovalItem } from "@/lib/guardians/types";
 import {
   afterReplacement, allVacant, canConfirm, checkReplacement, canObject, canReport, checkFallback, checkPeople, clock, fallbackStage, fallbackWinner, feedFor,
-  guardianTodo, heldSeat, isMonitor, monitorPending, moveItem, pausedBy, secondsLeft, shortName, successionStage, voterRole,
+  guardianTodo, heldSeat, isMonitor, mayRaise, monitorPending, moveItem, pausedBy, secondsLeft, shortName, successionStage, voterRole,
   waitFraction, waitUnit,
 } from "./derive";
 
@@ -261,5 +261,61 @@ describe("replacing a trusted person (owner_replace_seat)", () => {
     expect(afterReplacement(s, LERATO)).toMatchObject({ removed: false, backups: s.backups, monitors: s.monitors });
     expect(afterReplacement(s, KAGISO)).toMatchObject({ removed: true, backups: [{ wallet: NAIDOO, name: "Adv. Naidoo" }] });
     expect(afterReplacement(s, ZODWA)).toMatchObject({ removed: true, monitors: [] });
+  });
+});
+
+describe("objections after the second review", () => {
+  const C1 = W("C"), NOW = 2000;
+  /** One open claim of Lerato's, or a death Lerato reported, with what was raised before. */
+  const at = (status: "Active" | "Unlocked", objections: Objection[] = [], since = 900, g: Partial<GuardiansSnapshot> = {}) => {
+    const s = snap(status, guard({ objections, ...g }));
+    s.claims = [{ address: C1, beneficiary: LERATO, status: "Open" }] as EstateSnapshot["claims"];
+    s.estate.death = { ...s.estate.death, certHash: "cert", submittedBy: LERATO, submittedAt: since, pendingSince: status === "Active" ? null : since };
+    return s;
+  };
+
+  it("a monitor may challenge once; never the person who gains", () => {
+    expect(mayRaise(at("Unlocked"), "Claim", C1, ZODWA, NOW)).toBe(true);
+    expect(mayRaise(at("Unlocked"), "Claim", C1, LERATO, NOW)).toBe(false);
+    expect(mayRaise(at("Active"), "Unlock", W("E"), LERATO, NOW)).toBe(false);
+    expect(mayRaise(at("Unlocked", [objection({ status: "Dismissed" })]), "Claim", C1, ZODWA, NOW)).toBe(false);
+  });
+  it("again for another death, or after the earlier one was upheld", () => {
+    expect(mayRaise(at("Unlocked", [objection({ status: "Upheld" })]), "Claim", C1, ZODWA, NOW)).toBe(true);
+    expect(mayRaise(at("Unlocked", [objection({ status: "Dismissed", raisedAt: 500 })]), "Claim", C1, ZODWA, NOW)).toBe(true);
+    const unlock = (raisedAt: number) => at("Active", [objection({ kind: "Unlock", target: W("E"), status: "Dismissed", raisedAt })]);
+    expect(mayRaise(unlock(500), "Unlock", W("E"), ZODWA, NOW)).toBe(true);
+    expect(mayRaise(unlock(1010), "Unlock", W("E"), ZODWA, NOW)).toBe(false);
+  });
+  it("never a second time on a hardship request, and on a fallback only for a later countdown", () => {
+    expect(mayRaise(at("Unlocked", [objection({ kind: "Hardship", status: "Dismissed", raisedAt: 500 })]), "Hardship", C1, ZODWA, NOW)).toBe(false);
+    const started = (startedAt: number) => at("Unlocked", [objection({ kind: "Fallback", target: W("F"), status: "Dismissed" })], 900,
+      { fallback: { recipients: [], startedAt, readyAt: startedAt + 120, done: false, canStart: false } });
+    expect(mayRaise(started(1500), "Fallback", W("F"), ZODWA, NOW)).toBe(true);
+    expect(mayRaise(started(1000), "Fallback", W("F"), ZODWA, NOW)).toBe(false);
+  });
+
+  it("a lapsed or voided objection pauses nothing and takes no vote", () => {
+    const o = objection({ lapsesAt: 1500 });
+    const g = guard({ objections: [o] });
+    expect(pausedBy(g, o.target, 1499)).toBe(o);
+    expect(pausedBy(g, o.target, 1500)).toBeNull();
+    expect(voterRole(g, o, snap("Unlocked", g), THANDI, 1499)).toBe("holder");
+    expect(voterRole(g, o, snap("Unlocked", g), THANDI, 1500)).toBeNull();
+  });
+  it("on the fallback the monitors vote, never whoever raised it and never a holder for it", () => {
+    const g = guard({ seats: [seat(0, THANDI, { monitors: [{ wallet: KAGISO, name: "Kagiso" }, { wallet: ZODWA, name: "Zodwa" }] }), seat(1, ANITA), seat(2, BONGANI)] });
+    const o = objection({ kind: "Fallback", seatIndex: null });
+    expect(voterRole(g, o, snap("Unlocked", g), KAGISO)).toBe("monitor");
+    expect(voterRole(g, o, snap("Unlocked", g), ZODWA)).toBeNull();
+    expect(voterRole(g, o, snap("Unlocked", g), THANDI)).toBeNull();
+  });
+});
+
+describe("the agent never takes a trusted person's place", () => {
+  it("refuses the agent's wallet, not somebody else's", () => {
+    const ctx = { owner: OWNER, holders: [THANDI, ANITA, BONGANI], agent: W("G") };
+    expect(checkReplacement({ name: "Agent", wallet: W("G") }, ctx)).toBe("agent");
+    expect(checkReplacement({ name: "Kagiso", wallet: KAGISO }, ctx)).toBeNull();
   });
 });

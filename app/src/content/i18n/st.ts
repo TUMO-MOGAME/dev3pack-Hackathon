@@ -425,6 +425,7 @@ export const st: Bundle = {
       title: "E thibetswe ke konteraka",
       body: "Ona ke molao wa lefa ho Solana o etsang mosebetsi wa wona. Agent e ke ke ya o feta.",
       code: "Molao",
+      failed: "Sheba pele o leka hape",
     },
     consent: { before: "Ke dumela hore Heirloom e sebetse tlhahisoleseding ena kamoo ho hlalositsweng kateng ho", link: "leano la lekunutu", after: "." },
     consentRequired: "Ka kopo tshwaya lebokose ho tswela pele.",
@@ -449,7 +450,7 @@ export const st: Bundle = {
     toast: { dismiss: "Tlosa molaetsa" },
     time: { justNow: "hona jwale", minutes: "metsotso e {n} e fetileng", hours: "dihora tse {n} tse fetileng", days: "matsatsi a {n} a fetileng", never: "le ka mohla" },
     errors: {
-      generic: "Ho na le se sa tsamayang hantle mme ha ho letho le fetotsweng. Ka kopo leka hape.",
+      generic: "Ho na le se sa tsamayang hantle. Sheba se fetohileng pele o leka hape.",
       NoWallet: "Kgetha pele hore o sebetsa o le mang.",
       NoEstate: "Ha ho moralo hajwale. Mong wa lefa o o saena pele.",
       NotOwner: "Ke mong wa lefa feela ya ka etsang sena.",

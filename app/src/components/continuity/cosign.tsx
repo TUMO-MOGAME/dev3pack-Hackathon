@@ -65,7 +65,7 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
       return settleSeen(s)(est, asset.address, agreed);
     }, done, true);
     if (res.ok) { setSeen(null); setMoved(false); return; }
-    if (res.code === "OfferChanged") setMoved(true);
+    if (res.code === "OfferChanged" || res.code === "sale_changed") setMoved(true);
     else setBlocked({ code: res.code, message: res.message });
   };
 
