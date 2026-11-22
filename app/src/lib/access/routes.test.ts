@@ -24,7 +24,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/api/http", async (original: () => Promise<object>) => ({ ...(await original()), isChainMode: () => true, rateLimit: () => undefined }));
+vi.mock("@/lib/api/http", async (original: () => Promise<object>) => ({ ...(await original()), isChainMode: () => true, rateLimit: () => undefined, rateLimitShared: async () => undefined }));
 vi.mock("@/lib/chain/config", async (original: () => Promise<{ chainConfig: object }>) => {
   const m = await original();
   return { ...m, chainConfig: { ...m.chainConfig, usdtMint: h.mint, cluster: "devnet" } };
@@ -38,6 +38,9 @@ vi.mock("@/lib/agent/agent-wallet", () => ({
   hasAgentWallet: () => true,
   agentAddress: async () => h.agent,
   agentSignAndSend: async (ixs: { data: Uint8Array }[]) => { h.signed.push(...ixs); return { signature: "sig", explorerUrl: "url" }; },
+}));
+vi.mock("@/lib/server/agent-ledger", async (original: () => Promise<object>) => ({
+  ...(await original()), agentLedger: () => ({ spend: async () => ({ hour: 0, day: 0, complete: true }) }),
 }));
 vi.mock("@/lib/agent/review", () => ({
   reviewDocument: async (input: { facts?: string; untrusted?: string }) => {
@@ -252,6 +255,22 @@ describe("/api/list-asset and /api/accept-offer (S1)", () => {
   it("a trusted person settles someone else's offer", async () => {
     expect((await settling(trusted)).status).toBe(200);
     expect(h.signed).toHaveLength(1);
+  });
+});
+
+describe("every caller waits for the async checks (§18.3 S3)", () => {
+  it("verifyAction, spendAgentAllowance and rateLimitShared are always awaited", () => {
+    const root = path.resolve(process.cwd(), "src");
+    let calls = 0;
+    for (const f of readdirSync(root, { recursive: true, encoding: "utf8" })) {
+      if (!/\.tsx?$/.test(f) || f.includes(".test.")) continue;
+      for (const line of readFileSync(path.join(root, f), "utf8").split("\n")) {
+        if (!/\b(verifyAction|spendAgentAllowance|rateLimitShared)\(/.test(line) || /export async function/.test(line)) continue;
+        calls++;
+        expect(line, f).toMatch(/await (verifyAction|spendAgentAllowance|rateLimitShared)\(/);
+      }
+    }
+    expect(calls).toBeGreaterThanOrEqual(9);
   });
 });
 

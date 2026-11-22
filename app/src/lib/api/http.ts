@@ -1,11 +1,13 @@
 import "server-only";
 /**
  * Shared helpers for route handlers: JSON responses with bigint support, typed errors → status codes,
- * zod body parsing, client IP, and a simple per-IP fixed-window rate limit (in-memory; per instance).
+ * zod body parsing, client IP, and a per-IP rate limit: `rateLimit` (in memory, per instance) for ordinary routes,
+ * `rateLimitShared` (also across instances when the shared store is there) where the agent signs or spends.
  */
 import { z } from "zod";
 import { AgentError } from "../agent/gemini";
 import { UploadError } from "../storage";
+import { takeShared } from "../server/shared-store";
 
 export function json(data: unknown, init: ResponseInit = {}): Response {
   const body = JSON.stringify(data, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
@@ -13,11 +15,16 @@ export function json(data: unknown, init: ResponseInit = {}): Response {
 }
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string, public code = "error") { super(message); }
+  constructor(public status: number, message: string, public code = "error", public retryAfterSecs?: number) { super(message); }
 }
 
 export function errorResponse(e: unknown): Response {
-  if (e instanceof HttpError) return json({ error: e.message, code: e.code }, { status: e.status });
+  if (e instanceof HttpError) {
+    const retryAfter = e.retryAfterSecs;
+    return retryAfter === undefined
+      ? json({ error: e.message, code: e.code }, { status: e.status })
+      : json({ error: e.message, code: e.code, retryAfter }, { status: e.status, headers: { "retry-after": String(retryAfter) } });
+  }
   if (e instanceof z.ZodError) return json({ error: "Invalid request", code: "invalid", issues: e.issues.slice(0, 10).map((i) => `${i.path.join(".")}: ${i.message}`) }, { status: 400 });
   if (e instanceof UploadError) return json({ error: e.message, code: "upload" }, { status: 400 });
   if (e instanceof AgentError) return json({ error: e.message, code: e.code }, { status: e.code === "timeout" ? 504 : e.code === "not_configured" ? 503 : 502 });
@@ -54,7 +61,17 @@ export function rateLimit(req: Request, bucket: string, limit: number, windowMs 
     return;
   }
   w.count++;
-  if (w.count > limit) throw new HttpError(429, "Too many requests. Please wait a minute and try again.", "rate_limited");
+  if (w.count > limit) throw tooMany((w.start + windowMs - now) / 1000);
+}
+
+const tooMany = (secs: number) =>
+  new HttpError(429, "Too many requests. Please wait a minute and try again.", "rate_limited", Math.max(1, Math.ceil(secs)));
+
+/** `rateLimit`, and the same allowance across instances when the shared store is there. Always await it. */
+export async function rateLimitShared(req: Request, bucket: string, limit: number, windowMs = 60_000): Promise<void> {
+  rateLimit(req, bucket, limit, windowMs);
+  const taken = await takeShared([{ key: `rate:${bucket}:${clientIp(req)}`, max: limit, windowSecs: windowMs / 1000 }]);
+  if (taken && !taken.ok) throw tooMany(taken.retryAfterSecs);
 }
 
 /** Wraps a handler with uniform error handling. */

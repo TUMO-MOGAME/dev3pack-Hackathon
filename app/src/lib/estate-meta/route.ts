@@ -7,8 +7,8 @@ import "server-only";
  *
  * POST is signed by the acting wallet (ed25519 over lib/estate-meta/signed.ts metaMessage). Checks, in order: the
  * body's shape (400 bad_input) and size (413); the demo deployment (503 unavailable: the demo keeps names in the
- * browser); the time, at most 5 minutes off (401 stale); the signature (401 unauthorized); single use on this
- * instance (401 replay); the estate from the chain (404 not_found). Then:
+ * browser); the time, at most 5 minutes off (401 stale); the signature (401 unauthorized); single use, across
+ * instances when the shared store is there (401 replay); the estate from the chain (404 not_found). Then:
  *  - save: only the estate's on-chain owner (403 forbidden); a save older than the last one this instance stored is
  *    refused (409 stale), so a replay on another instance can't roll names back past a newer save seen here; a
  *    draft must hash to the on-chain will_hash (409 will_hash).
@@ -25,6 +25,7 @@ import { hashJson } from "@/lib/agent/hash";
 import { verifyEd25519 } from "@/lib/legacy/server/auth";
 import type { WillDraft } from "@/lib/types";
 import { META_MAX_SKEW_MS, metaBody, metaMessage } from "./signed";
+import { createNonces } from "@/lib/access/nonces";
 import { memberReader, type MemberCheck } from "@/lib/access/server";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
@@ -86,7 +87,7 @@ const defaults: EstateMetaRouteDeps = {
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
 
 export function estateMetaRoutes(deps: EstateMetaRouteDeps = defaults) {
-  const seen = new Map<string, number>();
+  const firstUse = createNonces("estate-meta", META_MAX_SKEW_MS * 2);
   /** The newest save this instance stored, by estate (ms). */
   const lastSave = new Map<string, number>();
 
@@ -121,9 +122,7 @@ export function estateMetaRoutes(deps: EstateMetaRouteDeps = defaults) {
     if (!verifyEd25519(b.wallet, metaMessage(b.action, b.estate, b.wallet, b.ts, sha(metaBody(payload))), b.sig)) {
       throw new HttpError(401, "The signature does not match this wallet.", "unauthorized");
     }
-    for (const [k, t] of seen) if (now - t > META_MAX_SKEW_MS * 2) seen.delete(k);
-    if (seen.has(b.sig)) throw new HttpError(401, "This request was already used. Please try again.", "replay");
-    seen.set(b.sig, now);
+    if (!(await firstUse(b.sig, now))) throw new HttpError(401, "This request was already used. Please try again.", "replay");
 
     const onChain = await deps.estate(b.estate);
     if (!onChain) throw new HttpError(404, "Estate not found on-chain.", "not_found");

@@ -2,7 +2,8 @@ import "server-only";
 /**
  * Server half of lib/access/messages.ts.
  *
- * - verifyAction: the wallet really asked for exactly this, just now, once. The route then checks its role.
+ * - verifyAction: the wallet really asked for exactly this, just now, once (nonces.ts). Always await it. The route
+ *   then checks its role.
  * - readerOf / isMember: who is reading, and whether the chain says they belong to this estate's family. A member is
  *   the owner, an active beneficiary, a trusted person, a backup, a monitor or a fallback recipient.
  * - assertServedEstate: the agent works (and spends SOL) only for estates that name it and use our USD₮ mint.
@@ -17,6 +18,7 @@ import { beneficiaryPda, guardPda, seatPda } from "../chain/pda";
 import { chainConfig } from "../chain/config";
 import { getIdl } from "../chain/idl";
 import { fetchAccountRaw } from "../chain/reads";
+import { createNonces } from "./nonces";
 import { ACTION_HEADER, ACTION_MAX_SKEW_MS, READ_HEADER, READ_PASS_MS, actionMessage, readPassMessage, type AgentAction } from "./messages";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
@@ -35,10 +37,10 @@ function header<T>(req: Request, name: string, schema: z.ZodType<T>): T | null {
   }
 }
 
-const seen = new Map<string, number>();
+const firstUse = createNonces("action", ACTION_MAX_SKEW_MS * 2);
 
 /** The wallet that signed this action. Throws 401 otherwise. */
-export function verifyAction(req: Request, action: AgentAction, estate: string, body: string, now = Date.now()): string {
+export async function verifyAction(req: Request, action: AgentAction, estate: string, body: string, now = Date.now()): Promise<string> {
   const a = header(req, ACTION_HEADER, actionSchema);
   if (!a) throw new HttpError(401, "Sign this request with your wallet.", "unauthorized");
   if (Math.abs(now - a.ts) > ACTION_MAX_SKEW_MS) throw new HttpError(401, "This request is too old. Please try again.", "stale");
@@ -46,9 +48,7 @@ export function verifyAction(req: Request, action: AgentAction, estate: string, 
   if (!verifyEd25519(a.wallet, actionMessage(action, estate, a.wallet, a.ts, bodyHex), a.sig)) {
     throw new HttpError(401, "The signature does not match this wallet.", "unauthorized");
   }
-  for (const [k, t] of seen) if (now - t > ACTION_MAX_SKEW_MS * 2) seen.delete(k);
-  if (seen.has(a.sig)) throw new HttpError(401, "This request was already used. Please try again.", "replay");
-  seen.set(a.sig, now);
+  if (!(await firstUse(a.sig, now))) throw new HttpError(401, "This request was already used. Please try again.", "replay");
   return a.wallet;
 }
 

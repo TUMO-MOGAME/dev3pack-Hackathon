@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { handler, HttpError, isChainMode, json, parseJson, rateLimit } from "@/lib/api/http";
+import { handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
 import { acceptOfferBody } from "@/lib/agent/schemas";
 import { rankOffers } from "@/lib/agent/offers";
 import { acceptOffer } from "@/lib/chain/instructions";
@@ -18,10 +18,10 @@ export const maxDuration = 60;
  * Returns { tx, ranking }. 409 if no offer is eligible (the contract would reject it anyway).
  */
 export const POST = handler(async (req) => {
-  rateLimit(req, "accept-offer", 5);
+  await rateLimitShared(req, "accept-offer", 5);
   const b = await parseJson(req, acceptOfferBody);
   if (!isChainMode()) throw new HttpError(409, "On-chain sale runs in chain mode only.");
-  const wallet = verifyAction(req, "accept-offer", b.estate, actionBody.acceptOffer(b));
+  const wallet = await verifyAction(req, "accept-offer", b.estate, actionBody.acceptOffer(b));
   if (!hasAgentWallet()) throw new HttpError(503, "The agent wallet is not configured (AGENT_SEED_PHRASE).");
   const snap = await loadPublicSnapshot(b.estate);
   if (!snap.estate.verifiers.includes(wallet)) throw new HttpError(403, "Only the estate's trusted people can settle a sale.", "forbidden");
@@ -35,7 +35,7 @@ export const POST = handler(async (req) => {
   if (best.buyer === wallet) throw new HttpError(403, "You cannot settle a sale to yourself. Ask another trusted person.", "own_offer");
   const agentKey = await agentAddress();
   assertServedEstate(snap.estate, agentKey);
-  spendAgentAllowance("accept-offer", wallet, b.estate);
+  await spendAgentAllowance("accept-offer", wallet, b.estate);
   const agent = new PublicKey(agentKey!);
   const recipient = new PublicKey(asset.hardshipBeneficiary ?? asset.proceedsTo);
   const tx = await agentSignAndSend([acceptOffer(chainCtx(), {
