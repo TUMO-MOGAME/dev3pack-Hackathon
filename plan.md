@@ -1145,3 +1145,31 @@ agent while Active; funds need at least one working path (trusted people or a fa
 the upgrade authority is Heirloom's key.
 
 Service contract for wave 2: the types in app/src/lib (committed before the wave) and app/src/lib/death-rules.ts.
+
+### 18.9 Independent review, app and services (22 Nov): verdict "don't ship", so fix before release
+The lead confirmed the critical findings and a sample of the high ones in the code. Every fix gets a test that fails
+before it. Both services, four languages.
+
+| ID | Severity | Defect | Fix | Owner |
+|---|---|---|---|---|
+| C1 | Critical | New app on the old program (or an old tab on the new one) writes corrupted rules | Program: `add_rule` gets a new instruction name, so both mismatches fail closed. App: writes and health fail closed unless the deployed program is the IDL's; a stale tab asks for a reload. Release order: upgrade, verify, then push | program + server |
+| C2 | Critical | Chain-mode sample buttons submit a file the server always refuses | Real sample files or none on chain; type, bytes and size checked before any signature | client |
+| H1 | High | "9,50" is read as 950 | One strict amount parser everywhere, assistant included | client |
+| H2 | High | One address takes every starter grant (lead's pace change) | Per address 4 an hour and 8 a day; overall 12 and 48 | server |
+| H3 | High | Sponsor limits keyed to a signer the attacker picks | Key on the real actor, charge every signer, per-address daily cap, never blocks reviews | server |
+| H4 | High | Forged accounts pass the server's checks | Owner program checked on every read; allowances only for verified targets | server |
+| H5 | High | Strangers write and evict tree photos and hide flags | Members only | server |
+| H6 | High | Interrupted signing can't be resumed | Draft and names saved first; "Finish signing" while incomplete | client |
+| H7 | High | A failed review strands a claim or hardship | "Ask for the review again" with the same file | client |
+| H8 | High | A sent payment reads as "nothing left your wallet" | Once signed: "submitted, checking", never a second id | client |
+| H9 | High | A declined request can still be approved after death | Decline shown, approval withheld in both services | client |
+| H10 | High | "Every month" is signed as every 60 s on the test site | The real interval is shown before signing and in the plan | client |
+| H11 | High | The co-signer can sign another recipient than shown | Recipient is part of what was seen | client |
+| H12 | High | An unnamed fallback recipient's death is always rejected | Judge the document; the second person and the refute wait check identity | server |
+| H13 | High | "Update offer" always fails on chain | Withdraw and place in one transaction | client |
+| M1, M2, M6, M7 | Medium | Top-ups blind the backstop; reports lost; global eviction; rent farming | As reported | server |
+| M3, M4, M5, M8, M9, M10 | Medium | Wrong fee review; asset terms; zero wait; double confirm; unseen reasons; monitors without an inbox | As reported | client (M9's store: server) |
+| Lows, wording | Low | As reported, and the four open product items of §18.8 | Fix, or record why not | both; README and docs: lead |
+
+Release order is fixed: program upgrade, hash check, push, live checks.
+Not code: the legal-notice placeholders (name, phone, email, address) are live on both sites and need Tumo's details.
