@@ -157,7 +157,10 @@ describe("who decides and the request's status", () => {
     expect(ownerCanDecide(snap, claim())).toBe(true);
     expect(ownerCanDecide({ ...snap, asks: { Claim1: note({ declinedAt: NOW }) } }, claim())).toBe(false);
     expect(ownerCanDecide(snapshot({ estate: { status: "Unlocked" } }), claim())).toBe(false);
-    expect(ownerCanDecide(snap, claim({ rule: "RuleTuition" }))).toBe(true);
+    expect(ownerCanDecide(snap, claim({ rule: "RuleTuition", payee: UCT }))).toBe(true);
+    // A payee the rule no longer allows, or a claimant taken out of the plan: it could never be paid (R16).
+    expect(ownerCanDecide(snap, claim({ rule: "RuleTuition" }))).toBe(false);
+    expect(ownerCanDecide(snapshot({ beneficiaries: [] }), claim())).toBe(false);
     expect(ownerCanDecide(snapshot({ rules: [everyday({ startsNow: false })] }), claim())).toBe(false);
     expect(ownerCanDecide(snap, claim({ agentVerdict: "Pending" }))).toBe(false);
   });

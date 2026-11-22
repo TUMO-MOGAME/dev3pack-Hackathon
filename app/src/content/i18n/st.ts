@@ -7,6 +7,7 @@
  * Amounts, USD₮, "Heirloom" and people's and institutions' names are left as they are.
  */
 import type { Bundle } from "./types";
+import { safeguardsSt } from "./safeguards";
 import { askSt } from "./ask";
 import { treeSt } from "./tree";
 import { lettersSt } from "./letters";
@@ -30,7 +31,7 @@ export const st: Bundle = {
       darkMode: "Mokgwa o lefifi",
     },
     footer: {
-      blurb: "Heirloom e sebetsa hammoho le lengolo la hao la thato le saennweng pela dipaki. Ha e le nkele sebaka. Ke prototype ya hackathon ho Solana devnet; konteraka ha e so hlahlojwe.",
+      blurb: "Heirloom e sebetsa mmoho le lengolo la hao la thato le saennweng ka pela dipaki. Ha e le nkele sebaka. Mohlala wa hackathon ho Solana devnet; konteraka ha e so hlahlojwe, mme Heirloom e ka e ntjhafatsa.",
       legalTitle: "Molao",
       links: [
         { href: "/#purposes", label: "Seo e se lefellang" },
@@ -76,7 +77,7 @@ export const st: Bundle = {
     hero: {
       eyebrow: "Moralo o phelang wa malapa a Afrika Borwa",
       title: "Rerela lelapa la hao, *jwale* le ha o se o le siile.",
-      body: "Bolella Heirloom ka mantswe a hao seo lelapa la hao le se hlokang. Se fetoha moralo polokelong e sireletsehileng ya USD₮: dibuka le ditefello tsa kotara tse lefuwang ka nako kajeno, le melao eo e tswelang pele ha o se o hlokahetse. Chelete e tsamaya feela bakeng sa morero wa yona, e ya hantle yunivesithing kapa ntlong ya baithuti.",
+      body: "Bolella Heirloom ka mantswe a hao hore lelapa la hao le hloka eng. E fetoha moralo polokelong e sireletsehileng ya USD₮: dibuka le ditjhelete tsa kotara tse lefuwang kajeno ha nako e fihla, le melao e tshwanang e tswelang pele ha o se o le siyo. Molao o mong le o mong o lefa feela ba dumelletsweng ke wena, jwaloka yunivesithi kapa bodulo. Se sa hlokweng ke molao se ya ho motho eo o mo bitsang ka lebitso.",
       primary: "Leka demo",
       secondary: "Bona hore e sebetsa jwang",
       note: "E sebetsa fonong efe kapa efe, ho browser kapa jwalo ka app. Ha ho extension ya browser.",
@@ -92,7 +93,7 @@ export const st: Bundle = {
         rows: [
           { label: "Lerato · dibuka", detail: "Kgwedi le kgwedi ho Van Schaik", amount: "85 USD₮", state: "Jwale" },
           { label: "Lerato · ditefello tsa thuto", detail: "Ka kotloloho ho UCT", amount: "3 200 USD₮", state: "E lefilwe" },
-          { label: "Koloi ya lelapa", detail: "E rekiswa ka hodimo ho theko e tlase ya Ntate, hamorao", amount: "12 500 USD₮", state: "Hamorao" },
+          { label: "Koloi ya lelapa", detail: "E rekiswa ka theko e tlase ya Ntate kapa ho feta, hamorao", amount: "12 500 USD₮", state: "Hamorao" },
         ],
       },
     },
@@ -102,7 +103,7 @@ export const st: Bundle = {
         { term: "Tether USD₮", detail: "didolara tsa dijithale tse tsitsitseng" },
         { term: "Tether WDK", detail: "dinotlolo fonong ya hao" },
         { term: "Solana", detail: "ditefo tse ditshenyehelo di tlase" },
-        { term: "2 ho 3", detail: "batho ba tshepahalang ba etsa qeto" },
+        { term: "2 ho 3", detail: "batho ba tshepahalang ba netefatsa lefu" },
       ],
     },
     problem: {
@@ -126,12 +127,12 @@ export const st: Bundle = {
     purposes: {
       eyebrow: "Seo moralo wa hao o se lefellang",
       title: "Randa e nngwe le e nngwe e na le *morero*, le sebaka seo e yang ho sona.",
-      body: "Melao e ngolwa ka puo e bonolo mme e qobellwa ke konteraka. Chelete e lefuwa lebenkeleng la dibuka, yunivesithing kapa ntlong ya baithuti, ho hang e seng pokothong moo e ka lahlehang teng.",
+      body: "Melao e ngolwa ka puo e bonolo mme e qobellwa ke konteraka. O mong le o mong o lefa ya dumelletsweng ke wena: lebenkele la dibuka, yunivesithi, bodulo kapa wallet ya setho sa lelapa ha o e kgethile.",
       items: [
-        { tag: "Jwale · kgwedi le kgwedi", title: "Dibuka le ditshenyehelo tsa thuto", amount: "85 USD₮", body: "Chelete ya dibuka ya Lerato, e lefuwa ka la 1.", to: "Ho Van Schaik Bookstore", alt: "Baithuti ba yunivesithi ba sebetsa ka phaposing ya dithuto." },
+        { tag: "Jwale · kgwedi le kgwedi", title: "Dibuka le ditshenyehelo tsa thuto", amount: "85 USD₮", body: "Tjhelete ya dibuka ya Lerato, e lefuwang kgwedi le kgwedi.", to: "Ho Van Schaik Bookstore", alt: "Baithuti ba yunivesithi ba sebetsa ka phaposing ya dithuto." },
         { tag: "Kotara e nngwe le e nngwe", title: "Ditefello tsa thuto, ho fihlela kabelong ya mangolo", amount: "3 200 USD₮", body: "Ditefello tsa kotara, kajeno le ha o se o hlokahetse.", to: "Ho University of Cape Town", alt: "Moithuti ya qetileng o phahamisa katiba ya hae ka pela moaho wa yunivesithi." },
-        { tag: "Kgwedi le kgwedi", title: "Sebaka se sireletsehileng sa ho dula", amount: "300 USD₮", body: "Rente ya ntlo ya baithuti e sa saleng morao.", to: "Ho Tugwell Residence", alt: "Ntate o tshwere letsoho la moradi wa hae ha a tsamaya hodima lebota tlasa lehodimo le leputswa." },
-        { tag: "Hamorao · ha o se o hlokahetse", title: "Koloi ya lelapa, e rekiswa ka toka", amount: "≥ 12 500 USD₮", body: "Ho hang e seng ka tlase ho theko e tlase ya Ntate. Dinyehelo di bolokilwe ka escrow, ha ho thekiso ya potlako.", to: "E kgutlela polokelong ya lelapa", alt: "Toyota Corolla ya 2017 ya mmala wa silefera, e bonwa ka pele." },
+        { tag: "Kgwedi le kgwedi", title: "Sebaka se sireletsehileng sa ho dula", amount: "300 USD₮", body: "Rente ya bodulo kgwedi le kgwedi, ha polokelo e ntse e e kgona.", to: "Ho Tugwell Residence", alt: "Ntate o tshwere letsoho la moradi wa hae ha a tsamaya hodima lebota tlasa lehodimo le leputswa." },
+        { tag: "Hamorao · ha o se o hlokahetse", title: "Koloi ya lelapa, e rekiswa ka toka", amount: "≥ 12 500 USD₮", body: "E seng ka tlase ho theko ya Ntate ntle le ha bothata ba nnete bo pakwa. Motho ya tshepahalang o saena le yena.", to: "E kgutlela polokelong ya lelapa", alt: "Toyota Corolla ya 2017 ya mmala wa silefera, e bonwa ka pele." },
       ],
     },
     how: {
@@ -145,11 +146,11 @@ export const st: Bundle = {
         },
         {
           title: "Saena mme o kenye chelete polokelong",
-          body: "Etsa wallet fonong ya hao ka Tether WDK, saena moralo wa hao mme o kenye USD₮. Melao eo o e tshwaileng \"jwale\" e qala ho lefa ditheo tse amohetsweng ka nako. Tse ding di a ema. O ka ntsha chelete neng kapa neng.",
+          body: "Theha wallet fonong ya hao ka Tether WDK, saena moralo wa hao mme o kenye USD₮. Ho qala ho hloka SOL e nyane bakeng sa rente. Melao eo o e tshwaileng \"jwale\" e ka lefa ha nako e fihla: kemiso ya rona e matha hang ka letsatsi, mme mang kapa mang a ka qala tefo e fihletsweng ke nako. E meng e a ema. O ka ntsha tjhelete ho fihlela lefu le netefatswa.",
         },
         {
           title: "Moralo o phela ho o feta",
-          body: "Kamora hore batho ba babedi ho ba bararo bao o ba tshepang ba netefatse lefu la hao mme nako ya ho emela e fele, moralo oo o tswela pele. Konteraka e tswela pele ho lefa yunivesithi ka kotloloho mme e rekisa koloi ka theko e tlase eo o e beileng kapa ka hodimo.",
+          body: "Ha ba babedi ho batho ba hao ba bararo ba tshepahalang ba netefatsa lefu la hao mme nako ya ho ema e fela, moralo o tshwanang o tswela pele. Melao e tswela pele ho lefa yunivesithi ka kotloloho. Koloi e ka rekiswa ka theko ya hao e tlase kapa ho feta, motho ya tshepahalang a saena le yena.",
         },
       ],
       chat: {
@@ -190,12 +191,12 @@ export const st: Bundle = {
       eyebrow: "Tshepo le polokeho",
       title: "Agent e a eletsa. Konteraka e a qobella. *Batho bao o ba tshepang* ba a etsa qeto.",
       photoAlt: "Letsoho la lesea le phomotse letsohong le bulehileng la motho e moholo.",
-      quote: "Seo o ba tshepisang sona kajeno se ntse se bolokwa ha o se o sitwa ho ba teng.",
+      quote: "Seo o se rerang kajeno se ka nna sa ba sebeletsa ha o se siyo.",
       items: [
-        { title: "Meedi eo ho seng motho ya ka e fetang ka puo", body: "Meedi, ditheo tse amohetsweng le theko e tlase ya koloi di bolokilwe lenaneong la Solana. Esita le agent ya AI e ke ke ya tsamaisa chelete ka ntle ho tsona." },
-        { title: "Ba babedi ho ba bararo ba tshepahalang", body: "Mophethahatsi wa lefa la hao, ramolao, moholo wa lelapa. Lefu le amohelwa feela ha ba babedi ho bona ba le netefatsa, mme dikopo tse sa tlwaelehang le tsona di a ba hloka." },
-        { title: "\"Ke sa ntse ke le teng\"", body: "Nako ya ho emela e latela tlaleho e nngwe le e nngwe ya lefu. Ho tobetsa hanngwe ke wena ho a e hlakola mme ho notlela polokelo hape." },
-        { title: "Mathata, a tshwarwa ka hloko", body: "Afidafiti e enweng le batho ba babedi ba tshepahalang ba ka dumella koloi hore e rekiswe ka tlase ho theko ya hao, empa ho hang e seng ka tlase ho theko e tlase ya mathata." },
+        { title: "Meedi eo ho seng motho ya ka e fetang ka puo", body: "Lenaneo la Solana le hlahloba meedi, ba dumelletsweng ho lefuwa le meedi ya theko, kahoo agent ya AI e ke ke ya tsamaisa tjhelete ka ntle ho yona. Heirloom e tshwere senotlolo se ka ntjhafatsang lenaneo." },
+        { title: "Ba babedi ho ba bararo ba tshepahalang", body: "Mophethahatsi wa hao, agente, moholo wa lelapa. Ba babedi ba netefatsa lefu. Ha ho setse a le mong ya ka etsang qeto, ke yena ya etsang qeto. Ha ho se motho ya setseng, lethathamo la ho qetela leo o le behileng le nka sebaka kamora ho ema nako e telele." },
+        { title: "\"Ke sa ntse ke le teng\"", body: "Nako ya ho ema e latela lefu le leng le le leng le netefaditsweng. Ho tobetsa hang nako efe kapa efe pele ho notlollwa ho hlakola tlaleho." },
+        { title: "Mathata, a tshwarwa ka hloko", body: "Affidavit e hlapantsweng le tumellano ya batho ba hao ba tshepahalang di ka dumella koloi e rekiswe ka tlase ho theko ya hao, empa le kgale ka tlase ho theko ya bothata." },
         { title: "Dipampiri tsa lekunutu di dula e le lekunutu", body: "Mangolo a lefu le di-ID ha di kenngwe bukeng e bulehileng ya ditlaleho. Ke monwana feela wa tokomane ka nngwe, hore mang kapa mang a kgone ho netefatsa hore ha ho letho le fetotsweng." },
         { title: "Dinotlolo tsa hao, fonong ya hao", body: "Di-wallet di etswa ka Tether WDK mme poleloana ya ho kgutlisa e dula sesebedisweng sa hao. Di-server tsa Heirloom ha di ka ke tsa tshwara dinotlolo tsa hao." },
       ],
@@ -206,7 +207,7 @@ export const st: Bundle = {
       body: "Heirloom e boloka thekenoloji e sa o kene tseleng mme bopaki bo le haufi. Depositi e nngwe le e nngwe, tumello le tefo di ka bulwa ho Solana Explorer.",
       points: [
         { term: "USD₮", detail: "Chelete feela eo polokelo e e amohelang. Konteraka e hana di-token tse etsisang." },
-        { term: "Tether WDK", detail: "Wallet e nngwe le e nngwe ka app, ho kenyeletswa ya agent, e etswa le ho saenwa ka Wallet Development Kit." },
+        { term: "Tether WDK", detail: "Diwallet tse etswang ka hara app, le ya agent, di sebedisa Wallet Development Kit. O ka sebedisa le wallet ya fono." },
         { term: "Solana", detail: "Ditefiso tse tlase di etsa hore ditefo tse nyane, morero ka morero, di kgonahale." },
         { term: "Randa", detail: "Dipalo di bontshwa ka diranta ka sekgahla sa phapanyetsano sa Afrika Borwa sa jwale." },
       ],
@@ -221,7 +222,7 @@ export const st: Bundle = {
           { title: "Lefa le lengolo la thato di saennwe", detail: "Thabo", amount: "" },
         ],
       },
-      honest: "Meedi ka botshepehi: ena ke prototype ho netweke ya teko. E ema pela lengolo la thato le saennweng pela dipaki ho ya ka Molao wa Mangolo a Thato, mme ha e le nkele sebaka. Thaetlele ya dijithale ya koloi e laola phetisetso; ngodiso ya eNaTIS e dula e le rekoto ya molao.",
+      honest: "Meedi ka botshepehi: ena ke mohlala netwekeng ya teko. E ema pela lengolo la thato le saennweng ka pela dipaki tlasa Wills Act mme ha e le nkele sebaka. Heirloom e tshwere senotlolo sa ho ntjhafatsa lenaneo. Lenaneo le hlahloba moedi wa theko, tjhelete e tobileng le tekeno ya motho wa bobedi; hore na ke tlhahiso efe e molemo ke keletso ya agent. Setifikeiti sa dijithale sa koloi se laola phetisetso; ngodiso ya eNaTIS e dula e le rekoto ya molao.",
     },
     cta: {
       eyebrow: "E leke ka metsotso e meraro",
@@ -230,7 +231,7 @@ export const st: Bundle = {
       primary: "Leka demo",
       secondary: "Etsa wallet ya ka",
       photoAlt: "Ntate o tshwere letsoho la moradi wa hae ha a tsamaya hodima lebota tlasa lehodimo le leputswa.",
-      card: { title: "O ntse a tshwere letsoho la hae", body: "Tshepiso e nngwe le e nngwe moralong e a bolokwa, leha o sitwa ho ba teng." },
+      card: { title: "O ntse a tshwere letsoho la hae", body: "Moralo o latela melao ya wona, leha o se siyo." },
     },
   },
 
@@ -338,7 +339,7 @@ export const st: Bundle = {
         approve: { title: "Motho ya tshepahalang o dumella kopo", body: "Tumello e le nngwe, ebe polokelo e lefa yunivesithi ka kotloloho." },
         list: { title: "Mophethahatsi o bula thekiso ya koloi", body: "Koloi e beilwe thekisong ka theko e kopuwang." },
         offer: { title: "Pieter o etsa tlhahiso", body: "USD₮ ya hae e ya escrow. Ditlhahiso tse ka tlase ho theko e tlase di ke ke tsa hlola." },
-        settle: { title: "Phethela thekiso", body: "Agent e amohela tlhahiso e molemo ka ho fetisisa e lekanang le theko e tlase kapa e fetang, ka transaction e le nngwe." },
+        settle: { title: "Phethela thekiso", body: "Motho ya tshepahalang o saena le agent bakeng sa tlhahiso eo e e bonang e le molemo, mme agent e e phetha ka transaction e le nngwe." },
         done: { title: "Pale e phethehile", body: "Bula Bopaki ho bona rasiti e nngwe le e nngwe, kapa qala bocha mme o leke tsela ya mathata." },
       },
     },
@@ -367,7 +368,7 @@ export const st: Bundle = {
     status: {
       estate: { Active: "E a sebetsa", DeathPending: "Nako ya ho emela", Unlocked: "Le bulehile", Frozen: "Le emisitswe" },
       estateHint: {
-        Active: "Melao e phelang e lefa ka nako. Tse ding kaofela di a ema.",
+        Active: "Melao e tshwailweng Jwale e ka lefa ha nako e fihla. Tse ding kaofela di a ema.",
         DeathPending: "Lefu le netefaditswe. Lefa le tla buleha ha nako ya ho emela e fela.",
         Unlocked: "Melao e a sebetsa.",
         Frozen: "Le emisitswe ha ho ntse ho rarollwa kgang.",
@@ -417,12 +418,12 @@ export const st: Bundle = {
       },
       reviewing: "Agent e bala tokomane",
       reviewingSteps: ["E hlahloba mofuta wa tokomane", "E bala mabitso, matsatsi le dipalo", "E batla matshwao a phetolo", "E ngolla batho ba tshepahalang tlaleho"],
-      advisory: "Agent e kgothaletsa feela. Motho ya tshepahalang o etsa qeto.",
-      advisoryRejected: "Agent e hlahloba tokomane feela. Romela kopi e hlakileng mme motho ya tshepahalang o tla etsa qeto.",
+      advisory: "Agent ha e dumelle ditefo. Batho ba etsa qeto.",
+      advisoryRejected: "Tokomane eo agent e sa e amoheleng ha e fete moo. Romela khopi e hlakileng, mme batho ba etse qeto ho tloha moo.",
     },
     blocked: {
       title: "E thibetswe ke konteraka",
-      body: "Ona ke molao wa lefa ho Solana o etsang mosebetsi wa ona. Ha ho motho, esita le agent, ya ka o feta.",
+      body: "Ona ke molao wa lefa ho Solana o etsang mosebetsi wa wona. Agent e ke ke ya o feta.",
       code: "Molao",
     },
     consent: { before: "Ke dumela hore Heirloom e sebetse tlhahisoleseding ena kamoo ho hlalositsweng kateng ho", link: "leano la lekunutu", after: "." },
@@ -460,7 +461,7 @@ export const st: Bundle = {
       NoDeathClaim: "Ha ho lefu le tlalehilweng.",
       AgentNotApproved: "Agent ha e so amohele tokomane.",
       OwnClaimDispute: "O ke ke wa hanyetsa kopo ya hao.",
-      TimeOutOfRange: "Nako eo e ka ntle ho meedi e dumelletsweng.",
+      TimeOutOfRange: "Nako eo e ka ntle ho meedi e dumelletsweng. Letsatsi la ho fela le tlameha ho ba nakong e tlang.",
       TooManyRules: "Moralo o ka ba le melao e 16 feela.",
       NoResidualRecipient: "Ha ho motho ya boletsweng ho amohela se setseng.",
       NothingToSweep: "Melao e ntse e hloka tsohle tse polokelong.",
@@ -629,7 +630,7 @@ export const st: Bundle = {
         simulatedName: "Wallet ya founu e etsisitsweng",
         connect: "Bula wallet ya ka",
         connecting: "Re emetse app ya wallet ya hao",
-        fees: "Ditefello tsa netweke di lefuwa ke motshehetsi wa ditefello wa Heirloom ha a le teng, kahoo ha o hloke SOL.",
+        fees: "Ditefello tsa netweke di lefuwa ke motshehetsi wa ditefello wa Heirloom ha a le teng. Ho theha diakhaonto ho ntse ho hloka SOL e nyane bakeng sa rente.",
         error: "Wallet ya hao ha e a hokahana. Bula app ya wallet, dumella Heirloom mme o leke hape.",
         simulated: {
           badge: "E etsisitswe",
@@ -654,7 +655,7 @@ export const st: Bundle = {
         title: "Bakeng sa hao",
         owner: { heartbeat: "Ke sa ntse ke le teng", last: "Ho itlhahisa ha ho qetela: {when}", body: "Ho itlhahisa kapele ho bolella batho ba hao ba tshepahalang hore tsohle di lokile.", done: "O itlhahisitse. Re a leboha." },
         ownerPending: { title: "Lefu le tlalehilwe", body: "Haeba ena ke phoso, e hlakole hona jwale. Polokelo e dula e notletswe.", cta: "Ya tatellanong" },
-        beneficiaryActive: { title: "Moralo wa hao o phelang o a sebetsa", body: "Melao e tshwailweng \"Jwale\" e se e sebetsa: kopa ditefello mme ntate wa hao o a di dumella. Tse ding di qala kamora hore lefa le buleha.", cta: "Etsa kopo" },
+        beneficiaryActive: { title: "Moralo wa hao o phelang o a sebetsa", body: "Melao e tshwailweng \"Jwale\" e se e sebetsa: kopa ditefo mme mong o a di dumella. E meng e qala ha lefa le notlolotswe.", cta: "Etsa kopo" },
         beneficiaryPending: { title: "Nako ya ho emela e a tsamaya", body: "Lefa le tla buleha ha e fela. O ka e latela tatellanong.", cta: "Bula tatellano" },
         beneficiaryUnlocked: { title: "Melao ya hao e lokile", body: "Kopa ditefello kapa rente mme Heirloom e lefa setheo ka kotloloho.", cta: "Etsa kopo" },
         ownerClaims: { title: "{count} di emetse tumello ya hao", body: "Tlasa moralo wa hao o phelang o dumella tefo e nngwe le e nngwe ka bowena. Agent e se e badile statemente.", cta: "Hlahloba mme o dumelle" },
@@ -668,7 +669,7 @@ export const st: Bundle = {
       checkIn: {
         eyebrow: "Ho itlhahisa",
         title: "Ke sa ntse ke le teng",
-        body: "Itlhahise bonyane hang ka mora matsatsi a mang le a mang a {every}. Haeba o sa itlhahise, batho ba hao ba tshepahalang ba kopuwa ho o hlahloba. Ha ho letho le lefuwang ntle le haeba lefu le tlalehwa ka lengolo la lefu mme le netefatswa.",
+        body: "Ipontshe bonyane matsatsi a mang le a mang a {every}. Ha o fetwa ke nako, batho ba hao ba tshepahalang ba kopuwa ho o hlahloba. Ho fetwa ke nako ha ho notlolle letho: ho hloka lefu le tlalehilweng ka setifikeiti, le netefatso.",
         cta: "Ke sa ntse ke le teng",
         done: "O itlhahisitse. Re a leboha.",
         last: "Ho itlhahisa ha ho qetela",
@@ -691,14 +692,14 @@ export const st: Bundle = {
         demo: { note: "Oache ya demo: letsatsi le nka metsotswana e 2.", soon: "Demo: tlolela ho kgopotso", overdue: "Demo: fosa ho itlhahisa" },
         watch: {
           title: "{name} ha a so itlhahise matsatsi a {n}",
-          body: "Moralo wa {name} o kopa ho itlhahisa hang ka mora matsatsi a mang le a mang a {every}. Ka kopo ikopanye le yena. Haeba a hlokahetse, setho sa lelapa se ka le tlaleha tatellanong, mme batho ba babedi ba tshepahalang ba le netefatsa.",
+          body: "Moralo wa {name} o kopa ho ipontsha matsatsi a mang le a mang a {every}. Ka kopo ikopanye le bona. Ha ba hlokahetse, setho sa lelapa se ka le tlaleha lenaneng la nako, mme batho ba tshepahalang ba a netefatsa.",
           cta: "Bula tatellano",
         },
       },
       timeline: "Tatellano",
       scheduled: {
         title: "Ditefo tse rerilweng",
-        body: "Di lefuwa ka bo tsona ho bamohedi ba amohetsweng. Ha ho hlokahale kopo.",
+        body: "Kemiso ya rona e matha hang ka letsatsi, mme mang kapa mang a ka qala tefo e fihletsweng ke nako. Ha ho hlokahale kopo.",
         dueNow: "E fihlile jwale",
         payNow: "Lefa jwale",
         paying: "Ho a lefuwa",
@@ -719,6 +720,7 @@ export const st: Bundle = {
           term: "kotara",
           year: "selemo",
         },
+        stopped: "E emisitswe: motho kapa ya lefuwang o tlositswe",
       },
       rate: "1 USD₮ = R {rate} · {source}",
       rules: {
@@ -727,7 +729,7 @@ export const st: Bundle = {
         nowSr: "E qala jwale",
         laterSr: "E qala kamora hore lefa le buleha",
         title: "Melao",
-        body: "Chelete e tsamaya feela ha molao o e dumella.",
+        body: "Molao o mong le o mong o lefa feela ka hara meedi ya wona. Kamora lefu, se sa hlokweng ke molao se ka ya ho motho ya boletsweng ke mong, kapa ka moralo wa ho qetela.",
         empty: "Ha ho melao hajwale.",
         forWho: "Bakeng sa {name}",
         paidTo: "E lefuwa feela ho {kind}",
@@ -741,7 +743,7 @@ export const st: Bundle = {
         highlighted: "Agent e supile molao ona",
       },
       car: { title: "Koloi ya lelapa", floor: "Theko e tlase", none: "Ha ho koloi e kentsweng hajwale.", add: "Kenya koloi", view: "Sheba" },
-      people: { title: "Batho ba tshepahalang", body: "{need} ho ba 3 ba tlameha ho netefatsa lefu.", view: "Bona bohle" },
+      people: { title: "Batho ba tshepahalang", body: "Ba {need} ho ba {total} ba lokela ho netefatsa lefu.", view: "Bona bohle" },
       activity: { title: "Diketso tsa morao-rao", empty: "Ha ho letho le etsahetseng hajwale. Diketso di hlaha mona ha lefa le ntse le sebediswa.", all: "Bona rasiti e nngwe le e nngwe", receipt: "Rasiti", receiptSr: "E bula Solana Explorer tabong e ntjha", statement: "Setatemente sa kgwedi", tree: "Bula Sefate sa Tshepo" },
     },
     will: {
@@ -761,7 +763,7 @@ export const st: Bundle = {
         now: "Jwale",
         later: "Ha ke se ke le siile",
         startLabel: "Molao wa {category} bakeng sa {name} o qala neng?",
-        startHint: "Melao ya \"Jwale\" e lefa o ntse o le teng. Melao yohle e tswela pele ha o se o le siile.",
+        startHint: "Melao ya \"Jwale\" e lefa ha o ntse o le teng. Molao o mong le o mong o tswela pele ha o se o le siyo, ho fihlela moedi kapa letsatsi la ho fela.",
         recurringLine: "{amount} hang ka {every} ho {payee}",
         every: { minute: "motsotso", week: "beke", month: "kgwedi", term: "kotara", year: "selemo" },
         scheduled: "E rerilwe",
@@ -791,7 +793,7 @@ export const st: Bundle = {
         summaryTitle: "Ka bokgutshwane",
         rulesTitle: "Molao ka molao",
         nowTitle: "E qala jwale, o ntse o le teng",
-        nowBody: "Ditefo tse rerilweng di tsamaya ka bo tsona. Eng kapa eng e lefuwang ha ho kopuwa, o e dumella ka bowena. Ha o se o le siile melao ena e a tswela pele, e dumellwa ke motho ya tshepahalang.",
+        nowBody: "Kemiso ya rona e romela ditefo tse hlophisitsweng hang ka letsatsi, mme mang kapa mang a ka qala e fihletsweng ke nako. Se lefuwang ka kopo, o se dumella ka bowena. Ha o se o le siyo melao ena e tswela pele, e dumellwa ke batho ba hao ba tshepahalang.",
         laterTitle: "Ha o se o le siile",
         laterBody: "Tsena di qala ha lefa le buleha.",
         noneNow: "Ha ho molao o qalang jwale. O ka fetolela molao ofe kapa ofe ho \"Jwale\" moqoqong.",
@@ -799,15 +801,17 @@ export const st: Bundle = {
         rule: "{name}: {category} e lefuwa feela ho {kind}, ho fihlela ho {max} ka nako le {cap} kaofela, ho fihlela {date}.",
         ruleOther: "{name}: {category} e lefuwa feela ho molefuwa ya amohetsweng, ho fihlela ho {max} ka nako le {cap} kaofela, ho fihlela {date}.",
         trustedTitle: "Ke mang ya netefatsang lefu la hao",
-        trusted: "Bafe kapa bafe ba {need} ho ba bararo bana ba tlameha ho netefatsa. Ebe nako ya ho emela ya {period} e a tsamaya, mme o ka e hlakola ka ho tobetsa hang.",
+        trusted: "Ba {need} ho bana ba bararo ba lokela ho netefatsa, kapa bohle ba setseng ha ba le ka tlase ho moo. Ebe nako ya ho ema ya {period} e a qala, mme o ka e hlakola ka ho tobetsa hang.",
         carTitle: "Koloi",
-        car: "{title} e rekiswa ho tlhahiso e kgolo ka ho fetisisa e lekanang le {floor} kapa e e fetang. Chelete e ya ho: {proceeds}.",
+        car: "{title} e ka rekiswa ka {floor} kapa ho feta, ha motho ya tshepahalang a saena bakeng sa tlhahiso e tobileng. Agent e hlophisa ditlhahiso. Tjhelete e ya ho: {proceeds}.",
         carHardship: "{policy} Theko e tlase ya mathata ke {floor}.",
         limitsTitle: "Ho molemo ho tseba",
         limits: [
-          "Sena se dula pela lengolo la hao la thato le saennweng pela dipaki. Ha se le nkele sebaka.",
-          "Ha o ntse o phela o ka kenya chelete, wa e ntsha mme wa itlhahisa. Ke melao e tshwailweng \"Jwale\" feela e lefang.",
-          "Kamora hore lefu le netefatswe, ha ho motho ya ka fetolang melao ena, esita le Heirloom.",
+          "Sena se ema pela lengolo la hao la thato le saennweng ka pela dipaki. Ha se le nkele sebaka.",
+          "Ha o ntse o phela o ka eketsa tjhelete, wa e ntsha, wa ba wa ipontsha. Ke melao e tshwailweng \"Jwale\" feela e lefang.",
+          "Ha lefu le netefaditswe, lenaneo ha le dumelle motho ho fetola melao ena. Heirloom e tshwere senotlolo se ka ntjhafatsang lenaneo.",
+          "Melao e lefa ba dumelletsweng. Se setseng, moralo wa ho qetela le tjhelete ya thekiso di ka ya ho batho bao o ba bitsang.",
+          "Ditefello tsa netweke di a tshehetswa ha ho kgoneha. Ho theha diakhaonto ho hloka SOL e nyane bakeng sa rente.",
         ],
         signNote: "Ho saena ho ngola monwana wa melao ena ho Solana. Mantswe a hao a dula e le lekunutu.",
         sign: "Saena mme o notlele",
@@ -822,7 +826,7 @@ export const st: Bundle = {
         summaryEvery: { minute: "motsotso", week: "beke", month: "kgwedi", term: "kotara", year: "selemo" },
         summaryAsset: "{title} e rekiswa bonyane ka {floor}, kapa bonyane ka {hardship} haeba ngwana a paka mathata a sebele.",
       },
-      done: { title: "Moralo wa hao o notletswe", body: "Melao e saennwe ka wallet ya hao. Kenya chelete polokelong mme e tshwailweng \"Jwale\" e qala ho sebetsa kajeno.", receipts: "Diresiti", receipt: "Rasiti {n}", receiptSr: "E bula Solana Explorer tabong e ntjha", fund: "Kenya chelete polokelong", car: "Kenya koloi", estate: "Bona lefa la ka" },
+      done: { title: "Moralo wa hao o notletswe", body: "Melao e saennwe ka wallet ya hao. Kenya tjhelete polokelong mme e tshwailweng \"Jwale\" e ka lefa ha nako ya yona e fihla.", receipts: "Diresiti", receipt: "Rasiti {n}", receiptSr: "E bula Solana Explorer tabong e ntjha", fund: "Kenya chelete polokelong", car: "Kenya koloi", estate: "Bona lefa la ka" },
       notYours: {
         title: "Ona ke moralo wa {name}",
         body: "O karolo ya moralo wa {name}, mme o tla dula o le kamoo o leng kateng. Moralo wa hao o arohile: agent e o thusa ho o haha, mme o fetoha lefa le letjha sepacheng sa hao.",
@@ -836,7 +840,7 @@ export const st: Bundle = {
     vault: {
       eyebrow: "Polokelo",
       title: "Kenya chelete *polokelong*",
-      body: "Polokelo e bolokela lelapa la hao USD₮. Melao e tshwailweng \"Jwale\" e lefa ho tswa ho yona ka nako. Ha o ntse o phela ke ya hao: kenya kapa o ntshe neng kapa neng ha o batla.",
+      body: "Polokelo e boloka USD₮ bakeng sa lelapa la hao. Melao e tshwailweng \"Jwale\" e ka lefa ho yona ha nako e fihla. O ka eketsa kapa wa ntsha ho fihlela lefu le netefatswa.",
       balance: "Polokelong",
       wallet: "Wallet ya hao",
       tabs: { deposit: "Kenya chelete", withdraw: "Ntsha chelete" },
@@ -846,7 +850,7 @@ export const st: Bundle = {
       withdraw: "Ntshetsa wallet ya ka",
       deposited: "E kentswe polokelong",
       withdrawn: "E ntsheditswe wallet ya hao",
-      locked: { title: "Polokelo e tlamilwe ke melao ya yona", body: "Lefu le tlalehilwe kapa le netefaditswe, kahoo ho kenya le ho ntsha chelete ho emisitswe. Haeba ena ke phoso, e hlakole tatellanong." },
+      locked: { title: "Polokelo e tlamilwe ke melao ya yona", body: "Lefu le netefaditswe, kahoo ho kenya le ho ntsha tjhelete ho emisitswe. Ha e le phoso, \"Ke sa le teng\" e a le hlakola." },
       lockedCta: "Bula tatellano",
       payVault: "Polokelo ya lelapa",
       payWallet: "Wallet ya hao",
@@ -910,7 +914,7 @@ export const st: Bundle = {
       imageAlt: "Setshwantsho sa koloi ya sedan e silevera, {title}",
       protect: {
         title: "Kamoo theko e sirelletswang kateng",
-        body: "{owner} o beile theko e tlase. Konteraka ho Solana e hana thekiso efe kapa efe ka tlase ho yona. Agent e ka kgetha feela tlhahiso e kgolo ka ho fetisisa e ka hodima mola.",
+        body: "{owner} o behile theko e tlase. Konteraka e hana thekiso e ka tlase ho moedi mme e hloka tekeno ya motho ya tshepahalang tjheleteng e tobileng. Hore na ke tlhahiso efe e molemo ke keletso ya agent.",
         scaleLabel: "Sekala sa theko se bontshang theko e tlase ya mathata, theko e tlase, theko e kopuwang le ditlhahiso tsa jwale",
         hardshipFloor: "Theko e tlase ya mathata",
         floor: "Theko e tlase",
@@ -959,7 +963,7 @@ export const st: Bundle = {
       },
       settle: {
         title: "Phethela thekiso",
-        body: "Kopa agent ho amohela tlhahiso e kgolo ka ho fetisisa. E ka kgetha feela eo konteraka e e dumellang.",
+        body: "Bala moreki le tjhelete e tobileng, ebe o a saena. Agent e hlophisa ditlhahiso, e saena le wena mme e phetha thekiso.",
         cta: "Kopa agent ho phethela",
         working: "Agent e hlahloba ditlhahiso kgahlanong le konteraka",
         done: "E rekisitswe. Chelete le tokomane ya beng di fapanyetsanwe ka transaction e le nngwe",
@@ -970,7 +974,7 @@ export const st: Bundle = {
         from: "Ho tswa ho {name}",
         approvals: "{got} ho {need} ba batho ba tshepahalang",
         link: "Kopa kgethollo ka lebaka la mathata",
-        linkBody: "O hlile o le mathateng? Afidafiti e hlapantsweng le batho ba babedi ba tshepahalang ba ka dumella koloi ho rekiswa ka tlase ho theko e tlase, empa le ka mohla e seng ka tlase ho theko e tlase ya mathata.",
+        linkBody: "O tlhokong ya nnete? Affidavit e hlapantsweng le tumellano ya batho ba tshepahalang di ka dumella koloi e rekiswe ka tlase ho theko e beilweng, le kgale ka tlase ho theko ya bothata.",
       },
       sold: {
         title: "E rekisitswe",
@@ -993,21 +997,21 @@ export const st: Bundle = {
     people: {
       eyebrow: "Batho",
       title: "Ke bomang ba leng karolo ya *lefa* lena",
-      body: "Batho le ditheo tseo mong wa lefa a di kgethileng. Ha ho motho e mong ya ka amohelang kapa a dumella letho.",
+      body: "Batho le ba lefuwang bao mong a ba kgethileng, le seo e mong le e mong a ka se etsang. Mong a ka bolela le ya amohelang se setseng le lethathamo la ho qetela.",
       trusted: {
         title: "Batho ba tshepahalang",
-        body: "Ba netefatsa lefu mme ba dumella dikopo. Ba ke ke ba inkela chelete le ka mohla.",
+        body: "Ba netefatsa lefu, ba dumella dikopo mme ba saena thekiso. Ha ho ya dumellang kopo ya hae.",
         slots: ["Mophethahatsi ya ngotsweng lengolong la thato", "Motho wa bobedi ya tshepahalang", "Motho wa boraro ya tshepahalang"],
         thresholds: [
-          { label: "Netefatsa lefu", value: "{n} ho 3" },
-          { label: "Dumella kopo ya ditefello", value: "{n} ho 3" },
-          { label: "Dumella mathata", value: "{n} ho 3" },
+          { label: "Netefatsa lefu", value: "{n} ho {total}" },
+          { label: "Dumella kopo ya tefo", value: "{n} ho {total}" },
+          { label: "Dumella bothata", value: "{n} ho {total}" },
         ],
       },
-      family: { title: "Lelapa", body: "Melao e ngoletswe bona, empa chelete e ya ditheong, eseng ho bona.", rules: "Melao e {n}", oneRule: "Molao o 1" },
+      family: { title: "Lelapa", body: "Melao e ngolwa bakeng sa bona mme e lefa ba dumelletsweng, ho ka kenyeletswa wallet ya bona ha mong a e kgethile.", rules: "Melao e {n}", oneRule: "Molao o 1" },
       payees: {
         title: "Ditheo tse amohetsweng",
-        body: "Ke dibaka feela tseo polokelo e ka di lefang.",
+        body: "Ke tsona feela dibaka tseo melao e ka di lefang. Se setseng, moralo wa ho qetela le tjhelete ya thekiso di ka ya le ho batho ba boletsweng ke mong.",
         add: "Kenya setheo",
         name: "Lebitso",
         kind: "Mofuta",
@@ -1021,7 +1025,7 @@ export const st: Bundle = {
       },
       agent: {
         title: "Agent ya Heirloom",
-        body: "Agent e na le wallet ya yona, e entsweng ka Tether WDK. E ka ngola feela dihlahlobo tsa yona tsa ditokomane, ya beha koloi thekisong le ho amohela tlhahiso eo konteraka e e dumellang. E ke ke ya ntsha chelete kapa ya e isa kae kae.",
+        body: "Agent e na le wallet ya yona, e entsweng ka Tether WDK. E ke ke ya ntsha kapa ya fapanya tjhelete.",
       },
       wallet: "Wallet",
       you: "Wena",
@@ -1033,7 +1037,7 @@ export const st: Bundle = {
       steps: {
         signed: {
           title: "Moralo o saennwe mme polokelo e kentswe chelete",
-          done: "O saennwe ke {name}. Polokelo e na le {amount}. Melao e phelang e se e ntse e lefa.",
+          done: "E saennwe ke {name}. Polokelo e na le {amount}. Melao e tshwailweng Jwale e ka lefa.",
           todo: "Mong wa lefa o saena moralo mme o kenya chelete polokelong.",
         },
         reported: {
@@ -1043,8 +1047,8 @@ export const st: Bundle = {
         },
         confirmed: {
           title: "Batho ba tshepahalang ba a netefatsa",
-          done: "Le netefaditswe ke batho ba tshepahalang ba {got} (ho hlokahala {need} ho {total}).",
-          todo: "{need} ho batho ba {total} ba tshepahalang ba tlameha ho netefatsa.",
+          done: "Le netefaditswe ke batho ba tshepahalang: {got}.",
+          todo: "Ba {need} ho ba {total} ba ka etsang qeto ba lokela ho netefatsa.",
           progress: "{got} ho {need} ba netefaditse",
         },
         waiting: {
@@ -1096,7 +1100,7 @@ export const st: Bundle = {
       body: "Kgetha molao, kenya statemente mme Heirloom e lefa setheo ka kotloloho. Ha ho letho le lefuwang wena ka kheshe.",
       locked: {
         title: "O ka kopa tsena kamora lefu la {owner}",
-        active: "{owner} o sa ntse a phela, kahoo melao ena e emetse. E buleha feela kamora hore batho ba babedi ba tshepahalang ba netefatse lefu la {owner} mme nako ya ho emela e fele.",
+        active: "{owner} o a phela, kahoo melao ena e a ema. E bulwa feela ha batho ba tshepahalang ba netefatsa lefu la {owner} mme nako ya ho ema e fela.",
         pending: "Lefu la {owner} le netefaditswe. Nako ya ho emela e a tsamaya, mme dikopo tsa hao di buleha ha e fela.",
         cta: "Bula tatellano",
       },
@@ -1156,7 +1160,7 @@ export const st: Bundle = {
       },
       result: {
         submitted: "Kopo e rometswe",
-        submittedBody: "Agent e hlahlobile statemente ya hao. Jwale motho a le mong ya tshepahalang o tlameha ho e dumella.",
+        submittedBody: "Agent e hlahlobile setatemente sa hao. Jwale batho ba tshepahalang ba etsa qeto.",
         submittedBodyOwner: "Agent e hlahlobile statemente ya hao. Jwale {owner} o tlameha ho e dumella.",
         declined: "Tokomane ha e a amohelwa",
         declinedBody: "Ha ho letho le lefilweng mme ha ho letho le fetohileng. O ka romela kopi e hlakileng ya tokomane ya mantlha.",
@@ -1200,9 +1204,9 @@ export const st: Bundle = {
       },
       needTitle: "Seo o tla se hloka",
       need: [
-        "Afidafiti e hlalosang boemo ba hao, e hlapantsweng pela Commissioner of Oaths. Seteishene sefe kapa sefe sa SAPS se etsa sena mahala.",
-        "Dipampiri tse tshehetsang, jwalo ka diakhaonto tsa sepetlele kapa lengolo la mong'a ntlo.",
-        "Ba babedi ho batho ba bararo ba tshepahalang ba tlameha ho dumela kamora ho bala tlaleho ya agent.",
+        "Affidavit e hlalosang maemo a hao, e hlapantsweng ka pela Commissioner of Oaths. Seteishene sefe kapa sefe sa SAPS se etsa sena mahala.",
+        "Dipampiri tse tshehetsang, jwaloka diakhaonto tsa sepetlele kapa lengolo la mong wa ntlo.",
+        "Batho ba babedi ba tshepahalang ba lokela ho dumela ha ba badile tlaleho ya agent, kapa ya setseng a le mong ya ka etsang qeto.",
       ],
       file: "Afidafiti e hlapantsweng",
       fileHint: "Foto kapa PDF, setempe sa commissioner se bonahala",
@@ -1353,6 +1357,7 @@ export const st: Bundle = {
         approve: "Dumella mme o lefe",
         done: "E dumetswe. Polokelo e lefile {payee} ka kotloloho",
         paying: "Ho lefuwa setheo",
+        approveOnly: "Dumella",
       },
       hardship: {
         title: "{name} o kopa ho rekisa koloi ka tlase ho theko e tlase",
@@ -1371,7 +1376,7 @@ export const st: Bundle = {
       confirmed: "E netefaditswe",
       reportMissing: {
         title: "Tlaleho ya agent",
-        body: "Agent e hlahlobile tokomane ena mme ya e amohela, mme monwana wa tlaleho ya yona o ho Solana. Tlaleho e felletseng e ke ke ya bontshwa sesebedisweng sena hona jwale. Netefatsa feela seo o se tsebang e le nnete.",
+        body: "Agent e hlahlobile tokomane ena mme ha e a e hana, mme monwana wa tlaleho ya yona o ho Solana. Tlaleho e felletseng e ke ke ya bontshwa sesebedisweng sena hajwale. Netefatsa feela seo o tsebang hore ke nnete.",
         link: "Bula tlhahlobo ya agent ho Solana Explorer",
         sr: "E bula Solana Explorer tabong e ntjha",
       },
@@ -1396,12 +1401,12 @@ export const st: Bundle = {
       },
       rules: {
         title: "Melao",
-        body: "E behilwe ke mong wa lefa mme e phethahatswa ke konteraka: ha ho motho, esita le Heirloom, ya ka lefang kantle ho yona.",
+        body: "E behilwe ke mong mme e qobellwa ke konteraka, eo Heirloom e tshwereng senotlolo sa ho e ntjhafatsa. Se sa hlokweng ke molao se ka ya ho motho ya boletsweng ke mong, kapa ka moralo wa ho qetela.",
         who: "Ke mang ya etsang qeto",
         death: "Netefatsa lefu",
         claims: "Dumella kopo",
         hardship: "Dumella thekiso ka tlase ho theko e tlase",
-        quorum: "{need} ho batho ba 3 ba tshepahalang",
+        quorum: "Batho ba {need} ho ba {total} ba tshepahalang",
         people: "Batho ba tshepahalang",
         perClaim: "Ho fihlela ho {amount} ka kopo",
         used: "{spent} ho {cap} e sebedisitswe",
@@ -1432,7 +1437,7 @@ export const st: Bundle = {
       facts: { title: "Dintlha tse ho blockchain" },
       receipt: "Rasiti",
       receiptSr: "E bula Solana Explorer tabong e ntjha",
-      footer: "Heirloom e ngola feela menwana ya ditokomane. Ditokomane ka botsona di dula le lelapa.",
+      footer: "Ho blockchain, Heirloom e ngola feela menwana ya ditokomane. Ditokomane ka botsona di bolokwa ka ntle ho blockchain.",
     },
     handover: {
       metaTitle: "Pakete ya phetiso",
@@ -1552,7 +1557,7 @@ export const st: Bundle = {
         executorNote: "Afrika Borwa, tefo ya mophethahatsi e lekanyeditswe ho 3.5% ya lefa, hammoho le VAT. Moedi ona ke 3.5% ya polokelo le ditheko tse tlase tsa thepa ya hao kajeno, hammoho le 15% VAT. Setho sa lelapa se romela invoice ya ramolao, motho ya tshepehang o e amohela, mme e lefuwa ramolao ka kotloloho.",
         executorNoteDraft: "Afrika Borwa, tefo ya mophethahatsi e lekanyeditswe ho 3.5% ya lefa, hammoho le VAT. Boloka moedi ona ho moo kapa ka tlase. Setho sa lelapa se romela invoice ya ramolao, motho ya tshepehang o e amohela, mme e lefuwa ramolao ka kotloloho.",
         claimNote: "Ha ho kemiso: e lefuwa feela kgahlanong le invoice, ho molefuwa ya amohetsweng wa mofuta ona.",
-        draftPayeeNote: "Netweke ya teko, molefuwa e motjha o hloka hore wallet ya hae e kenngwe pele kemiso e ka qala. Ho fihlela ka nako eo molao o lefuwa kgahlanong le di-invoice.",
+        draftPayeeNote: "Pele o saena, ya lefuwang e motjha o hloka wallet. Tlhahlobo e o dumella ho sebedisa ba boikwetliso, kapa ho kgetha ho lefa ka kopo hajwale.",
         add: "Kenya moralong wa ka",
         adding: "E a kenngwa",
         cancel: "Hlakola",
@@ -1684,33 +1689,33 @@ export const st: Bundle = {
     },
     flows: {
       willNew: "Ha re o hahe hammoho. Mpolelle ka mantswe a hao hore na ke mang ya lokelang ho hlokomelwa le hore na ho lokela ho lefellwa eng. Ke tla e fetola melao e hlakileng, mme o kgethe hore na ke efe e qalang jwale le efe e emang ho fihlela o se o le siile.",
-      willDone: "Moralo wa hao o saennwe mme o notletswe ka melao e {rules} bakeng sa bana ba {children}. Ha o ntse o phela o ntse o ka kenya chelete polokelong, wa ntsha, mme wa itlhahisa. Ha lefu le ntse le netefatswa, ha ho motho ya ka fetolang melao ka boyona.",
+      willDone: "Moralo wa hao o saennwe mme o notletswe ka melao e {rules} bakeng sa bana ba {children}. Ha o ntse o phela o ka eketsa polokelong, wa ntsha, wa ba wa ipontsha. Ha lefu le se le netefaditswe, lenaneo ha le dumelle motho ho fetola melao. Heirloom e tshwere senotlolo se ka ntjhafatsang lenaneo.",
       willOther: "Ke mong wa lefa feela ya ngolang lengolo la thato. O ka bala molao o mong le o mong leqepheng la lefa: o mong le o mong o bontsha hore ke wa mang, o lefa eng le hore ho setse bokae.",
-      claimReady: "Tlasa molao wa hao wa {category} o ka kopa ho fihlela ho {max} ka nako, mme ho setse {left} kaofela. Chelete e ya ho {payeeKind} ka kotloloho, eseng ho wena. Lokisa statemente ya morao-rao e le foto kapa PDF mme ke tla e bala pele, ebe motho a le mong ya tshepahalang o a e dumella.",
+      claimReady: "Tlasa molao wa hao wa {category} o ka kopa ho fihla ho {max} ka nako, mme ho setse {left} kaofela. Tjhelete e ya ka kotloloho ho ya dumelletsweng ({payeeKind}). Lokisa setatemente sa moraorao e le foto kapa PDF: ke tla se bala pele, ebe batho ba etsa qeto.",
       claimLocked: "Molao oo o qala kamora hore lefa le buleha. Hona jwale lefa le {status}. Haeba ntate wa hao a hlokahetse, mohato wa pele ke ho le tlaleha ka lengolo la lefu.",
       claimNotYours: "Ke bana ba ngotsweng lengolong la thato feela ba ka kopang. Haeba o motho ya tshepahalang, dikopo tsa bona di fihla inbox ya hao di na le tlaleho ya ka.",
       claimNoRule: "Ha ke fumane molao ka lebitso la hao lefeng lena, kahoo ha ho letho leo o ka le kopang hajwale.",
-      carHeld: "{title} e tshwerwe ke lefa. E ke ke ya rekiswa ka tlase ho {floor} ({floorZar}). Kamora hore lefa le buleha, motho ya tshepahalang o bula thekiso mme ke amohela tlhahiso e kgolo ka ho fetisisa e lekanang le theko eo kapa e e fetang.",
+      carHeld: "{title} e tshwerwe ke lefa. Theko ya yona e tlase e tlwaelehileng ke {floor} ({floorZar}). Ha lefa le notlolotswe, motho ya tshepahalang o bula thekiso, ke hlophisa ditlhahiso, mme motho ya tshepahalang o saena bakeng sa e tobileng pele ke e phetha.",
       carListed: "{title} e thekisong ka {asking}. Ho {offerCount} hajwale, mme e kgolo ka ho fetisisa: {best}. Konteraka e ke ke ya ntumella ho amohela eng kapa eng ka tlase ho {floor} ntle le haeba kopo ya mathata e dumetswe, mme le ka mohla e seng ka tlase ho {hardshipFloor}.",
       carSold: "{title} e rekisitswe. Chelete le tokomane ya beng ya dijithale di fapanyetsanwe ka transaction e le nngwe, kahoo ha ho lehlakore le neng le ka thetsehwa. Rasiti e karolong ya Bopaki.",
       carNone: "Ha ho koloi e kentsweng lefeng lena hajwale. Mong wa lefa a ka kenya e le nngwe thebeng ya Koloi mme ke tla sisinya theko e kopuwang e loketseng ho tswa dithekisong tsa jwale tsa Afrika Borwa.",
-      carHardship: "Haeba o hlile o le mathateng, o ka kopa hore koloi e rekiswe ka tlase ho theko e tlase. O tla hloka afidafiti e hlapantsweng seteisheneng sa SAPS (ke mahala) le dipampiri tse tshehetsang. Batho ba babedi ba tshepahalang ba tlameha ho dumela.",
-      deathFamily: "Ke maswabi ha o tobane le sena. Ha o se o itokiseditse, kenya lengolo la lefu le tswang Home Affairs. Ke le bala pele, ebe ba babedi ho {v1}, {v2} le {v3} ba tlameha ho netefatsa. Kamora nako ya ho emela ya {wait}, lefa le a buleha mme melao e qala ho lefa.",
+      carHardship: "Ha o le tlhokong ya nnete, o ka kopa hore koloi e rekiswe ka tlase ho theko e beilweng. O tla hloka affidavit e hlapantsweng seteisheneng sa SAPS (ke mahala) le dipampiri tse tshehetsang. Batho ba babedi ba tshepahalang ba lokela ho dumela, kapa ya setseng a le mong ya ka etsang qeto.",
+      deathFamily: "Ke masoabi hore o tobane le sena. Ha o se o itokisitse, kenya setifikeiti sa lefu se tswang ho Home Affairs. Ke se bala pele, ebe ba babedi ho {v1}, {v2} le {v3} ba a netefatsa, kapa bohle ba setseng ha ba le ka tlase ho moo. Kamora nako ya ho ema ya {wait}, lefa le a notlollwa mme melao e qala ho lefa.",
       deathOwner: "Haeba motho a ka tlaleha lefu la hao ka phoso, o tla le bona tatellanong ya hao mme ho tobetsa hang ho \"Ke sa ntse ke le teng\" ho le hlakola. Ho itlhahisa kgafetsa ho boetse ho bontsha batho ba hao ba tshepahalang hore tsohle di lokile.",
-      deathVerifier: "Ha lefu le tlalehwa, ke hlahloba setifikeiti mme ke o romella tlaleho ya ka. O netefatsa feela seo o se tsebang ka bowena hore ke nnete. Ba babedi ho batho ba bararo ba tshepahalang ba tlameha ho dumela pele nako ya ho emela e qala.",
+      deathVerifier: "Ha lefu le tlalehwa, ke hlahloba setifikeiti mme ke o romela tlaleho ya ka. O netefatsa feela seo wena o tsebang hore ke nnete. Batho ba babedi ba tshepahalang ba lokela ho dumela pele nako ya ho ema e qala, kapa bohle ba setseng ba ka etsang qeto ha ba le ka tlase ho moo.",
       compliance: "Heirloom e sebetsa pela lengolo la thato le saennweng pela dipaki. Ho ya ka Wills Act, lengolo la thato la elektroniki ha le so amohelwe ke molao Afrika Borwa, kahoo lengolo la hao la pampiri le bolela mophethahatsi wa hao mme le supa lefa lena. Bakeng sa lekunutu (POPIA), disetifikeiti le distatemente ha di bewe rekotong ya setjhaba. Ho ngolwa feela monwana wa tokomane ka nngwe, kahoo ha ho motho ya ka e balang, empa mang kapa mang a ka paka hore ha e a fetolwa.",
-      safety: "Dintho tse tharo. Konteraka e tshwara meedi, kahoo esita le nna nke ke ka lefa ho feta seo molao o se dumellang, kapa ka lefa mang kapa mang eo e seng setheo se amohetsweng. Lefu le hloka ba babedi ho batho ba hao ba bararo ba tshepahalang, hammoho le nako ya ho emela eo o ka e hlakolang. Mme ditokomane di balwa ke nna pele, ebe di balwa ke motho.",
-      scheduled: "Moralo o phelang o ka lefa jwale, eseng feela ha o se o le siile. Ditefo tse rerilweng moralong ona: {count}, mme e latelang ke {next}. E nngwe le e nngwe e ya ho molefuwa wa yona ya amohetsweng ka kotloloho mme e emisa moeding wa molao. Melao e tshwailweng \"Ha ke se ke le siile\" e qala dikemiso tsa yona ha lefa le buleha.",
+      safety: "Dintho tse tharo. Konteraka e boloka meedi, kahoo nke ke ka lefa ho feta molao kapa ka kgetha ya lefuwang: melao e lefa ba dumelletsweng, mme se setseng, tsa moralo wa ho qetela le tsa thekiso di ya feela moo mong a beileng. Lefu le hloka batho ba hao ba tshepahalang le nako ya ho ema eo o ka e hlakolang. Ditokomane di balwa ke nna pele, ebe ke motho. Heirloom e ka ntjhafatsa konteraka.",
+      scheduled: "Moralo o phelang o ka lefa jwale, e seng feela ha o se o le siyo. Moralo ona o na le {count} tse hlophisitsweng, mme e latelang ke {next}. Kemiso ya rona e matha hang ka letsatsi, mme mang kapa mang a ka qala e fihletsweng ke nako. E nngwe le e nngwe e ya ho ya dumelletsweng mme e ema moeding wa molao. Melao e tshwailweng \"Ha ke se ke le siyo\" e qala ha lefa le notlollwa.",
       scheduledNone: "Ha ho ditefo tse rerilweng moralong ona. Ha o haha moralo o ka tshwaya molao ofe kapa ofe \"Jwale\" mme wa o fa kemiso, ka mohlala chelete ya dibuka ya kgwedi le kgwedi.",
       vault: "Polokelo e na le {vault} ({vaultZar} ka sekgahla sa kajeno ho tswa ho {fxSource}). {vaultNote}",
       vaultOwnerNote: "Ha lefa le ntse le sebetsa o ka kenya kapa wa ntsha chelete neng kapa neng.",
-      vaultOtherNote: "E lefa feela ho ya ka melao, ho ditheo tse amohetsweng.",
+      vaultOtherNote: "Melao e lefa ba dumelletsweng ka hara meedi ya yona. Se setseng se ka ya ho motho ya boletsweng ke mong, kapa ka moralo wa ho qetela.",
       inbox: "Tse o emetseng: {count}. E nngwe le e nngwe e tla le tlaleho ya ka: seo tokomane e se buang, eng kapa eng e shebahalang e fosahetse, le hore na ke na le bonnete bo bokae.",
       inboxEmpty: "Ha ho letho le o emetseng hona jwale. Ke tla bontsha dikopo tse ntjha inbox ya hao ha di fihla.",
       escrow: "Ha o etsa tlhahiso, USD₮ ya hao e kena ho escrow e tshwerweng ke konteraka, eseng ke lelapa kapa ke nna. Haeba tlhahiso ya hao e hlola, chelete le tokomane ya beng ya dijithale ya koloi di fapanyetsanwa ka transaction e le nngwe. Haeba e sa hlole, o kgutlisa chelete ya hao ka ho tobetsa hang.",
       noEstate: "Ha ho lefa mona hajwale. Ho demo, qala o le Thabo mme o ngole lengolo la thato le nna. Ho nka hoo e ka bang motsotso.",
       summary: "Lefa la {owner} le {status}. Polokelo e na le {vault} ({vaultZar}), le melao e {rules} bakeng sa bana ba {children}. {next}",
-      nextActive: "Melao e phelang e lefa ka nako mme e meng e a emela.",
+      nextActive: "Melao e tshwailweng Jwale e ka lefa ha nako e fihla, mme e meng e a ema.",
       nextPending: "Lefu le netefaditswe mme nako ya ho emela e a tsamaya.",
       nextUnlocked: "Melao e a sebetsa: ditefello di ka kopuwa mme koloi e ka rekiswa.",
     },
@@ -1726,7 +1731,7 @@ export const st: Bundle = {
     publicRecord: { link: "Bula rekoto ya setjhaba", hint: "Leqephe la ho balwa feela bakeng sa lelapa kapa mophethahatsi. Ha ho hlokehe wallet." },
     sheet: {
       title: "Bua le Heirloom",
-      subtitle: "Motataisi wa hao wa lefa. E a hlalosa, e a ngola mme e a hlahloba. E ke ke ya tsamaisa chelete ka bo yona.",
+      subtitle: "Motataisi wa lefa la hao. E a hlalosa, e a ngola, e a hlahloba. E ke ke ya tsamaisa tjhelete ka ntle ho melao ya moralo wa hao.",
       tabChat: "Moqoqo",
       tabCall: "Letsetsa",
       close: "Kwala",
@@ -1890,6 +1895,7 @@ export const st: Bundle = {
   },
 
   guardians: {
+    rules: safeguardsSt,
     errors: {
       NotMonitor: "Ke motho feela eo mong wa lefa a mo kgethileng ho hlokomela motho enwa ya tshepahalang ya ka hanyetsang.",
       ObjectionOpen: "Ho na le kganyetso e bulehileng, kahoo sena se emisitswe ho fihlela batho ba tshepahalang ba etsa qeto.",
@@ -1898,14 +1904,14 @@ export const st: Bundle = {
       NoSuccessionPending: "Ha ho lefu le tlalehilweng la motho enwa ya tshepahalang.",
       SeatVacant: "Sebaka sena se se na motho: motho ya tshepahalang le bathusi ba hae kaofela ba hlokahetse.",
       SeatsNotVacant: "Moralo wa ho qetela o sebetsa feela ha batho bohle ba tshepahalang le bathusi ba bona ba hlokahetse.",
-      NotConfirmer: "O ke ke wa netefatsa sena. Ho tlameha ho netefatsa motho e mong ya tshepahalang.",
+      NotConfirmer: "O ke ke wa netefatsa sena. Ho tlameha ho netefatsa motho e mong ya dumelletsweng.",
       FallbackNotReady: "Moralo wa ho qetela ha o so itokise. Nako ya ho emela e kanna ya ba e ntse e tsamaya.",
       FallbackDone: "Moralo wa ho qetela o se o phethilwe.",
       NoFallbackRecipient: "Bohle ba lethathamong la moralo wa ho qetela ba hlokahetse, kahoo ha ho motho ya ka lefuwang.",
-      BadBackup: "Mothusi e ke ke ya eba motho ya tshepahalang ka sebele, motho e mong ya tshepahalang kapa mong wa lefa.",
+      BadBackup: "Mothusi e ke ke ya eba motho ya tshepahalang ka sebele, motho e mong ya tshepahalang, mong wa lefa kapa agent.",
       BadMonitor: "Motho a ke ke a hlokomela ditumello tsa hae. Kgetha motho e mong.",
       BadFallback: "Motho e mong le e mong lethathamong la moralo wa ho qetela o tlameha ho fapana, mme mong wa lefa a ke ke a ba ho lona.",
-      ObjectionLapsed: "Kganyetso ena e fedile: ha ya tshehetswa ka nako, kahoo moralo wa ho qetela o ka tswela pele.",
+      ObjectionLapsed: "Kganyetso ena e fedile: ha ya tshehetswa ka nako, kapa mong o bontshitse hore o a phela, kahoo ha e sa amohela divoutu.",
       ObjectionNotLapsed: "Kganyetso ena e sa ntse e bulehile. E fela feela ha nako ya yona ya ho emela e fedile.",
       DuplicateVerifier: "Motho eo a ke ke a nka sebaka sena: o se a ntse a tshwere sebaka sa motho ya tshepahalang, kapa ke mong wa lefa.",
     },
@@ -1930,7 +1936,7 @@ export const st: Bundle = {
 
     setup: {
       title: "Bathusi le bahlokomedi",
-      body: "Kgetha hore na ke mang ya nkang sebaka ha motho ya tshepahalang a hlokahala, le hore na ke mang ya hlokomelang ditumello tsa hae. O ka fetola sena ha o sa ntse o phela.",
+      body: "Kgetha ya nkang sebaka ha motho ya tshepahalang a hlokahala, le ya hlokomelang ditumello tsa hae. Ha sena se buletswe, o ka nkela motho ya tshepahalang sebaka. O ka se fetola ha o sa ntse o phela.",
       cta: "Bulela bathusi le bahlokomedi",
       done: "Bathusi le bahlokomedi ba buletswe",
       off: "Lefa lena le entswe pele ho ba le bathusi le bahlokomedi. Mong wa lefa a ka ba bulela.",
@@ -1973,7 +1979,7 @@ export const st: Bundle = {
       newName: "Lebitso la motho e motjha ya tshepahalang",
       newWallet: "Aterese ya wallet ya hae ya USD₮",
       effectsTitle: "Se etsahalang sebakeng sena",
-      effectHolder: "{name} o kgaotsa ho ba motho ya tshepahalang hanghang mme a ke ke a hlola a dumella letho lefeng lena. Ditumello tseo a seng a di fane di dula di ngotswe.",
+      effectHolder: "{name} o kgaotsa ho ba motho ya tshepahalang hanghang mme a ke ke a hlola a dumella letho lefeng lena. Ho nkela motho sebaka ho bontsha hore o a phela, kahoo seo a se netefaditseng ka lefu la hao se a hlakolwa.",
       effectBackups: "Bathusi ba dula ba le jwalo ({list}). Haeba motho e motjha a hlokahala, ba nka sebaka ka tatellano eo.",
       effectNoBackups: "Sebaka sena ha se na bathusi. Wena, kapa motho e motjha, le ka kgetha ho fihlela ho ba babedi kamora moo.",
       effectMonitors: "Bahlokomedi ba dula ({list}) mme jwale ba hlokomela ditumello tsa motho e motjha.",
@@ -1991,6 +1997,7 @@ export const st: Bundle = {
         wallet: "Hona ha ho shebahale jwalo ka aterese ya wallet ya Solana.",
         owner: "O ke ke wa ba motho wa hao ya tshepahalang. Kgetha motho e mong.",
         holder: "Motho eo o se a tshwere sebaka sa motho ya tshepahalang. Sebaka ka seng se hloka motho ya fapaneng.",
+        agent: "Agent e ke ke ya eba motho ya tshepahalang. Kgetha motho e mong.",
       },
     },
 
@@ -2006,9 +2013,9 @@ export const st: Bundle = {
 
     fallback: {
       title: "Moralo wa ho qetela",
-      body: "Ke mang ya fumanang tsohle ha ho se motho ya tshepahalang ya setseng.",
-      when: "O sebetsa feela ha batho bohle ba tshepahalang le bathusi ba bona ba hlokahetse, kamora {wait} ntle le kganyetso.",
-      order: "Polokelo e ya ho motho wa pele lethathamong ya sa ntseng a phela. Ha a hlokahetse, e ya ho ya latelang.",
+      body: "Ya fumanang se ka polokelong ha ho se motho ya tshepahalang ya setseng.",
+      when: "O sebetsa feela ha batho bohle ba tshepahalang le bathusi ba bona ba hlokahetse mme lefu la mong le tlalehilwe, kamora {wait} (habedi ha agent e ne e sa kgodiseha ka lefu). Kganyetso e a o emisa.",
+      order: "Polokelo e ya ho motho wa pele lethathamong eo lefu la hae le sa netefatswang. Ha le netefaditswe, e ya ho ya latelang.",
       empty: "Ha ho moralo wa ho qetela hajwale.",
       edit: "Fetola moralo wa ho qetela",
       add: "Kenya motho ya amohelang",
@@ -2028,6 +2035,7 @@ export const st: Bundle = {
         empty: "Kenya bonyane motho a le mong ya amohelang.",
       },
       link: "Bona moralo wa ho qetela",
+      reported: "E tlalehilwe",
     },
 
     fallbackStatus: {
@@ -2041,10 +2049,10 @@ export const st: Bundle = {
       reportDeath: {
         open: "Motho ya amohelang o hlokahetse",
         title: "Tlaleha hore motho ya amohelang moralong wa ho qetela o hlokahetse",
-        body: "Kenya lengolo la hae la lefu. Ha agent e le amohela, polokelo e ya ho motho ya latelang lethathamong.",
+        body: "Kenya lengolo la bona la lefu. Agent e le hlahloba feela: ba ka re \"Ke a phela\", mme kamora ho ema motho wa bobedi o tlameha ho netefatsa pele lethathamo le ba tlola.",
         person: "Ke mang ya hlokahetseng?",
         submit: "Romela ho agent",
-        done: "Ho ngotswe. Jwale moralo wa ho qetela o tlola {name}.",
+        done: "Ho tlalehilwe. {name} o tlolwa feela ha motho wa bobedi a netefatsa kamora ho ema.",
         rejected: "Agent ha e a kgona ho netefatsa lengolo lena, kahoo ha ho letho le fetotsweng.",
       },
       pay: "Moralo wa ho qetela",
@@ -2052,7 +2060,7 @@ export const st: Bundle = {
 
     report: {
       title: "Tlaleha lefu la motho ya tshepahalang",
-      body: "Kenya lengolo la lefu. Agent e a le bala, motho e mong ya tshepahalang o a netefatsa, mme kamora ho ema hanyane mothusi wa pele o nka sebaka.",
+      body: "Kenya lengolo la lefu. Agent e a le bala, motho wa bobedi o a netefatsa, mme kamora ho ema hanyane mothusi wa pele ya tshwanelehang o nka sebaka.",
       person: "Ke mang ya hlokahetseng?",
       choose: "Kgetha motho",
       file: "Lengolo la lefu",
@@ -2075,12 +2083,14 @@ export const st: Bundle = {
       reviewing: "Agent e bala lengolo la lefu.",
       rejected: "Agent ha e a amohela lengolo la lefu, kahoo ha ho letho le fetohang.",
       confirm: { body: "Motho e mong ya tshepahalang o tlameha ho netefatsa sena pele ho fetoha letho.", cta: "Netefatsa lefu", done: "Ho netefaditswe. Nako ya ho emela e qadile", waiting: "Ho emetswe motho e mong ya tshepahalang hore a netefatse." },
-      waiting: { title: "{next} o nka sebaka kamora {time}", body: "{name} a sa ntse a ka re \"Ke sa ntse ke le teng\" ho emisa sena." },
+      waiting: { title: "{next} o nka sebaka kamora {time}", body: "{name} a sa ntse a ka re \"Ke sa ntse ke le teng\" ho emisa sena.", plain: "Ho ema ho fela kamora {time}" },
       vacant: "Ha ho mothusi ya setseng, kahoo sebaka sena se tla sala se se na motho.",
       ready: { title: "Ho emela ho fedile", body: "Jwale mang kapa mang a ka fetisetsa sebaka ho {next}.", cta: "Fetisetsa sebaka", done: "Jwale {next} o tshwere sebaka sena" },
       stillHere: { title: "Motho e mong o tlalehile hore o hlokahetse", body: "Haeba o bala sena, tobetsa ka tlase. Tlaleho e a hlakolwa mme ha ho letho le fetohang.", cta: "Ke sa ntse ke le teng", done: "Ho hlakotswe. Re a leboha ka ho re tsebisa." },
       nowHolds: "Jwale {next} o tshwere sebaka sena",
       paused: "Ho emisitswe: {name} o hlahisitse kganyetso.",
+      emptyCta: "Qetela: sebaka se sala se se na motho",
+      emptied: "Sebaka jwale ha se na motho",
     },
 
     feed: {
@@ -2112,7 +2122,7 @@ export const st: Bundle = {
       about: "Ho: {what}",
       reason: "Lebaka la bona",
       fingerprint: "Monwana o ho blockchain",
-      status: { Open: "E emisitswe", Upheld: "E tshehetswe: e hlakotswe", Dismissed: "E hannwe: e a tswela pele" },
+      status: { Open: "E emisitswe", Upheld: "E tshehetswe: e hlakotswe", Dismissed: "E hannwe: e a tswela pele", Lapsed: "E fedile: ha e sa e emisa" },
       votes: "{up} ho tshehetsa · {down} ho hana",
       uphold: "Tshehetsa: e hlakole",
       dismiss: "Hana: e tlohele e tswele pele",
@@ -2124,6 +2134,7 @@ export const st: Bundle = {
       outcome: { Upheld: "Batho ba tshepahalang ba dumetse le kganyetso, kahoo e hlakotswe.", Dismissed: "Batho ba tshepahalang ba hanne kganyetso, kahoo e tswetse pele." },
       listTitle: "Dikganyetso",
       listEmpty: "Ha ho kganyetso e hlahisitsweng.",
+      monitorsDecide: "Ha ho motho ya tshepahalang ya setseng, kahoo bahlokomedi ba babedi ba etsa qeto. Motho ka mong o na le voutu e le nngwe.",
     },
 
     inbox: {
@@ -2174,7 +2185,7 @@ export const st: Bundle = {
     eyebrow: "Thepa",
     list: {
       title: "Dintho tse tla *rekiswa*",
-      body: "Tsohle tseo lefa le tla di rekisetsa lelapa, le ka mohla e seng ka tlase ho theko e beilweng.",
+      body: "Seo lefa le ka se rekisetsang lelapa. Motho ya tshepahalang o saena le yena, mme konteraka e hlahloba moedi wa theko.",
       add: "Kenya thepa",
       current: "E bontshwang",
       photos: "Difoto tse {n}",

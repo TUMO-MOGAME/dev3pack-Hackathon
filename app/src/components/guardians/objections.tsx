@@ -15,7 +15,8 @@ import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Badge, Button, Consent, Field, inputClass, Notice } from "@/components/ui/primitives";
 import { fmt, timeAgo, useCopy } from "@/components/shell/copy";
-import { canObject, clock, feedFor, objectionFor, secondsLeft, shortName, voterRole, watchedSeats } from "./derive";
+import { canObject, clock, feedFor, objectionFor, objectionOver, secondsLeft, shortName, voterRole, watchedSeats } from "./derive";
+import { interestedIn } from "@/lib/guardians/decisions";
 import { ActionResult, useAction, useGuardians } from "./parts";
 
 export const MIN_REASON = 10;
@@ -107,24 +108,26 @@ function FeedItem({ item, now, timeLabel }: { item: SeatApprovalItem; now: numbe
   const { guardians: c } = useCopy();
   const g = useGuardians();
   const f = c.feed;
+  const { snap, session } = useEstate();
   const objection = objectionFor(g, item.target);
-  const open = canObject(g, item, now);
+  const open = !!snap && canObject(g, item, now, { snap, wallet: session?.address });
   const left = secondsLeft(item.objectionDeadline, now);
   return (
     <li className={clsx("rounded-md border p-3", open ? "border-[1.5px] border-dashed border-ink" : "border-line")}>
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={open ? "warn" : "neutral"}>{f.kinds[item.kind]}</Badge>
         {open && <Badge tone="gold">{f.badge}</Badge>}
-        {objection && <Badge tone={objection.status === "Open" ? "danger" : "ok"}>{c.objection.status[objection.status]}</Badge>}
+        {objection && <Badge tone={objection.status === "Open" && !objectionOver(objection, now) ? "danger" : "ok"}>{objectionOver(objection, now) ? c.objection.status.Lapsed : c.objection.status[objection.status]}</Badge>}
       </div>
       <p className="mt-1.5 font-semibold">{item.summary}</p>
       <p className="text-small text-ink-2">{fmt(f.when, { when: timeLabel })}</p>
-      {objection ? <ObjectionCard objection={objection} compact className="mt-3" /> : open ? (
+      {objection && <ObjectionCard objection={objection} compact className="mt-3" />}
+      {open ? (
         <>
           {left !== null && <p className="mt-1 text-small tabular-nums">{fmt(f.deadline, { time: clock(left) })}</p>}
           <div className="mt-2"><RaiseObjection kind={item.kind} target={item.target} seatIndex={item.seatIndex} /></div>
         </>
-      ) : <p className="mt-1 text-small text-ink-2">{f.closed}</p>}
+      ) : objection ? null : <p className="mt-1 text-small text-ink-2">{f.closed}</p>}
     </li>
   );
 }
@@ -135,19 +138,23 @@ export function ObjectionCard({ objection: o, compact = false, what, className }
   const { session, snap } = useEstate();
   const g = useGuardians();
   const { act, busy, receipt, refusal } = useAction();
+  const now = useNow(5000);
   if (!snap) return null;
   const t = c.objection;
-  const voter = voterRole(g, o, snap, session?.address);
+  const voter = voterRole(g, o, snap, session?.address, now);
+  const over = objectionOver(o, now);
+  // Nobody dismisses a challenge in their own favour; upholding is theirs to do.
+  const ownGain = voter !== "owner" && !!voter && session?.address === interestedIn(snap, o.kind, o.target);
   const watched = o.seatIndex !== null ? g?.seats.find((s) => s.index === o.seatIndex) : undefined;
   const subject = what ?? g?.feed.find((f) => f.target === o.target)?.summary ?? c.feed.kinds[o.kind];
   const key = `vote-${o.address}`;
 
   return (
-    <article aria-label={t.title} className={clsx("rounded-md bg-surface p-3", o.status === "Open" ? "border-2 border-l-8 border-ink" : "border-[1.5px] border-ink", className)}>
+    <article aria-label={t.title} className={clsx("rounded-md bg-surface p-3", o.status === "Open" && !over ? "border-2 border-l-8 border-ink" : "border-[1.5px] border-ink", className)}>
       <div className="flex flex-wrap items-center gap-2">
         <Gavel className="size-4" aria-hidden="true" />
         <p className="font-semibold">{fmt(t.by, { name: o.monitorName })}</p>
-        <Badge tone={o.status === "Open" ? "warn" : o.status === "Upheld" ? "danger" : "ok"}>{t.status[o.status]}</Badge>
+        <Badge tone={o.status === "Open" && !over ? "warn" : o.status === "Upheld" ? "danger" : "ok"}>{over ? t.status.Lapsed : t.status[o.status]}</Badge>
       </div>
       {!compact && <p className="mt-1 text-small">{fmt(t.about, { what: subject })}{watched ? ` · ${watched.holderName}` : ""}</p>}
       <div className="mt-2">
@@ -160,9 +167,9 @@ export function ObjectionCard({ objection: o, compact = false, what, className }
           <p className="mt-2 text-small tabular-nums">{fmt(t.votes, { up: o.votesUphold, down: o.votesDismiss })}</p>
           {voter && (
             <>
-              <p className="mt-1 text-small text-ink-2">{voter === "owner" ? t.ownerDecides : t.twoDecide}</p>
+              <p className="mt-1 text-small text-ink-2">{voter === "owner" ? t.ownerDecides : voter === "monitor" ? t.monitorsDecide : t.twoDecide}</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button variant="secondary" className="flex-1" loading={busy === `${key}-down`} disabled={!!busy} onClick={() => void act(`${key}-down`, (s, est) => s.voteObjection(est, o.address, false), t.dismissed)}>{t.dismiss}</Button>
+                {!ownGain && <Button variant="secondary" className="flex-1" loading={busy === `${key}-down`} disabled={!!busy} onClick={() => void act(`${key}-down`, (s, est) => s.voteObjection(est, o.address, false), t.dismissed)}>{t.dismiss}</Button>}
                 <Button className="flex-1" loading={busy === `${key}-up`} disabled={!!busy} onClick={() => void act(`${key}-up`, (s, est) => s.voteObjection(est, o.address, true), t.upheld)}>{t.uphold}</Button>
               </div>
             </>
@@ -181,9 +188,10 @@ export function ObjectionList({ snap, onlyVotable = false, title, className }: {
   const { guardians: c } = useCopy();
   const { session } = useEstate();
   const g = useGuardians();
+  const now = useNow(5000);
   if (!g || !g.enabled) return null;
   const list = [...g.objections]
-    .filter((o) => !onlyVotable || voterRole(g, o, snap, session?.address) !== null)
+    .filter((o) => !onlyVotable || voterRole(g, o, snap, session?.address, now) !== null)
     .sort((a, b) => Number(b.status === "Open") - Number(a.status === "Open") || b.raisedAt - a.raisedAt);
   if (onlyVotable && list.length === 0) return null;
   return (

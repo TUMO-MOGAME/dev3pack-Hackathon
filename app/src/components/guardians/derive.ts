@@ -5,7 +5,9 @@
  */
 import type { EstateSnapshot } from "@/lib/service";
 import type { Base58 } from "@/lib/types";
-import type { FallbackPlan, FallbackRecipient, GuardiansSnapshot, Objection, Seat, SeatApprovalItem } from "@/lib/guardians/types";
+import type { FallbackPlan, FallbackRecipient, GuardiansSnapshot, Objection, Seat, SeatApprovalItem, TargetKind } from "@/lib/guardians/types";
+import { disputeOn, objectionLapsesAt, openDisputeOn } from "@/lib/disputes/types";
+import { canConfirmRecipient, canConfirmSeat, deathSince, interestedIn } from "@/lib/guardians/decisions";
 
 export interface Person { wallet: Base58; name: string }
 export type DraftRecipient = { wallet: Base58; name: string; kind: FallbackRecipient["kind"] };
@@ -48,31 +50,62 @@ export function objectionFor(g: GuardiansSnapshot | null, target: Base58): Objec
   return list[0] ?? null;
 }
 
+/** An Open objection past its time (or voided by the owner's sign of life) binds nobody and takes no more votes. */
+export const objectionOver = (o: Objection, now: number | null | undefined) =>
+  o.status === "Open" && !!now && o.lapsesAt !== null && o.lapsesAt !== undefined && now >= o.lapsesAt;
+
 /** An open objection pausing this target, if any: the UI shows "Paused: <name> raised an objection". */
-export function pausedBy(g: GuardiansSnapshot | null, target: Base58): Objection | null {
+export function pausedBy(g: GuardiansSnapshot | null, target: Base58, now?: number | null): Objection | null {
   const o = objectionFor(g, target);
-  return o && o.status === "Open" ? o : null;
+  return o && o.status === "Open" && !objectionOver(o, now) ? o : null;
 }
 
-/** Can a monitor still object to this approval? Only within the review window and only once per target. */
-export function canObject(g: GuardiansSnapshot | null, item: SeatApprovalItem, now: number | null): boolean {
-  if (!g || objectionFor(g, item.target)) return false;
-  if (item.objectionDeadline === null) return true;
-  return now !== null && now < item.objectionDeadline;
+/** May this wallet challenge it now (mirrors raise_objection)? Not whoever gains, and once where the program says so. */
+export function mayRaise(snap: EstateSnapshot, kind: TargetKind, target: Base58, wallet: Base58 | null | undefined, now: number | null): boolean {
+  const g = snap.guardians;
+  if (!g?.enabled || !wallet || now === null || wallet === interestedIn(snap, kind, target)) return false;
+  if (openDisputeOn(snap.disputes, target, now)) return false;
+  const prev = objectionFor(g, target);
+  if (!prev || prev.status === "Upheld") return true;
+  if (prev.status === "Open" && (kind === "Fallback" || !objectionOver(prev, now))) return false;
+  const dispute = disputeOn(snap.disputes, target);
+  if (dispute && dispute.raisedAt >= prev.raisedAt) return true;
+  const beforeThisDeath = prev.raisedAt < deathSince(snap.estate);
+  switch (kind) {
+    case "Claim": return snap.estate.status === "Unlocked" && beforeThisDeath;
+    case "Hardship": return false;
+    case "Unlock": return beforeThisDeath;
+    case "Fallback": return prev.raisedAt < (g.fallback.startedAt ?? Infinity);
+    default: {
+      const wait = snap.estate.waitingPeriodSecs;
+      return now >= objectionLapsesAt(prev.raisedAt, wait) + Math.max(wait, 60);
+    }
+  }
+}
+
+/** Can a monitor still object to this approval? Only within the review window; `by` applies the program's other rules. */
+export function canObject(g: GuardiansSnapshot | null, item: SeatApprovalItem, now: number | null, by?: { snap: EstateSnapshot; wallet: Base58 | null | undefined }): boolean {
+  if (!g || (!by && objectionFor(g, item.target))) return false;
+  if (item.objectionDeadline !== null && (now === null || now >= item.objectionDeadline)) return false;
+  return !by || mayRaise(by.snap, item.kind, item.target, by.wallet, now);
 }
 
 /** Feed items a monitor can still act on: the inbox badge. */
-export function monitorPending(g: GuardiansSnapshot | null, wallet: Base58 | null | undefined, now: number | null): number {
-  return feedFor(g, wallet).filter((f) => canObject(g, f, now)).length;
+export function monitorPending(g: GuardiansSnapshot | null, wallet: Base58 | null | undefined, now: number | null, snap?: EstateSnapshot): number {
+  return feedFor(g, wallet).filter((f) => canObject(g, f, now, snap && { snap, wallet })).length;
 }
 
 /**
- * Who may vote on an objection: a seat holder who is not the person being watched, or the owner while the estate is
- * Active (the owner decides alone). Returns "owner", "holder" or null.
+ * Who may vote on an objection: a seat holder who is neither the person being watched nor whoever raised it, the
+ * owner while the estate is Active (deciding alone), or, on the fallback, a monitor (one vote across seats).
  */
-export function voterRole(g: GuardiansSnapshot | null, o: Objection, snap: EstateSnapshot, wallet: Base58 | null | undefined): "owner" | "holder" | null {
-  if (!g || !wallet || o.status !== "Open") return null;
-  if (wallet === snap.estate.owner) return snap.estate.status === "Active" ? "owner" : null;
+export function voterRole(
+  g: GuardiansSnapshot | null, o: Objection, snap: EstateSnapshot, wallet: Base58 | null | undefined, now?: number | null,
+): "owner" | "holder" | "monitor" | null {
+  if (!g || !wallet || o.status !== "Open" || objectionOver(o, now)) return null;
+  if (wallet === snap.estate.owner && snap.estate.status === "Active") return "owner";
+  if (wallet === o.monitor) return null;
+  if (o.kind === "Fallback") return isMonitor(g, wallet) ? "monitor" : null;
   const mine = heldSeat(g, wallet);
   if (!mine) return null;
   if (o.seatIndex !== null && o.seatIndex === mine.index) return null;
@@ -92,24 +125,8 @@ export function successionStage(seat: Seat, now: number | null): SuccessionStage
   return "ready";
 }
 
-/**
- * Who may confirm a reported passing (mirrors confirm_seat_death): the holder of another living seat; if no other
- * seat has a living holder, this seat's second backup or one of its monitors. Never the reporter, never backups[0]
- * (they would be confirming their own promotion), never the holder.
- */
-export function canConfirm(g: GuardiansSnapshot | null, seat: Seat, wallet: Base58 | null | undefined): boolean {
-  const s = seat.succession;
-  if (!g || !wallet || !s || s.verdict !== "Approved" || s.confirmedBy) return false;
-  if (wallet === seat.holder || wallet === s.reportedBy || wallet === seat.backups[0]?.wallet) return false;
-  const others = g.seats.filter((x) => x.index !== seat.index && !x.vacant && x.holder);
-  if (others.length > 0) return others.some((x) => x.holder === wallet);
-  return seat.backups[1]?.wallet === wallet || seat.monitors.some((m) => m.wallet === wallet);
-}
-
-/** Anyone except the holder may report the holder's passing, while the seat is filled and nothing is pending. */
-export function canReport(seat: Seat, wallet: Base58 | null | undefined): boolean {
-  return !!wallet && !seat.vacant && !!seat.holder && seat.holder !== wallet && !seat.succession;
-}
+/** Who may confirm (R18 included) and who may report or replace a report: lib/guardians/decisions. */
+export { canConfirmSeat as canConfirm, canReportSeat as canReport } from "@/lib/guardians/decisions";
 
 export type FallbackStage = "notNeeded" | "waitingOwner" | "ready" | "counting" | "executable" | "done";
 
@@ -183,18 +200,19 @@ export function checkPeople(
   return null;
 }
 
-export type ReplaceError = "name" | "wallet" | "owner" | "holder";
+export type ReplaceError = "name" | "wallet" | "owner" | "holder" | "agent";
 
 /**
  * Checks the new holder of a seat before owner_replace_seat is sent (mirrors DuplicateVerifier): a name, a wallet,
  * never the owner and never anyone who holds a seat now (this seat's own holder included). Returns the problem or null.
  */
-export function checkReplacement(p: Person, ctx: { owner: Base58; holders: readonly (Base58 | null)[] }): ReplaceError | null {
+export function checkReplacement(p: Person, ctx: { owner: Base58; holders: readonly (Base58 | null)[]; agent?: Base58 }): ReplaceError | null {
   const w = p.wallet.trim();
   if (!p.name.trim()) return "name";
   if (!looksLikeWallet(w)) return "wallet";
   if (w === ctx.owner) return "owner";
   if (ctx.holders.some((h) => h && h === w)) return "holder";
+  if (ctx.agent && w === ctx.agent) return "agent";
   return null;
 }
 
@@ -225,10 +243,12 @@ export function checkFallback(list: readonly DraftRecipient[]): { row: number; e
 /** Everything a trusted person or the owner still has to act on in the guardians area (adds to the inbox badge). */
 export function guardianTodo(g: GuardiansSnapshot | null, snap: EstateSnapshot, wallet: Base58 | null | undefined, now: number | null): number {
   if (!g || !wallet) return 0;
-  const votes = g.objections.filter((o) => voterRole(g, o, snap, wallet) !== null).length;
-  const confirms = g.seats.filter((s) => canConfirm(g, s, wallet)).length;
-  const stillHere = g.seats.filter((s) => s.holder === wallet && s.succession && s.succession.verdict !== "Rejected").length;
-  return votes + confirms + stillHere + monitorPending(g, wallet, now);
+  const s = { ...snap, guardians: g };
+  const votes = g.objections.filter((o) => voterRole(g, o, s, wallet, now) !== null).length;
+  const confirms = g.seats.filter((x) => canConfirmSeat(s, x, wallet)).length;
+  const recipients = now === null ? 0 : g.fallback.recipients.filter((r, i) => r.report && now >= r.report.confirmableAt && canConfirmRecipient(s, i, wallet)).length;
+  const stillHere = g.seats.filter((x) => x.holder === wallet && x.succession && x.succession.verdict !== "Rejected").length;
+  return votes + confirms + recipients + stillHere + monitorPending(g, wallet, now, s);
 }
 
 /** "2 days" / "90 days" / "60 seconds" / "2 minutes": the copy picks the words, this picks the unit. */

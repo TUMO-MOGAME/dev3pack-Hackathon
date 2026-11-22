@@ -8,7 +8,7 @@ export const ask = {
   sheet: {
     title: "Ask for money",
     descOwner: "{owner} gets your request and decides. If yes, it is paid straight to the place you choose.",
-    descTrusted: "Your trusted people check it. One approval pays it, straight to the place you choose.",
+    descTrusted: "Your trusted people check it. Usually one approval is enough to pay it, straight to the place you choose.",
     close: "Close",
     purposeLabel: "What is it for?",
     purposeHint: "A few words, like a school trip.",
@@ -48,7 +48,7 @@ export const ask = {
     sentOwner: "Sent to {owner}",
     sentTrusted: "Sent to your trusted people",
     bodyOwner: "{owner} sees it on their home screen and decides. You will see the answer on yours.",
-    bodyTrusted: "A trusted person sees it in their inbox. One approval pays it.",
+    bodyTrusted: "A trusted person sees it in their inbox. Usually one approval is enough to pay it.",
     noDoc: "No letter was attached, so the decision rests on your words.",
     refused: "Your request could not go ahead",
     refusedBody: "The agent could not accept the letter. Ask again with a clear copy, or without a letter.",

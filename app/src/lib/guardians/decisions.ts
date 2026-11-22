@@ -117,8 +117,7 @@ export function hardshipStands(snap: Pick<EstateSnapshot, "assets">, h: Hardship
 export function hardshipVote(snap: EstateSnapshot, h: Hardship, me: Base58 | null | undefined): Vote | null {
   const e = snap.estate;
   if (!isHeld(me) || e.status !== "Unlocked" || h.status !== "Open" || !openToPeople(h.agentVerdict) || hardshipStands(snap, h)) return null;
-  const asset = snap.assets.find((a) => a.address === h.asset);
-  if (!asset || asset.status === "Sold") return null;
+  if (snap.assets.find((a) => a.address === h.asset)?.status === "Sold") return null;
   const i = e.verifiers.indexOf(me);
   if (i < 0) return null;
   if (me === h.beneficiary) return "own";

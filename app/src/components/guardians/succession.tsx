@@ -8,7 +8,6 @@ import { useId, useState, type FormEvent } from "react";
 import { Check, FileHeart, HeartPulse, Hourglass, TriangleAlert, UserRoundPlus } from "@/components/ui/icons";
 import type { Seat } from "@/lib/guardians/types";
 import type { AgentReport } from "@/lib/types";
-import { shortAddress } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Button, Card, Consent, Field, inputClass, Notice } from "@/components/ui/primitives";
@@ -16,18 +15,22 @@ import { FilePicker } from "@/components/ui/client";
 import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { canConfirm, canReport, clock, secondsLeft, shortName, successionStage, waitFraction } from "./derive";
+import { confirmRoute, seatReplace, successionOutcome } from "@/lib/guardians/decisions";
+import { ReplaceWhen, useWho } from "./decision";
 import { ActionResult, CountdownRing, PausedNotice, useAction, useGuardians } from "./parts";
 
 /** Upload a trusted person's death certificate. Anyone except that person may report it. */
 export function ReportPassing({ initialSeat }: { initialSeat?: number }) {
   const { common, guardians: c } = useCopy();
-  const { session } = useEstate();
+  const { session, snap } = useEstate();
   const g = useGuardians();
+  const now = useNow(5000);
   const r = c.report;
   const id = useId();
   const { act, busy, refusal, receipt } = useAction();
-  const options = (g?.seats ?? []).filter((s) => canReport(s, session?.address));
-  const [seatIndex, setSeatIndex] = useState<number | "">(initialSeat !== undefined && options.some((s) => s.index === initialSeat) ? initialSeat : "");
+  // Participants only, and a reported passing only once its report may be replaced (R6).
+  const options = (g?.seats ?? []).filter((s) => !!snap && canReport(snap, s, session?.address, now) && (initialSeat === undefined || s.index === initialSeat));
+  const [seatIndex, setSeatIndex] = useState<number | "">(initialSeat ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,19 +95,21 @@ export function SuccessionStatus({ seat }: { seat: Seat }) {
   const now = useNow();
   const { act, busy, receipt, refusal } = useAction();
   const [handedTo, setHandedTo] = useState<string | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  const who = useWho(snap);
   const s = seat.succession;
   const t = c.succession;
+  const sr = c.rules.seat;
   const me = session?.address;
 
   if (handedTo) return <Notice tone="ok" className="mt-3" title={fmt(t.nowHolds, { next: handedTo })}><ActionResult receipt={receipt} refusal={null} /></Notice>;
-  if (!g || !s) return null;
+  if (!g || !s || !snap) return null;
   const stage = successionStage(seat, now);
   const name = shortName(seat.holderName);
-  const next = s.nextHolder ? shortName(s.nextHolder.name) : null;
-  const who = (w: string) => snap?.beneficiaries.find((b) => b.wallet === w)?.label
-    ?? g.seats.find((x) => x.holder === w)?.holderName
-    ?? g.seats.flatMap((x) => [...x.backups, ...x.monitors]).find((p) => p.wallet === w)?.name
-    ?? shortAddress(w);
+  const outcome = successionOutcome(snap.estate, seat);
+  const next = outcome.kind === "promote" ? shortName(outcome.next.name) : null;
+  const ending = outcome.kind === "clear" ? sr.clear : t.vacant;
+  const route = confirmRoute(snap.estate, seat);
   const left = secondsLeft(s.readyAt, now);
   const isHolder = me === seat.holder;
 
@@ -128,14 +133,22 @@ export function SuccessionStatus({ seat }: { seat: Seat }) {
       {s.report && (stage === "rejected" || stage === "confirm") && <div className="mt-3"><ReportCard report={s.report} compact /></div>}
 
       {stage === "confirm" && (
-        canConfirm(g, seat, me) ? (
+        canConfirm(snap, seat, me) ? (
           <div className="mt-3">
-            <p className="text-small">{t.confirm.body}</p>
+            <p className="text-small">{route === "family" ? sr.familyBody : t.confirm.body}</p>
             <Button className="mt-2" loading={busy === `confirm-${seat.index}`} disabled={!!busy} onClick={() => void act(`confirm-${seat.index}`, (svc, est) => svc.confirmSeatDeath(est, seat.index), t.confirm.done)}>
               <Check className="size-5" aria-hidden="true" />{t.confirm.cta}
             </Button>
           </div>
-        ) : <p className="mt-2 text-small text-ink-2">{t.confirm.waiting}</p>
+        ) : <p className="mt-2 text-small text-ink-2">{sr.route[route]}</p>
+      )}
+      {(stage === "reviewing" || stage === "confirm") && (
+        <>
+          <ReplaceWhen times={seatReplace(snap.estate, seat)} who="seat" />
+          {canReport(snap, seat, me, now) && (replacing
+            ? <div className="mt-3"><ReportPassing initialSeat={seat.index} /></div>
+            : <Button variant="secondary" small className="mt-2" onClick={() => setReplacing(true)}>{c.rules.replace.cta}</Button>)}
+        </>
       )}
 
       {stage === "waiting" && (
@@ -143,8 +156,9 @@ export function SuccessionStatus({ seat }: { seat: Seat }) {
           <CountdownRing fraction={waitFraction(s.readyAt, g.successionWaitSecs, now)} />
           <div className="min-w-0">
             <p className="font-semibold tabular-nums" role="timer" aria-live="off">
-              {next ? fmt(t.waiting.title, { next, time: left === null ? "" : clock(left) }) : t.vacant}
+              {next ? fmt(t.waiting.title, { next, time: left === null ? "" : clock(left) }) : fmt(t.waiting.plain, { time: left === null ? "" : clock(left) })}
             </p>
+            {!next && <p className="text-small">{ending}</p>}
             <p className="text-small text-ink-2">{fmt(t.waiting.body, { name })}</p>
           </div>
         </div>
@@ -153,13 +167,13 @@ export function SuccessionStatus({ seat }: { seat: Seat }) {
       {stage === "ready" && (
         <div className="mt-3">
           <p className="flex items-center gap-2 font-semibold"><Hourglass className="size-4" aria-hidden="true" />{t.ready.title}</p>
-          <p className="text-small text-ink-2">{next ? fmt(t.ready.body, { next }) : t.vacant}</p>
+          <p className="text-small text-ink-2">{next ? fmt(t.ready.body, { next }) : ending}</p>
           <Button className="mt-2" loading={busy === `finalize-${seat.index}`} disabled={!!busy}
             onClick={async () => {
-              const res = await act(`finalize-${seat.index}`, (svc, est) => svc.finalizeSuccession(est, seat.index), next ? fmt(t.ready.done, { next }) : undefined);
-              if (res.ok && s.nextHolder) setHandedTo(s.nextHolder.name);
+              const res = await act(`finalize-${seat.index}`, (svc, est) => svc.finalizeSuccession(est, seat.index), next ? fmt(t.ready.done, { next }) : outcome.kind === "clear" ? sr.cleared : t.emptied);
+              if (res.ok && outcome.kind === "promote") setHandedTo(outcome.next.name);
             }}>
-            <UserRoundPlus className="size-5" aria-hidden="true" />{t.ready.cta}
+            <UserRoundPlus className="size-5" aria-hidden="true" />{next ? t.ready.cta : outcome.kind === "clear" ? sr.clearCta : t.emptyCta}
           </Button>
         </div>
       )}

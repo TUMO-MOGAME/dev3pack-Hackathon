@@ -25,6 +25,9 @@ import { ObjectionList } from "@/components/guardians/objections";
 import { YearlyCapEditor, YearlyUsage } from "@/components/disputes/yearly";
 import { Marked } from "@/components/ui/marked";
 import { ActivityText, useNameBook } from "@/components/shell/activity-text";
+import { useWho } from "@/components/guardians/decision";
+import { isFamily, isHeld } from "@/lib/guardians/decisions";
+import { eligibleSeats } from "@/lib/death-rules";
 import { clock, guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
 
 type Copy = ScreensCopy["estate"];
@@ -36,7 +39,7 @@ export function EstateScreen({ copy: english }: { copy: Copy }) {
 }
 
 function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role }) {
-  const { common } = useCopy();
+  const { common, guardians } = useCopy();
   const { fx, setProofOpen, walletUsdt } = useEstate();
   const now = useNow(10000);
   const book = useNameBook(snap);
@@ -44,6 +47,7 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
   const rate = fx?.usdtZar ?? null;
   const car = snap.assets[0];
   const first = e.ownerName.split(" ")[0];
+  const living = eligibleSeats(e.verifiers).length;
 
   return (
     <div className="grid gap-5 *:min-w-0 lg:grid-cols-[1.35fr_1fr] lg:items-start">
@@ -138,10 +142,10 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
             <h2 className="flex items-center gap-2 text-h3"><UsersRound className="size-5 text-amber" aria-hidden="true" />{copy.people.title}</h2>
             <ButtonLink href="/people" variant="ghost" small>{copy.people.view}</ButtonLink>
           </div>
-          <p className="text-small text-ink-2">{fmt(copy.people.body, { need: e.deathThreshold })}</p>
+          <p className="text-small text-ink-2">{living ? fmt(copy.people.body, { need: Math.min(e.deathThreshold, living), total: living }) : guardians.rules.tally.nobody}</p>
           <ul className="mt-3 flex flex-col gap-1.5">
-            {e.verifierNames.map((n, i) => (
-              <li key={e.verifiers[i]} className="flex items-center gap-2.5 text-small font-medium">
+            {e.verifierNames.map((name, i) => [isHeld(e.verifiers[i]) ? name : guardians.vacant, i] as const).map(([n, i]) => (
+              <li key={i} className="flex items-center gap-2.5 text-small font-medium">
                 <span className="grid size-8 place-items-center rounded-full border border-ink font-bold text-ink" aria-hidden="true">{n.replace(/^(Adv\.|Ms\.|Mr\.|Uncle|Aunt|Pastor)\s+/i, "")[0]}</span>
                 {n}
               </li>
@@ -181,7 +185,8 @@ function RuleCard({ rule, snap, copy, rate, now }: { rule: Rule; snap: EstateSna
   const { intent, setIntent } = useEstate();
   const ref = useRef<HTMLLIElement>(null);
   const [glow, setGlow] = useState(false);
-  const who = snap.beneficiaries.find((b) => b.wallet === rule.beneficiary)?.label ?? "";
+  const nameOf = useWho(snap);
+  const who = snap.beneficiaries.find((b) => b.wallet === rule.beneficiary)?.label ?? nameOf(rule.beneficiary);
   const Icon = categoryIcon[rule.category];
   const used = rule.lifetimeCap > BigInt(0) ? Number(rule.spentTotal) / Number(rule.lifetimeCap) : 0;
   const date = new Date(rule.validUntil * 1000).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
@@ -224,7 +229,7 @@ function RuleCard({ rule, snap, copy, rate, now }: { rule: Rule; snap: EstateSna
       </div>
       <YearlyUsage rule={rule} now={now} category={common.status.category[rule.category]} />
       <p className="mt-2 text-[0.75rem] text-ink-2">{fmt(ended ? copy.rules.ended : copy.rules.until, { date })}</p>
-      <YearlyCapEditor rule={rule} category={common.status.category[rule.category]} />
+      {!ended && <YearlyCapEditor rule={rule} category={common.status.category[rule.category]} />}
     </li>
   );
 }
@@ -251,7 +256,7 @@ function ForYou({ copy, snap, session, role, now, walletUsdt, rate }: {
   } else if (role === "monitor") {
     const g = guardiansOf(snap);
     const watched = watchedSeats(g, session.address).map((s) => shortName(s.holderName)).join(", ");
-    const n = monitorPending(g, session.address, now);
+    const n = monitorPending(g, session.address, now, snap);
     block = { title: watched ? fmt(guardians.forYou.title, { name: watched }) : guardians.setup.title, body: n > 0 ? fmt(guardians.forYou.body, { count: n === 1 ? f.countOne : fmt(f.countMany, { n }) }) : guardians.forYou.clear, cta: guardians.forYou.cta, href: "/inbox" };
   } else if (role === "buyer") block = { ...f.buyer, href: "/car" };
 
@@ -302,6 +307,7 @@ function Scheduled({ copy, snap, rate }: { copy: Copy; snap: EstateSnapshot; rat
   const { busy } = useEstate();
   const { pay } = usePay();
   const now = useNow();
+  const nameOf = useWho(snap);
   const c = copy.scheduled;
   const e = snap.estate;
   const rules = snap.rules.filter((r) => r.recurringAmount > BigInt(0));
@@ -314,14 +320,16 @@ function Scheduled({ copy, snap, rate }: { copy: Copy; snap: EstateSnapshot; rat
       </div>
       <ul className="grid gap-3">
         {rules.map((r) => {
-          const payee = snap.payees.find((p) => p.wallet === r.fixedPayee)?.name ?? "";
+          const payee = nameOf(r.fixedPayee);
+          // Every payout checks both again (R16).
+          const stopped = !isFamily(snap, r.beneficiary) || !snap.payees.some((p) => p.wallet === r.fixedPayee && p.kind === r.allowedPayeeKind);
           const who = snap.beneficiaries.find((b) => b.wallet === r.beneficiary)?.label.replace(/\s*\(.*\)$/, "") ?? "";
           const live = e.status === "Unlocked" || (r.startsNow && e.status === "Active");
           const capped = r.spentTotal + r.recurringAmount > r.lifetimeCap;
           const ended = now !== null && now > r.validUntil;
           const left = r.nextDue !== null && now !== null ? r.nextDue - now : null;
-          const due = live && !capped && !ended && left !== null && left <= 0;
-          const state = capped ? c.capReached : ended ? c.ended : !live ? (r.startsNow || e.status === "DeathPending" ? (e.status === "DeathPending" && r.startsNow ? c.paused : c.startsAfter) : c.startsAfter) : left === null ? "" : due ? c.dueNow : fmt(c.nextIn, { time: clock(left) });
+          const due = live && !capped && !ended && !stopped && left !== null && left <= 0;
+          const state = stopped ? c.stopped : capped ? c.capReached : ended ? c.ended : !live ? (r.startsNow || e.status === "DeathPending" ? (e.status === "DeathPending" && r.startsNow ? c.paused : c.startsAfter) : c.startsAfter) : left === null ? "" : due ? c.dueNow : fmt(c.nextIn, { time: clock(left) });
           return (
             <li key={r.address} className={clsx("flex flex-wrap items-center gap-3 rounded-lg border bg-surface p-4 shadow-card", due ? "border-[1.5px] border-dashed border-ink" : "border-line")}>
               <span className={clsx("grid size-10 shrink-0 place-items-center rounded-full", r.startsNow ? "bg-ink text-bg" : "border border-line-strong bg-surface text-ink-2")}>
@@ -332,7 +340,7 @@ function Scheduled({ copy, snap, rate }: { copy: Copy; snap: EstateSnapshot; rat
                 <p className="text-small text-ink-2">{fmt(c.forWho, { name: who, every: everyLabel(r.intervalSecs, c.intervals) })}{rate ? ` · ≈ ${formatZar(r.recurringAmount, rate)}` : ""}</p>
                 <p className={clsx("mt-0.5 min-h-5 text-small font-semibold tabular-nums", due ? "text-ink" : "text-ink-2")} role="timer" aria-live="off">{state}</p>
               </div>
-              {live && !capped && !ended && (
+              {live && !capped && !ended && !stopped && (
                 <Button
                   small variant={due ? "primary" : "secondary"} disabled={!due || !!busy}
                   onClick={() => void pay({ kind: "scheduled", source: "vault", to: r.fixedPayee ?? "", toLabel: payee, amount: r.recurringAmount, execute: (svc, est) => svc.executeScheduled(est, r.address), successText: fmt(c.paid, { payee }) })}

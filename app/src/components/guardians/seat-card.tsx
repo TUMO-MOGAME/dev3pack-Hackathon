@@ -7,6 +7,8 @@ import type { Seat } from "@/lib/guardians/types";
 import type { EstateSnapshot } from "@/lib/service";
 import { shortAddress } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
+import { useNow } from "@/lib/hooks/use-now";
+import { confirmRoute, deathOpen, replaceFor, seatReplace } from "@/lib/guardians/decisions";
 import { Badge, Button } from "@/components/ui/primitives";
 import { Avatar } from "@/components/shell/avatar";
 import { fmt, useCopy } from "@/components/shell/copy";
@@ -21,6 +23,7 @@ export function SeatCard({ seat, snap }: { seat: Seat; snap: EstateSnapshot }) {
   const { session, role } = useEstate();
   const g = useGuardians();
   const { act, busy, receipt, refusal } = useAction();
+  const now = useNow(5000);
   const [editing, setEditing] = useState<"backups" | "monitors" | null>(null);
   const [replacing, setReplacing] = useState(false);
   const replaceRef = useRef<HTMLButtonElement>(null);
@@ -33,16 +36,21 @@ export function SeatCard({ seat, snap }: { seat: Seat; snap: EstateSnapshot }) {
   const me = session?.address;
   const ownerActive = role === "owner" && me === e.owner && e.status === "Active";
   const holderSelf = !!me && me === seat.holder;
-  const canBackups = ownerActive || (holderSelf && !seat.succession);
+  // A stale report gives way to new backups; a pending one still blocks them (R6).
+  const times = seatReplace(e, seat);
+  const reportBlocks = !!seat.succession && !(me && times && now !== null && now >= replaceFor(times, seat.succession.reportedBy, me));
+  const canBackups = (ownerActive || holderSelf) && !reportBlocks;
+  // R18: a monitor takes over from a family member's confirmation.
+  const monitorClears = !!seat.succession?.confirmedBy && confirmRoute(e, seat) === "family";
   const canMonitors = ownerActive;
   const watching = seat.monitors.some((m) => m.wallet === me);
   const holders = (g?.seats ?? []).map((s) => s.holder);
 
   // People the owner already knows: the family, the other trusted people and anyone already named somewhere.
   const known = new Map<string, Person>();
-  for (const b of snap.beneficiaries) known.set(b.wallet, { wallet: b.wallet, name: b.label.replace(/\s*\(.*\)$/, "") });
+  for (const b of snap.beneficiaries) if (b.active) known.set(b.wallet, { wallet: b.wallet, name: b.label.replace(/\s*\(.*\)$/, "") });
   for (const s of g?.seats ?? []) for (const p of [...s.backups, ...s.monitors]) known.set(p.wallet, p);
-  const suggestions = [...known.values()].filter((p) => p.wallet !== e.owner);
+  const suggestions = [...known.values()].filter((p) => p.wallet !== e.owner && p.wallet !== e.agent);
 
   const save = async (kind: "backups" | "monitors", list: Person[]) => {
     const res = kind === "backups"
@@ -78,6 +86,7 @@ export function SeatCard({ seat, snap }: { seat: Seat; snap: EstateSnapshot }) {
         <p className="mt-0.5 text-small text-ink-2">{why}</p>
         {editing === kind ? (
           <PeopleEditor
+            note={kind === "monitors" && monitorClears ? c.rules.seat.monitorClears : undefined}
             kind={kind} seat={seat} owner={e.owner} holders={holders} initial={people.map((p) => ({ ...p }))} suggestions={suggestions}
             busy={busy === `${kind}-${seat.index}`} onSave={(l) => void save(kind, l)} onCancel={() => setEditing(null)}
           />
@@ -130,7 +139,7 @@ export function SeatCard({ seat, snap }: { seat: Seat; snap: EstateSnapshot }) {
       )}
       {replacing && (
         <ReplaceSeatForm
-          seat={seat} owner={e.owner} holders={holders} suggestions={suggestions}
+          seat={seat} owner={e.owner} agent={e.agent} cancelsPassing={deathOpen(e)} holders={holders} suggestions={suggestions}
           openObjection={(g?.objections ?? []).some((o) => o.status === "Open" && o.kind === "Succession" && o.seatIndex === seat.index)}
           otherSeats={(g?.seats ?? []).filter((s) => s.index !== seat.index)}
           busy={busy === `replace-${seat.index}`} onSubmit={(p) => void replace(p)} onCancel={closeReplace}

@@ -19,7 +19,9 @@ import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import type { AgentReport } from "@/lib/types";
 import { usePay } from "@/components/pay/payment";
 import { NamesNotice } from "@/components/continuity/names-notice";
-import { checkFallback, clock, isMonitor, objectionFor, fallbackStage, fallbackWinner, MAX_FALLBACK, moveItem, secondsLeft, waitFraction, type DraftRecipient } from "./derive";
+import { checkFallback, clock, isMonitor, mayRaise, objectionFor, objectionOver, fallbackStage, fallbackWinner, MAX_FALLBACK, moveItem, secondsLeft, shortName, waitFraction, type DraftRecipient } from "./derive";
+import { canReportRecipient, isFamily, payoutHeldUntil } from "@/lib/guardians/decisions";
+import { RecipientReports } from "./recipient";
 import { RaiseObjection } from "./objections";
 import { ActionResult, CountdownRing, PausedNotice, useAction, useGuardians, useWaitText } from "./parts";
 
@@ -31,8 +33,11 @@ export function FallbackPlanCard({ snap, className }: { snap: EstateSnapshot; cl
   const g = useGuardians();
   const waitText = useWaitText();
   const { act, busy, receipt, refusal } = useAction();
+  const now = useNow(5000);
   const [editing, setEditing] = useState(false);
   if (!g || !g.enabled) return null;
+  // While the plan runs, its status card has the reports.
+  const reportsHere = fallbackStage(g, now) === "notNeeded";
   const f = c.fallback;
   const e = snap.estate;
   const ownerActive = role === "owner" && session?.address === e.owner && e.status === "Active";
@@ -63,7 +68,7 @@ export function FallbackPlanCard({ snap, className }: { snap: EstateSnapshot; cl
                     <p className="font-mono text-[0.7rem] text-ink-2">{shortAddress(r.wallet)}</p>
                   </div>
                   <span className="sr-only">{fmt(f.position, { n: i + 1 })}</span>
-                  {r.dead ? <Badge tone="danger">{f.dead}</Badge> : <Badge>{f.kindShort[r.kind]}</Badge>}
+                  {r.dead ? <Badge tone="danger">{f.dead}</Badge> : r.report ? <Badge tone="warn">{f.reported}</Badge> : <Badge>{f.kindShort[r.kind]}</Badge>}
                 </li>
               ))}
             </ol>
@@ -71,6 +76,12 @@ export function FallbackPlanCard({ snap, className }: { snap: EstateSnapshot; cl
           {ownerActive ? (
             <Button variant="secondary" small className="mt-3" onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden="true" />{f.edit}</Button>
           ) : role === "owner" ? <p className="mt-3 text-small text-ink-2">{f.ownerOnly}</p> : null}
+        </>
+      )}
+      {!editing && reportsHere && (
+        <>
+          <RecipientReports snap={snap} className="mt-3" />
+          <ReportRecipientDeath />
         </>
       )}
       <ActionResult receipt={receipt} refusal={refusal} />
@@ -87,7 +98,7 @@ function FallbackEditor({ snap, initial, busy, onSave, onCancel }: { snap: Estat
   const [error, setError] = useState<string | null>(null);
   const [announce, setAnnounce] = useState("");
   const used = new Set(rows.map((r) => r.wallet));
-  const picks = snap.beneficiaries.filter((b) => !used.has(b.wallet));
+  const picks = snap.beneficiaries.filter((b) => b.active && !used.has(b.wallet));
 
   const set = (i: number, patch: Partial<DraftRecipient>) => { setRows((r) => r.map((x, n) => (n === i ? { ...x, ...patch } : x))); setError(null); };
   const move = (i: number, to: number) => {
@@ -183,7 +194,10 @@ export function FallbackStatus({ snap, className }: { snap: EstateSnapshot; clas
   const guardTarget = g.address ?? g.objections.find((o) => o.kind === "Fallback")?.target;
   // Any watcher or family member may object to the fallback while it counts down.
   const me = session?.address;
-  const mayObject = !!guardTarget && !objectionFor(g, guardTarget) && (isMonitor(g, me) || snap.beneficiaries.some((b) => b.wallet === me));
+  const mayObject = !!guardTarget && (isMonitor(g, me) || isFamily(snap, me)) && mayRaise(snap, "Fallback", guardTarget, me, now);
+  const heldUntil = payoutHeldUntil(snap, now);
+  const objection = guardTarget ? objectionFor(g, guardTarget) : null;
+  const paused = objection?.status === "Open" && !objectionOver(objection, now);
 
   const execute = async () => {
     if (!winner) return;
@@ -203,14 +217,14 @@ export function FallbackStatus({ snap, className }: { snap: EstateSnapshot; clas
           {stage === "ready" && (
             <>
               <h2 className="text-h3">{s.ready.title}</h2>
-              <p className="mt-1 text-ink-2">{fmt(s.ready.body, { wait: waitText(g.fallbackWaitSecs) })}</p>
+              <p className="mt-1 text-ink-2">{fmt(s.ready.body, { wait: waitText(g.fallbackWaitSecs * (snap.estate.status === "Active" && snap.estate.death.verdict === "Referred" ? 2 : 1)) })}</p>
               <Button className="mt-3" loading={busy === "fallback-start"} disabled={!!busy} onClick={() => void act("fallback-start", (svc, est) => svc.startFallback(est), s.ready.done)}>{s.ready.cta}</Button>
             </>
           )}
           {stage === "counting" && (
             <>
               <div className="flex items-center gap-3">
-                <CountdownRing fraction={waitFraction(g.fallback.readyAt, g.fallbackWaitSecs, now)} />
+                <CountdownRing fraction={waitFraction(g.fallback.readyAt, (g.fallback.readyAt ?? 0) - (g.fallback.startedAt ?? 0), now)} />
                 <h2 className="text-h3 tabular-nums" role="timer" aria-live="off">{left === null ? s.title : fmt(s.counting.title, { time: clock(left) })}</h2>
               </div>
               <p className="mt-2 text-ink-2">{winner ? fmt(s.counting.body, { name }) : s.noOne}</p>
@@ -223,7 +237,10 @@ export function FallbackStatus({ snap, className }: { snap: EstateSnapshot; clas
               <h2 className="flex items-center gap-2 text-h3"><Hourglass className="size-5" aria-hidden="true" />{s.executable.title}</h2>
               <p className="mt-1 text-ink-2">{winner ? fmt(s.executable.body, { name }) : s.noOne}</p>
               {guardTarget && <PausedNotice target={guardTarget} className="mt-2" />}
-              {winner && <Button className="mt-3" disabled={!!busy} onClick={() => void execute()}>{s.executable.cta}</Button>}
+              {winner && heldUntil !== null && now !== null && (
+                <p role="status" className="mt-2 text-small font-semibold tabular-nums">{fmt(c.rules.recipient.held, { name: shortName(name), time: clock(heldUntil - now) })}</p>
+              )}
+              {winner && heldUntil === null && !paused && <Button className="mt-3" disabled={!!busy} onClick={() => void execute()}>{s.executable.cta}</Button>}
             </>
           )}
           {stage === "done" && (
@@ -231,17 +248,24 @@ export function FallbackStatus({ snap, className }: { snap: EstateSnapshot; clas
           )}
         </div>
       </div>
-      {stage !== "done" && <ReportRecipientDeath />}
+      {stage !== "done" && (
+        <>
+          <RecipientReports snap={snap} className="mt-3" />
+          <ReportRecipientDeath />
+        </>
+      )}
       <ActionResult receipt={receipt} refusal={refusal} />
     </Card>
   );
 }
 
-/** Anyone may report that a fallback recipient has died; the agent checks the certificate (report_fallback_death). */
+/** A participant reports that a recipient has died; the agent's verdict only opens it to a second person (R4). */
 function ReportRecipientDeath() {
   const { common, guardians: c } = useCopy();
   const r = c.fallbackStatus.reportDeath;
   const g = useGuardians();
+  const { snap, session } = useEstate();
+  const now = useNow(5000);
   const id = useId();
   const { act, busy, receipt, refusal } = useAction();
   const [open, setOpen] = useState(false);
@@ -251,14 +275,14 @@ function ReportRecipientDeath() {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<AgentReport | null>(null);
   const [reported, setReported] = useState("");
-  const options = (g?.fallback.recipients ?? []).map((x, i) => ({ ...x, i })).filter((x) => !x.dead && x.kind !== "charity");
+  const options = (g?.fallback.recipients ?? []).map((x, i) => ({ ...x, i })).filter((x) => x.kind !== "charity" && !!snap && canReportRecipient(snap, x.i, session?.address, now));
   if (busy === "fallback-death") return <div className="mt-4"><Reviewing /></div>;
   if (report) {
     return (
       <div className="mt-4">
         <ReportCard report={report} compact />
         {report.verdict === "approve"
-          ? <p role="status" className="mt-2 text-small font-semibold">{fmt(r.done, { name: reported })}</p>
+          ? <p role="status" className="mt-2 text-small font-semibold">{fmt(r.done, { name: shortName(reported) })}</p>
           : <p role="alert" className="mt-2 text-small font-semibold">{r.rejected}</p>}
         <ActionResult receipt={receipt} refusal={null} />
         <Button variant="quiet" small className="mt-2" onClick={() => { setReport(null); setFile(null); setIndex(""); setOpen(false); }}>{c.cancel}</Button>

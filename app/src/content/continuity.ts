@@ -36,11 +36,11 @@ const en = {
   },
   residual: {
     title: "Whatever is left",
-    body: "After your passing, money that no rule still needs goes to this person. Money a rule can still pay stays in the vault.",
+    body: "After your passing, money that no rule still needs can be paid to this person, and anyone can start that payment. Money a live rule can still pay stays in the vault.",
     label: "Who receives what is left",
     save: "Save",
     saved: "Saved",
-    none: "Nobody is named yet. Choose someone, or what is left stays in the vault.",
+    none: "Nobody is named yet. Until you choose someone, what is left follows your fallback list, or stays in the vault if you have none.",
     goesTo: "Goes to {name}",
     ready: "{amount} is no longer needed by any rule.",
     waiting: "Every rule still needs what is in the vault.",
@@ -56,9 +56,9 @@ const en = {
     done: "Rule ended",
   },
   names: {
-    notDurable: "Names are not stored permanently on this test site yet. They are kept in the owner's browser, never on-chain. If they go missing for the family, the owner opens Heirloom in that browser and unlocks the wallet, and they are put back.",
+    notDurable: "Names are not stored permanently on this test site yet. They are kept in the owner's browser, and the app doesn't write them on-chain. If they go missing for the family, the owner opens Heirloom in that browser and unlocks the wallet, and they are put back.",
   },
-  referred: "The agent was not sure, so it did not approve. People decide: at least two trusted people, or the owner on a living plan.",
+  referred: "The agent was not sure, so it did not approve. People decide: two trusted people, or the only one left who may decide, or the owner on a living plan.",
   relist: "The last listing ended. It can be listed again.",
 };
 
@@ -95,11 +95,11 @@ const af: ContinuityCopy = {
   },
   residual: {
     title: "Wat ook al oorbly",
-    body: "Na jou afsterwe gaan geld wat geen reël meer nodig het nie na hierdie persoon. Geld wat 'n reël nog kan betaal, bly in die kluis.",
+    body: "Ná jou afsterwe kan geld wat geen reël meer nodig het nie aan hierdie persoon betaal word, en enigiemand kan daardie betaling begin. Geld wat 'n lewende reël nog kan betaal, bly in die kluis.",
     label: "Wie ontvang wat oorbly",
     save: "Stoor",
     saved: "Gestoor",
-    none: "Niemand is nog benoem nie. Kies iemand, anders bly die res in die kluis.",
+    none: "Niemand is nog benoem nie. Totdat jy iemand kies, volg die res jou terugvallys, of bly dit in die kluis as jy geen lys het nie.",
     goesTo: "Gaan na {name}",
     ready: "{amount} word deur geen reël meer benodig nie.",
     waiting: "Die reëls het nog alles in die kluis nodig.",
@@ -115,9 +115,9 @@ const af: ContinuityCopy = {
     done: "Reël beëindig",
   },
   names: {
-    notDurable: "Name word nog nie permanent op hierdie toetswerf gestoor nie. Hulle word in die eienaar se blaaier gehou, nooit op die blokketting nie. As die familie hulle nie meer sien nie, maak die eienaar Heirloom in daardie blaaier oop en ontsluit die beursie, en dan word hulle teruggesit.",
+    notDurable: "Name word nog nie permanent op hierdie toetswerf gestoor nie. Hulle word in die eienaar se blaaier gehou, en die app skryf hulle nie op die blokketting nie. As die familie hulle nie meer sien nie, maak die eienaar Heirloom in daardie blaaier oop en ontsluit die beursie, en dan word hulle teruggesit.",
   },
-  referred: "Die agent was onseker en het dus nie goedgekeur nie. Mense besluit: ten minste twee vertroude mense, of die eienaar by 'n lewende plan.",
+  referred: "Die agent was onseker en het dus nie goedgekeur nie. Mense besluit: twee vertroude mense, of die enigste oorblywende een wat mag besluit, of die eienaar by 'n lewende plan.",
   relist: "Die vorige lys het verval. Dit kan weer gelys word.",
 };
 
@@ -152,11 +152,11 @@ const st: ContinuityCopy = {
   },
   residual: {
     title: "Se setseng",
-    body: "Ka mora lefu la hao, tjhelete e sa hlokweng ke molao e ya ho motho enwa. Tjhelete eo molao o ntseng o ka e lefa e dula polokelong.",
+    body: "Ka mora lefu la hao, tjhelete e sa hlokweng ke molao e ka lefuwa motho enwa, mme mang kapa mang a ka qala tefo eo. Tjhelete eo molao o sebetsang o ntseng o ka e lefa e dula polokelong.",
     label: "Ya amohelang se setseng",
     save: "Boloka",
     saved: "E bolokilwe",
-    none: "Ha ho motho ya boletsweng. Kgetha motho, ho seng jwalo se setseng se tla dula polokelong.",
+    none: "Ha ho motho ya boletsweng. Ho fihlela o kgetha motho, se setseng se latela lethathamo la hao la ho qetela, kapa se dula polokelong ha o se na lona.",
     goesTo: "E ya ho {name}",
     ready: "{amount} ha e sa hlokwa ke molao ofe kapa ofe.",
     waiting: "Melao e ntse e hloka tsohle tse polokelong.",
@@ -172,9 +172,9 @@ const st: ContinuityCopy = {
     done: "Molao o fedisitswe",
   },
   names: {
-    notDurable: "Mabitso ha a so bolokwe ka ho sa feleng webosaeteng ena ya teko. A bolokwa sebatling sa mong'a wona, e seng blockchaineng le kgale. Ha lelapa le sa a bone, mong'a moralo o bula Heirloom sebatling seo mme o notlolla sepatjhe, ebe a a kgutliswa.",
+    notDurable: "Mabitso a so bolokwe ka ho sa feleng webosaeteng ena ya teko. A bolokwa sebatling sa mong'a wona, mme app ha e a ngole blockchaineng. Ha lelapa le sa a bone, mong'a moralo o bula Heirloom sebatling seo mme o notlolla sepatjhe, ebe a a kgutliswa.",
   },
-  referred: "Agent e ne e sa kgodiseha, kahoo ha e a dumela. Batho ba etsa qeto: bonyane batho ba babedi ba tshepuwang, kapa mong'a moralo o phelang.",
+  referred: "Agent e ne e sa kgodiseha, kahoo ha e a dumela. Batho ba etsa qeto: ba babedi ba tshepuwang, kapa ya setseng a le mong ya ka etsang qeto, kapa mong'a moralo o phelang.",
   relist: "Lenane le fetileng le fedile. E ka behwa thekisong hape.",
 };
 
@@ -209,11 +209,11 @@ const zu: ContinuityCopy = {
   },
   residual: {
     title: "Okusele",
-    body: "Ngemva kokushona kwakho, imali engasadingwa yinoma yimuphi umthetho iya kulo muntu. Imali umthetho osengayikhokha ihlala esisefeni.",
+    body: "Ngemva kokushona kwakho, imali engasadingwa ngumthetho ingakhokhelwa lo muntu, futhi noma ubani angaqalisa leyo nkokhelo. Imali umthetho osebenzayo osengayikhokha ihlala esisefeni.",
     label: "Ozothola okusele",
     save: "Londoloza",
     saved: "Kulondoloziwe",
-    none: "Akekho oqokiwe. Khetha umuntu, uma kungenjalo okusele kuzohlala esisefeni.",
+    none: "Akekho oqokiwe. Kuze kube ukhetha umuntu, okusele kulandela uhlu lwakho lokugcina, noma kuhlale esisefeni uma ungenalo.",
     goesTo: "Kuya ku-{name}",
     ready: "U-{amount} akasadingwa yinoma yimuphi umthetho.",
     waiting: "Imithetho isadinga konke okusesisefeni.",
@@ -229,9 +229,9 @@ const zu: ContinuityCopy = {
     done: "Umthetho uqediwe",
   },
   names: {
-    notDurable: "Amagama awakagcinwa unomphela kule sayithi yokuhlola. Agcinwa esipheqululini somnikazi, hhayi ku-blockchain nanini. Uma umndeni ungasawaboni, umnikazi uvula i-Heirloom kuleso siphequluli avule isikhwama, bese ebuyiselwa.",
+    notDurable: "Amagama awakagcinwa unomphela kule sayithi yokuhlola. Agcinwa esipheqululini somnikazi, futhi i-app ayiwabhali ku-blockchain. Uma umndeni ungasawaboni, umnikazi uvula i-Heirloom kuleso siphequluli avule isikhwama, bese ebuyiselwa.",
   },
-  referred: "I-agent ibingaqiniseki, ngakho ayivumanga. Abantu bayanquma: okungenani abantu ababili abathembekile, noma umnikazi ohlelweni oluphilayo.",
+  referred: "I-agent ibingaqiniseki, ngakho ayivumanga. Abantu bayanquma: ababili abathembekile, noma oyedwa osele onganquma, noma umnikazi ohlelweni oluphilayo.",
   relist: "Uhlu lwangaphambilini luphelile. Ingafakwa futhi ukuze ithengiswe.",
 };
 

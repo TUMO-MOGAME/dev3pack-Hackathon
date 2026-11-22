@@ -5,7 +5,7 @@ export const site = {
   tagline: "Plan for your family, now and after you're gone.",
   title: "Heirloom: plan for your family, now and after you're gone",
   description:
-    "Set up a family plan in plain language. Heirloom pays allowances and school fees on schedule from a secure USD₮ vault today, and keeps paying the university directly after you're gone. Built with Tether WDK on Solana.",
+    "Set up a family plan in plain language. Heirloom pays allowances and school fees from a secure USD₮ vault when they are due, within the limits you set, and the same rules can keep paying after you're gone. Built with Tether WDK on Solana.",
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://heirloom.tumoolo.tech",
   themeLight: "#ffffff",
   themeDark: "#000000",
@@ -25,7 +25,7 @@ export const site = {
   },
   footer: {
     blurb:
-      "Heirloom works alongside your signed, witnessed will. It does not replace it. Hackathon prototype on Solana devnet; the contract has not been audited.",
+      "Heirloom works alongside your signed, witnessed will. It does not replace it. Hackathon prototype on Solana devnet; the contract has not been audited, and Heirloom can upgrade it.",
     linksTitle: "Heirloom",
     legalTitle: "Legal",
     links: [

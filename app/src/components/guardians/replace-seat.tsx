@@ -13,8 +13,11 @@ import { NamesNotice } from "@/components/continuity/names-notice";
 import { afterReplacement, checkReplacement, shortName, type Person, type ReplaceError } from "./derive";
 
 export function ReplaceSeatForm({
-  seat, owner, holders, suggestions, busy, onSubmit, onCancel, openObjection = false, otherSeats = [],
+  seat, owner, agent, cancelsPassing, holders, suggestions, busy, onSubmit, onCancel, openObjection = false, otherSeats = [],
 }: {
+  agent: Base58;
+  /** A death claim is open: replacing someone is proof of life, so it is cancelled (R2). */
+  cancelsPassing: boolean;
   /** An Open objection to this place's succession: the contract leaves it in place, and until it is voted on it blocks the next succession here. */
   openObjection?: boolean;
   /** The other places: if the new person is a backup there, the contract leaves them on that list. */
@@ -53,7 +56,7 @@ export function ReplaceSeatForm({
   const submit = (ev: FormEvent) => {
     ev.preventDefault();
     const clean = { name: person.name.trim(), wallet: person.wallet.trim() };
-    const problem = checkReplacement(clean, { owner, holders });
+    const problem = checkReplacement(clean, { owner, holders, agent });
     if (problem) {
       setError(problem);
       (problem === "name" ? nameRef : walletRef).current?.focus();
@@ -104,6 +107,7 @@ export function ReplaceSeatForm({
 
       <Notice tone="accent" title={c.effectsTitle}>
         <ul className="mt-1 flex list-disc flex-col gap-1 pl-4">
+          {cancelsPassing && <li className="font-semibold">{g.rules.here.warning}</li>}
           {!vacant && <li>{fmt(c.effectHolder, { name: holderName })}</li>}
           {seat.succession && !vacant && <li>{fmt(c.effectSuccession, { name: holderName })}</li>}
           <li>{after.backups.length ? fmt(c.effectBackups, { list: list(after.backups) }) : c.effectNoBackups}</li>

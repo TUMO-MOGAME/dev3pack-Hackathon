@@ -20,14 +20,14 @@ export function ClaimWindow({ claim, payee, payeeName, amount, successText }: { 
   const { pay } = usePay();
   const g = useGuardians();
   const now = useNow();
-  if (!g) return null;
-  if (pausedBy(g, claim)) return null; // the PausedNotice above says why
+  if (pausedBy(g, claim, now)) return null; // the PausedNotice above says why
   if (snap && openDisputeOn(snap.disputes, claim, now ?? 0)) return null; // the dispute card above says why
-  const deadline = g.feed.find((f) => f.target === claim)?.objectionDeadline ?? null;
+  // The owner's own approval waits for no window.
+  const deadline = snap?.claims.find((c) => c.address === claim)?.ownerApproved ? null : g?.claimPayableAt?.[claim] ?? null;
   const left = secondsLeft(deadline, now);
   const waiting = deadline !== null && (left === null || left > 0);
 
-  if (waiting) {
+  if (g && waiting) {
     return (
       <div className="mt-4 flex items-center gap-3 rounded-md border-[1.5px] border-dashed border-ink p-3">
         <CountdownRing fraction={waitFraction(deadline, g.objectionWindowSecs, now)} />
@@ -39,7 +39,7 @@ export function ClaimWindow({ claim, payee, payeeName, amount, successText }: { 
   }
   return (
     <div className="mt-4">
-      <p className="text-small">{c.window.ready}</p>
+      <p className="text-small">{deadline === null ? c.rules.vote.pay : c.window.ready}</p>
       <Button className="mt-2" disabled={!!busy}
         onClick={() => void pay({ kind: "claim-payout", source: "vault", to: payee, toLabel: payeeName, amount, execute: (s, est) => s.executeClaim(est, claim), successText })}>
         <Banknote className="size-5" aria-hidden="true" />{c.window.payNow}

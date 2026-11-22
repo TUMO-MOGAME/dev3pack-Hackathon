@@ -11,6 +11,7 @@ import { scheduleStepDue } from "@/lib/schedule-step";
 import type { CommonCopy } from "@/content/common";
 import { fmt, useCopy } from "./copy";
 import { openToPeople } from "@/lib/verdict";
+import { canSign, claimBlock, claimPayable, claimVote, deathTally, deathVote, isFamily, isHeld } from "@/lib/guardians/decisions";
 
 type StepKey = keyof CommonCopy["demo"]["steps"];
 const ORDER: StepKey[] = ["will", "fund", "schedule", "car", "ask", "answer", "report", "attest", "wait", "claim", "approve", "list", "offer", "settle", "done"];
@@ -23,8 +24,10 @@ function nextStep(snap: EstateSnapshot | null, sessions: WalletSession[]): Step 
   if (!snap) return { key: "will", actor: owner, href: "/will" };
   const e = snap.estate;
   const ownerS = sessions.find((s) => s.address === e.owner) ?? owner;
-  const kid = sessions.find((s) => snap.beneficiaries.some((b) => b.wallet === s.address)) ?? by("beneficiary")[0] ?? null;
-  const verifier = (i: number) => sessions.find((s) => s.address === e.verifiers[i]) ?? null;
+  const kid = sessions.find((s) => isFamily(snap, s.address)) ?? by("beneficiary")[0] ?? null;
+  const person = (address: string | undefined) => sessions.find((s) => s.address === address) ?? null;
+  const holders = e.verifiers.filter(isHeld);
+  const now = Math.floor(Date.now() / 1000);
   const buyer = by("buyer")[0] ?? null;
   const car = snap.assets[0];
   if (e.status === "Active") {
@@ -35,22 +38,27 @@ function nextStep(snap: EstateSnapshot | null, sessions: WalletSession[]): Step 
     if (!e.death.certHash) {
       const everyday = snap.rules.find((r) => r.startsNow && r.category === "General" && r.recurringAmount === BigInt(0));
       const asks = everyday ? snap.claims.filter((c) => c.rule === everyday.address) : [];
-      const waiting = asks.find((c) => c.status === "Open" && openToPeople(c.agentVerdict) && !c.ownerApproved && !snap.asks?.[c.address]?.declinedAt);
+      const waiting = asks.find((c) => c.status === "Open" && openToPeople(c.agentVerdict) && !c.ownerApproved && !snap.asks?.[c.address]?.declinedAt && !claimBlock(snap, c, now));
       if (waiting) return { key: "answer", actor: ownerS, href: "/chat" };
-      if (everyday && asks.length === 0) return { key: "ask", actor: sessions.find((s) => s.address === everyday.beneficiary) ?? kid, href: "/chat" };
+      if (everyday && asks.length === 0 && now <= everyday.validUntil && isFamily(snap, everyday.beneficiary)) return { key: "ask", actor: sessions.find((s) => s.address === everyday.beneficiary) ?? kid, href: "/chat" };
     }
     if (!e.death.certHash) return { key: "report", actor: kid, href: "/family" };
-    const i = e.death.attestations.findIndex((a) => !a);
-    return { key: "attest", actor: verifier(Math.max(0, i)), href: "/inbox", vars: { got: e.death.attestations.filter(Boolean).length, need: e.deathThreshold } };
+    const t = deathTally(e);
+    const next = holders.find((v) => canSign(deathVote(e, v)));
+    return { key: "attest", actor: person(next ?? holders[0]), href: "/inbox", vars: { got: t.got, need: t.needed } };
   }
   if (e.status === "DeathPending") return { key: "wait", actor: kid, href: "/family" };
   if (snap.claims.length === 0) return { key: "claim", actor: kid, href: "/claims" };
-  const open = snap.claims.find((c) => c.status === "Open");
-  if (open) return { key: "approve", actor: verifier(Math.max(0, open.approvals.findIndex((a) => !a))), href: "/inbox" };
-  if (car?.status === "Held") return { key: "list", actor: verifier(0), href: "/car" };
+  // A claim nobody can ever pay, or with nobody left to decide it, is not a step.
+  const open = snap.claims.find((c) => c.status === "Open" && (claimPayable(snap, c, now) || holders.some((v) => canSign(claimVote(snap, c, v, now)))));
+  if (open) {
+    const signer = holders.find((v) => canSign(claimVote(snap, open, v, now)));
+    return { key: "approve", actor: person(claimPayable(snap, open, now) ? holders[0] : signer), href: "/inbox" };
+  }
+  if (car?.status === "Held") return { key: "list", actor: person(holders[0]), href: "/car" };
   if (car?.status === "Listed") {
     const mine = buyer && snap.offers.some((o) => o.buyer === buyer.address);
-    return mine ? { key: "settle", actor: verifier(0), href: "/car" } : { key: "offer", actor: buyer, href: "/car" };
+    return mine ? { key: "settle", actor: person(holders.find((v) => v !== buyer.address)) ?? kid, href: "/car" } : { key: "offer", actor: buyer, href: "/car" };
   }
   return { key: "done", actor: null, href: "/estate" };
 }

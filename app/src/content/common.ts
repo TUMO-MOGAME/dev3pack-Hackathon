@@ -104,7 +104,7 @@ export const common = {
       approve: { title: "A trusted person approves the claim", body: "One approval, then the vault pays the university directly." },
       list: { title: "The executor opens the car sale", body: "The car is listed at the asking price." },
       offer: { title: "Pieter makes an offer", body: "His USD₮ goes into escrow. Offers under the floor can't win." },
-      settle: { title: "Settle the sale", body: "The agent accepts the best offer at or above the floor, in one transaction." },
+      settle: { title: "Settle the sale", body: "A trusted person co-signs the offer the agent ranks best, and the agent completes it in one transaction." },
       done: { title: "The story is complete", body: "Open Proof to see every receipt, or reset and try the hardship path." },
     },
   },
@@ -134,7 +134,7 @@ export const common = {
   status: {
     estate: { Active: "Active", DeathPending: "Waiting period", Unlocked: "Unlocked", Frozen: "Frozen" },
     estateHint: {
-      Active: "Living rules pay on schedule. Everything else waits.",
+      Active: "Rules marked Now can pay when due. Everything else waits.",
       DeathPending: "A passing was confirmed. The estate unlocks when the waiting period ends.",
       Unlocked: "The rules are in force.",
       Frozen: "Paused while a dispute is resolved.",
@@ -184,13 +184,13 @@ export const common = {
     } as Record<string, string>,
     reviewing: "The agent is reading the document",
     reviewingSteps: ["Checking the document type", "Reading names, dates and amounts", "Looking for signs of editing", "Writing a report for the trusted people"],
-    advisory: "The agent only recommends. A trusted person decides.",
+    advisory: "The agent doesn't approve payments. People decide.",
     /** Under a report the agent did not accept: nothing went to the trusted people, so say what happens next instead. */
-    advisoryRejected: "The agent only checks the document. Send a clear copy and a trusted person decides.",
+    advisoryRejected: "A document the agent doesn't accept goes no further. Send a clear copy, and people decide from there.",
   },
   blocked: {
     title: "Blocked by the contract",
-    body: "This is the estate's rule on Solana doing its job. Nobody, including the agent, can override it.",
+    body: "This is the estate's rule on Solana doing its job. The agent can't override it.",
     code: "Rule",
   },
   consent: { before: "I agree to Heirloom processing this information as described in the", link: "privacy policy", after: "." },
@@ -228,7 +228,7 @@ export const common = {
     NoDeathClaim: "No passing has been reported.",
     AgentNotApproved: "The agent has not cleared the document yet.",
     OwnClaimDispute: "You cannot dispute your own claim.",
-    TimeOutOfRange: "That length of time is outside the allowed range.",
+    TimeOutOfRange: "That time is outside the allowed range. An end date must be in the future.",
     TooManyRules: "A plan can have at most 16 rules.",
     NoResidualRecipient: "Nobody has been named to receive what is left.",
     NothingToSweep: "The rules still need everything in the vault.",

@@ -19,6 +19,8 @@ import { getService, type EstateSnapshot, type HeirloomService } from "@/lib/ser
 import { DEMO_STAGES, isMockService, type DemoStage } from "@/lib/service/mock";
 import { auditDecisions, auditPayments, isMissingEstate, looksLikeAddress, publicSnapshot } from "@/lib/audit";
 import { checkInPlan } from "@/lib/checkin";
+import { eligibleSeats } from "@/lib/death-rules";
+import { claimTally, deathTally, hardshipTally, isHeld } from "@/lib/guardians/decisions";
 import { formatUsdt } from "@/lib/format";
 import { useNow } from "@/lib/hooks/use-now";
 import type { Claim, EstateStatus } from "@/lib/types";
@@ -31,7 +33,6 @@ import { Marked } from "@/components/ui/marked";
 type Copy = ScreensCopy["audit"];
 const PROGRAM_ID = process.env.NEXT_PUBLIC_HEIRLOOM_PROGRAM_ID ?? "";
 const longDate = (secs: number) => new Date(secs * 1000).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
-const count = (a: boolean[]) => a.filter(Boolean).length;
 /** Same tones as the estate screen's status badge. */
 const statusTone: Record<EstateStatus, Tone> = { Active: "accent", DeathPending: "warn", Unlocked: "ok", Frozen: "danger" };
 
@@ -136,6 +137,11 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
   const book = usePublicNameBook(snap);
   const e = snap.estate;
   const plan = checkInPlan(isMock ? "mock" : "chain");
+  const { guardians } = useCopy();
+  const living = eligibleSeats(e.verifiers).length;
+  const quorumText = (threshold: number) => (living ? fmt(copy.rules.quorum, { need: Math.min(threshold, living), total: living }) : guardians.rules.tally.nobody);
+  // Once the wait has started the confirmations are history; until then only those that count.
+  const confirmations = () => (e.status === "Active" ? deathTally(e).got : e.death.attestations.filter(Boolean).length);
   const payeeName = (wallet: string) => snap.payees.find((p) => p.wallet === wallet)?.name ?? wallet.slice(0, 4) + "…" + wallet.slice(-4);
   const who = (wallet: string) => snap.beneficiaries.find((b) => b.wallet === wallet)?.label ?? wallet.slice(0, 4) + "…" + wallet.slice(-4);
   const ruleOf = (c: Claim) => snap.rules.find((r) => r.address === c.rule);
@@ -173,13 +179,13 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
 
         <Section id="audit-people" title={copy.rules.who} icon={<UsersRound className="size-5 text-amber" aria-hidden="true" />}>
           <DefList items={[
-            { term: copy.rules.death, value: fmt(copy.rules.quorum, { need: e.deathThreshold }) },
-            { term: copy.rules.claims, value: fmt(copy.rules.quorum, { need: e.claimThreshold }) },
-            { term: copy.rules.hardship, value: fmt(copy.rules.quorum, { need: e.hardshipThreshold }) },
+            { term: copy.rules.death, value: quorumText(e.deathThreshold) },
+            { term: copy.rules.claims, value: quorumText(e.claimThreshold) },
+            { term: copy.rules.hardship, value: quorumText(e.hardshipThreshold) },
           ]} />
           <h3 className="mt-4 font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{copy.rules.people}</h3>
           <ul className="mt-1 flex flex-col gap-1 text-small font-medium">
-            {e.verifierNames.map((n, i) => <li key={`${e.verifiers[i]}-${i}`}>{n}</li>)}
+            {e.verifierNames.map((n, i) => <li key={i}>{isHeld(e.verifiers[i]) ? n : guardians.vacant}</li>)}
           </ul>
         </Section>
       </div>
@@ -211,7 +217,7 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
         <h3 className="font-sans text-body font-semibold tracking-normal">{copy.decisions.passing}</h3>
         {e.death.certHash ? (
           <>
-            <p className="mt-1 text-small">{fmt(copy.decisions.reported, { verdict: copy.decisions.verdict[e.death.verdict], got: count(e.death.attestations), need: e.deathThreshold })}</p>
+            <p className="mt-1 text-small">{fmt(copy.decisions.reported, { verdict: copy.decisions.verdict[e.death.verdict], got: confirmations(), need: deathTally(e).needed })}</p>
             <Fingerprint label={copy.decisions.certificate} value={e.death.certHash} />
           </>
         ) : <p className="mt-1 text-small text-ink-2">{copy.decisions.noPassing}</p>}
@@ -224,7 +230,7 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
                   <p className="min-w-0 text-small font-medium">{fmt(copy.decisions.claim, { amount: formatUsdt(c.amount, { decimals: 0 }), payee: payeeName(c.payee), category: common.status.category[ruleOf(c)?.category ?? "General"] })}</p>
                   <Badge tone={c.status === "Paid" ? "ok" : c.status === "Rejected" ? "danger" : "warn"}>{common.status.claim[c.status]}</Badge>
                 </div>
-                <p className="text-[0.75rem] text-ink-2">{c.ownerApproved ? copy.decisions.ownerApproved : fmt(copy.decisions.approvals, { got: count(c.approvals), need: e.claimThreshold })}</p>
+                <p className="text-[0.75rem] text-ink-2">{c.ownerApproved ? copy.decisions.ownerApproved : fmt(copy.decisions.approvals, { got: claimTally(e, c).got, need: claimTally(e, c).needed })}</p>
                 <Fingerprint label={copy.decisions.evidence} value={c.evidenceHash} />
                 {c.txSignature && <ExplorerLink signature={c.txSignature} label={copy.receipt} srLabel={copy.receiptSr} />}
               </li>
@@ -240,7 +246,7 @@ function Record({ copy, snap, isMock }: { copy: Copy; snap: EstateSnapshot; isMo
                   <p className="min-w-0 text-small font-medium">{fmt(copy.decisions.hardship, { asset: snap.assets.find((a) => a.address === h.asset)?.title ?? "" })}</p>
                   <Badge tone={h.status === "Approved" ? "ok" : h.status === "Rejected" ? "danger" : "warn"}>{common.status.hardship[h.status]}</Badge>
                 </div>
-                <p className="text-[0.75rem] text-ink-2">{fmt(copy.decisions.approvals, { got: count(h.approvals), need: e.hardshipThreshold })}</p>
+                <p className="text-[0.75rem] text-ink-2">{fmt(copy.decisions.approvals, { got: hardshipTally(e, h).got, need: hardshipTally(e, h).needed })}</p>
                 <Fingerprint label={copy.decisions.evidence} value={h.evidenceHash} />
               </li>
             ))}

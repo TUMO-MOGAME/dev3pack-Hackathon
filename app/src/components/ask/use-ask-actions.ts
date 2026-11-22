@@ -20,7 +20,7 @@ export function useAskActions() {
   const approve = useCallback((claimAddr: string) => {
     const claim = snap?.claims.find((x) => x.address === claimAddr);
     if (!snap || !claim) return;
-    const payee = snap.payees.find((p) => p.wallet === claim.payee)?.name ?? "";
+    const payee = snap.payees.find((p) => p.wallet === claim.payee)?.name ?? snap.names?.[claim.payee] ?? "";
     const low = snap.estate.vaultBalance < claim.amount ? [fmt(c.sheet.vaultLow, { vault: formatUsdt(snap.estate.vaultBalance, { decimals: 0 }) })] : undefined;
     // Skip the approval if it already went through on an earlier attempt (the program refuses a second one); tracked
     // here too, because "Try again" re-runs this before the snapshot refreshes.

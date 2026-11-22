@@ -8,7 +8,7 @@ export const assets = {
   eyebrow: "Assets",
   list: {
     title: "Things to *sell*",
-    body: "Everything the estate will sell for the family, never below the price that was set.",
+    body: "What the estate can sell for the family. A trusted person co-signs, and the contract checks the price limit.",
     add: "Add an asset",
     current: "Showing",
     photos: "{n} photos",

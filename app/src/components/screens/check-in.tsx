@@ -13,7 +13,8 @@ import { isMockService } from "@/lib/service/is-mock";
 import { checkInPlan, checkInStatus, type CheckInStatus } from "@/lib/checkin";
 import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, ButtonLink, Card, Eyebrow, Meter, Notice, type Tone } from "@/components/ui/primitives";
-import { fmt } from "@/components/shell/copy";
+import { fmt, useCopy } from "@/components/shell/copy";
+import { useStillHere } from "@/components/guardians/decision";
 
 type Copy = ScreensCopy["estate"]["checkIn"];
 
@@ -32,11 +33,27 @@ export function nextLabel(st: CheckInStatus, c: Copy): string {
 
 /** The owner's card. Renders nothing when the switch does not apply (passing reported, unlocked, frozen). */
 export function CheckInCard({ copy: c, snap, now }: { copy: Copy; snap: EstateSnapshot; now: number | null }) {
-  const { service, isMock, run, busy, refresh, notify, explain } = useEstate();
+  const { service, isMock, busy, refresh, notify, explain } = useEstate();
+  const here = useCopy().guardians.rules.here;
+  const { checkIn, cancels } = useStillHere(c.done);
   const plan = checkInPlan(isMock ? "mock" : "chain");
   if (now === null) return <Card aria-busy="true" className="min-h-40" />;
   const st = checkInStatus(snap.estate, now, plan);
-  if (st.state === "off") return null;
+  if (st.state === "off") {
+    if (!cancels) return null;
+    // A reported passing: the same button, and what it cancels (U1).
+    return (
+      <Card aria-labelledby="checkin-title" role="region" className="border-2 border-l-8 border-ink">
+        <Eyebrow>{c.eyebrow}</Eyebrow>
+        <h2 id="checkin-title" className="mt-1.5 text-h3">{here.title}</h2>
+        <p className="mt-1 text-ink-2">{here.body}</p>
+        <p className="mt-2 font-semibold">{here.warning}</p>
+        <Button className="mt-3" onClick={() => void checkIn()} loading={busy === "heartbeat"}>
+          <HeartPulse className="size-5" aria-hidden="true" />{c.cta}
+        </Button>
+      </Card>
+    );
+  }
   const urgent = st.state === "overdue" || st.state === "soon" || st.state === "never";
   const mock = isMockService(service) ? service : null;
   const demo = async (daysLeft: number) => {
@@ -57,7 +74,7 @@ export function CheckInCard({ copy: c, snap, now }: { copy: Copy; snap: EstateSn
             {st.state === "soon" ? fmt(c.soon.body, { n: Math.max(1, st.daysLeft) }) : st.state === "overdue" ? c.overdue.body : st.state === "never" ? fmt(c.neverBody, { every: plan.everyDays }) : fmt(c.body, { every: plan.everyDays })}
           </p>
         </div>
-        <Button onClick={() => void run("heartbeat", (s, est) => s.heartbeat(est), c.done)} loading={busy === "heartbeat"} variant={urgent ? "primary" : "secondary"}>
+        <Button onClick={() => void checkIn()} loading={busy === "heartbeat"} variant={urgent ? "primary" : "secondary"}>
           <HeartPulse className="size-5" aria-hidden="true" />{c.cta}
         </Button>
       </div>

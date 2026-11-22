@@ -16,6 +16,7 @@ import { createMockLegacy } from "./mock-legacy";
 import { fail } from "./mock-errors";
 import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type MockGuardState, type Named } from "./mock-guardians";
 import { createMockDisputes } from "./mock-disputes";
+import { DEMO_PAYEES } from "./mock-payees";
 import { createMockAsk } from "./mock-ask";
 import type { MockTreeState } from "./mock-tree";
 import type { TreeService } from "../tree/types";
@@ -120,13 +121,7 @@ const RIVALS = [
   { address: "AyEsHaKhAn4xT8rLp3cZd6FgJy4bN7eQiBuYeR5551aa", name: "Ayesha Khan" },
   { address: "JoHaNbOtHa2xT5rLm8cZp3FgHy6bJ9eUaBuYeR662bcd", name: "Johan Botha" },
 ];
-const PAYEES = [
-  { wallet: "UCT1uNiVeRsItYoFcApEtOwN5sZc3FdYg8uE6rAoPaY1", kind: "University" as const, name: "University of Cape Town" },
-  { wallet: "WiTs2uNiVeRsItYwItWaTeRsRaNd3FdYg8uE6rAoPaY2", kind: "University" as const, name: "University of the Witwatersrand" },
-  { wallet: "MoRr3iSiSaAcSoNhIgHsChOoLsOwEtOg8uE6rAoPaY3", kind: "School" as const, name: "Morris Isaacson High School" },
-  { wallet: "SoUt4hPoInTsTuDeNtReSiDeNcEsBrAaMg8uE6rAPaY4", kind: "Landlord" as const, name: "South Point Student Residences" },
-  { wallet: "VaNs5cHaIkBoOkStOrEbRaAmFoNtEiNg8uE6rAoPaY55", kind: "Other" as const, name: "Van Schaik Bookstore" },
-];
+const PAYEES = DEMO_PAYEES;
 
 export { DEMO_FX };
 /** Demo clock: a 30 day waiting period lasts 60 seconds, and every schedule repeats every 60 seconds. */

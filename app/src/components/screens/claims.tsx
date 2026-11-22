@@ -29,9 +29,10 @@ import { AskLauncher } from "@/components/ask/launcher";
 import { useAskActions } from "@/components/ask/use-ask-actions";
 import { useNow } from "@/lib/hooks/use-now";
 import { openDisputeOn } from "@/lib/disputes/types";
-import { openToPeople } from "@/lib/verdict";
+import { openToPeople, outcomeOf } from "@/lib/verdict";
 import { ReferredNote } from "@/components/continuity/continuity";
-import { outcomeOf, quorumFor } from "@/lib/verdict";
+import { claimBlock, claimPayable, claimTally, isFamily, ownerMayApprove } from "@/lib/guardians/decisions";
+import { ClaimState, useWho, VoteTally } from "@/components/guardians/decision";
 
 type Copy = ScreensCopy["claims"];
 
@@ -50,10 +51,11 @@ function Claims({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
   const askCopy = useLocalized(askEnglish, (t) => t.ask);
   const e = snap.estate;
   const myRules = snap.rules.filter((r) => r.beneficiary === session.address && r.recurringAmount === BigInt(0));
-  const open = (r: (typeof myRules)[number]) => e.status === "Unlocked" || (r.startsNow && e.status === "Active");
-  const canClaim = role === "beneficiary" && myRules.some(open);
+  const now = useNow(15000);
+  const open = (r: (typeof myRules)[number]) => (now === null || now <= r.validUntil) && (e.status === "Unlocked" || (r.startsNow && e.status === "Active"));
+  const canClaim = role === "beneficiary" && isFamily(snap, session.address) && myRules.some(open);
   const ownerName = e.ownerName.split(" ")[0];
-  const forOwner = role === "owner" && e.status === "Active" ? snap.claims.filter((c) => c.status === "Open" && openToPeople(c.agentVerdict) && !snap.asks?.[c.address]?.declinedAt && snap.rules.find((r) => r.address === c.rule)?.startsNow) : [];
+  const forOwner = role === "owner" ? snap.claims.filter((c) => ownerMayApprove(snap, c, now) && !snap.asks?.[c.address]?.declinedAt) : [];
   const [wizard, setWizard] = useState<{ rule?: string; payee?: string; amount?: number } | null>(null);
   const claims = role === "beneficiary" ? snap.claims.filter((c) => c.beneficiary === session.address) : snap.claims;
   // Family members can see (and dispute) each other's pending payments.
@@ -123,14 +125,15 @@ function Claims({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
 
 /* ---------- A claim and its progress ---------- */
 
-export function ClaimTracker({ claim, need, copy, waitingFor }: { claim: Claim; need: number; copy: Copy; waitingFor?: string }) {
+export function ClaimTracker({ claim, snap, copy, waitingFor }: { claim: Claim; snap: EstateSnapshot; copy: Copy; waitingFor?: string }) {
   const t = copy.tracker;
-  const got = claim.approvals.filter(Boolean).length;
+  const live = snap.estate.status;
+  const approved = claim.ownerApproved || (live === "Unlocked" && claimTally(snap.estate, claim).met);
   const declined = claim.status === "Rejected";
   const steps = [
     { label: t.submitted, done: true },
     { label: declined ? t.declined : t.checked, done: claim.agentVerdict !== "Pending", bad: declined },
-    { label: t.approved, done: claim.status === "Paid" || claim.ownerApproved || got >= need, note: !declined && claim.status === "Open" ? (waitingFor ?? fmt(t.approvals, { got, need })) : undefined },
+    { label: t.approved, done: claim.status === "Paid" || approved, note: !declined && !approved && claim.status === "Open" ? waitingFor : undefined },
     { label: t.paid, done: claim.status === "Paid" },
   ];
   const current = steps.findIndex((s) => !s.done);
@@ -160,10 +163,14 @@ export function ClaimTracker({ claim, need, copy, waitingFor }: { claim: Claim; 
 function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; copy: Copy }) {
   const { common } = useCopy();
   const { fx } = useEstate();
+  const nameOf = useWho(snap);
+  const now = useNow(15000);
   const rate = fx?.usdtZar ?? null;
-  const rule = snap.rules.find((r) => r.address === claim.rule);
-  const payee = snap.payees.find((p) => p.wallet === claim.payee)?.name ?? "";
-  const who = snap.beneficiaries.find((b) => b.wallet === claim.beneficiary)?.label ?? "";
+  const rule = claim.fromEndedRule ? undefined : snap.rules.find((r) => r.address === claim.rule);
+  const payee = nameOf(claim.payee);
+  const who = snap.beneficiaries.find((b) => b.wallet === claim.beneficiary)?.label ?? nameOf(claim.beneficiary);
+  const block = claim.status === "Open" ? claimBlock(snap, claim, now) : null;
+  const unlocked = snap.estate.status === "Unlocked";
   const Icon = rule ? categoryIcon[rule.category] : Banknote;
   const askCopy = useLocalized(askEnglish, (t) => t.ask);
   const note = snap.asks?.[claim.address];
@@ -181,10 +188,14 @@ function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; 
         <Badge tone={tone}>{declined ? askCopy.status.declined : common.status.claim[claim.status]}</Badge>
       </div>
       {claim.status === "Open" && <ReferredNote verdict={claim.agentVerdict} />}
-      {declined ? <p className="mt-3 text-small font-semibold">{fmt(askCopy.line.declined, { owner: snap.estate.ownerName.split(" ")[0] })}</p> : <div className="mt-4"><ClaimTracker claim={claim} need={snap.estate.claimThreshold} copy={copy} waitingFor={snap.estate.status === "Active" && rule?.startsNow ? fmt(copy.card.waitingOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : undefined} /></div>}
-      {claim.status === "Open" && <PausedNotice target={claim.address} className="mt-3" />}
-      {!declined && <DisputePanel kind="Claim" target={claim.address} className="mt-3" />}
-      {claim.status === "Open" && snap.guardians?.claimPayableAt?.[claim.address] !== undefined && (
+      {declined ? <p className="mt-3 text-small font-semibold">{fmt(askCopy.line.declined, { owner: snap.estate.ownerName.split(" ")[0] })}</p> : <div className="mt-4"><ClaimTracker claim={claim} snap={snap} copy={copy} waitingFor={!block && snap.estate.status === "Active" && rule?.startsNow ? fmt(copy.card.waitingOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : undefined} /></div>}
+      {claim.status === "Open" && unlocked && !block && !claim.ownerApproved && openToPeople(claim.agentVerdict) && (
+        <div className="mt-3"><VoteTally tally={claimTally(snap.estate, claim)} names={snap.estate.verifierNames} /></div>
+      )}
+      {!declined && <ClaimState snap={snap} claim={claim} />}
+      {claim.status === "Open" && !block && <PausedNotice target={claim.address} className="mt-3" />}
+      {!declined && !block && <DisputePanel kind="Claim" target={claim.address} className="mt-3" />}
+      {unlocked && claimPayable(snap, claim, now) && (
         <ClaimWindow claim={claim.address} payee={claim.payee} payeeName={payee} amount={claim.amount} successText={fmt(copy.card.paidOn, { payee })} />
       )}
       {claim.status === "Paid" && (
@@ -225,7 +236,8 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
   const w = copy.wizard;
   const rate = fx?.usdtZar ?? null;
   const live = snap.estate.status;
-  const usable = (r: { startsNow: boolean }) => live === "Unlocked" || (r.startsNow && live === "Active");
+  const nowS = useNow(15000);
+  const usable = (r: { startsNow: boolean; validUntil: number }) => (nowS === null || nowS <= r.validUntil) && (live === "Unlocked" || (r.startsNow && live === "Active"));
   const rules = snap.rules.filter((r) => r.beneficiary === session.address && r.recurringAmount === BigInt(0)).sort((a, b) => Number(usable(b)) - Number(usable(a)));
   const [ruleAddr, setRuleAddr] = useState(preset.rule && rules.some((r) => r.address === preset.rule && usable(r)) ? preset.rule : rules.filter(usable).length === 1 ? rules.filter(usable)[0].address : "");
   const rule = rules.find((r) => r.address === ruleAddr);
@@ -276,7 +288,7 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
         <h2 className="text-h3" role="status">{ok ? copy.result.submitted : copy.result.declined}</h2>
         {outcome !== "Refer" && <p className="mt-1 text-ink-2">{!ok ? copy.result.declinedBody : live === "Active" ? fmt(copy.result.submittedBodyOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : copy.result.submittedBody}</p>}
         {outcome === "Refer" && <ReferredNote verdict="Referred" />}
-        {claim && <div className="mt-4"><ClaimTracker claim={claim} need={live === "Active" ? 1 : quorumFor(claim.agentVerdict, snap.estate.claimThreshold)} copy={copy} /></div>}
+        {claim && <div className="mt-4"><ClaimTracker claim={claim} snap={snap} copy={copy} /></div>}
         <div className="mt-4"><ReportCard report={result.report} /></div>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button onClick={onClose}>{copy.listTitle}</Button>
@@ -404,8 +416,9 @@ function OwnerApproval({ claim, snap, copy }: { claim: Claim; snap: EstateSnapsh
   const note = snap.asks?.[claim.address];
   const rate = fx?.usdtZar ?? null;
   const rule = snap.rules.find((r) => r.address === claim.rule);
-  const payee = snap.payees.find((p) => p.wallet === claim.payee)?.name ?? "";
-  const who = snap.beneficiaries.find((b) => b.wallet === claim.beneficiary)?.label ?? "";
+  const nameOf = useWho(snap);
+  const payee = nameOf(claim.payee);
+  const who = snap.beneficiaries.find((b) => b.wallet === claim.beneficiary)?.label ?? nameOf(claim.beneficiary);
   return (
     <motion.li layout className="rounded-lg border border-line bg-surface p-4 shadow-card">
       <p className="text-h3 font-display tabular-nums">{formatUsdt(claim.amount)}{rate ? <span className="ml-2 font-sans text-small text-ink-2">≈ {formatZar(claim.amount, rate)}</span> : null}</p>

@@ -15,7 +15,9 @@ import { FAUCET_URL, starterRefusalText, type RefusalText } from "@/lib/starter/
 import type { EstateSnapshot } from "@/lib/service/types";
 import type { Rule, Verdict, WillDraft } from "@/lib/types";
 import { Button, Card, Field, inputClass } from "@/components/ui/primitives";
-import { fmt } from "@/components/shell/copy";
+import { fmt, useCopy } from "@/components/shell/copy";
+import { sweepHeldUntil } from "@/lib/guardians/decisions";
+import { clock, shortName } from "@/components/guardians/derive";
 
 const useText = () => continuity[useLocale()];
 const ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -154,6 +156,7 @@ export function ResidualPicker({ draft, value, onChange }: { draft: WillDraft; v
 /** Vault: the owner names who receives what is left; after the unlock anyone can pay it out to them. */
 export function ResidualCard({ snap, className }: { snap: EstateSnapshot; className?: string }) {
   const t = useText();
+  const held = useCopy().guardians.rules.recipient.sweepHeld;
   const { run, busy } = useEstate();
   const { session } = useWallet();
   const now = useNow();
@@ -163,6 +166,7 @@ export function ResidualCard({ snap, className }: { snap: EstateSnapshot; classN
   const people = snap.beneficiaries.filter((b) => b.active);
   const canSet = e.status === "Active" && session?.address === e.owner && people.length > 0;
   const chosen = pick || to || people[0]?.wallet || "";
+  const heldUntil = sweepHeldUntil(snap, now);
   const surplus = e.status === "Unlocked" && now ? surplusOf(e.vaultBalance, snap.rules, now) : BigInt(0);
 
   return (
@@ -186,6 +190,9 @@ export function ResidualCard({ snap, className }: { snap: EstateSnapshot; classN
       {e.status === "Unlocked" && to && (
         <div className="mt-3">
           <p className="text-small text-ink-2">{surplus > BigInt(0) ? fmt(t.residual.ready, { amount: formatUsdt(surplus) }) : t.residual.waiting}</p>
+          {surplus > BigInt(0) && to && heldUntil !== null && now !== null && (
+            <p role="status" className="mt-1 text-small font-semibold tabular-nums">{fmt(held, { name: shortName(residualName(snap, to) ?? shortAddress(to)), time: clock(heldUntil - now) })}</p>
+          )}
           {surplus > BigInt(0) && (
             <Button className="mt-2" loading={busy === "sweep"} onClick={() => run("sweep", (s, est) => s.sweepResidual(est), t.residual.swept)}>{t.residual.sweep}</Button>
           )}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EstateSnapshot } from "@/lib/service";
+import { NO_WALLET } from "@/lib/guardians/decisions";
 import type { GuardiansSnapshot, Objection, Seat, SeatApprovalItem } from "@/lib/guardians/types";
 import {
   afterReplacement, allVacant, canConfirm, checkReplacement, canObject, canReport, checkFallback, checkPeople, clock, fallbackStage, fallbackWinner, feedFor,
@@ -27,7 +28,16 @@ function guard(over: Partial<GuardiansSnapshot> = {}): GuardiansSnapshot {
   };
 }
 
-const snap = (status: "Active" | "Unlocked" = "Active") => ({ estate: { owner: OWNER, status } } as unknown as EstateSnapshot);
+/** A snapshot around a guard: the trusted people are its holders, Lerato the family. */
+const snap = (status: "Active" | "Unlocked" = "Active", g: GuardiansSnapshot = guard()) => ({
+  estate: {
+    owner: OWNER, agent: W("G"), status, waitingPeriodSecs: 60, verifiers: g.seats.map((s) => s.holder ?? NO_WALLET),
+    death: { certHash: null, submittedBy: null, verdict: "Pending", attestations: [], pendingSince: null },
+  },
+  beneficiaries: [{ address: W("R"), wallet: LERATO, label: "Lerato", active: true }],
+  claims: [], hardships: [], disputes: [],
+  guardians: g,
+} as unknown as EstateSnapshot);
 
 const item = (over: Partial<SeatApprovalItem> = {}): SeatApprovalItem => ({
   seatIndex: 2, approver: BONGANI, approverName: "Uncle Bongani", kind: "Claim", target: W("C"), summary: "Approved 3 500 USD₮", ts: 1000, objectionDeadline: 1060, ...over,
@@ -110,28 +120,32 @@ describe("succession", () => {
   it("only another living holder confirms; never the reporter, the holder or the first backup", () => {
     const s = { ...guard().seats[2], succession: pending() };
     const g = withSeat(s);
-    expect(canConfirm(g, s, THANDI)).toBe(true);
-    expect(canConfirm(g, s, BONGANI)).toBe(false);
-    expect(canConfirm(g, s, LERATO)).toBe(false);
-    expect(canConfirm(g, s, KAGISO)).toBe(false);
-    expect(canConfirm(g, s, ZODWA)).toBe(false);
-    expect(canConfirm(g, { ...s, succession: pending({ verdict: "Pending" }) }, THANDI)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, THANDI)).toBe(true);
+    expect(canConfirm(snap("Active", g), s, BONGANI)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, LERATO)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, KAGISO)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, ZODWA)).toBe(false);
+    expect(canConfirm(snap("Active", g), { ...s, succession: pending({ verdict: "Pending" }) }, THANDI)).toBe(false);
   });
 
   it("with no other living holder, the second backup or a monitor confirms", () => {
     const s = { ...guard().seats[2], succession: pending() };
     const g = guard({ seats: [seat(0, null), seat(1, null), s] });
-    expect(canConfirm(g, s, NAIDOO)).toBe(true);
-    expect(canConfirm(g, s, ZODWA)).toBe(true);
-    expect(canConfirm(g, s, KAGISO)).toBe(false);
+    expect(canConfirm(snap("Active", g), s, NAIDOO)).toBe(true);
+    expect(canConfirm(snap("Active", g), s, ZODWA)).toBe(true);
+    expect(canConfirm(snap("Active", g), s, KAGISO)).toBe(false);
   });
 
-  it("anyone but the holder may report, once", () => {
+  it("only participants report, never the holder, and again only when the report is stale", () => {
     const s = guard().seats[2];
-    expect(canReport(s, LERATO)).toBe(true);
-    expect(canReport(s, BONGANI)).toBe(false);
-    expect(canReport({ ...s, succession: pending() }, LERATO)).toBe(false);
-    expect(canReport(seat(0, null), LERATO)).toBe(false);
+    expect(canReport(snap(), s, LERATO, 0)).toBe(true);
+    expect(canReport(snap(), s, ZODWA, 0)).toBe(true);
+    expect(canReport(snap(), s, BONGANI, 0)).toBe(false);
+    expect(canReport(snap(), s, W("S"), 0)).toBe(false);
+    const reported = { ...s, succession: { ...pending(), reportedBy: THANDI, reportedAt: 1000 } };
+    expect(canReport(snap(), reported, LERATO, 1119)).toBe(false);
+    expect(canReport(snap(), reported, LERATO, 1120)).toBe(true);
+    expect(canReport(snap(), seat(0, null), LERATO, 0)).toBe(false);
   });
 
   it("finds the seat a wallet holds", () => {
@@ -217,10 +231,11 @@ describe("inbox count", () => {
   it("adds votes, confirmations, 'I'm still here' and the monitor's feed", () => {
     const s2 = { ...guard().seats[2], succession: { certHash: "aa", reportedBy: LERATO, verdict: "Approved" as const, confirmedBy: null, pendingSince: 0, readyAt: 60, nextHolder: null } };
     const g = guard({ seats: [seat(0, THANDI), seat(1, ANITA), s2], objections: [objection()], feed: [item({ target: W("G") })] });
-    expect(guardianTodo(g, snap(), THANDI, 1000)).toBe(2); // vote + confirm
-    expect(guardianTodo(g, snap(), BONGANI, 1000)).toBe(1); // I'm still here
-    expect(guardianTodo(g, snap(), ZODWA, 1000)).toBe(1);   // feed item
-    expect(guardianTodo(null, snap(), THANDI, 1000)).toBe(0);
+    const s = snap("Active", g);
+    expect(guardianTodo(g, s, THANDI, 1000)).toBe(2); // vote + confirm
+    expect(guardianTodo(g, s, BONGANI, 1000)).toBe(1); // I'm still here
+    expect(guardianTodo(g, s, ZODWA, 1000)).toBe(1);   // feed item
+    expect(guardianTodo(null, s, THANDI, 1000)).toBe(0);
   });
 });
 

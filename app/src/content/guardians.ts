@@ -3,6 +3,8 @@
  * passing) and the fallback plan. Shared through the shell copy provider (`useCopy().guardians`), because these parts
  * appear on several screens (People, Plan, Inbox, Timeline, Estate). {curly} values are filled at runtime.
  */
+import { safeguards } from "./safeguards";
+
 export const guardians = {
   /** Contract error names in plain words (added to common.errors for the Blocked card and toasts). */
   errors: {
@@ -13,17 +15,20 @@ export const guardians = {
     NoSuccessionPending: "No passing has been reported for this trusted person.",
     SeatVacant: "This place is empty: the trusted person and their backups have all passed away.",
     SeatsNotVacant: "The fallback plan only runs when every trusted person and their backups have passed away.",
-    NotConfirmer: "You can't confirm this one. Another trusted person has to.",
+    NotConfirmer: "You can't confirm this one. Someone else who may confirm has to.",
     FallbackNotReady: "The fallback plan isn't ready yet. The waiting period may still be running.",
     FallbackDone: "The fallback plan has already been carried out.",
     NoFallbackRecipient: "Everyone on the fallback list has passed away, so there is no one to pay.",
-    BadBackup: "A backup can't be the trusted person themselves, another trusted person or the owner.",
+    BadBackup: "A backup can't be the trusted person themselves, another trusted person, the owner or the agent.",
     BadMonitor: "Someone can't watch their own approvals. Choose a different person.",
     BadFallback: "Each person on the fallback list must be different, and the owner can't be on it.",
-    ObjectionLapsed: "This objection has lapsed: it wasn't upheld in time, so the fallback plan can go ahead.",
+    ObjectionLapsed: "This objection has lapsed: it wasn't upheld in time, or the owner showed they are alive, so it takes no more votes.",
     ObjectionNotLapsed: "This objection is still open. It lapses only when its waiting period is over.",
     DuplicateVerifier: "That person can't take this place: they already hold a trusted place, or they are the owner.",
   } as Record<string, string>,
+
+  /** The second security review's rules (content/safeguards.ts). */
+  rules: safeguards,
 
   seats: ["Executor named in the will", "Second trusted person", "Third trusted person"],
   you: "You",
@@ -45,7 +50,7 @@ export const guardians = {
 
   setup: {
     title: "Backups and monitors",
-    body: "Name who takes over if a trusted person dies, and who watches their approvals. You can change this while you're alive.",
+    body: "Name who takes over if a trusted person dies, and who watches their approvals. With this on, you can also replace a trusted person. You can change it while you're alive.",
     cta: "Turn on backups and monitors",
     done: "Backups and monitors are on",
     off: "This estate was created before backups and monitors existed. The owner can turn them on.",
@@ -89,7 +94,7 @@ export const guardians = {
     newName: "New trusted person's name",
     newWallet: "Their USD₮ wallet address",
     effectsTitle: "What happens to this place",
-    effectHolder: "{name} stops being a trusted person straight away and can't approve anything for this estate any more. Approvals they already gave stay on record.",
+    effectHolder: "{name} stops being a trusted person straight away and can't approve anything for this estate any more. Replacing someone shows you are alive, so anything they confirmed about your passing is cancelled.",
     effectBackups: "The backups stay as they are ({list}). If the new person dies, they take over in that order.",
     effectNoBackups: "This place has no backups. You, or the new person, can name up to two afterwards.",
     effectMonitors: "The monitors stay ({list}) and now watch the new person's approvals.",
@@ -107,6 +112,7 @@ export const guardians = {
       wallet: "That doesn't look like a Solana wallet address.",
       owner: "You can't be your own trusted person. Choose someone else.",
       holder: "That person already holds a trusted place. Each place needs a different person.",
+      agent: "The agent can't be a trusted person. Choose someone else.",
     },
   },
 
@@ -122,9 +128,9 @@ export const guardians = {
 
   fallback: {
     title: "Fallback plan",
-    body: "Who receives everything if no trusted person is left.",
-    when: "It only runs if every trusted person and their backups have died, after {wait} with no objection.",
-    order: "The vault goes to the first person on the list who is still alive. If they have died, it goes to the next.",
+    body: "Who receives what is in the vault if no trusted person is left.",
+    when: "It only runs if every trusted person and their backups have died and the owner's death is reported, after {wait} (twice that if the agent wasn't sure of the death). An objection pauses it.",
+    order: "The vault goes to the first person on the list not confirmed to have died. If they have, it goes to the next.",
     empty: "No fallback plan yet.",
     edit: "Change the fallback plan",
     add: "Add a recipient",
@@ -133,6 +139,7 @@ export const guardians = {
     kindShort: { family: "Family", heir: "Heir", charity: "Charity" },
     position: "Choice {n}",
     dead: "Has passed away",
+    reported: "Reported",
     saved: "Fallback plan saved",
     ownerOnly: "Only the owner can change the fallback plan, while the estate is active.",
     max: "Up to 4 recipients.",
@@ -157,10 +164,10 @@ export const guardians = {
     reportDeath: {
       open: "A recipient has passed away",
       title: "Report that a fallback recipient has passed away",
-      body: "Upload their death certificate. If the agent accepts it, the vault goes to the next person on the list.",
+      body: "Upload their death certificate. The agent only checks it: they can say \"I'm alive\", and after a wait a second person must confirm before the list skips them.",
       person: "Who has passed away?",
       submit: "Send to the agent",
-      done: "Recorded. The fallback plan now skips {name}.",
+      done: "Reported. {name} is skipped only if a second person confirms after the wait.",
       rejected: "The agent could not confirm this certificate, so nothing changed.",
     },
     pay: "Fallback plan",
@@ -168,7 +175,7 @@ export const guardians = {
 
   report: {
     title: "Report a trusted person's passing",
-    body: "Upload the death certificate. The agent reads it, another trusted person confirms, and after a short wait the first backup takes the place.",
+    body: "Upload the death certificate. The agent reads it, a second person confirms, and after a short wait the first eligible backup takes the place.",
     person: "Who has passed away?",
     choose: "Choose a person",
     file: "Death certificate",
@@ -191,8 +198,10 @@ export const guardians = {
     reviewing: "The agent is reading the certificate.",
     rejected: "The agent did not accept the certificate, so nothing changes.",
     confirm: { body: "Another trusted person must confirm this before anything changes.", cta: "Confirm the passing", done: "Confirmed. The waiting period has started", waiting: "Waiting for another trusted person to confirm." },
-    waiting: { title: "{next} takes over in {time}", body: "{name} can still say \"I'm still here\" to stop this." },
+    waiting: { title: "{next} takes over in {time}", plain: "The wait ends in {time}", body: "{name} can still say \"I'm still here\" to stop this." },
     vacant: "No backup is left, so this place will be empty.",
+    emptyCta: "Finish: the place becomes empty",
+    emptied: "The place is now empty",
     ready: { title: "The wait is over", body: "Anyone can now hand the place to {next}.", cta: "Hand over the place", done: "{next} now holds this place" },
     stillHere: { title: "Someone reported that you have passed away", body: "If you're reading this, tap below. The report is cancelled and nothing changes.", cta: "I'm still here", done: "Cancelled. Thank you for letting us know." },
     nowHolds: "{next} now holds this place",
@@ -228,7 +237,7 @@ export const guardians = {
     about: "To: {what}",
     reason: "Their reason",
     fingerprint: "Fingerprint on-chain",
-    status: { Open: "Paused", Upheld: "Upheld: cancelled", Dismissed: "Dismissed: continues" },
+    status: { Open: "Paused", Upheld: "Upheld: cancelled", Dismissed: "Dismissed: continues", Lapsed: "Lapsed: no longer pauses it" },
     votes: "{up} to uphold · {down} to dismiss",
     uphold: "Uphold: cancel it",
     dismiss: "Dismiss: let it continue",
@@ -236,6 +245,7 @@ export const guardians = {
     dismissed: "Dismissed. It continues.",
     ownerDecides: "While you're alive, your decision settles it.",
     twoDecide: "Two trusted people decide. The person being watched can't vote.",
+    monitorsDecide: "No trusted person is left, so two monitors decide. Each person has one vote.",
     voted: "Your vote is in.",
     outcome: { Upheld: "The trusted people agreed with the objection, so it was cancelled.", Dismissed: "The trusted people dismissed the objection, so it went ahead." },
     listTitle: "Objections",

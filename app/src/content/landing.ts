@@ -8,7 +8,7 @@ export const landing = {
   hero: {
     eyebrow: "A living family plan for South African families",
     title: "Plan for your family, *now* and after you're gone.",
-    body: "Tell Heirloom what your family needs, in your own words. It becomes a plan on a secure vault of USD₮: books and term fees paid on schedule today, and the same rules carrying on after you're gone. Money only ever moves for its purpose, straight to the university or the residence.",
+    body: "Tell Heirloom what your family needs, in your own words. It becomes a plan on a secure vault of USD₮: books and term fees paid when due today, and the same rules carrying on after you're gone. Each rule pays only payees you approve, like the university or the residence. What no rule needs goes to the person you name.",
     primary: "Try the demo",
     secondary: "See how it works",
     note: "Works on any phone, in the browser or as an app. No browser extension.",
@@ -24,7 +24,7 @@ export const landing = {
       rows: [
         { label: "Lerato · books", detail: "Every month to Van Schaik", amount: "85 USD₮", state: "Now" },
         { label: "Lerato · tuition", detail: "Straight to UCT", amount: "3 200 USD₮", state: "Paid" },
-        { label: "Family car", detail: "Sold above Dad's floor, later", amount: "12 500 USD₮", state: "Later" },
+        { label: "Family car", detail: "Sold at Dad's floor or above, later", amount: "12 500 USD₮", state: "Later" },
       ],
     },
   },
@@ -34,7 +34,7 @@ export const landing = {
       { term: "Tether USD₮", detail: "stable digital dollars" },
       { term: "Tether WDK", detail: "keys on your phone" },
       { term: "Solana", detail: "low-fee payments" },
-      { term: "2 of 3", detail: "trusted people decide" },
+      { term: "2 of 3", detail: "trusted people confirm a passing" },
     ],
   },
   problem: {
@@ -58,12 +58,12 @@ export const landing = {
   purposes: {
     eyebrow: "What your plan pays for",
     title: "Every rand has a *purpose*, and a place it goes.",
-    body: "Rules are written in plain language and enforced by a contract. Money is paid to the bookstore, the university or the residence, never to a pocket where it can drift.",
+    body: "Rules are written in plain language and enforced by a contract. Each one pays a payee you approved: the bookstore, the university, the residence or a family member's own wallet if you choose it.",
     items: [
-      { tag: "Now · every month", title: "Books and study costs", amount: "85 USD₮", body: "Lerato's book allowance, paid on the 1st.", to: "To Van Schaik Bookstore", alt: "University students working in a lecture room." },
+      { tag: "Now · every month", title: "Books and study costs", amount: "85 USD₮", body: "Lerato's book allowance, paid every month.", to: "To Van Schaik Bookstore", alt: "University students working in a lecture room." },
       { tag: "Every term", title: "Tuition, all the way to graduation", amount: "3 200 USD₮", body: "Term fees, today and after you're gone.", to: "To University of Cape Town", alt: "A graduate raises her cap in front of a university building." },
-      { tag: "Monthly", title: "A safe place to live", amount: "300 USD₮", body: "Residence rent that never falls behind.", to: "To Tugwell Residence", alt: "A father holds his daughter's hand as she walks along a wall under a blue sky." },
-      { tag: "Later · after you're gone", title: "The family car, sold fairly", amount: "≥ 12 500 USD₮", body: "Never below Dad's floor. Escrowed offers, no rushed sale.", to: "Back into the family vault", alt: "A silver 2017 Toyota Corolla, seen from the front." },
+      { tag: "Monthly", title: "A safe place to live", amount: "300 USD₮", body: "Residence rent every month, while the vault covers it.", to: "To Tugwell Residence", alt: "A father holds his daughter's hand as she walks along a wall under a blue sky." },
+      { tag: "Later · after you're gone", title: "The family car, sold fairly", amount: "≥ 12 500 USD₮", body: "Not below Dad's floor unless real hardship is proven. A trusted person co-signs.", to: "Back into the family vault", alt: "A silver 2017 Toyota Corolla, seen from the front." },
     ],
   },
   how: {
@@ -77,11 +77,11 @@ export const landing = {
       },
       {
         title: "Sign and fund the vault",
-        body: "Create a wallet on your phone with Tether WDK, sign your plan and deposit USD₮. Rules you marked \"now\" start paying approved institutions on schedule. The rest wait. You can withdraw at any time.",
+        body: "Create a wallet on your phone with Tether WDK, sign your plan and deposit USD₮. Setting up needs a little SOL for rent. Rules you marked \"now\" can pay when due: the hosted schedule runs once a day, and anyone can trigger a payment that is due. The rest wait. You can withdraw until a passing is confirmed.",
       },
       {
         title: "The plan outlives you",
-        body: "After two of your three trusted people confirm your passing and a waiting period ends, the same plan carries on. The contract keeps paying the university directly and sells the car at or above your floor.",
+        body: "After two of your three trusted people confirm your passing and a waiting period ends, the same plan carries on. The rules keep paying the university directly. The car can sell at or above your floor, with a trusted person co-signing.",
       },
     ],
     chat: {
@@ -122,12 +122,12 @@ export const landing = {
     eyebrow: "Trust and safety",
     title: "The agent advises. The contract enforces. *People you trust* decide.",
     photoAlt: "A baby's hand resting in an adult's open palm.",
-    quote: "What you promise them today is still kept when you can't be there.",
+    quote: "What you plan today can still work for them when you can't be there.",
     items: [
-      { title: "Limits no one can talk past", body: "Caps, approved institutions and the car's minimum price live in a Solana program. Not even the AI agent can move money outside them." },
-      { title: "Two of three trusted people", body: "Your executor, a lawyer, a family elder. A passing is only accepted when two of them confirm it, and unusual requests need them too." },
-      { title: "\"I'm still here\"", body: "A waiting period follows every report of a passing. One tap from you cancels it and locks the vault again." },
-      { title: "Hardship, handled with care", body: "A sworn affidavit and two trusted people can let the car sell below your price, but never below your hardship floor." },
+      { title: "Limits no one can talk past", body: "A Solana program checks caps, approved payees and the price limits, so the AI agent can't move money outside them. Heirloom holds the key that can upgrade the program." },
+      { title: "Two of three trusted people", body: "Your executor, a lawyer, a family elder. Two of them confirm a passing. If only one who may decide is left, that one decides. If none is left, the fallback list you set takes over after a long wait." },
+      { title: "\"I'm still here\"", body: "A waiting period follows every confirmed passing. One tap from you at any time before it unlocks cancels the report." },
+      { title: "Hardship, handled with care", body: "A sworn affidavit and your trusted people's agreement can let the car sell below your price, but never below your hardship floor." },
       { title: "Private papers stay private", body: "Death certificates and IDs never go on a public ledger. Only a fingerprint of each document does, so anyone can check nothing was altered." },
       { title: "Your keys, on your phone", body: "Wallets are created with Tether WDK and the recovery phrase stays on your device. Heirloom's servers never hold your keys." },
     ],
@@ -138,7 +138,7 @@ export const landing = {
     body: "Heirloom keeps the technology out of your way and the evidence within reach. Every deposit, approval and payment can be opened on Solana Explorer.",
     points: [
       { term: "USD₮", detail: "The only money the vault accepts. The contract rejects look-alike tokens." },
-      { term: "Tether WDK", detail: "Every wallet in the app, including the agent's own, is created and signed with the Wallet Development Kit." },
+      { term: "Tether WDK", detail: "Wallets made in the app, and the agent's own, use the Wallet Development Kit. You can also bring a phone wallet." },
       { term: "Solana", detail: "Low fees make small, purpose-by-purpose payouts practical." },
       { term: "Rand", detail: "Amounts are shown in rand at a live South African exchange rate." },
     ],
@@ -155,7 +155,7 @@ export const landing = {
         { title: "Estate and will signed", detail: "Thabo", amount: "" },
       ],
     },
-    honest: "Honest limits: this is a prototype on a test network. It sits beside a signed, witnessed will under the Wills Act and does not replace one. The car's digital title gates the handover; eNaTIS registration remains the legal record.",
+    honest: "Honest limits: this is a prototype on a test network. It sits beside a signed, witnessed will under the Wills Act and does not replace one. Heirloom holds the program's upgrade key. The program checks a sale's price limit, exact amount and co-signature; which offer ranks best is the agent's advice. The car's digital title gates the handover; eNaTIS registration remains the legal record.",
   },
   cta: {
     eyebrow: "Try it in three minutes",
@@ -164,7 +164,7 @@ export const landing = {
     primary: "Try the demo",
     secondary: "Create my own wallet",
     photoAlt: "A father holds his daughter's hand as she walks along a wall under a blue sky.",
-    card: { title: "Still holding her hand", body: "Every promise in the plan is kept, even when you can't be there." },
+    card: { title: "Still holding her hand", body: "The plan keeps to its rules, even when you can't be there." },
   },
 } as const;
 

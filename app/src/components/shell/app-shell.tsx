@@ -30,8 +30,9 @@ import { LanguageSwitcher } from "@/components/site/language-switcher";
 import { useLocalized } from "@/lib/i18n/client";
 import { useNow } from "@/lib/hooks/use-now";
 import { guardiansOf, guardianTodo } from "@/components/guardians/derive";
+import { AliveBanner } from "@/components/guardians/recipient";
+import { canSign, claimVote, deathVote, hardshipVote, ownerMayApprove } from "@/lib/guardians/decisions";
 import { disputesToDecide } from "@/components/disputes/disputes";
-import { openToPeople } from "@/lib/verdict";
 import { StarterBanner } from "@/components/continuity/continuity";
 
 export { Avatar } from "./avatar";
@@ -68,7 +69,7 @@ export function AppShell({ common: commonEn, assistant: assistantEn, pay: payEn,
   const guardians = useLocalized(guardiansEn, (t) => t.guardians);
   const disputes = useLocalized(disputesEn, (t) => t.disputes);
   // Contract errors from the guardians and disputes features are explained in plain words like the rest.
-  const errors = useMemo(() => ({ ...guardians.errors, ...disputes.errors, ...common.errors }), [guardians.errors, disputes.errors, common.errors]);
+  const errors = useMemo(() => ({ ...guardians.errors, ...disputes.errors, ...common.errors, ...guardians.rules.errors }), [guardians.errors, guardians.rules.errors, disputes.errors, common.errors]);
   return (
     <CopyProvider value={{ common, assistant, pay, guardians, disputes, siteName }}>
         <PinGate>
@@ -256,6 +257,7 @@ function Chrome({ children }: { children: ReactNode }) {
         >
           {framed && <EstateSwitcher inset={isChat} />}
           <StarterBanner />
+          {framed && <div className={clsx("empty:hidden", isChat && "px-4 pt-3")}><AliveBanner /></div>}
           {children}
         </main>
       </div>
@@ -296,17 +298,14 @@ function Chrome({ children }: { children: ReactNode }) {
 
 /** Living-plan claims the owner still has to approve. */
 export function ownerPending(snap: NonNullable<ReturnType<typeof useEstate>["snap"]>): number {
-  if (snap.estate.status !== "Active") return 0;
-  return snap.claims.filter((c) => c.status === "Open" && openToPeople(c.agentVerdict) && snap.rules.find((r) => r.address === c.rule)?.startsNow).length;
+  return snap.claims.filter((c) => ownerMayApprove(snap, c, Math.floor(Date.now() / 1000)) && !snap.asks?.[c.address]?.declinedAt).length;
 }
 
 /** Items a given trusted person still has to act on. */
 export function pendingFor(snap: NonNullable<ReturnType<typeof useEstate>["snap"]>, address: string): number {
-  const i = snap.estate.verifiers.indexOf(address);
-  if (i < 0) return 0;
-  const d = snap.estate.death;
-  const death = snap.estate.status === "Active" && d.certHash && openToPeople(d.verdict) && !d.attestations[i] ? 1 : 0;
-  const claims = snap.estate.status === "Unlocked" ? snap.claims.filter((c) => c.status === "Open" && openToPeople(c.agentVerdict) && !c.approvals[i]).length : 0;
-  const hardships = snap.hardships.filter((h) => h.status === "Open" && openToPeople(h.agentVerdict) && !h.approvals[i]).length;
+  const now = Math.floor(Date.now() / 1000);
+  const death = canSign(deathVote(snap.estate, address)) ? 1 : 0;
+  const claims = snap.claims.filter((c) => canSign(claimVote(snap, c, address, now))).length;
+  const hardships = snap.hardships.filter((h) => canSign(hardshipVote(snap, h, address))).length;
   return death + claims + hardships;
 }

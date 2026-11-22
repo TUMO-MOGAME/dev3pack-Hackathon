@@ -11,9 +11,11 @@ import Link from "next/link";
 import { ArrowRight, ShieldCheck, UsersRound } from "@/components/ui/icons";
 import type { EstateSnapshot } from "@/lib/service";
 import { useEstate } from "@/lib/hooks/estate";
+import { useNow } from "@/lib/hooks/use-now";
 import { Button, ButtonLink, Card } from "@/components/ui/primitives";
 import { fmt, useCopy } from "@/components/shell/copy";
-import { canConfirm, heldSeat } from "./derive";
+import { canConfirm, fallbackStage, heldSeat } from "./derive";
+import { RecipientReports } from "./recipient";
 import { FallbackPlanCard, FallbackStatus } from "./fallback";
 import { MonitorFeed, ObjectionList } from "./objections";
 import { ActionResult, useAction, useGuardians } from "./parts";
@@ -68,14 +70,17 @@ export function GuardiansInbox({ snap, className }: { snap: EstateSnapshot; clas
   const { guardians: c } = useCopy();
   const { session } = useEstate();
   const g = useGuardians();
+  const now = useNow(5000);
   if (!g || !g.enabled) return null;
   const me = session?.address;
+  const reportsHere = fallbackStage(g, now) === "notNeeded";
   const mine = heldSeat(g, me);
   // Passings to act on: one I can confirm, or one reported about me ("I'm still here").
-  const successions = g.seats.filter((s) => s.succession && (canConfirm(g, s, me) || (mine && s.index === mine.index)));
+  const successions = g.seats.filter((s) => s.succession && (canConfirm(snap, s, me) || (mine && s.index === mine.index)));
   return (
     <div className={`grid gap-5 empty:hidden ${className ?? ""}`}>
       <FallbackStatus snap={snap} />
+      {reportsHere && <RecipientReports snap={snap} />}
       {successions.length > 0 && (
         <section aria-labelledby="succession-inbox" className="rounded-xl border border-line bg-surface p-4 sm:p-5">
           <h2 id="succession-inbox" className="text-h3">{c.inbox.successionTitle}</h2>
@@ -91,11 +96,13 @@ export function GuardiansInbox({ snap, className }: { snap: EstateSnapshot; clas
 export function SuccessionTimeline({ snap }: { snap: EstateSnapshot }) {
   const { guardians: c } = useCopy();
   const g = useGuardians();
+  const now = useNow(5000);
   if (!g || !g.enabled) return null;
   const t = c.timeline;
   return (
     <>
       <FallbackStatus snap={snap} className="mt-6" />
+      {fallbackStage(g, now) === "notNeeded" && <RecipientReports snap={snap} className="mt-6" />}
       <section aria-labelledby="succession-timeline" className="mt-6">
         <h2 id="succession-timeline" className="text-h3">{t.title}</h2>
         <p className="mt-1 text-small text-ink-2">{t.body}</p>

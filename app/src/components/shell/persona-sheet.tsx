@@ -8,6 +8,7 @@ import type { DemoStage } from "@/lib/service/mock";
 import type { DemoShortcut } from "@/lib/hooks/estate";
 import type { EstateSnapshot } from "@/lib/service";
 import { allVacant, guardiansOf } from "@/components/guardians/derive";
+import { canSign, deathVote } from "@/lib/guardians/decisions";
 import { formatUsdt, shortAddress } from "@/lib/format";
 import { useWallet } from "@/lib/hooks/wallet-source";
 import { useEstate } from "@/lib/hooks/estate";
@@ -31,11 +32,12 @@ function guardShortcuts(snap: EstateSnapshot): GuardShortcut[] {
   if (!g?.enabled) return active ? ["setupDemoGuardians"] : [];
   const bongani = g.seats[2];
   const out: GuardShortcut[] = [];
-  if (bongani && !bongani.vacant) out.push("simulateSeatApproval");
+  // While Thabo is alive only he approves claims: then Bongani can only confirm a reported passing.
+  if (bongani && !bongani.vacant && (snap.estate.status === "Unlocked" || canSign(deathVote(snap.estate, bongani.holder)))) out.push("simulateSeatApproval");
   if (bongani && !bongani.vacant && !bongani.succession) out.push("simulateSeatPassing");
   if (g.feed.some((f) => f.objectionDeadline !== null)) out.push("endObjectionWindow");
   if (g.seats.some((s) => s.succession?.confirmedBy)) out.push("endSuccessionWait");
-  if (g.fallback.startedAt !== null && !g.fallback.done) out.push("endFallbackWait");
+  if ((g.fallback.startedAt !== null || g.fallback.recipients.some((r) => r.report)) && !g.fallback.done) out.push("endFallbackWait");
   if (!allVacant(g)) out.push("simulateAllSeatsVacant");
   return out;
 }
