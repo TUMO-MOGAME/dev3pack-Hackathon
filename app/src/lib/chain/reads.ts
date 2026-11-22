@@ -258,7 +258,7 @@ export function activityFrom(events: ChainEvent[]): ActivityItem[] {
   return events.map((ev) => {
     const d = describeEvent(ev.name, ev.data);
     let reportHash: string | undefined;
-    try { reportHash = d.kind.endsWith("Reviewed") ? hex(ev.data, "report_hash") : undefined; } catch { /* no hash on this event */ }
+    try { reportHash = (d.kind.endsWith("Reviewed") || d.kind === "ReviewReferred") ? hex(ev.data, "report_hash") : undefined; } catch { /* no hash on this event */ }
     const sale = saleFromEvent(ev.name, ev.data);
     const payment = paymentFromEvent(ev.name, ev.data);
     return { ts: ev.ts, kind: d.kind, text: d.text, amount: d.amount, txSignature: ev.signature, ...(d.parties ? { parties: d.parties } : {}), ...(reportHash ? { reportHash } : {}), ...(sale ? { sale } : {}), ...(payment ? { payment } : {}) };

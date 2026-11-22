@@ -2,7 +2,8 @@ import "server-only";
 /**
  * /api/estate-meta (app/api/estate-meta/route.ts re-exports it): an estate's off-chain display names.
  *
- * GET ?estate=… is open (names only, POPIA-scoped; the UI shows them to the family).
+ * GET ?estate=… gives the names to the family only (a read pass, lib/access). Anyone else gets the titles of the
+ * things for sale, with every name replaced by its role.
  *
  * POST is signed by the acting wallet (ed25519 over lib/estate-meta/signed.ts metaMessage). Checks, in order: the
  * body's shape (400 bad_input) and size (413); the demo deployment (503 unavailable: the demo keeps names in the
@@ -24,6 +25,7 @@ import { hashJson } from "@/lib/agent/hash";
 import { verifyEd25519 } from "@/lib/legacy/server/auth";
 import type { WillDraft } from "@/lib/types";
 import { META_MAX_SKEW_MS, metaBody, metaMessage } from "./signed";
+import { memberReader, type MemberCheck } from "@/lib/access/server";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 const signedFields = { estate: addr, wallet: addr, ts: z.number().int().positive(), sig: z.string().regex(/^[0-9a-f]{128}$/) };
@@ -41,6 +43,7 @@ const bodySchema = z.discriminatedUnion("action", [
 const MAX_BODY = 200_000;
 
 export interface EstateMetaRouteDeps {
+  member?: MemberCheck;
   chain(): boolean;
   /** Milliseconds. */
   now(): number;
@@ -90,7 +93,13 @@ export function estateMetaRoutes(deps: EstateMetaRouteDeps = defaults) {
   const GET = handler(async (req) => {
     rateLimit(req, "estate-meta", 60);
     const estate = addr.parse(new URL(req.url).searchParams.get("estate"));
-    return json((await deps.get(estate)) ?? null);
+    const meta = await deps.get(estate);
+    if (!meta) return json(null);
+    if (await (deps.member ?? memberReader)(req, estate)) return json(meta);
+    return json({
+      estate: meta.estate, ownerWallet: meta.ownerWallet, assetTitles: meta.assetTitles,
+      ownerName: "Estate owner", verifierNames: ["Verifier 1", "Verifier 2", "Verifier 3"], buyerNames: {},
+    } satisfies EstateMeta);
   });
 
   const POST = handler(async (req) => {
@@ -136,6 +145,11 @@ export function estateMetaRoutes(deps: EstateMetaRouteDeps = defaults) {
     const willHash = m.data.draft ? await hashJson(m.data.draft) : null;
     if (willHash && onChain.willHash !== willHash) throw new HttpError(409, "Draft does not match the on-chain will hash.", "will_hash");
     const { draft, ...names } = m.data;
+    // The last line of defence against a save built from the redacted view (roles in place of names).
+    if (names.ownerName === "Estate owner") {
+      const stored = await deps.get(b.estate);
+      if (stored && stored.ownerName !== names.ownerName) throw new HttpError(409, "Unlock your wallet and reload before changing names.", "redacted");
+    }
     await deps.save({ estate: b.estate, ownerWallet: b.wallet, ...names });
     lastSave.set(b.estate, b.ts);
     if (draft && willHash) await deps.saveDraft(b.wallet, draft, willHash);

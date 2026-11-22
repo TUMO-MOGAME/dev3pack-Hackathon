@@ -5,6 +5,17 @@ import { fetchActivity, fetchEstateRaw } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
 import { getEstateMeta, getReports } from "../db";
 
+/**
+ * What anyone may know: chain state plus asset titles (things for sale). No family names, no agent reports.
+ * For the agent's own routes and for callers who are not members.
+ */
+export async function loadPublicSnapshot(estate: string): Promise<EstateSnapshot> {
+  const meta = await getEstateMeta(estate);
+  const raw = await fetchEstateRaw(estate, meta ? { assetTitles: meta.assetTitles } : {});
+  return assembleSnapshot(raw, [], {});
+}
+
+/** Everything, including names and reports: only after the caller is known to be family. */
 export async function loadSnapshot(estate: string): Promise<EstateSnapshot> {
   const meta = await getEstateMeta(estate);
   const raw = await fetchEstateRaw(estate, meta ? {

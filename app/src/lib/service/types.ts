@@ -20,6 +20,7 @@ import type { InvoiceRead } from "../bills/invoice";
 import type { AskNote, AskService } from "../ask/types";
 import type { TreeService } from "../tree/types";
 import type { LettersService } from "../letters/types";
+import type { ContinuityService, CreateEstateOptions } from "../continuity/types";
 
 export interface TxResult { signature: string; explorerUrl: string }
 
@@ -45,9 +46,11 @@ export interface EstateSnapshot {
   names?: Record<Base58, string>;
   /** "Ask for money" notes by claim address (purpose, the owner's decline; off-chain, lib/ask). Absent on older snapshots. */
   asks?: Record<Base58, AskNote>;
+  /** Who a sweep pays: the named person, else the first living fallback recipient. Null: nobody yet. */
+  residual?: Base58 | null;
 }
 
-export interface HeirloomService extends GuardiansService, DisputesService, AskService, TreeService, LettersService {
+export interface HeirloomService extends GuardiansService, DisputesService, AskService, TreeService, LettersService, ContinuityService {
   mode: "mock" | "chain";
 
   // Reads
@@ -64,7 +67,7 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   rankOffers(asset: Base58): Promise<OfferRanking>;
 
   // Owner
-  createEstateFromWill(draft: WillDraft): Promise<{ estate: Base58; txs: TxResult[] }>;
+  createEstateFromWill(draft: WillDraft, opts?: CreateEstateOptions): Promise<{ estate: Base58; txs: TxResult[] }>;
   deposit(estate: Base58, amountUsdt: number): Promise<TxResult>;
   withdraw(estate: Base58, amountUsdt: number): Promise<TxResult>;
   heartbeat(estate: Base58): Promise<TxResult>;

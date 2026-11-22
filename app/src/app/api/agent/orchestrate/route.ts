@@ -5,7 +5,8 @@ import { chatMessageSchema, localeSchema } from "@/lib/agent/schemas";
 import { orchestrate, ROUTABLE } from "@/lib/agent/orchestrator";
 import { toEstateFacts, type EstateFacts } from "@/lib/agent/facts";
 import { estateFactsSchema } from "@/lib/agent/facts-schema";
-import { loadSnapshot } from "@/lib/server/estate";
+import { loadPublicSnapshot, loadSnapshot } from "@/lib/server/estate";
+import { memberReader } from "@/lib/access/server";
 import { saveTranscript } from "@/lib/db";
 
 export const maxDuration = 60;
@@ -63,7 +64,11 @@ export const POST = handler(async (req) => {
   // Text chat: use the facts the screen sent. Voice: in chain mode read the chain first (the caller's {{facts}} were
   // captured when the call started); otherwise, and in mock mode, the facts from the call's dynamic variable.
   let facts: EstateFacts | null = channel === "text" ? b.facts ?? null : null;
-  if (!facts && estateAddr && isChainMode()) facts = await loadSnapshot(estateAddr).then(toEstateFacts).catch(() => null);
+  if (!facts && estateAddr && isChainMode()) {
+    // Names and reports only for a member with a read pass; anyone else hears what the chain already shows.
+    const member = await memberReader(req, estateAddr).catch(() => null);
+    facts = await (member ? loadSnapshot(estateAddr) : loadPublicSnapshot(estateAddr)).then(toEstateFacts).catch(() => null);
+  }
   facts ??= b.facts ?? null;
 
   const result = await orchestrate({ history, facts, context: { persona, role, page: b.context?.page ?? b.page, channel, locale: b.locale } }, b.specialist);

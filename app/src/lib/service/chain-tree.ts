@@ -31,6 +31,7 @@ import {
 } from "../chain/demo-estate";
 import { demoPhotos } from "./mock-tree";
 import type { GenerationLink, PersonId, Relationship, TreeService } from "../tree/types";
+import { readHeaders } from "../access/client";
 
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
 
@@ -68,7 +69,7 @@ export function createChainTree(d: ChainTreeDeps): TreeService {
 
   async function serverLinks(estate: Base58): Promise<FamilyLinks> {
     try {
-      const res = await f(`/api/tree?estate=${estate}`, { cache: "no-store" });
+      const res = await f(`/api/tree?estate=${estate}`, { cache: "no-store", headers: readHeaders() });
       if (!res.ok) throw new Error(String(res.status));
       const data = (await res.json()) as FamilyLinks;
       return { relationships: Array.isArray(data.relationships) ? data.relationships : [], hidden: Array.isArray(data.hidden) ? data.hidden : [] };
@@ -85,7 +86,7 @@ export function createChainTree(d: ChainTreeDeps): TreeService {
   async function photos(estate: Base58): Promise<Record<PersonId, StoredPhoto>> {
     let server: Record<PersonId, StoredPhoto> = {};
     try {
-      const res = await f(`/api/tree/photo?estate=${estate}`, { cache: "no-store" });
+      const res = await f(`/api/tree/photo?estate=${estate}`, { cache: "no-store", headers: readHeaders() });
       if (res.ok) {
         const data = (await res.json()) as FamilyPhotos;
         if (data?.photos && typeof data.photos === "object") server = data.photos;

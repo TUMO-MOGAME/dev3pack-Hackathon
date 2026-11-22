@@ -27,7 +27,7 @@ function wallet() {
   return { address, key: privateKey as KeyObject, signMessage: async (m: string) => edSign(null, Buffer.from(m, "utf8"), privateKey).toString("hex") };
 }
 let current = wallet();
-vi.mock("../wallet/signer", () => ({ getActiveSigner: () => current }));
+vi.mock("../wallet/signer", () => ({ getActiveSigner: () => current, peekActiveSigner: () => current }));
 
 const { createChainAsk, mergeAsks, askReviewContext } = await import("./chain-ask");
 const { askRoutes } = await import("../ask/server/route");
@@ -53,7 +53,7 @@ function world(opts: { estateStatus?: string; claimStatus?: string; ownerApprove
     if (type === "Beneficiary") return { label: "Lerato (daughter)" };
     return accounts[address] ?? null;
   };
-  const routes = askRoutes({ fetchRaw: (t, a) => fetchRaw(t, a), now: () => Date.now(), chain: () => true });
+  const routes = askRoutes({ fetchRaw: (t, a) => fetchRaw(t, a), now: () => Date.now(), chain: () => true, member: async () => "member" });
   const calls: { method: string; body?: Record<string, unknown>; status: number }[] = [];
   const fakeFetch = (async (url: string, init?: RequestInit) => {
     const req = new Request(`http://local${url}`, init);

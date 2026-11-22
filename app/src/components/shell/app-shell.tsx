@@ -31,6 +31,8 @@ import { useLocalized } from "@/lib/i18n/client";
 import { useNow } from "@/lib/hooks/use-now";
 import { guardiansOf, guardianTodo } from "@/components/guardians/derive";
 import { disputesToDecide } from "@/components/disputes/disputes";
+import { openToPeople } from "@/lib/verdict";
+import { StarterBanner } from "@/components/continuity/continuity";
 
 export { Avatar } from "./avatar";
 
@@ -253,6 +255,7 @@ function Chrome({ children }: { children: ReactNode }) {
           className={clsx("min-w-0 flex-1 outline-none", framed && isChat ? "flex flex-col" : clsx("mx-auto w-full max-w-6xl px-4 pt-5", framed ? "pb-28 lg:pb-16" : "pb-10"))}
         >
           {framed && <EstateSwitcher inset={isChat} />}
+          <StarterBanner />
           {children}
         </main>
       </div>
@@ -294,7 +297,7 @@ function Chrome({ children }: { children: ReactNode }) {
 /** Living-plan claims the owner still has to approve. */
 export function ownerPending(snap: NonNullable<ReturnType<typeof useEstate>["snap"]>): number {
   if (snap.estate.status !== "Active") return 0;
-  return snap.claims.filter((c) => c.status === "Open" && c.agentVerdict === "Approved" && snap.rules.find((r) => r.address === c.rule)?.startsNow).length;
+  return snap.claims.filter((c) => c.status === "Open" && openToPeople(c.agentVerdict) && snap.rules.find((r) => r.address === c.rule)?.startsNow).length;
 }
 
 /** Items a given trusted person still has to act on. */
@@ -302,8 +305,8 @@ export function pendingFor(snap: NonNullable<ReturnType<typeof useEstate>["snap"
   const i = snap.estate.verifiers.indexOf(address);
   if (i < 0) return 0;
   const d = snap.estate.death;
-  const death = snap.estate.status === "Active" && d.certHash && d.verdict === "Approved" && !d.attestations[i] ? 1 : 0;
-  const claims = snap.estate.status === "Unlocked" ? snap.claims.filter((c) => c.status === "Open" && c.agentVerdict === "Approved" && !c.approvals[i]).length : 0;
-  const hardships = snap.hardships.filter((h) => h.status === "Open" && h.agentVerdict === "Approved" && !h.approvals[i]).length;
+  const death = snap.estate.status === "Active" && d.certHash && openToPeople(d.verdict) && !d.attestations[i] ? 1 : 0;
+  const claims = snap.estate.status === "Unlocked" ? snap.claims.filter((c) => c.status === "Open" && openToPeople(c.agentVerdict) && !c.approvals[i]).length : 0;
+  const hardships = snap.hardships.filter((h) => h.status === "Open" && openToPeople(h.agentVerdict) && !h.approvals[i]).length;
   return death + claims + hardships;
 }

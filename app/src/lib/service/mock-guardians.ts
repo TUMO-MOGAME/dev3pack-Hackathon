@@ -14,6 +14,7 @@ import type {
 import { fail, need } from "./mock-errors";
 import { shortName } from "../names";
 import { cleanSpec, foreignSpecKeys, isPhotoLabel, type AssetSpec } from "../assets/spec";
+import { objectionLapsesAt } from "../disputes/types";
 
 /** Demo timings: objection window, succession wait and fallback wait (real: 2 days, 7 days, 90 days). */
 export const GUARD_DEMO_TIMINGS = { objectionWindowSecs: 60, successionWaitSecs: 60, fallbackWaitSecs: 120 } as const;
@@ -116,13 +117,15 @@ export function createMockGuardians(d: GuardDeps) {
     need(est().status === "Active", "BadStatus", "This can only change while the estate is active.");
   };
   const seat = (index: number) => g().seats.find((s) => s.index === index) ?? fail("BadStatus", "That trusted person's seat does not exist.");
-  const openObjection = (target: Base58) => g().objections.find((o) => o.target === target && o.status === "Open");
-  /** An Open Fallback objection lapses (counts as dismissed) once the fallback wait has passed since it was raised. */
-  const lapsesAt = (o: MockObjection) => (o.kind === "Fallback" && o.status === "Open" ? o.raisedAt + g().fallbackWaitSecs : null);
+  /** An Open objection lapses (counts as dismissed): Fallback after the fallback wait, the others after two waiting periods. */
+  const lapsesAt = (o: MockObjection) => (o.status !== "Open" ? null
+    : o.kind === "Fallback" ? o.raisedAt + g().fallbackWaitSecs : objectionLapsesAt(o.raisedAt, est().waitingPeriodSecs));
+  const openObjection = (target: Base58) =>
+    g().objections.find((o) => o.target === target && o.status === "Open" && (o.kind === "Fallback" || !lapsed(o)));
   const lapsed = (o: MockObjection) => { const at = lapsesAt(o); return at !== null && nowSecs() >= at; };
   function markLapsed(o: MockObjection) {
     o.status = "Dismissed";
-    d.log("ObjectionResolved", "The objection lapsed: it was not upheld in time, so the fallback plan can go ahead", d.tx());
+    d.log("ObjectionResolved", o.kind === "Fallback" ? "The objection lapsed: it was not upheld in time, so the fallback plan can go ahead" : "The objection lapsed: it was not upheld in time, so the paused step can go ahead", d.tx());
   }
 
   function createSeats() {
@@ -303,7 +306,7 @@ export function createMockGuardians(d: GuardDeps) {
     need(!s.succession, "SuccessionPending", "A passing is already being confirmed for this seat.");
     const t = d.tx();
     d.log("SeatDeathReported", `${first(d.me())} reported that ${first(s.holder!)} has passed away`, t);
-    if (report.verdict === "reject") {
+    if (report.verdict !== "approve") {
       d.log("SeatDeathReviewed", "The agent could not accept the certificate. Nothing has changed", d.tx());
       return t;
     }
@@ -444,7 +447,13 @@ export function createMockGuardians(d: GuardDeps) {
     const prev = g().objections.find((o) => o.target === input.target);
     if (prev) {
       need(prev.status !== "Open", "ObjectionOpen", "An objection is already open on this.");
+      if (prev.status === "Open" && prev.kind !== "Fallback" && lapsed(prev)) markLapsed(prev);
       need(!(prev.status === "Dismissed" && (input.kind === "Claim" || input.kind === "Hardship")), "BadStatus", "This objection was already dismissed.");
+      need(!(input.kind === "Unlock" && prev.status === "Dismissed" && prev.raisedAt >= (est().death.pendingSince ?? 0)), "BadStatus", "This waiting period has already been challenged once.");
+      if (prev.status === "Dismissed" && (input.kind === "Sale" || input.kind === "Succession")) {
+        const free = objectionLapsesAt(prev.raisedAt, est().waitingPeriodSecs) + Math.max(est().waitingPeriodSecs, 60);
+        need(nowSecs() >= free, "ObjectionCooldown", "It is too soon to object to this again.");
+      }
       // One fallback objection per countdown: a dismissed or lapsed one can't be raised again until it restarts.
       need(!(input.kind === "Fallback" && prev.status === "Dismissed" && prev.raisedAt >= (g().fallbackStartedAt ?? Infinity)), "BadStatus", "An objection to this countdown was already decided.");
       g().objections = g().objections.filter((o) => o !== prev);
@@ -546,7 +555,7 @@ export function createMockGuardians(d: GuardDeps) {
     need(!g().fallbackDead[i], "BadStatus", "This passing is already recorded.");
     const t = d.tx();
     d.log("FallbackDeathReported", `${first(d.me())} reported that ${r.name} has passed away`, t);
-    if (report.verdict === "reject") {
+    if (report.verdict !== "approve") {
       d.log("FallbackDeathReviewed", "The agent could not accept the certificate. Nothing has changed", d.tx());
       return t;
     }

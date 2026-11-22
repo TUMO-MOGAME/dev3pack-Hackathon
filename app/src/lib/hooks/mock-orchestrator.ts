@@ -8,6 +8,7 @@ import type { FxRate, Role } from "../types";
 import type { AssistantCopy } from "@/content/assistant";
 import type { AgentAction, OrchestratorReply } from "./agent-types";
 import { shortName } from "../names";
+import { openToPeople } from "@/lib/verdict";
 
 export interface OrchestratorContext { role: Role | null; address: string | null; snap: EstateSnapshot | null; fx: FxRate | null }
 
@@ -87,7 +88,7 @@ export function mockOrchestrate(text: string, ctx: OrchestratorContext, copy: As
   }
 
   if (has("waiting for me", "inbox", "approve")) {
-    const n = (e.death.certHash && e.death.verdict === "Approved" && e.status === "Active" ? 1 : 0)
+    const n = (e.death.certHash && openToPeople(e.death.verdict) && e.status === "Active" ? 1 : 0)
       + snap.claims.filter((c) => c.status === "Open").length + snap.hardships.filter((h) => h.status === "Open").length;
     return out("EstateGuide", n ? fill(f.inbox, { count: n === 1 ? copy.inboxCountOne : fill(copy.inboxCountMany, { n }) }) : f.inboxEmpty, [{ type: "navigate", to: "/inbox" }]);
   }

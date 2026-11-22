@@ -822,7 +822,7 @@ export const screens = {
       ownerApproved: "Approved by the owner",
       evidence: "Evidence fingerprint",
       hardship: "Hardship request: {asset}",
-      verdict: { Pending: "pending", Approved: "approved", Rejected: "rejected" },
+      verdict: { Pending: "pending", Approved: "approved", Rejected: "rejected", Referred: "not sure, so people decide" },
       steps: "Every decision step",
       none: "No decisions yet.",
     },

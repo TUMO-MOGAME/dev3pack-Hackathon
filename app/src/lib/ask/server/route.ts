@@ -3,8 +3,7 @@ import "server-only";
  * /api/asks logic (app/api/asks/route.ts re-exports it): GET an estate's request notes, POST a signed note (the asker)
  * or decline (the owner). Kept here with its chain reads injectable, so tests can drive it without a network.
  *
- * GET is open like /api/estate-meta and /api/reports (a purpose is a few words; the family's names are no less
- * personal). POST needs a fresh ed25519 signature from the right wallet, checked against the chain:
+ * GET is for members only, with a read pass (lib/access). POST needs a fresh ed25519 signature from the right wallet, checked against the chain:
  *  - note: the claim exists, belongs to `estate`, and `wallet` is its beneficiary;
  *  - decline: `wallet` owns the estate, the estate is Active and the claim is still Open and not approved.
  */
@@ -17,6 +16,7 @@ import { bool, enumOf, key, num, type Raw } from "@/lib/chain/decoders";
 import { ASK_MAX_SKEW_MS, askMessage, noteBody } from "../auth-message";
 import { cleanPurpose, PURPOSE_MAX } from "../types";
 import { declineAsk, getAsk, listAsks, saveAsk } from "./store";
+import { requireMember, type MemberCheck } from "@/lib/access/server";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 const sig = z.string().regex(/^[0-9a-f]{128}$/);
@@ -31,6 +31,7 @@ const body = z.discriminatedUnion("action", [
 export type AskPost = z.infer<typeof body>;
 
 export interface AskRouteDeps {
+  member?: MemberCheck;
   fetchRaw(type: "Claim" | "Estate", address: string): Promise<Raw | null>;
   now(): number;
   chain(): boolean;
@@ -44,6 +45,7 @@ export function askRoutes(deps: AskRouteDeps = defaults) {
   const GET = handler(async (req) => {
     rateLimit(req, "asks", 60);
     const estate = addr.parse(new URL(req.url).searchParams.get("estate"));
+    await requireMember(req, estate, deps.member);
     return json(await listAsks(estate));
   });
 

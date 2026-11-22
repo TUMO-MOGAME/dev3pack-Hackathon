@@ -23,7 +23,8 @@ export function errorResponse(e: unknown): Response {
   if (e instanceof AgentError) return json({ error: e.message, code: e.code }, { status: e.code === "timeout" ? 504 : e.code === "not_configured" ? 503 : 502 });
   const msg = e instanceof Error ? e.message : "Unexpected error";
   console.error("[api]", msg);
-  return json({ error: msg.slice(0, 300), code: "server" }, { status: 500 });
+  // An RPC URL can carry an API key: never echo one.
+  return json({ error: msg.replace(/(https?|wss?):\/\/\S+/g, "[url]").slice(0, 300), code: "server" }, { status: 500 });
 }
 
 export async function parseJson<T>(req: Request, schema: z.ZodType<T>, maxBytes = 200_000): Promise<T> {

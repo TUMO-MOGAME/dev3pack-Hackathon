@@ -5,7 +5,7 @@
  */
 export interface SponsorLimits { perMinute: number; perDay: number; rentPerDay: number; dailyBudgetLamports: number }
 
-export const DEFAULT_SPONSOR_LIMITS: SponsorLimits = { perMinute: 6, perDay: 60, rentPerDay: 3, dailyBudgetLamports: 500_000_000 };
+export const DEFAULT_SPONSOR_LIMITS: SponsorLimits = { perMinute: 12, perDay: 60, rentPerDay: 3, dailyBudgetLamports: 100_000_000 };
 
 const MIN = 60_000, DAY = 86_400_000;
 

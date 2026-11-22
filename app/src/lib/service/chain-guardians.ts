@@ -35,6 +35,8 @@ export interface ChainGuardianDeps {
   review(file: File, purpose: ReviewPurpose, estate: Base58, context: string, index: number): Promise<{ report: AgentReport }>;
   getMeta(estate: Base58): Promise<EstateMeta | null>;
   saveMeta(meta: EstateMeta): Promise<void>;
+  /** The real names, for changing and saving back (chain.ts). */
+  getMetaForWrite?(estate: Base58): Promise<EstateMeta | null>;
   requireOwnerOf(estate: Base58): PublicKey;
   /** chain.ts getEstate (its snapshot carries `guardians`). */
   getEstate(estate: Base58): Promise<{ guardians?: GuardiansSnapshot }>;
@@ -94,7 +96,7 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
     const named = people.filter((p) => p.name);
     if (!named.length) return;
     saveLocal((l) => { for (const p of named) l.names[p.wallet] = p.name; });
-    const meta = await d.getMeta(estate);
+    const meta = await (d.getMetaForWrite ?? d.getMeta)(estate);
     if (meta) await d.saveMeta({ ...meta, buyerNames: { ...meta.buyerNames, ...Object.fromEntries(named.map((p) => [p.wallet, p.name.slice(0, 64)])) } }).catch(() => undefined);
   }
 

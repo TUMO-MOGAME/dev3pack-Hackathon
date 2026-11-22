@@ -151,8 +151,8 @@ function world(opts: { chainMode?: boolean; serverDown?: boolean; owner?: Return
   const owner = opts.owner ?? wallet();
   let acting = owner;
   const deps = { fetchRaw: async (_t: "Estate", a: string) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => opts.chainMode ?? true };
-  const routes = treeRoutes(deps);
-  const photos = photoRoutes(deps);
+  const routes = treeRoutes({ ...deps, member: async () => "member" });
+  const photos = photoRoutes({ ...deps, member: async () => "member" });
   const calls: { method: string; status: number }[] = [];
   const fakeFetch = (async (url: string, init?: RequestInit) => {
     if (opts.serverDown) throw new TypeError("fetch failed");
@@ -255,7 +255,7 @@ describe("relationships and hidden flags (Supabase off: server memory + this dev
     const zodwaLike = wallet();
     w.actAs(zodwaLike);
     await w.svc.setHidden(E, true);
-    const links = await (await treeRoutes().GET(new Request(`http://local/api/tree?estate=${E}`))).json() as { hidden: string[] };
+    const links = await (await treeRoutes({ fetchRaw: async () => null, now: () => Date.now(), chain: () => true, member: async () => "member" }).GET(new Request(`http://local/api/tree?estate=${E}`))).json() as { hidden: string[] };
     expect(links.hidden).toEqual([zodwaLike.address]);
   });
 
@@ -287,7 +287,7 @@ describe("photos (plan.md §15.11): /api/tree/photo, Supabase off (server memory
     return { action: "photo", estate: E, wallet: over.wallet ?? w.address, ts, sig, person, photo };
   }
   const post = (routes: ReturnType<typeof photoRoutes>, body: unknown) => routes.POST(new Request("http://local/api/tree/photo", { method: "POST", body: JSON.stringify(body) }));
-  const routesFor = (owner: W, chain = true) => photoRoutes({ fetchRaw: async (_t, a) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => chain });
+  const routesFor = (owner: W, chain = true) => photoRoutes({ fetchRaw: async (_t, a) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => chain, member: async () => "member" });
   const code = async (res: Response) => ((await res.json()) as { code?: string }).code;
 
   it("the seeded devnet demo family starts with the demo site's faces (Kagiso has none)", async () => {

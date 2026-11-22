@@ -13,6 +13,8 @@ import { askStatus, decider } from "@/lib/ask/logic";
 import { openDisputeOn } from "@/lib/disputes/types";
 import { shortName } from "@/lib/names";
 import type { Nudge, NudgeKind } from "./types";
+import { openToPeople } from "@/lib/verdict";
+import { quorumFor } from "@/lib/verdict";
 
 export const DAY = 86400;
 /** The owner is nudged to check in after this long without a heartbeat. */
@@ -127,7 +129,7 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
     return n?.currency === "ZAR" && n.typed > 0 ? ` · R ${Math.round(n.typed).toLocaleString("en-ZA")}` : zar(cl.amount);
   };
   for (const cl of snap.claims) {
-    if (cl.status !== "Open" || cl.agentVerdict !== "Approved" || cl.ownerApproved || notes[cl.address]?.declinedAt) continue;
+    if (cl.status !== "Open" || !openToPeople(cl.agentVerdict) || cl.ownerApproved || notes[cl.address]?.declinedAt) continue;
     const rule = snap.rules.find((r) => r.address === cl.rule);
     const vars = { name: personName(cl.beneficiary), amount: usd(cl.amount), zar: zar(cl.amount), payee: payeeName(cl.payee) };
     if (role === "owner" && e.status === "Active" && rule?.startsNow) {
@@ -146,14 +148,14 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
           : { label: a.owner.approve, action: { type: "run", op: "approveAsk", target: cl.address } },
       });
       out[out.length - 1].secondary = { label: a.owner.decline, action: { type: "run", op: "declineAsk", target: cl.address } };
-    } else if (isVerifier && e.status === "Unlocked" && !cl.approvals[vIndex] && count(cl.approvals) < e.claimThreshold) {
+    } else if (isVerifier && e.status === "Unlocked" && !cl.approvals[vIndex] && count(cl.approvals) < quorumFor(cl.agentVerdict, e.claimThreshold)) {
       push({ id: `claim:${cl.address}`, kind: "claim-to-approve", urgency: "now", title: c.claimVerifier.title, body: fill(c.claimVerifier.body, vars), primary: { label: c.claimVerifier.cta, action: { type: "navigate", to: "/inbox" } } });
     }
   }
 
   // A reported passing.
   const d = e.death;
-  if (isVerifier && e.status === "Active" && d.certHash && d.verdict === "Approved" && !d.attestations[vIndex]) {
+  if (isVerifier && e.status === "Active" && d.certHash && openToPeople(d.verdict) && !d.attestations[vIndex]) {
     push({
       id: `death:${d.certHash}`, kind: "death-to-confirm", urgency: "now", title: c.deathToConfirm.title,
       body: fill(c.deathToConfirm.body, { name: personName(d.submittedBy), owner }),
@@ -179,7 +181,7 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
   // Hardship requests for a trusted person.
   if (isVerifier) {
     for (const h of snap.hardships) {
-      if (h.status !== "Open" || h.agentVerdict !== "Approved" || h.approvals[vIndex]) continue;
+      if (h.status !== "Open" || !openToPeople(h.agentVerdict) || h.approvals[vIndex]) continue;
       push({
         id: `hardship:${h.address}`, kind: "hardship-to-review", urgency: "soon", title: c.hardshipToReview.title,
         body: fill(c.hardshipToReview.body, { name: personName(h.beneficiary) }),

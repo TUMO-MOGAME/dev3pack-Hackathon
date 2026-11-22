@@ -16,8 +16,10 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID,
   assetPda, ata, beneficiaryPda, claimPda, estatePda, hardshipPda, nftEscrowAta, offerEscrowAta, offerPda,
   payeePda, rulePda, vaultAta, guardPda, mediaPda, objectionPda, seatPda, stampPda, yearCapPda,
+  agentVotePda, residualPda,
 } from "./pda";
 import type { AssetKind, TargetKind } from "../guardians/types";
+import type { ReviewOutcome } from "../verdict";
 
 const RENT_SYSVAR = new PublicKey("SysvarRent111111111111111111111111111111111");
 
@@ -89,6 +91,7 @@ export function hash32(hex: string): number[] {
 }
 const cat = (c: Category) => enumValue("Category", c);
 const kind = (k: PayeeKind) => enumValue("PayeeKind", k);
+const outcomeArg = (o: ReviewOutcome) => enumValue("ReviewOutcome", o);
 
 // ---------- context ----------
 export interface Ctx { programId: PublicKey; usdtMint: PublicKey }
@@ -212,8 +215,8 @@ export function submitDeathClaim(ctx: Ctx, estate: PublicKey, signer: PublicKey,
 }
 
 /** 11 (agent) */
-export function reviewDeath(estate: PublicKey, agent: PublicKey, approve: boolean, reportHashHex: string) {
-  return buildIx("review_death", [approve, hash32(reportHashHex)], { agent, estate });
+export function reviewDeath(estate: PublicKey, agent: PublicKey, outcome: ReviewOutcome, reportHashHex: string) {
+  return buildIx("review_death", [outcomeArg(outcome), hash32(reportHashHex)], { agent, estate });
 }
 
 /** 12 */
@@ -248,8 +251,8 @@ export function submitClaim(ctx: Ctx, p: {
 }
 
 /** 16 (agent) */
-export function reviewClaim(estate: PublicKey, agent: PublicKey, claim: PublicKey, rule: PublicKey, approve: boolean, reportHashHex: string) {
-  return buildIx("review_claim", [approve, hash32(reportHashHex)], { agent, estate, claim, rule });
+export function reviewClaim(estate: PublicKey, agent: PublicKey, claim: PublicKey, rule: PublicKey, outcome: ReviewOutcome, reportHashHex: string) {
+  return buildIx("review_claim", [outcomeArg(outcome), hash32(reportHashHex)], { agent, estate, claim, rule });
 }
 
 /** 17 */
@@ -329,8 +332,8 @@ export function submitHardship(ctx: Ctx, estate: PublicKey, asset: PublicKey, si
 }
 
 /** 23 (agent) */
-export function reviewHardship(estate: PublicKey, agent: PublicKey, asset: PublicKey, hardship: PublicKey, approve: boolean, reportHashHex: string) {
-  return buildIx("review_hardship", [approve, hash32(reportHashHex)], { agent, estate, asset, hardship });
+export function reviewHardship(estate: PublicKey, agent: PublicKey, asset: PublicKey, hardship: PublicKey, outcome: ReviewOutcome, reportHashHex: string) {
+  return buildIx("review_hardship", [outcomeArg(outcome), hash32(reportHashHex)], { agent, estate, asset, hardship });
 }
 
 /** 24 */
@@ -379,7 +382,7 @@ function seatAccounts(ctx: Ctx, estate: PublicKey) {
   return { seat0, seat1, seat2 };
 }
 
-/** Owner (or the agent at setup): creates the Guard with its three timings. */
+/** Owner: creates the Guard with its three timings (never the agent: they cannot be changed later). */
 export function initGuard(ctx: Ctx, authority: PublicKey, estate: PublicKey, t: { objectionWindowSecs: number; successionWaitSecs: number; fallbackWaitSecs: number }) {
   return buildIx("init_guard", [i64(t.objectionWindowSecs), i64(t.successionWaitSecs), i64(t.fallbackWaitSecs)],
     { authority, payer: authority, estate, guard: guardPda(ctx.programId, estate) });
@@ -543,4 +546,40 @@ export function setYearlyCap(ctx: Ctx, p: { owner: PublicKey; rule: PublicKey; c
   return buildIx("set_yearly_cap", [u64(p.cap), i64(p.periodStart)], {
     owner: p.owner, ...estateAccounts(ctx, p.owner), rule: p.rule, year_cap: yearCapPda(ctx.programId, p.rule),
   });
+}
+
+// ---------- continuity (22 Nov 2026) ----------
+
+/** Owner, estate Active: the rule expires now. */
+export function endRule(ctx: Ctx, owner: PublicKey, rule: PublicKey) {
+  const { estate } = estateAccounts(ctx, owner);
+  return buildIx("end_rule", [], { owner, estate, rule });
+}
+
+/** Owner, estate Active: who receives what is left. */
+export function setResidual(ctx: Ctx, owner: PublicKey, recipient: PublicKey) {
+  const { estate } = estateAccounts(ctx, owner);
+  return buildIx("set_residual", [recipient], { owner, estate, residual: residualPda(ctx.programId, estate) });
+}
+
+/** Anyone, estate Unlocked: pays the vault minus what live rules reserve. `rules`: every rule, in id order. */
+export function sweepResidual(ctx: Ctx, p: { payer: PublicKey; estate: PublicKey; recipient: PublicKey; rules: PublicKey[] }) {
+  const t = buildIx("sweep_residual", [], {
+    payer: p.payer, estate: p.estate, recipient: p.recipient, usdt_mint: ctx.usdtMint,
+    residual: residualPda(ctx.programId, p.estate), guard: guardPda(ctx.programId, p.estate),
+    vault: vaultAta(ctx.usdtMint, p.estate), recipient_usdt: ata(ctx.usdtMint, p.recipient),
+  });
+  for (const pubkey of p.rules) t.keys.push({ pubkey, isSigner: false, isWritable: false });
+  return t;
+}
+
+/** Owner, estate Active: replaces the agent. */
+export function setAgent(ctx: Ctx, owner: PublicKey, agent: PublicKey) {
+  const { estate } = estateAccounts(ctx, owner);
+  return buildIx("set_agent", [agent], { owner, estate });
+}
+
+/** A trusted person votes to replace the agent's key. */
+export function voteAgent(ctx: Ctx, estate: PublicKey, verifier: PublicKey, candidate: PublicKey) {
+  return buildIx("vote_agent", [candidate], { verifier, estate, agent_vote: agentVotePda(ctx.programId, estate, candidate) });
 }

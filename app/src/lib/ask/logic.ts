@@ -8,6 +8,8 @@ import type { Base58, Claim, Estate, Payee, Rule } from "../types";
 import { yearlyLeft } from "../disputes/types";
 import { toBase } from "../format";
 import type { AskCurrency, AskNote } from "./types";
+import { openToPeople } from "@/lib/verdict";
+import { quorumFor } from "@/lib/verdict";
 
 /** A rule is open for payments now: always after unlock, and while the owner is alive only if it "starts now". */
 export function ruleOpen(estate: Pick<Estate, "status">, rule: Pick<Rule, "startsNow">): boolean {
@@ -118,7 +120,7 @@ export function askStatus(claim: Claim, estate: Pick<Estate, "status" | "claimTh
   if (claim.status === "Paid") return "paid";
   if (claim.status === "Rejected") return "refused";
   if (claim.agentVerdict === "Pending") return "checking";
-  const quorum = estate.status === "Unlocked" && claim.approvals.filter(Boolean).length >= estate.claimThreshold;
+  const quorum = estate.status === "Unlocked" && claim.approvals.filter(Boolean).length >= quorumFor(claim.agentVerdict, estate.claimThreshold);
   if (claim.ownerApproved || quorum) return "approved";
   if (note?.declinedAt) return "declined";
   return "waiting";
@@ -128,6 +130,6 @@ export function askStatus(claim: Claim, estate: Pick<Estate, "status" | "claimTh
 export function ownerCanDecide(snap: EstateSnapshot, claim: Claim): boolean {
   const rule = snap.rules.find((r) => r.address === claim.rule);
   if (snap.estate.status !== "Active" || !rule?.startsNow) return false;
-  if (claim.status !== "Open" || claim.agentVerdict !== "Approved") return false;
+  if (claim.status !== "Open" || !openToPeople(claim.agentVerdict)) return false;
   return !snap.asks?.[claim.address]?.declinedAt;
 }

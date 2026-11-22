@@ -13,6 +13,8 @@ import { Blocked } from "@/components/shell/blocked";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { formatUsdt } from "@/lib/format";
+import { ReferredNote } from "@/components/continuity/continuity";
+import { quorumFor } from "@/lib/verdict";
 
 type Copy = ScreensCopy["hardship"];
 
@@ -88,9 +90,10 @@ function HardshipView({ copy, snap, session, role }: { copy: Copy; snap: EstateS
                     <p className="font-semibold">{fmt(copy.from, { name: nameOf(h) })}</p>
                     <Badge tone={h.status === "Approved" ? "ok" : h.status === "Rejected" ? "danger" : "warn"}>{common.status.hardship[h.status]}</Badge>
                   </div>
-                  {h.status === "Open" && (
-                    <div className="mt-3"><Quorum approvals={h.approvals} needed={e.hardshipThreshold} names={e.verifierNames} label={fmt(copy.approvals, { got, need: e.hardshipThreshold })} /></div>
-                  )}
+                  {h.status === "Open" && (<>
+                    <ReferredNote verdict={h.agentVerdict} />
+                    <div className="mt-3"><Quorum approvals={h.approvals} needed={quorumFor(h.agentVerdict, e.hardshipThreshold)} names={e.verifierNames} label={fmt(copy.approvals, { got, need: quorumFor(h.agentVerdict, e.hardshipThreshold) })} /></div>
+                  </>)}
                   {h.status === "Approved" && car && (
                     <p className="mt-3 flex items-start gap-2 rounded-md border-[1.5px] border-ink p-3 font-medium"><TickDisc className="mt-0.5 size-5" />{fmt(copy.approved, { floor: formatUsdt(car.hardshipFloor, { decimals: 0 }), name: nameOf(h).split(" ")[0] })}</p>
                   )}

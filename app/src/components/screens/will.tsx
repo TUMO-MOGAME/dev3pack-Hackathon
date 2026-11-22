@@ -21,6 +21,8 @@ import { FRESH_ATTR, firstDemoPersona } from "@/lib/service/fresh-visit";
 import { ruleKey, signedEvery, waitingSecsFor, waitingText, withOwnerSummary } from "@/lib/will-summary";
 import { isMockService } from "@/lib/service/is-mock";
 import { willView } from "@/lib/hooks/pick-estate";
+import { ConnectPeople, EndRule, ResidualPicker } from "@/components/continuity/continuity";
+import { missingPeople, withWallets } from "@/lib/continuity/practice";
 
 type Copy = ScreensCopy["will"];
 type BillsCopy = ScreensCopy["bills"];
@@ -114,7 +116,10 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
   const [greetingEnter] = useState<"css" | "none">(() => (!firstVisit && typeof document !== "undefined" && document.documentElement.hasAttribute(FRESH_ATTR) ? "none" : "css"));
   const locale = useLocale();
   const { common, assistant } = useCopy();
-  const { service, run, busy, openAgent } = useEstate();
+  const { service, run, busy, openAgent, isMock } = useEstate();
+  const [wallets, setWallets] = useState<Record<string, string>>({});
+  const [practice, setPractice] = useState(false);
+  const [residualLabel, setResidualLabel] = useState("");
   const first = session.label.split(/[ (]/)[0];
   // The greeting (message 0) follows the current language and name: this writer can be the first-visit copy that was
   // rendered before the visitor's language loaded.
@@ -186,7 +191,8 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
   }, [messages.length, pending, stickToEnd]);
 
   const turns = messages.filter((m) => m.role === "user").length;
-  const complete = !!draft && draft.assets.length > 0 && draft.verifiers.length >= 3 && draft.rules.length > 0;
+  // An asset is optional: most families have no car to put in a plan.
+  const complete = !!draft && draft.beneficiaries.length > 0 && draft.verifiers.length >= 3 && draft.rules.length > 0;
 
   // `base` lets a retry resend from the history *without* the failed message (state updates aren't visible yet).
   const send = async (text: string, base: Msg[] = messages) => {
@@ -209,12 +215,27 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
 
   const sign = async () => {
     if (!draft) return;
-    const res = await run("sign", (s) => s.createEstateFromWill(draft));
+    const signed = isMock ? draft : withWallets(draft, wallets);
+    const res = await run("sign", (s) => s.createEstateFromWill(signed, { practice, residualLabel: residualLabel || draft.beneficiaries[0]?.label }));
     if (res.ok) onSigned(res.value);
   };
 
   if (view === "review" && draft) {
-    return <Review copy={copy} draft={draft} edited={owned?.edited ?? false} onBack={() => setView("chat")} onSign={sign} signing={busy === "sign"} />;
+    const missing = isMock ? [] : missingPeople(draft, wallets);
+    return (
+      <Review
+        copy={copy} draft={draft} edited={owned?.edited ?? false} onBack={() => setView("chat")} onSign={sign} signing={busy === "sign"}
+        blocked={missing.length > 0}
+        setup={(
+          <>
+            <ResidualPicker draft={draft} value={residualLabel || draft.beneficiaries[0]?.label || ""} onChange={setResidualLabel} />
+            {!isMock && (
+              <ConnectPeople draft={draft} missing={missing} wallets={wallets} onWallets={(next, made) => { setWallets(next); if (made) setPractice(true); }} />
+            )}
+          </>
+        )}
+      />
+    );
   }
 
   const chips = turns < copy.suggestions.length ? copy.suggestions[turns] : copy.suggestions[copy.suggestions.length - 1];
@@ -394,7 +415,7 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
 
 /* ---------- Plain-language review ---------- */
 
-function Review({ copy, draft, edited, onBack, onSign, signing }: { copy: Copy; draft: WillDraft; edited: boolean; onBack: () => void; onSign: () => void; signing: boolean }) {
+function Review({ copy, draft, edited, onBack, onSign, signing, blocked, setup }: { copy: Copy; draft: WillDraft; edited: boolean; onBack: () => void; onSign: () => void; signing: boolean; blocked: boolean; setup: ReactNode }) {
   const { common } = useCopy();
   const r = copy.review;
   const need = 2;
@@ -462,6 +483,8 @@ function Review({ copy, draft, edited, onBack, onSign, signing }: { copy: Copy; 
         </section>
       ))}
 
+      {setup}
+
       <section className="mt-6">
         <h2 className="text-h3">{r.limitsTitle}</h2>
         <ul className="mt-2 list-disc space-y-1.5 pl-5 text-ink-2 marker:text-amber">
@@ -470,7 +493,7 @@ function Review({ copy, draft, edited, onBack, onSign, signing }: { copy: Copy; 
       </section>
 
       <div className="sticky bottom-[var(--safe-b)] -mx-4 mt-6 border-t border-line bg-bg px-4 py-3 lg:bottom-0">
-        <Button block onClick={onSign} loading={signing} className="min-h-13!">
+        <Button block onClick={onSign} disabled={blocked} loading={signing} className="min-h-13!">
           <Lock className="size-5" aria-hidden="true" />{signing ? r.signing : r.sign}
         </Button>
         <p className="mt-2 text-center text-small text-ink-2">{r.signNote}</p>
@@ -505,6 +528,7 @@ function Locked({ copy, bills, snap }: { copy: Copy; bills: BillsCopy; snap: Est
                 <p className="mt-1.5">{recurring
                   ? fmt(copy.review.recurringRule, { ...base, amount: formatUsdt(rule.recurringAmount, { decimals: 0 }), payee: snap.payees.find((x) => x.wallet === rule.fixedPayee)?.name ?? "", every: copy.preview.every[signedEvery(rule)] })
                   : fmt(rule.allowedPayeeKind === "Other" ? copy.review.ruleOther : copy.review.rule, base)}</p>
+                <EndRule snap={snap} rule={rule} />
               </div>
             </li>
           );

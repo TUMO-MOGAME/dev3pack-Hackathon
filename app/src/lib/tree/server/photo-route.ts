@@ -3,7 +3,7 @@ import "server-only";
  * /api/tree/photo logic (app/api/tree/photo/route.ts re-exports it): GET an estate's tree photos, POST a signed change
  * (plan.md §15.11).
  *
- * GET is open like /api/tree (the tree itself is shown only to the family, by the UI). POST needs a fresh, single-use
+ * GET is for members only, with a read pass (lib/access). POST needs a fresh, single-use
  * ed25519 signature (lib/tree/links.ts treeMessage, action "photo") from the acting wallet over the person and the
  * photo, then:
  *  - the photo is a WebP data URL of at most 60 KB (lib/tree/photos.ts checkPhoto; 415 / 413 otherwise);
@@ -23,6 +23,7 @@ import { DEVNET_DEMO_ESTATE, DEVNET_DEMO_FALLBACK_KINDS } from "@/lib/chain/demo
 import { defaultPeople, PERSON_ID, TREE_MAX_SKEW_MS, treeBody, treeMessage } from "../links";
 import { checkPhoto, PHOTO_MAX_BODY, photoConsent, type PhotoSubject } from "../photos";
 import { getLinks, getPhotos, putPhoto } from "./store";
+import { requireMember, type MemberCheck } from "@/lib/access/server";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 const body = z.object({
@@ -35,6 +36,7 @@ const body = z.object({
 export type TreePhotoPost = z.infer<typeof body>;
 
 export interface PhotoRouteDeps {
+  member?: MemberCheck;
   fetchRaw(type: "Estate", address: string): Promise<Raw | null>;
   now(): number;
   chain(): boolean;
@@ -59,6 +61,7 @@ export function photoRoutes(deps: PhotoRouteDeps = defaults) {
   const GET = handler(async (req) => {
     rateLimit(req, "tree-photo", 60);
     const estate = addr.parse(new URL(req.url).searchParams.get("estate"));
+    await requireMember(req, estate, deps.member);
     return json(await getPhotos(estate));
   });
 

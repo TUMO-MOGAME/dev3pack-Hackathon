@@ -22,6 +22,8 @@ import { ClaimWindow } from "@/components/guardians/claim-window";
 import { DisputeList, DisputePanel } from "@/components/disputes/disputes";
 import { disputesVotedBy, effectiveStatus, openDisputeOn } from "@/lib/disputes/types";
 import { useNow } from "@/lib/hooks/use-now";
+import { openToPeople } from "@/lib/verdict";
+import { quorumFor } from "@/lib/verdict";
 
 type Copy = ScreensCopy["inbox"];
 
@@ -72,18 +74,18 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
   // Watchers who are not trusted people only see the guardians part below.
   const items: Item[] = [];
   const d = e.death;
-  if (me >= 0 && e.status === "Active" && d.certHash && d.verdict === "Approved") {
+  if (me >= 0 && e.status === "Active" && d.certHash && openToPeople(d.verdict)) {
     items.push({
       key: "death", kind: "death",
       title: fmt(copy.death.title, { name: e.ownerName }),
       body: fmt(copy.death.body, { by: d.submittedBy ? label(d.submittedBy) : "" }),
       report: d.agentReport,
       reviewTx: snap.activity.find((a) => a.kind === "DeathReviewed")?.txSignature,
-      approvals: d.attestations, need: e.deathThreshold, mine: !!d.attestations[me], approveLabel: copy.death.approve,
+      approvals: d.attestations, need: quorumFor(d.verdict, e.deathThreshold), mine: !!d.attestations[me], approveLabel: copy.death.approve,
       act: async () => { await run("death", (s, est) => s.attestDeath(est), copy.death.done); },
     });
   }
-  for (const c of me >= 0 && e.status === "Unlocked" ? snap.claims.filter((x) => x.status === "Open" && x.agentVerdict === "Approved") : []) {
+  for (const c of me >= 0 && e.status === "Unlocked" ? snap.claims.filter((x) => x.status === "Open" && openToPeople(x.agentVerdict)) : []) {
     const rule = snap.rules.find((r) => r.address === c.rule);
     const payee = snap.payees.find((p) => p.wallet === c.payee)?.name ?? "";
     const got = c.approvals.filter(Boolean).length;
@@ -95,12 +97,12 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
         left: rule ? formatUsdt(rule.lifetimeCap - rule.spentTotal - c.amount, { decimals: 0 }) : "",
       }),
       amountZar: rate ? formatZar(c.amount, rate) : undefined,
-      report: c.agentReport, approvals: c.approvals, need: e.claimThreshold, mine: !!c.approvals[me], approveLabel: copy.claim.approve,
-      payable: g?.enabled && got >= e.claimThreshold ? { payee: c.payee, payeeName: payee, amount: c.amount, successText: fmt(copy.claim.done, { payee }) } : undefined,
+      report: c.agentReport, approvals: c.approvals, need: quorumFor(c.agentVerdict, e.claimThreshold), mine: !!c.approvals[me], approveLabel: copy.claim.approve,
+      payable: g?.enabled && got >= quorumFor(c.agentVerdict, e.claimThreshold) ? { payee: c.payee, payeeName: payee, amount: c.amount, successText: fmt(copy.claim.done, { payee }) } : undefined,
       act: async () => {
         // Approve, and if that completes the quorum, release the payment in the same breath. With watchers (a Guard),
         // the payment waits out the objection window first, so only approve here.
-        if (got + 1 >= e.claimThreshold && !g?.enabled && !openDisputeOn(snap.disputes, c.address, now ?? 0)) {
+        if (got + 1 >= quorumFor(c.agentVerdict, e.claimThreshold) && !g?.enabled && !openDisputeOn(snap.disputes, c.address, now ?? 0)) {
           // "Try again" in the payment sheet re-runs execute: don't approve a second time (the program rejects that).
           let approved = !!c.approvals[me];
           await pay({
@@ -117,12 +119,12 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       },
     });
   }
-  for (const h of me >= 0 ? snap.hardships.filter((x) => x.status === "Open" && x.agentVerdict === "Approved") : []) {
+  for (const h of me >= 0 ? snap.hardships.filter((x) => x.status === "Open" && openToPeople(x.agentVerdict)) : []) {
     items.push({
       key: h.address, kind: "hardship", target: h.address,
       title: fmt(copy.hardship.title, { name: label(h.beneficiary) }),
       body: car ? fmt(copy.hardship.body, { floor: formatUsdt(car.hardshipFloor, { decimals: 0 }), min: formatUsdt(car.floorPrice, { decimals: 0 }), name: label(h.beneficiary).split(" ")[0] }) : "",
-      report: h.agentReport, approvals: h.approvals, need: e.hardshipThreshold, mine: !!h.approvals[me], approveLabel: copy.hardship.approve,
+      report: h.agentReport, approvals: h.approvals, need: quorumFor(h.agentVerdict, e.hardshipThreshold), mine: !!h.approvals[me], approveLabel: copy.hardship.approve,
       act: async () => { await run(h.address, (s, est) => s.approveHardship(est, h.address), copy.hardship.done); },
     });
   }

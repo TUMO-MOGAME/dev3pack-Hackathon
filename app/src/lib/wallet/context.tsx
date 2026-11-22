@@ -23,6 +23,7 @@ import type { PhoneSigner } from "./phone-signer";
 import { isValidSeed, newSeedPhrase, openAccount, readOnly, wdkPartialSign, wdkSign, wdkSignAndSend, type WdkAccount } from "./wdk";
 import { mockSignature, personaSessions } from "./personas";
 import { setActiveSigner } from "./signer";
+import { ensureReadPass } from "../access/client";
 
 export type PinReason = "create" | "unlock";
 export type RequestPin = (reason: PinReason, label: string) => Promise<string | null>;
@@ -99,6 +100,7 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
       const enc = await encryptSeed(seedPhrase, pin);
       persist([...stored.current.filter((w) => w.address !== acc.address), { kind: "wdk", address: acc.address, label, role, enc, createdAt: Date.now() }]);
       unlocked.current.set(acc.address, acc);
+      await ensureReadPass({ address: acc.address, signMessage: (m) => acc.account.sign(m) }).catch(() => undefined);
     }
     setSessions((prev) => [...prev.filter((s) => s.address !== acc.address), session]);
     setActiveAddr(acc.address);
@@ -117,11 +119,40 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
     return addWallet(label, role, seedPhrase);
   }, [addWallet]);
 
+  /** Practice wallets for the people in a plan (test network): one PIN for all, and the owner stays signed in. */
+  const createPractice = useCallback(async (people: { label: string; role: Role }[]): Promise<Base58[]> => {
+    if (!people.length) return [];
+    if (isMock) throw new Error("The demo family already has wallets.");
+    const pin = await pinRef.current("create", people.map((p) => p.label).join(", "));
+    if (!pin) throw new Error("A PIN is needed to keep the wallets safe on this device.");
+    assertPin(pin);
+    const made: { stored: StoredWallet; session: WalletSession }[] = [];
+    for (const { label, role } of people) {
+      const phrase = await newSeedPhrase();
+      const acc = await openAccount(phrase, chainConfig.rpcUrl);
+      const address = acc.address;
+      made.push({
+        stored: { kind: "wdk", address, label, role, enc: await encryptSeed(phrase, pin), createdAt: Date.now() },
+        session: { address, label, role, solBalance: 0, usdtBalance: 0n },
+      });
+      unlocked.current.set(address, acc);
+      await ensureReadPass({ address, signMessage: (m) => acc.account.sign(m) }).catch(() => undefined);
+    }
+    persist([...stored.current, ...made.map((m) => m.stored)]);
+    setSessions((prev) => [...prev, ...made.map((m) => m.session)]);
+    return made.map((m) => m.session.address);
+  }, [isMock]);
+
   const connectPhone = useCallback(async (label: string, role: Role, walletName: string): Promise<WalletSession> => {
     const driver = await loadPhoneDriver(isMock);
     const { address, walletName: name } = await driver.connect(walletName);
     const session: WalletSession = { address, label, role, solBalance: 0, usdtBalance: 0n, source: "phone", phoneWallet: name, ...(isMock ? { simulated: true } : {}) };
-    if (!isMock) persist([...stored.current.filter((w) => w.address !== address), { kind: "phone", address, label, role, wallet: name, createdAt: Date.now() }]);
+    if (!isMock) {
+      persist([...stored.current.filter((w) => w.address !== address), { kind: "phone", address, label, role, wallet: name, createdAt: Date.now() }]);
+      // One signature in the wallet app, so this family's records can be read (never required to connect).
+      const { toHex } = await import("./phone-sign");
+      await ensureReadPass({ address, signMessage: async (m) => toHex(await driver.signMessage(name, address, new TextEncoder().encode(m))) }).catch(() => undefined);
+    }
     setSessions((prev) => [...prev.filter((s) => s.address !== address), session]);
     setActiveAddr(address);
     saveActive(address);
@@ -173,6 +204,8 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
     const acc = await openAccount(await decryptSeed(w.enc, pin), chainConfig.rpcUrl);
     if (acc.address !== address) { acc.manager.dispose(); throw new Error("Stored wallet does not match its address."); }
     unlocked.current.set(address, acc);
+    // The wallet is open, so this needs no second prompt: from now on the family's records show without a PIN.
+    await ensureReadPass({ address, signMessage: (m) => acc.account.sign(m) }).catch(() => undefined);
     return acc;
   }, []);
 
@@ -227,8 +260,8 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
 
   const session = sessions.find((s) => s.address === activeAddr) ?? null;
   const api = useMemo<WalletApi>(() => ({
-    ready, session, sessions, create, importSeed, connectPhone, switchTo, setRole, remove, lockAll, refreshBalances, signAndSend,
-  }), [ready, session, sessions, create, importSeed, connectPhone, switchTo, setRole, remove, lockAll, refreshBalances, signAndSend]);
+    ready, session, sessions, create, createPractice, importSeed, connectPhone, switchTo, setRole, remove, lockAll, refreshBalances, signAndSend,
+  }), [ready, session, sessions, create, createPractice, importSeed, connectPhone, switchTo, setRole, remove, lockAll, refreshBalances, signAndSend]);
 
   return <WalletContext.Provider value={api}>{children}</WalletContext.Provider>;
 }

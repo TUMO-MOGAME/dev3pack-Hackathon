@@ -130,7 +130,7 @@ export const rankOffersBody = z.object({
 });
 
 export const acceptOfferBody = z.object({ estate: base58, asset: base58 });
-export const listAssetBody = z.object({ estate: base58, asset: base58, durationSecs: z.number().int().min(60).max(60 * 60 * 24 * 60) });
+export const listAssetBody = z.object({ estate: base58, asset: base58, durationSecs: z.number().int().min(60 * 60).max(60 * 60 * 24 * 60) });
 
 export const reviewFields = z.object({
   purpose: z.enum(PURPOSES),

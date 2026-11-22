@@ -2,7 +2,7 @@ import "server-only";
 /**
  * /api/tree logic (app/api/tree/route.ts re-exports it): GET an estate's family links, POST a signed change.
  *
- * GET is open like /api/estate-meta and /api/asks (the tree itself is shown only to the family, by the UI).
+ * GET is for members only, with a read pass (lib/access).
  * POST needs a fresh, single-use ed25519 signature (lib/tree/links.ts treeMessage) from the acting wallet:
  *  - relate / unrelate: the wallet must own the estate (read from the chain);
  *  - hide: the signer hides or shows only themselves (the flag is stored for the signing wallet).
@@ -17,6 +17,7 @@ import { key, type Raw } from "@/lib/chain/decoders";
 import { PERSON_ID, RELATIONSHIP_KINDS, relationshipId, TREE_MAX_SKEW_MS, treeBody, treeMessage } from "../links";
 import type { RelationshipKind } from "../types";
 import { getLinks, putLink, removeLink, setHiddenFlag } from "./store";
+import { requireMember, type MemberCheck } from "@/lib/access/server";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 const sig = z.string().regex(/^[0-9a-f]{128}$/);
@@ -30,6 +31,7 @@ const body = z.discriminatedUnion("action", [
 export type TreePost = z.infer<typeof body>;
 
 export interface TreeRouteDeps {
+  member?: MemberCheck;
   fetchRaw(type: "Estate", address: string): Promise<Raw | null>;
   now(): number;
   chain(): boolean;
@@ -43,6 +45,7 @@ export function treeRoutes(deps: TreeRouteDeps = defaults) {
   const GET = handler(async (req) => {
     rateLimit(req, "tree", 60);
     const estate = addr.parse(new URL(req.url).searchParams.get("estate"));
+    await requireMember(req, estate, deps.member);
     return json(await getLinks(estate));
   });
 

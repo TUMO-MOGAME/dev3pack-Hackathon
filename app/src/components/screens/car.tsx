@@ -30,6 +30,9 @@ import { clock } from "@/components/guardians/derive";
 import { PausedNotice } from "@/components/guardians/parts";
 import { listingLink } from "@/lib/hooks/pick-estate";
 import { fullName } from "@/lib/names";
+import { ReferredNote, RelistNote } from "@/components/continuity/continuity";
+import { listingEnded } from "@/lib/continuity/logic";
+import { quorumFor } from "@/lib/verdict";
 
 type Copy = ScreensCopy["car"];
 const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
@@ -216,11 +219,12 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
 
       <div className="grid gap-5 *:min-w-0">
         {/* What this person can do */}
-        {car.status === "Held" && (
+        {(car.status === "Held" || (!!now && isVerifier && listingEnded(car, now))) && (
           isVerifier && e.status === "Unlocked" ? (
             <Card>
               <h2 className="flex items-center gap-2 text-h3"><Store className="size-5 text-amber" aria-hidden="true" />{copy.list.title}</h2>
               <p className="mt-1 text-ink-2">{copy.list.body}</p>
+              {car.status === "Listed" && <RelistNote />}
               <Button className="mt-3" loading={busy === "list"} onClick={() => run("list", (s, est) => s.listAsset(est, car.address, 7 * 86400), copy.list.done)}>{copy.list.cta}</Button>
             </Card>
           ) : (
@@ -242,7 +246,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
           </Card>
         )}
 
-        {car.status === "Listed" && (isVerifier || isFamily) && (
+        {car.status === "Listed" && isVerifier && (
           <Card>
             <h2 className="flex items-center gap-2 text-h3"><Gavel className="size-5 text-amber" aria-hidden="true" />{copy.settle.title}</h2>
             <p className="mt-1 text-ink-2">{copy.settle.body}</p>
@@ -300,7 +304,8 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
               <Badge tone={hardship.status === "Approved" ? "ok" : "warn"}>{common.status.hardship[hardship.status]}</Badge>
             </div>
             <p className="mt-1 text-ink-2">{fmt(copy.hardship.from, { name: snap.beneficiaries.find((b) => b.wallet === hardship.beneficiary)?.label ?? "" })}</p>
-            <div className="mt-3"><Quorum approvals={hardship.approvals} needed={e.hardshipThreshold} names={e.verifierNames} label={fmt(copy.hardship.approvals, { got: hardship.approvals.filter(Boolean).length, need: e.hardshipThreshold })} /></div>
+            <ReferredNote verdict={hardship.agentVerdict} />
+            <div className="mt-3"><Quorum approvals={hardship.approvals} needed={quorumFor(hardship.agentVerdict, e.hardshipThreshold)} names={e.verifierNames} label={fmt(copy.hardship.approvals, { got: hardship.approvals.filter(Boolean).length, need: e.hardshipThreshold })} /></div>
           </Card>
         ) : isFamily && car.status !== "Sold" && e.status === "Unlocked" ? (
           <Card className="bg-surface-2/50">

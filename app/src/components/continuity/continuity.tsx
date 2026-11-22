@@ -1,0 +1,217 @@
+"use client";
+/** Continuity (plan.md §17): starter funds, practice wallets, what is left, ending a rule, referrals. */
+import { useEffect, useState } from "react";
+import { continuity } from "@/content/continuity";
+import { useLocale } from "@/lib/i18n/client";
+import { useEstate } from "@/lib/hooks/estate";
+import { useWallet } from "@/lib/hooks/wallet-source";
+import { useNow } from "@/lib/hooks/use-now";
+import { formatUsdt, shortAddress } from "@/lib/format";
+import { residualName } from "@/lib/continuity/names";
+import { surplusOf } from "@/lib/continuity/logic";
+import { personKey, type MissingPerson } from "@/lib/continuity/practice";
+import type { EstateSnapshot } from "@/lib/service/types";
+import type { Rule, Verdict, WillDraft } from "@/lib/types";
+import { Button, Card, Field, inputClass } from "@/components/ui/primitives";
+import { fmt } from "@/components/shell/copy";
+
+const useText = () => continuity[useLocale()];
+const ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/** A brand-new test-network wallet has nothing: offer starter funds. Never shown in the demo. */
+export function StarterBanner() {
+  const t = useText();
+  const { session, refreshBalances, ready } = useWallet();
+  const { isMock, run, busy } = useEstate();
+  const [done, setDone] = useState<string | null>(null);
+  const [checked, setChecked] = useState<string | null>(null);
+  // Balances start at zero until read: look once before offering, so a funded wallet never sees this flash.
+  const address = session?.address ?? null;
+  useEffect(() => {
+    if (isMock || !ready || !address || checked === address) return;
+    let alive = true;
+    void refreshBalances().finally(() => { if (alive) setChecked(address); });
+    return () => { alive = false; };
+  }, [isMock, ready, address, checked, refreshBalances]);
+  if (isMock || !session || checked !== session.address || done === session.address) return null;
+  if (session.solBalance >= 0.02 || session.usdtBalance > BigInt(0)) return null;
+  const get = async () => {
+    const r = await run("starter", (s) => s.requestStarter(), t.starter.done, true);
+    if (r.ok) {
+      setDone(session.address);
+      await refreshBalances();
+    }
+  };
+  return (
+    <Card className="mb-4" aria-label={t.starter.title}>
+      <h2 className="text-h3">{t.starter.title}</h2>
+      <p className="mt-1 text-ink-2">{t.starter.body}</p>
+      <Button className="mt-3" loading={busy === "starter"} onClick={get}>{t.starter.cta}</Button>
+    </Card>
+  );
+}
+
+/** Plan review: a wallet for everyone, pasted or made for practice. */
+export function ConnectPeople({ draft, missing, wallets, onWallets }: {
+  draft: WillDraft;
+  missing: MissingPerson[];
+  wallets: Record<string, string>;
+  onWallets: (wallets: Record<string, string>, practice: boolean) => void;
+}) {
+  const t = useText();
+  const { createPractice } = useWallet();
+  const [typed, setTyped] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const people = draft.beneficiaries.length + draft.verifiers.length;
+  if (!people) return null;
+
+  const make = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const made = await createPractice(missing.map((m) => ({ label: m.name, role: m.role })));
+      onWallets({ ...wallets, ...Object.fromEntries(missing.map((m, i) => [m.key, made[i]])) }, true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const paste = (key: string, value: string) => {
+    const v = value.trim();
+    setTyped((x) => ({ ...x, [key]: v }));
+    if (ADDRESS.test(v)) onWallets({ ...wallets, [key]: v }, false);
+  };
+
+  const madeHere = [...draft.beneficiaries.map((_, i) => personKey("b", i)), ...draft.verifiers.map((_, i) => personKey("v", i))].some((k) => wallets[k]);
+  if (!missing.length && !madeHere) return null;
+  return (
+    <section className="mt-6" aria-labelledby="connect-people">
+      <h2 id="connect-people" className="text-h3">{t.practice.title}</h2>
+      {missing.length ? (
+        <>
+          <p className="mt-2 text-ink-2">{t.practice.body}</p>
+          <Button className="mt-3" loading={busy} onClick={make}>{busy ? t.practice.working : t.practice.cta}</Button>
+          <p className="mt-2 text-small text-ink-2">{t.practice.note}</p>
+          <div className="mt-3 grid gap-3">
+            {missing.map((m) => (
+              <Field
+                key={m.key} htmlFor={`wallet-${m.key}`} label={fmt(t.practice.address, { name: m.name })}
+                error={typed[m.key] && !ADDRESS.test(typed[m.key]) ? t.practice.invalid : null}
+              >
+                <input id={`wallet-${m.key}`} className={inputClass} autoComplete="off" spellCheck={false} value={typed[m.key] ?? ""} onChange={(e) => paste(m.key, e.target.value)} />
+              </Field>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="mt-2 text-ink-2" role="status">{t.practice.ready}</p>
+      )}
+      {error && <p role="alert" className="mt-2 text-small font-semibold">{error}</p>}
+    </section>
+  );
+}
+
+/** Plan review: who receives what is left. */
+export function ResidualPicker({ draft, value, onChange }: { draft: WillDraft; value: string; onChange: (label: string) => void }) {
+  const t = useText();
+  if (!draft.beneficiaries.length) return null;
+  return (
+    <section className="mt-6">
+      <h2 className="text-h3">{t.residual.title}</h2>
+      <p className="mb-3 mt-2 text-ink-2">{t.residual.body}</p>
+      <Field label={t.residual.label} htmlFor="residual-draft">
+        <select id="residual-draft" className={inputClass} value={value} onChange={(e) => onChange(e.target.value)}>
+          {draft.beneficiaries.map((b) => <option key={b.label} value={b.label}>{b.label}</option>)}
+        </select>
+      </Field>
+    </section>
+  );
+}
+
+/** Vault: the owner names who receives what is left; after the unlock anyone can pay it out to them. */
+export function ResidualCard({ snap, className }: { snap: EstateSnapshot; className?: string }) {
+  const t = useText();
+  const { run, busy } = useEstate();
+  const { session } = useWallet();
+  const now = useNow();
+  const [pick, setPick] = useState("");
+  const e = snap.estate;
+  const to = snap.residual ?? null;
+  const people = snap.beneficiaries.filter((b) => b.active);
+  const canSet = e.status === "Active" && session?.address === e.owner && people.length > 0;
+  const chosen = pick || to || people[0]?.wallet || "";
+  const surplus = e.status === "Unlocked" && now ? surplusOf(e.vaultBalance, snap.rules, now) : BigInt(0);
+
+  return (
+    <Card className={className}>
+      <h2 className="text-h3">{t.residual.title}</h2>
+      <p className="mt-1 text-ink-2">{t.residual.body}</p>
+      <p className="mt-2 font-semibold">{to ? fmt(t.residual.goesTo, { name: residualName(snap, to) ?? shortAddress(to) }) : t.residual.none}</p>
+      {canSet && (
+        <div className="mt-3 grid gap-3">
+          <Field label={t.residual.label} htmlFor="residual-set">
+            <select id="residual-set" className={inputClass} value={chosen} onChange={(ev) => setPick(ev.target.value)}>
+              {to && !people.some((b) => b.wallet === to) && <option value={to}>{residualName(snap, to) ?? shortAddress(to)}</option>}
+              {people.map((b) => <option key={b.wallet} value={b.wallet}>{b.label}</option>)}
+            </select>
+          </Field>
+          <Button variant="secondary" disabled={chosen === to} loading={busy === "residual"} onClick={() => run("residual", (s, est) => s.setResidual(est, chosen), t.residual.saved)}>
+            {t.residual.save}
+          </Button>
+        </div>
+      )}
+      {e.status === "Unlocked" && to && (
+        <div className="mt-3">
+          <p className="text-small text-ink-2">{surplus > BigInt(0) ? fmt(t.residual.ready, { amount: formatUsdt(surplus) }) : t.residual.waiting}</p>
+          {surplus > BigInt(0) && (
+            <Button className="mt-2" loading={busy === "sweep"} onClick={() => run("sweep", (s, est) => s.sweepResidual(est), t.residual.swept)}>{t.residual.sweep}</Button>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** The signed plan: the owner can end a rule while alive. */
+export function EndRule({ snap, rule }: { snap: EstateSnapshot; rule: Rule }) {
+  const t = useText();
+  const { run, busy } = useEstate();
+  const { session } = useWallet();
+  const now = useNow();
+  const [asking, setAsking] = useState(false);
+  if (!now) return null;
+  if (now > rule.validUntil) return <p className="mt-2 text-small font-semibold text-ink-2">{t.endRule.ended}</p>;
+  if (snap.estate.status !== "Active" || session?.address !== snap.estate.owner) return null;
+  const key = `end-${rule.address}`;
+  if (!asking) {
+    return (
+      <button type="button" onClick={() => setAsking(true)} className="mt-1 inline-flex min-h-11 items-center text-small font-semibold underline underline-offset-4">
+        {t.endRule.cta}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-2" role="group" aria-label={t.endRule.cta}>
+      <p className="text-small">{t.endRule.warn}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button small loading={busy === key} onClick={() => run(key, (s, est) => s.endRule(est, rule.address), t.endRule.done).then((r) => { if (r.ok) setAsking(false); })}>
+          {t.endRule.confirm}
+        </Button>
+        <Button small variant="secondary" onClick={() => setAsking(false)}>{t.endRule.keep}</Button>
+      </div>
+    </div>
+  );
+}
+
+/** Beside anything the agent referred instead of approving. */
+export function ReferredNote({ verdict }: { verdict: Verdict }) {
+  const t = useText();
+  if (verdict !== "Referred") return null;
+  return <p className="mt-2 text-small font-semibold">{t.referred}</p>;
+}
+
+export function RelistNote() {
+  return <p className="mt-1 text-small text-ink-2">{useText().relist}</p>;
+}

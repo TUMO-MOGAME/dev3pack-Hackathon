@@ -10,6 +10,7 @@ import { shortName } from "@/lib/names";
 import { scheduleStepDue } from "@/lib/schedule-step";
 import type { CommonCopy } from "@/content/common";
 import { fmt, useCopy } from "./copy";
+import { openToPeople } from "@/lib/verdict";
 
 type StepKey = keyof CommonCopy["demo"]["steps"];
 const ORDER: StepKey[] = ["will", "fund", "schedule", "car", "ask", "answer", "report", "attest", "wait", "claim", "approve", "list", "offer", "settle", "done"];
@@ -34,7 +35,7 @@ function nextStep(snap: EstateSnapshot | null, sessions: WalletSession[]): Step 
     if (!e.death.certHash) {
       const everyday = snap.rules.find((r) => r.startsNow && r.category === "General" && r.recurringAmount === BigInt(0));
       const asks = everyday ? snap.claims.filter((c) => c.rule === everyday.address) : [];
-      const waiting = asks.find((c) => c.status === "Open" && c.agentVerdict === "Approved" && !c.ownerApproved && !snap.asks?.[c.address]?.declinedAt);
+      const waiting = asks.find((c) => c.status === "Open" && openToPeople(c.agentVerdict) && !c.ownerApproved && !snap.asks?.[c.address]?.declinedAt);
       if (waiting) return { key: "answer", actor: ownerS, href: "/chat" };
       if (everyday && asks.length === 0) return { key: "ask", actor: sessions.find((s) => s.address === everyday.beneficiary) ?? kid, href: "/chat" };
     }

@@ -12,6 +12,7 @@ import { bits, bool, enumOf, hex, key, num, type Raw } from "./decoders";
 import { guardPda } from "./pda";
 import { scanAccounts, type ChainEvent } from "./reads";
 import { getConnection } from "./tx";
+import { objectionLapsesAt } from "../disputes/types";
 
 const DEFAULT_KEY = "11111111111111111111111111111111";
 /** Byte offsets of Seat.monitors[0] and [1] (8 discriminator + 32 estate + 1 index + 32 holder + 2×32 backups). */
@@ -171,7 +172,7 @@ export function assembleGuardians(
     return {
       address, kind, target: key(o, "target"), monitor, monitorName: name(monitor),
       seatIndex: seatIndex === NO_SEAT ? null : seatIndex, reason: extras.reasons[reasonHash] ?? "", reasonHash,
-      raisedAt, status, lapsesAt: kind === "Fallback" && status === "Open" ? raisedAt + fallbackWait : null,
+      raisedAt, status, lapsesAt: status !== "Open" ? null : kind === "Fallback" ? raisedAt + fallbackWait : objectionLapsesAt(raisedAt, estate.waitingPeriodSecs),
       votesUphold: countBits(num(o, "votes_uphold")), votesDismiss: countBits(num(o, "votes_dismiss")),
     };
   }).sort((a, b) => b.raisedAt - a.raisedAt);

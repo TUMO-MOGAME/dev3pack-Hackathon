@@ -150,9 +150,19 @@ describe("POST /api/estate-meta: buyer-name", () => {
 });
 
 describe("GET /api/estate-meta", () => {
-  it("stays open (names only)", async () => {
+  it("refuses to save the redacted view over the real names", async () => {
     expect(await status(signed(owner, "save", names))).toBe(200);
-    const r = await routes.GET(new Request(`http://local/api/estate-meta?estate=${E}`));
-    expect(((await r.json()) as EstateMeta).ownerName).toBe("Thabo Mokoena");
+    expect(await status(signed(owner, "save", { ...names, ownerName: "Estate owner" }))).toBe(409);
+  });
+
+  it("gives the family's names to members only; anyone else gets roles", async () => {
+    expect(await status(signed(owner, "save", names))).toBe(200);
+    const req = () => new Request(`http://local/api/estate-meta?estate=${E}`);
+    const stranger = (await (await estateMetaRoutes({ ...deps, member: async () => null }).GET(req())).json()) as EstateMeta;
+    expect(stranger.ownerName).toBe("Estate owner");
+    expect(stranger.verifierNames).toEqual(["Verifier 1", "Verifier 2", "Verifier 3"]);
+    expect(stranger.buyerNames).toEqual({});
+    const member = (await (await estateMetaRoutes({ ...deps, member: async () => owner.address }).GET(req())).json()) as EstateMeta;
+    expect(member.ownerName).toBe("Thabo Mokoena");
   });
 });

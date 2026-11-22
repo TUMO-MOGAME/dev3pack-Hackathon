@@ -7,6 +7,8 @@ import type { Base58, Role, WalletSession } from "../types";
  * In mock mode the same interface is backed by demo personas so the UI works offline.
  */
 export interface WalletApi {
+  /** Test network: practice wallets for other people in a plan (one PIN); the active wallet stays. */
+  createPractice(people: { label: string; role: Role }[]): Promise<Base58[]>;
   ready: boolean;
   /** The wallet currently acting in the UI. */
   session: WalletSession | null;

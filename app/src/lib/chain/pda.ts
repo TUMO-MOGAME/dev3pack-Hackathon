@@ -96,3 +96,11 @@ export const mediaPda = (programId: Key, asset: Key) =>
 /** ["yearcap", rule]: the rule's optional cap per 365-day period (may not exist). Added 15 Nov 2026. */
 export const yearCapPda = (programId: Key, rule: Key) =>
   find(programId, [enc.encode("yearcap"), pk(rule).toBytes()]);
+
+/** ["residual", estate]: who receives what no live rule still needs after the unlock. */
+export const residualPda = (programId: Key, estate: Key) =>
+  find(programId, [new TextEncoder().encode("residual"), pk(estate).toBytes()]);
+
+/** ["agentvote", estate, candidate]: the trusted people's votes to replace the agent's key. */
+export const agentVotePda = (programId: Key, estate: Key, candidate: Key) =>
+  find(programId, [new TextEncoder().encode("agentvote"), pk(estate).toBytes(), pk(candidate).toBytes()]);

@@ -71,6 +71,8 @@ export interface MockService extends HeirloomService {
 
 export { isMockService } from "./is-mock";
 import { MOCK_STORE_KEY } from "./is-mock";
+import { MAX_RULES, MIN_LISTING_SECS, listingEnded, nextDueAfter, residualRecipient, surplusOf } from "../continuity/logic";
+import { openToPeople, outcomeOf, quorumFor } from "../verdict";
 
 /* ---------- demo cast ---------- */
 
@@ -314,7 +316,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
 
   /* ----- synchronous "instructions" (shared by the async API and the stage seeder) ----- */
 
-  function createEstate(draft: WillDraft): TxResult[] {
+  function createEstate(draft: WillDraft, residualLabel?: string): TxResult[] {
     need(!s.created, "BadStatus", "This estate already has a signed will.");
     const owner = me();
     const txs: TxResult[] = [];
@@ -374,6 +376,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
         fixedPayee: r.recurring && fixed ? fixed.wallet : null,
       });
     });
+    const heirAt = Math.max(0, draft.beneficiaries.findIndex((b) => b.label === residualLabel));
+    s.snap.residual = s.snap.beneficiaries[heirAt]?.wallet ?? null;
     t = tx(); txs.push(t);
     log("WillSet", `Plan signed and locked: ${draft.rules.filter((r) => r.startsNow).length} rules start now, ${draft.rules.filter((r) => !r.startsNow).length} after a passing`, t);
     return txs;
@@ -392,6 +396,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
 
   function addRule(input: Parameters<HeirloomService["addRule"]>[1]): TxResult {
     needCreated(); needOwner();
+    need(s.snap.rules.length < MAX_RULES, "TooManyRules", `A plan can have at most ${MAX_RULES} rules.`);
     need(est().status === "Active", "BadStatus", "Rules cannot change once a passing is being confirmed.");
     need(input.maxPerClaimUsdt > 0 && input.maxPerClaimUsdt <= input.lifetimeCapUsdt, "InvalidAmount", "The per-claim limit must be above zero and within the total limit.");
     s.snap.rules.push({
@@ -488,15 +493,50 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     G.setAssetMedia(a.address, { kind: d.kind, title: a.title, photos: d.photos, spec: d.spec }, d.mediaRoot);
   }
 
-  function submitDeath(certHash: string, approve: boolean): TxResult {
+  function endRule(address: Base58): TxResult {
+    needCreated(); needOwner();
+    need(est().status === "Active", "BadStatus", "Rules cannot change once a passing is being confirmed.");
+    const r = s.snap.rules.find((x) => x.address === address) ?? fail("BadStatus", "That rule does not exist.");
+    need(nowSecs() <= r.validUntil, "RuleExpired", "This rule has already ended.");
+    r.validUntil = nowSecs() - 1;
+    const t = tx();
+    log("RuleEnded", `${first(me())} ended a ${r.category.toLowerCase()} rule. It cannot pay any more`, t);
+    return t;
+  }
+
+  function setResidual(recipient: Base58): TxResult {
+    needCreated(); needOwner();
+    need(est().status === "Active", "BadStatus", "This can only change while the estate is active.");
+    need(!!recipient && recipient !== est().owner, "NoResidualRecipient", "Choose someone other than the owner.");
+    s.snap.residual = recipient;
+    const t = tx();
+    log("ResidualSet", `${first(recipient)} will receive whatever no rule needs`, t);
+    return t;
+  }
+
+  function sweepResidual(): TxResult {
+    needCreated();
+    const e = est();
+    need(e.status === "Unlocked", "BadStatus", "Only after the estate has unlocked.");
+    const to = residualRecipient(s.snap.residual ?? null, null, "") ?? fail("NoResidualRecipient", "Nobody was named to receive what is left.");
+    const amount = surplusOf(e.vaultBalance, s.snap.rules, nowSecs());
+    need(amount > 0n, "NothingToSweep", "The rules still need everything in the vault.");
+    e.vaultBalance -= amount;
+    credit(to, amount);
+    const t = tx();
+    log("ResidualSwept", `${usd(amount)} that no rule needed was paid to ${first(to)}`, t, amount);
+    return t;
+  }
+
+  function submitDeath(certHash: string, approve: boolean, referred = false): TxResult {
     needCreated(); needBeneficiary();
     need(est().status === "Active", "BadStatus", "A passing has already been reported for this estate.");
     const d = est().death;
     const t = tx();
     log("DeathClaimSubmitted", `${first(me())} reported that ${first(est().owner)} has passed away`, t);
     if (approve) {
-      d.certHash = certHash; d.submittedBy = me(); d.verdict = "Approved"; d.attestations = [false, false, false]; d.pendingSince = null;
-      log("DeathReviewed", "The agent read the death certificate and found no problems", tx());
+      d.certHash = certHash; d.submittedBy = me(); d.verdict = referred ? "Referred" : "Approved"; d.attestations = [false, false, false]; d.pendingSince = null;
+      log(referred ? "ReviewReferred" : "DeathReviewed", referred ? "The agent was not sure about the certificate, so the trusted people decide" : "The agent read the death certificate and found no problems", tx());
     } else {
       d.certHash = null; d.submittedBy = null; d.verdict = "Pending";
       d.agentReport = undefined;
@@ -510,12 +550,12 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     const i = verifierIndex();
     const d = est().death;
     need(!!d.certHash, "NoDeathClaim", "No passing has been reported.");
-    need(d.verdict === "Approved", "AgentNotApproved", "The agent has not cleared the certificate.");
+    need(openToPeople(d.verdict), "AgentNotApproved", "The agent has not cleared the certificate.");
     need(!d.attestations[i], "AlreadyApproved", "You have already confirmed this.");
     d.attestations[i] = true;
     const t = tx();
     log("DeathAttested", `${first(me())} confirmed the passing (${count(d.attestations)} of ${est().deathThreshold})`, t);
-    if (count(d.attestations) >= est().deathThreshold && est().status === "Active") {
+    if (count(d.attestations) >= quorumFor(d.verdict, est().deathThreshold) && est().status === "Active") {
       est().status = "DeathPending";
       d.pendingSince = nowSecs();
     }
@@ -565,17 +605,18 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(rule.spentTotal + amt <= rule.lifetimeCap, "ExceedsLifetimeCap", `Only ${usd(rule.lifetimeCap - rule.spentTotal)} is left under this rule.`);
     need(nowSecs() <= rule.validUntil, "RuleExpired", "This rule has ended.");
     D.checkYearly(rule, amt, false);
-    // As on-chain (/api/review): only "reject" blocks; "needs_human" goes to the people who decide.
-    const approved = report.verdict !== "reject";
+    // As on-chain (/api/review): only "reject" blocks; an unsure agent refers, it never approves.
+    const outcome = outcomeOf(report.verdict);
+    const approved = outcome !== "Reject";
     const claim: Claim = {
       address: fakeAddr(), rule: rule.address, id: s.snap.claims.length, beneficiary: me(), payee: payee.wallet, amount: amt,
-      evidenceHash, agentVerdict: approved ? "Approved" : "Rejected", agentReport: report,
+      evidenceHash, agentVerdict: outcome === "Approve" ? "Approved" : outcome === "Refer" ? "Referred" : "Rejected", agentReport: report,
       approvals: [false, false, false], ownerApproved: false, status: approved ? "Open" : "Rejected", createdAt: nowSecs(),
     };
     s.snap.claims.unshift(claim);
     const t = tx();
     log("ClaimSubmitted", `${first(me())} asked for ${usd(amt)} to be paid to ${payee.name}`, t, amt);
-    log("ClaimReviewed", reviewed ?? (approved ? `The agent checked the ${rule.category.toLowerCase()} statement: it matches the claim` : "The agent could not accept the document. The claim was declined"), tx());
+    log("ClaimReviewed", reviewed ?? (outcome === "Refer" ? "The agent was not sure, so it referred the claim to people" : approved ? `The agent checked the ${rule.category.toLowerCase()} statement: it matches the claim` : "The agent could not accept the document. The claim was declined"), tx());
     return { t, claim };
   }
 
@@ -584,12 +625,12 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     const i = verifierIndex();
     const c = s.snap.claims.find((x) => x.address === address) ?? fail("BadStatus", "That claim does not exist.");
     need(c.status === "Open", "BadStatus", "This claim is already closed.");
-    need(c.agentVerdict === "Approved", "AgentNotApproved", "The agent has not cleared this claim.");
+    need(openToPeople(c.agentVerdict), "AgentNotApproved", "The agent has not cleared this claim.");
     need(!c.approvals[i], "AlreadyApproved", "You have already approved this.");
     c.approvals[i] = true;
     const t = tx();
     log("ClaimApproved", `${first(me())} approved ${first(c.beneficiary)}'s claim`, t);
-    const deadline = count(c.approvals) >= est().claimThreshold ? G.stamp(c.address, i) : null;
+    const deadline = count(c.approvals) >= quorumFor(c.agentVerdict, est().claimThreshold) ? G.stamp(c.address, i) : null;
     G.recordApproval({ kind: "Claim", seatIndex: i, target: c.address, t, deadline, summary: `Approved ${usd(c.amount)} to ${name(c.payee)} for ${first(c.beneficiary)}` });
     return t;
   }
@@ -601,7 +642,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(rule.startsNow, "BadStatus", "Only living-plan rules can be approved by the owner.");
     need(est().status === "Active", "BadStatus", "Owner approval only applies while the estate is active.");
     need(c.status === "Open", "BadStatus", "This claim cannot be approved.");
-    need(c.agentVerdict === "Approved", "AgentNotApproved", "The agent has not cleared this claim.");
+    need(openToPeople(c.agentVerdict), "AgentNotApproved", "The agent has not cleared this claim.");
     need(!c.ownerApproved, "AlreadyApproved", "You have already approved this.");
     c.ownerApproved = true;
     const t = tx();
@@ -623,7 +664,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     est().vaultBalance -= r.recurringAmount;
     r.spentTotal += r.recurringAmount;
     credit(r.fixedPayee!, r.recurringAmount);
-    r.nextDue = nowSecs() + r.intervalSecs;
+    // As on-chain: one instalment, then the next date on the schedule after now (a forced demo payment restarts from now).
+    r.nextDue = r.nextDue !== null && !force ? nextDueAfter(r.nextDue, r.intervalSecs, nowSecs()) : nowSecs() + r.intervalSecs;
     const t = tx();
     log("ScheduledPaid", `Scheduled payment: ${usd(r.recurringAmount)} paid to ${name(r.fixedPayee!)} for ${first(r.beneficiary)}`, t, r.recurringAmount, { payee: r.fixedPayee!, rule: r.address });
     return t;
@@ -635,9 +677,9 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     const rule = s.snap.rules.find((r) => r.address === c.rule)!;
     need(est().status === "Unlocked" || (rule.startsNow && est().status === "Active"), "BadStatus", "This claim cannot be paid right now.");
     need(c.status === "Open", "BadStatus", "This claim cannot be paid.");
-    need(c.agentVerdict === "Approved", "AgentNotApproved", "The agent has not cleared this claim.");
+    need(openToPeople(c.agentVerdict), "AgentNotApproved", "The agent has not cleared this claim.");
     // As on-chain: while the owner is alive only his approval counts; after unlock his approval or the quorum.
-    const approvedToPay = est().status === "Active" ? c.ownerApproved : c.ownerApproved || count(c.approvals) >= est().claimThreshold;
+    const approvedToPay = est().status === "Active" ? c.ownerApproved : c.ownerApproved || count(c.approvals) >= quorumFor(c.agentVerdict, est().claimThreshold);
     need(approvedToPay, "InsufficientApprovals", est().status === "Active" ? "The owner still needs to approve this." : "A trusted person still needs to approve this.");
     G.checkClaimExecutable(c.address, !c.ownerApproved);
     D.checkNotDisputed(c.address);
@@ -660,7 +702,9 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(est().verifiers.includes(me()) || me() === AGENT, "NotVerifier", "A trusted person or the agent opens the sale.");
     need(est().status === "Unlocked", "BadStatus", "The car can only be sold after the estate unlocks.");
     const a = s.snap.assets.find((x) => x.address === address) ?? fail("BadStatus", "That asset does not exist.");
-    need(a.status === "Held", "BadStatus", "This car is already listed or sold.");
+    need(a.status === "Held" || listingEnded(a, nowSecs()), "BadStatus", "This car is already listed or sold.");
+    need(durationSecs >= MIN_LISTING_SECS, "TimeOutOfRange", "A listing lasts at least an hour.");
+    const relisted = a.status === "Listed";
     a.status = "Listed";
     a.listingEnds = nowSecs() + durationSecs;
     const t = tx();
@@ -672,8 +716,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       log("OfferPlaced", `${r.name} put ${usd(amt)} in escrow as an offer`, tx(), amt);
     };
     const floor = fromBase(a.floorPrice);
-    if (withRivals !== "none") add(RIVALS[1], Math.round(floor * 0.93 / 50) * 50);
-    if (withRivals === "both") add(RIVALS[0], Math.round(floor * 1.017 / 50) * 50);
+    if (!relisted && withRivals !== "none") add(RIVALS[1], Math.round(floor * 0.93 / 50) * 50);
+    if (!relisted && withRivals === "both") add(RIVALS[0], Math.round(floor * 1.017 / 50) * 50);
     return t;
   }
 
@@ -734,7 +778,9 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       if (hardship) fail("BelowHardshipFloor", `No offer reaches the hardship floor of ${usd(a.hardshipFloor)}.`);
       fail("BelowFloor", `No offer reaches the minimum price of ${usd(a.floorPrice)}.`);
     }
+    need(est().verifiers.includes(me()) || me() === AGENT, "NotVerifier", "A trusted person asks the agent to settle the sale.");
     const o = s.snap.offers.find((x) => x.address === ranking.bestOffer)!;
+    need(o.buyer !== me(), "BadStatus", "You cannot settle a sale to yourself.");
     const to = a.hardshipBeneficiary ?? a.proceedsTo;
     if (to === ESTATE) est().vaultBalance += o.amount; else credit(to, o.amount);
     s.snap.offers = s.snap.offers.filter((x) => x !== o);
@@ -752,9 +798,10 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(a.status !== "Sold", "BadStatus", "The car has already been sold.");
     // Like the contract: one request per family member per car (the account is created once and never reused).
     need(!s.snap.hardships.some((h) => h.beneficiary === me() && h.asset === assetAddr), "BadStatus", "You have already asked once for this car.");
-    const ok = report.verdict === "approve";
+    const outcome = outcomeOf(report.verdict);
+    const ok = outcome !== "Reject";
     const h: Hardship = {
-      address: fakeAddr(), asset: a.address, beneficiary: me(), evidenceHash, agentVerdict: ok ? "Approved" : "Rejected",
+      address: fakeAddr(), asset: a.address, beneficiary: me(), evidenceHash, agentVerdict: outcome === "Approve" ? "Approved" : ok ? "Referred" : "Rejected",
       agentReport: report, approvals: [false, false, false], status: ok ? "Open" : "Rejected",
     };
     s.snap.hardships.unshift(h);
@@ -768,13 +815,13 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     needCreated();
     const i = verifierIndex();
     const h = s.snap.hardships.find((x) => x.address === address) ?? fail("BadStatus", "That request does not exist.");
-    need(h.status === "Open" && h.agentVerdict === "Approved", "BadStatus", "This request cannot be approved.");
+    need(h.status === "Open" && openToPeople(h.agentVerdict), "BadStatus", "This request cannot be approved.");
     need(!h.approvals[i], "AlreadyApproved", "You have already approved this.");
     h.approvals[i] = true;
     const t = tx();
     log("HardshipApproved", `${first(me())} approved ${first(h.beneficiary)}'s hardship request (${count(h.approvals)} of ${est().hardshipThreshold})`, t);
     G.recordApproval({ kind: "Hardship", seatIndex: i, target: h.address, t, deadline: null, summary: `Approved ${first(h.beneficiary)}'s request to sell below the minimum price` });
-    if (count(h.approvals) >= est().hardshipThreshold) {
+    if (count(h.approvals) >= quorumFor(h.agentVerdict, est().hardshipThreshold)) {
       h.status = "Approved";
       const a = s.snap.assets.find((x) => x.address === h.asset);
       if (a) a.hardshipBeneficiary = h.beneficiary;
@@ -1236,8 +1283,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       return rank(asset).ranking;
     },
 
-    async createEstateFromWill(draft) {
-      const txs = await mutate(1500, () => createEstate(draft));
+    async createEstateFromWill(draft, opts) {
+      const txs = await mutate(1500, () => createEstate(draft, opts?.residualLabel));
       return { estate: est().address, txs };
     },
     deposit: (_e, amountUsdt) => mutate(900, () => deposit(amountUsdt)),
@@ -1280,8 +1327,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       const hash = await hashFile(certificate);
       await wait(1900);
       const r = report("death", certificate, {});
-      const t = submitDeath(hash, r.verdict === "approve");
-      if (r.verdict === "approve") est().death.agentReport = r;
+      const t = submitDeath(hash, r.verdict !== "reject", r.verdict === "needs_human");
+      if (r.verdict !== "reject") est().death.agentReport = r;
       save();
       return { tx: t, report: r };
     },
@@ -1309,6 +1356,10 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     finalizeUnlock: () => mutate(800, () => finalizeUnlock()),
     executeClaim: (_e, claim) => mutate(1100, () => executeClaim(claim)),
 
+    endRule: (_e, rule) => mutate(900, () => endRule(rule)),
+    setResidual: (_e, recipient) => mutate(900, () => setResidual(recipient)),
+    sweepResidual: () => mutate(900, () => sweepResidual()),
+    requestStarter: async () => fail("BadStatus", "The demo family already has simulated money."),
     listAsset: (_e, asset, durationSecs) => mutate(900, () => listAsset(asset, durationSecs)),
     placeOffer: (_e, asset, amountUsdt, buyerName) => mutate(1000, () => placeOffer(asset, amountUsdt, buyerName)),
     withdrawOffer: (_e, asset) => mutate(800, () => withdrawOffer(asset)),

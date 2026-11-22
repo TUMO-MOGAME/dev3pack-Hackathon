@@ -98,3 +98,7 @@ export function yearlyLeft(y: YearlyCap | null | undefined, now: number): bigint
   const p = currentPeriod(y.cap, y.periodStart, y.spent, now);
   return p.cap > p.spent ? p.cap - p.spent : 0n;
 }
+
+/** A monitors' objection (not Fallback) lapses after two waiting periods (state.rs `lapses_at`). */
+export const objectionLapsesAt = (raisedAt: number, waitingPeriodSecs: number) =>
+  raisedAt + 2 * Math.max(waitingPeriodSecs, DISPUTE_MIN_SECS);

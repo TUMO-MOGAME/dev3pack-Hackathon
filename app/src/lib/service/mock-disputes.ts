@@ -46,12 +46,11 @@ export function createMockDisputes(d: DisputeDeps) {
     need(!isOpen(latestOn(target)), "ObjectionOpen", "A dispute is open, so this is paused until the trusted people decide.");
   }
 
-  /** raise_objection on a target that has (or had) a dispute: same PDA, so one challenge per claim. */
-  function checkObjectionAllowed(kind: TargetKind, target: Base58) {
+  /** raise_objection on a target with a dispute: only an open one blocks it; a finished one never uses it up. */
+  function checkObjectionAllowed(_kind: TargetKind, target: Base58) {
     const x = latestOn(target);
     if (!x) return;
     need(!isOpen(x), "ObjectionOpen", "A dispute is already open on this.");
-    need(kind !== "Claim" && kind !== "Hardship", "BadStatus", "This payment has already been challenged once.");
   }
 
   function raiseDispute(kind: DisputeKind, target: Base58, reason: string, reasonHash: string): TxResult {
@@ -66,6 +65,7 @@ export function createMockDisputes(d: DisputeDeps) {
     if (kind === "Claim") {
       const c = d.snap().claims.find((x) => x.address === target) ?? fail("BadStatus", "That claim does not exist.");
       need(c.status === "Open", "BadStatus", "This claim is no longer pending.");
+      need(c.beneficiary !== me, "OwnClaimDispute", "You cannot dispute your own claim.");
       what = `${d.usd(c.amount)} to ${name(c.payee)} for ${first(c.beneficiary)}`;
     } else if (kind === "Unlock") {
       need(target === e.address, "BadStatus", "That is not this estate.");

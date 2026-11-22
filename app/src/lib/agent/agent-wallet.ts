@@ -10,7 +10,7 @@ import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import { chainConfig } from "../chain/config";
 import { findInstruction, getIdl } from "../chain/idl";
 import { prepareTx } from "../chain/client";
-import { confirmOrThrow } from "../chain/tx";
+import { confirmOrThrow, getConnection } from "../chain/tx";
 import { openAccount, wdkPartialSign, wdkSignAndSend, type WdkAccount } from "../wallet/wdk";
 import { explorerTx } from "../format";
 
@@ -39,6 +39,9 @@ export async function agentAddress(): Promise<string | null> {
   return (await agentAccount()).address;
 }
 
+/** Enough for a few hundred fees; below it the agent stops. */
+const AGENT_RESERVE_LAMPORTS = 10_000_000;
+
 const eq = (a: Uint8Array, b: number[]) => a.length >= 8 && b.every((x, i) => a[i] === x);
 
 /** Throws unless every instruction targets the Heirloom program with an allow-listed discriminator. */
@@ -55,6 +58,10 @@ export function assertAllowed(ixs: TransactionInstruction[]): void {
 export async function agentSignAndSend(ixs: TransactionInstruction[]): Promise<{ signature: string; explorerUrl: string }> {
   assertAllowed(ixs);
   const acc = await agentAccount();
+  // The backstop against draining: holds across server instances, unlike the per-wallet allowances.
+  if ((await getConnection().getBalance(new PublicKey(acc.address), "confirmed")) < AGENT_RESERVE_LAMPORTS) {
+    throw new Error("The agent's wallet is low on SOL, so it is not signing right now.");
+  }
   const b64 = await prepareTx(acc.address, ixs);
   const signature = await wdkSignAndSend(acc.account, b64);
   await confirmOrThrow(signature);

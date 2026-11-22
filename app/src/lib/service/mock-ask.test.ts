@@ -52,7 +52,8 @@ describe("mock Ask for money", () => {
     expect(res.report).toMatchObject({ verdict: "needs_human", documentType: "request_note" });
     snap = await svc.getEstate(estate);
     const claim = snap.claims.find((c) => c.address === res.claim)!;
-    expect(claim).toMatchObject({ status: "Open", agentVerdict: "Approved", amount: toBase(16.22), payee: lerato });
+    // The agent had nothing to check, so it refers: it never approves what it could not verify.
+    expect(claim).toMatchObject({ status: "Open", agentVerdict: "Referred", amount: toBase(16.22), payee: lerato });
     expect(snap.asks?.[res.claim]).toMatchObject({ purpose: "Taxi to the library", currency: "ZAR", typed: 300, attachment: false });
 
     act("thabo");

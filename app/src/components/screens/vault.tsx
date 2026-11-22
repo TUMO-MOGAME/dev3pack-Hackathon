@@ -14,6 +14,7 @@ import { Button, ButtonLink, Card, ExplorerLink, Field, inputClass, Meter, Money
 import { fmt, timeAgo, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { usePay } from "@/components/pay/payment";
+import { ResidualCard } from "@/components/continuity/continuity";
 
 type Copy = ScreensCopy["vault"];
 
@@ -121,6 +122,8 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
           </div>
         </Card>
       )}
+
+      <ResidualCard snap={snap} className="mt-4" />
 
       {snap.rules.length > 0 && (
         <Card className="mt-4">

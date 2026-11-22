@@ -20,6 +20,7 @@ import { key, num, str, type Raw } from "../chain/decoders";
 import { getActiveSigner } from "../wallet/signer";
 import { sha256Hex } from "../agent/hash";
 import { formatUsdt, toBase } from "../format";
+import { readHeaders } from "../access/client";
 
 export interface ChainAskDeps {
   send(ixs: TransactionInstruction[]): Promise<TxResult>;
@@ -98,7 +99,7 @@ export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate:
 
   return {
     async loadAsks(estate) {
-      const server = await f(`/api/asks?estate=${estate}`, { cache: "no-store" })
+      const server = await f(`/api/asks?estate=${estate}`, { cache: "no-store", headers: readHeaders() })
         .then((r) => (r.ok ? (r.json() as Promise<AskNote[]>) : []))
         .catch(() => [] as AskNote[]);
       return mergeAsks(Array.isArray(server) ? server : [], readLocalAsks(storage, estate));

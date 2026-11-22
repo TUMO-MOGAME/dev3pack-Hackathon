@@ -2,26 +2,30 @@ import { PublicKey } from "@solana/web3.js";
 import { handler, HttpError, isChainMode, json, rateLimit } from "@/lib/api/http";
 import { reviewFields } from "@/lib/agent/schemas";
 import { reviewDocument } from "@/lib/agent/review";
-import { MAX_UPLOAD_BYTES, storeEvidence } from "@/lib/storage";
+import { loadReviewTarget } from "@/lib/agent/review-target";
+import { MAX_UPLOAD_BYTES, storeEvidence, validateUpload } from "@/lib/storage";
 import { recordEvidence, saveReport } from "@/lib/db";
-import { fetchAccountRaw, findRecentEvent } from "@/lib/chain/reads";
-import { hex, key } from "@/lib/chain/decoders";
-import { reviewClaim, reviewDeath, reviewFallbackDeath, reviewHardship, reviewSeatDeath } from "@/lib/chain/instructions";
-import { guardPda, seatPda } from "@/lib/chain/pda";
-import { getIdl } from "@/lib/chain/idl";
-import { agentSignAndSend, hasAgentWallet, agentAddress } from "@/lib/agent/agent-wallet";
+import { sha256Hex } from "@/lib/agent/hash";
+import { agentAddress, agentSignAndSend, hasAgentWallet } from "@/lib/agent/agent-wallet";
+import { spendAgentAllowance } from "@/lib/agent/budget";
+import { assertServedEstate, verifyAction } from "@/lib/access/server";
+import { actionBody } from "@/lib/access/messages";
+import { outcomeOf, type ReviewOutcome } from "@/lib/verdict";
 
 export const maxDuration = 90;
 
 /**
  * POST /api/review (multipart: file, purpose=death|claim|hardship|seat-death|fallback-death, estate, context, subject?,
- * index?, preview?=1). seat-death: `index` = seat 0..2; fallback-death: `index` = fallback recipient 0..3; the context
- * names the person whose death is reported (the reviewer checks the certificate against that name, not the owner).
- * 1. validate + store the file (private bucket), hash it
- * 2. chain mode: the hash must equal the evidence hash already on-chain (death claim / claim / hardship)
- * 3. Gemini DocumentReviewer → AgentReport (reportHash = sha256 of canonical JSON)
- * 4. the agent's WDK wallet signs review_* with approve = verdict !== "reject". "needs_human" is forwarded to the
- *    human verifiers (who must still approve on-chain) with the red flags attached; only "reject" blocks.
+ * index?, preview?=1).
+ *
+ * A preview (and everything in mock mode) only reads the document: nothing is stored, recorded or signed.
+ * A real review, in this order:
+ * 1. the request is signed by a wallet over exactly this file and target (lib/access);
+ * 2. the chain says the file is the evidence submitted, that wallet submitted it, it is not reviewed yet, and the
+ *    estate is one this agent serves. Only then is the file stored and the model called;
+ * 3. the reviewer gets facts built from the chain. The caller's `context` is passed only as untrusted text;
+ * 4. the agent signs approve, reject or refer. An unsure agent never approves: death, claim and hardship go to
+ *    people with a higher quorum; seat and fallback deaths, which have no such step, are rejected.
  * Returns { report, evidence: { sha256 }, tx: { signature, explorerUrl } | null, onChain: string }.
  */
 export const POST = handler(async (req) => {
@@ -34,83 +38,44 @@ export const POST = handler(async (req) => {
     purpose: form.get("purpose"), estate: form.get("estate"), context: form.get("context") ?? "", subject: form.get("subject") ?? undefined,
     index: form.get("index") ?? undefined,
   });
-  const deathOf = fields.purpose === "seat-death" || fields.purpose === "fallback-death";
-  if (deathOf && fields.index === undefined) throw new HttpError(400, "index is required for this review.");
-  if (fields.purpose === "seat-death" && fields.index! > 2) throw new HttpError(400, "There are only three seats.");
-  // A trusted person's or fallback recipient's certificate is stored and logged as a death certificate.
-  const storePurpose: "death" | "claim" | "hardship" = fields.purpose === "seat-death" || fields.purpose === "fallback-death" ? "death" : fields.purpose;
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const stored = await storeEvidence(bytes, file.type, storePurpose);
+  const mime = validateUpload(bytes, file.type);
+  const sha256 = await sha256Hex(bytes);
+  const read = { bytes, mime, purpose: fields.purpose, untrusted: fields.context, evidenceSha256: sha256 };
 
-  // On-chain integrity: the uploaded file must be the one whose hash the family member submitted.
-  let onChainTarget:
-    | { kind: "death" } | { kind: "claim"; claim: string; rule: string } | { kind: "hardship"; hardship: string; asset: string }
-    | { kind: "seat-death"; index: number } | { kind: "fallback-death"; index: number } | null = null;
-  const preview = form.get("preview") === "1"; // review only: no on-chain hash check and no agent tx
-  if (isChainMode() && !preview) {
-    if (fields.purpose === "death") {
-      const est = await fetchAccountRaw("Estate", fields.estate);
-      if (!est) throw new HttpError(404, "Estate not found on-chain.");
-      if (hex(est, "death_cert_hash") !== stored.sha256) throw new HttpError(409, "This file does not match the death certificate hash submitted on-chain.");
-      onChainTarget = { kind: "death" };
-    } else if (fields.purpose === "seat-death") {
-      const programId = getIdl().address;
-      const seat = await fetchAccountRaw("Seat", seatPda(programId, fields.estate, fields.index!).toBase58());
-      if (!seat) throw new HttpError(404, "This trusted person's seat was not found on-chain.");
-      if (hex(seat, "death_cert_hash") !== stored.sha256) throw new HttpError(409, "This file does not match the death certificate hash submitted on-chain.");
-      onChainTarget = { kind: "seat-death", index: fields.index! };
-    } else if (fields.purpose === "fallback-death") {
-      const programId = getIdl().address;
-      const guardAddr = guardPda(programId, fields.estate).toBase58();
-      if (!(await fetchAccountRaw("Guard", guardAddr))) throw new HttpError(404, "This estate has no fallback plan on-chain.");
-      // The Guard keeps no certificate hash: the report's hash is in its FallbackDeathReported event.
-      const i = fields.index!;
-      const reported = await findRecentEvent(guardAddr, "FallbackDeathReported", (d) => Number(d.index) === i && hex(d, "cert_hash") === stored.sha256);
-      if (!reported) throw new HttpError(409, "This file does not match a death certificate reported on-chain for this person.");
-      onChainTarget = { kind: "fallback-death", index: fields.index! };
-    } else {
-      if (!fields.subject) throw new HttpError(400, "subject (claim or hardship address) is required.");
-      const type = fields.purpose === "claim" ? "Claim" : "Hardship";
-      const acc = await fetchAccountRaw(type, fields.subject);
-      if (!acc) throw new HttpError(404, `${type} not found on-chain.`);
-      if (hex(acc, "evidence_hash") !== stored.sha256) throw new HttpError(409, `This file does not match the ${type.toLowerCase()} evidence hash on-chain.`);
-      onChainTarget = fields.purpose === "claim"
-        ? { kind: "claim", claim: fields.subject, rule: key(acc, "rule") }
-        : { kind: "hardship", hardship: fields.subject, asset: key(acc, "asset") };
-    }
+  const chain = isChainMode();
+  const preview = form.get("preview") === "1";
+  if (preview || !chain) {
+    const report = await reviewDocument(read);
+    return json({ report, evidence: { sha256, storage: "none" }, tx: null, onChain: preview ? "skipped (preview)" : "skipped (mock mode)" });
   }
 
-  const report = await reviewDocument({ bytes, mime: stored.mime, purpose: fields.purpose, context: fields.context, evidenceSha256: stored.sha256 });
+  const { purpose, estate, subject, index } = fields;
+  const wallet = verifyAction(req, "review", estate, actionBody.review({ purpose, subject, index, sha256 }));
+  if (!hasAgentWallet()) throw new HttpError(503, "The agent wallet is not configured.", "unavailable");
+  const agent = await agentAddress();
+  const target = await loadReviewTarget({ purpose, estate, subject, index, sha256 });
+  if (target.submitter !== wallet) throw new HttpError(403, "Only the person who submitted this can ask for its review.", "forbidden");
+  assertServedEstate(target.estate, agent);
+  spendAgentAllowance("review", wallet, estate);
+
+  const report = await reviewDocument({ ...read, facts: target.facts });
+  let outcome: ReviewOutcome = outcomeOf(report.verdict);
+  if (outcome === "Refer" && !target.canRefer) outcome = "Reject";
+
+  // A trusted person's or fallback recipient's certificate is stored and logged as a death certificate.
+  const storePurpose: "death" | "claim" | "hardship" = purpose === "seat-death" || purpose === "fallback-death" ? "death" : purpose;
+  const stored = await storeEvidence(bytes, mime, storePurpose);
   await recordEvidence(stored.path, stored.sha256, storePurpose, stored.mime, stored.size);
-
-  let tx: { signature: string; explorerUrl: string } | null = null;
-  let onChain = preview ? "skipped (preview)" : "skipped (mock mode)";
-  if (onChainTarget) {
-    if (!hasAgentWallet()) onChain = "skipped (AGENT_SEED_PHRASE not set)";
-    else {
-      const agent = new PublicKey((await agentAddress())!);
-      const estate = new PublicKey(fields.estate);
-      const approve = report.verdict !== "reject";
-      const t = onChainTarget;
-      const ixs = t.kind === "death"
-        ? [reviewDeath(estate, agent, approve, report.reportHash)]
-        : t.kind === "claim"
-          ? [reviewClaim(estate, agent, new PublicKey(t.claim), new PublicKey(t.rule), approve, report.reportHash)]
-          : t.kind === "hardship"
-            ? [reviewHardship(estate, agent, new PublicKey(t.asset), new PublicKey(t.hardship), approve, report.reportHash)]
-            : t.kind === "seat-death"
-              ? [reviewSeatDeath(estate, agent, t.index, approve, report.reportHash)]
-              : [reviewFallbackDeath(estate, agent, t.index, approve, report.reportHash)];
-      tx = await agentSignAndSend(ixs);
-      onChain = !approve ? "agent rejected on-chain"
-        : t.kind === "fallback-death" ? "agent approved on-chain; the recipient is skipped in the fallback order"
-          : "agent approved on-chain; waiting for human verifiers";
-    }
-  }
-
+  const tx = await agentSignAndSend([target.instruction(new PublicKey(agent!), outcome, report.reportHash)]);
   await saveReport({
-    reportHash: report.reportHash, purpose: storePurpose, estate: fields.estate, subject: fields.subject ?? null,
-    evidencePath: stored.path, evidenceSha256: stored.sha256, report, txSignature: tx?.signature ?? null,
+    reportHash: report.reportHash, purpose: storePurpose, estate, subject: subject ?? null,
+    evidencePath: stored.path, evidenceSha256: stored.sha256, report, txSignature: tx.signature,
   });
-  return json({ report, evidence: { sha256: stored.sha256, storage: stored.backend }, tx, onChain });
+
+  const onChain = outcome === "Reject" ? "agent rejected on-chain"
+    : outcome === "Refer" ? "agent was not sure: referred on-chain to people, who need a higher quorum"
+      : purpose === "fallback-death" ? "agent approved on-chain; the recipient is skipped in the fallback order"
+        : "agent approved on-chain; waiting for human verifiers";
+  return json({ report, evidence: { sha256, storage: stored.backend }, tx, onChain });
 });

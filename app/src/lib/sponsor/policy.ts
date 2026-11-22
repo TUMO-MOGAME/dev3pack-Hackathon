@@ -45,6 +45,8 @@ export const SPONSORED_HEIRLOOM_IXS = [
   "lapse_objection",
   // Disputes and yearly caps (15 Nov 2026).
   "raise_dispute", "resolve_dispute", "set_yearly_cap",
+  // Continuity (22 Nov 2026): the signer pays any rent.
+  "end_rule", "set_residual", "sweep_residual", "set_agent", "vote_agent",
 ] as const;
 
 export interface SponsorPolicy {

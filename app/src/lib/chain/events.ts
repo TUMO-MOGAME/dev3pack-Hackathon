@@ -53,6 +53,12 @@ const TEXT: Record<string, (d: Raw, amt?: bigint) => string> = {
   HardshipReviewed: (d) => `Agent reviewed a hardship request: ${pick(d, "approve", "approved") ? "supported" : "rejected"}`,
   HardshipApproved: (d) => `Verifier ${who(d, "verifier")} approved a hardship request`,
   ScheduledPaid: (d, a) => `Scheduled payment of ${a !== undefined ? formatUsdt(a) : "USD₮"} paid to ${who(d, "payee", "fixed_payee", "payee_wallet")}`,
+  ReviewReferred: () => "Agent was not sure and referred it: at least two trusted people, or the living owner, decide",
+  RuleEnded: () => "Owner ended a rule: it cannot pay any more",
+  ResidualSet: () => "Owner named who receives what is left",
+  ResidualSwept: () => "What no rule needed any more was paid to the named recipient",
+  AgentVoted: (d) => `Trusted person ${who(d, "verifier")} voted to replace the agent's key`,
+  AgentChanged: () => "The agent's key was replaced",
   ClaimOwnerApproved: () => "Owner approved a living-plan claim",
   // guardians (docs/guardians-spec.md §2.4)
   GuardInitialized: () => "Guardians switched on: approvals now wait for an objection window",
