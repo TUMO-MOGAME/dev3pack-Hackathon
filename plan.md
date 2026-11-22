@@ -1173,3 +1173,29 @@ before it. Both services, four languages.
 
 Release order is fixed: program upgrade, hash check, push, live checks.
 Not code: the legal-notice placeholders (name, phone, email, address) are live on both sites and need Tumo's details.
+
+### 18.10 Independent review, program (22 Nov): verdict "don't ship"
+The lead re-ran the reviewer's 62 probes on 242b161e: 62 pass (47 show a defect, 14 attacks held, 1 trade-off). No
+theft by an outsider. Each probe becomes a regression test of the corrected behaviour. No account layout changes.
+
+`RT` (recovery timeout) = 4 x max(waiting period, 60 s).
+
+| ID | Defect | Decision |
+|---|---|---|
+| H1 | An upheld sale objection is overwritten by a duplicate account | The `asset` slot only for Hardship; check every other typed/unchecked pair |
+| H2 | A shared backup who took a seat can't confirm | `backups[0]` excluded only while not a holder |
+| H3 | Dead confirmers make the fallback unreachable | An approved report unconfirmed for RT opens the monitor, backup and beneficiary route; finalize honours it |
+| H4 | A sole survivor who is also the claimant locks the vault | REVERSES the limit accepted in 18.8: only when no other seat is eligible and the agent Approved (never Referred) that person may attest (twice the wait) and approve a claim (twice the window). Not hardship |
+| H5 | A dismissed dispute still freezes a claim | The hold runs from the resolution |
+| H6 | The fallback skips the wait and the veto | Never before started + max(delay, 60 s), nor before the death's own wait; an open Unlock challenge blocks |
+| H7 | A lost agent and one lost key lock everything | While Active, with an open death claim and no owner sign of life for RT: two, or the only one left, may replace the agent |
+| M1-M4, M9, M10 | Proof of life, old check-ins, challenge slot, removed monitor, reserves after fallback, who may report | As the reviewer proposes |
+| M5 | Revoked challenges count | The living owner decides disputes |
+| M6 | A revoked agent's verdicts count | `vote_agent` and `set_agent` clear the death review; others where no layout change is needed |
+| M7 | Challenges bound to an address, not a report | Void once their report is cleared or replaced |
+| M8 | No time to challenge a sale or hardship | With a Guard an offer waits out the objection window; offers older than an upheld objection can't be accepted; a hardship gets a stamp and a window |
+| L1-L16 | Low | All fixed unless it needs a layout change, then documented |
+| C1 | Mixed versions corrupt rules | `add_rule` becomes `add_rule_v2` |
+
+Exit rule: after this wave a reviewer re-checks the diff only. Release when no critical or high is open; anything
+lower that remains is written in the README's limits.
