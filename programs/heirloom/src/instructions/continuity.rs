@@ -126,7 +126,20 @@ pub struct SweepResidual<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+
+    /// CHECK: the ["fallbackreport", estate, [the Guard's first living index, else 255]] PDA; may not exist.
+    /// Read only when paying by the fallback list: an agent-approved report on that recipient holds the sweep.
+    #[account(seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[next_index_of(&guard)]], bump)]
+    pub fallback_report: UncheckedAccount<'info>,
     // remaining_accounts: every Rule of the estate, in id order.
+}
+
+/// The fallback list's next index; NO_SEAT when there is no Guard.
+fn next_index_of(guard: &AccountInfo) -> u8 {
+    if !account_exists(guard) {
+        return NO_SEAT;
+    }
+    read_account::<Guard>(guard).map_or(NO_SEAT, |g| g.next_fallback_index())
 }
 
 /// Anyone, estate Unlocked: pays the vault minus what live rules can still claim. Callable again later
@@ -137,10 +150,14 @@ pub fn sweep_residual_handler<'info>(ctx: Context<'info, SweepResidual<'info>>) 
 
     let residual_info = ctx.accounts.residual.to_account_info();
     let guard_info = ctx.accounts.guard.to_account_info();
+    let mut by_list: Option<Guard> = None;
     let expected = if account_exists(&residual_info) {
         read_account::<Residual>(&residual_info)?.recipient
     } else if account_exists(&guard_info) {
-        read_account::<Guard>(&guard_info)?.next_fallback_recipient()
+        let guard: Guard = read_account(&guard_info)?;
+        let next = guard.next_fallback_recipient();
+        by_list = Some(guard);
+        next
     } else {
         Pubkey::default()
     };
@@ -148,10 +165,15 @@ pub fn sweep_residual_handler<'info>(ctx: Context<'info, SweepResidual<'info>>) 
         expected != Pubkey::default() && expected == ctx.accounts.recipient.key(),
         HeirloomError::NoResidualRecipient
     );
+    let ts = now()?;
+    let report_info = ctx.accounts.fallback_report.to_account_info();
+    if let Some(guard) = by_list.filter(|_| account_exists(&report_info)) {
+        let report: FallbackReport = read_account(&report_info)?;
+        require!(!report.holds_payment(&guard, &expected, ts), HeirloomError::DeathReportOpen);
+    }
 
     let infos = ctx.remaining_accounts;
     require!(infos.len() == estate.rule_count as usize, HeirloomError::RulesIncomplete);
-    let ts = now()?;
     let estate_key = estate.key();
     let mut reserved: u64 = 0;
     for (i, info) in infos.iter().enumerate() {
