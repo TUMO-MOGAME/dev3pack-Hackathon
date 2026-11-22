@@ -35,8 +35,8 @@ export const STARTER = {
   /** What a grant costs the agent besides that: the wallet's USD₮ account, and the fee. */
   accountLamports: 1_500_000,
   usdt: 500_000_000n, // 500 test USD₮
-  perHour: 4,
-  perDay: 16,
+  perHour: 6,
+  perDay: 24,
   reserveLamports: 300_000_000,
   /** From here the wallet has its setup SOL: it gets only the test USD₮. */
   hasSolLamports: 20_000_000,

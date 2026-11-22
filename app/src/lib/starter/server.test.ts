@@ -152,8 +152,10 @@ describe("pacing read from the chain", () => {
   });
 
   it("requests arriving together can't all take the last place", async () => {
+    // One place left, five asking at once (more would be turned away by the queue, not by the pace).
+    for (let i = 1; i < server.STARTER.perHour; i++) expect(await ask()).toBe("granted");
     const all = await Promise.all(Array.from({ length: 5 }, () => ask()));
-    expect(all.filter((r) => r === "granted")).toHaveLength(server.STARTER.perHour);
+    expect(all.filter((r) => r === "granted")).toHaveLength(1);
   });
 });
 

@@ -12,6 +12,7 @@
 - Reviewed fc693c3. Clean clone: 89 program tests, 965 app tests (one timeout under load, clean on re-run), build matches devnet. No code, chain or site changes.
 ### Next up
 - IN PROGRESS (Tumo, 22 Nov: fix everything from critical to low, update all docs, production fully up to date): plan §18, branch fix/second-review. Do not push this branch or main before the devnet upgrade is ready.
+- Merged on the branch (not deployed): S1-S6 (r2/server). Checked by the lead on the merge: vitest 1163/1163, tsc, eslint, mock and chain builds, production audit 0. Starter pace set to 6/hour, 24/day. Still to do: r2/program, chain and product waves, independent review, Supabase (waiting for the token file; migrations 0001-0009), release gates. Other replay stores (ask, letters, legacy, media, sponsor) move to the shared store in the chain wave.
 ### Decisions log
 - 22 Nov (Tumo): work before 27 Nov counts for this review (organisers allow it).
 - 22 Nov (Tumo): Heirloom gets its own Supabase account; the two existing projects stay untouched. Never run `supabase login` or `logout` here (one stored login): pass the Heirloom token per command as SUPABASE_ACCESS_TOKEN from a file outside the repo (~/.heirloom/supabase-token.txt).

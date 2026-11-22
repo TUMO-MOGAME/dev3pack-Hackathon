@@ -39,3 +39,6 @@ Thumbs.db
 
 # Redesign concept: stock photos stay local, like the originals
 /design/*/img/
+
+# Supabase CLI cache
+supabase/.temp/
