@@ -12,7 +12,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
-    // A few tests import heavy modules (WDK, legacy routes) cold; 5 s was too tight on a busy laptop.
-    testTimeout: 20_000,
+    // Tests and their hooks import heavy modules (WDK, web3.js, the routes) cold, which takes over 20 s on a busy
+    // laptop. These only bound a hang; no assertion depends on them.
+    testTimeout: 90_000,
+    hookTimeout: 90_000,
   },
 });
