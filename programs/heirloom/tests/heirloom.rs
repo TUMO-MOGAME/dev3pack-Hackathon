@@ -1272,8 +1272,8 @@ fn living_plan_claim_needs_owner_approval_while_active() {
     expect_err(env.owner_approve_claim(rule, claim), HeirloomError::AgentNotApproved);
     env.review_claim(claim, true).unwrap();
     expect_err(env.execute_claim(rule, claim), HeirloomError::InsufficientApprovals);
-    // Verifier approvals alone don't release money while the owner is alive.
-    env.approve_claim(claim, 0).unwrap();
+    // Verifiers can't approve while the owner is alive, so they can't release money either.
+    expect_err(env.approve_claim(claim, 0), HeirloomError::BadStatus);
     expect_err(env.execute_claim(rule, claim), HeirloomError::InsufficientApprovals);
 
     env.owner_approve_claim(rule, claim).unwrap();
@@ -1789,7 +1789,10 @@ fn owner_alive_decides_an_objection_alone() {
     let rule = rule_pda(&env.estate, 0);
     let claim = env.submit_claim(true, rule, uni, 300 * USDT).unwrap();
     env.review_claim(claim, true).unwrap();
-    env.approve_claim(claim, 0).unwrap();
+    // An approval an older program took while the owner was alive: the monitor can still object to it.
+    let mut c: Claim = fetch(&env.svm, &claim);
+    c.approvals = 0b001;
+    env.plant(claim, &c);
     env.object(&people, TargetKind::Claim, claim, 0, Some(claim), None).unwrap();
 
     env.owner_approve_claim(rule, claim).unwrap();
@@ -3572,4 +3575,463 @@ fn r07_a_countdown_for_an_earlier_claim_does_not_count_for_the_next() {
     expect_err(env.execute_fallback(k1), HeirloomError::FallbackNotReady);
     env.start_fallback().unwrap();
     expect_err(env.execute_fallback(k1), HeirloomError::WaitingPeriodNotOver);
+}
+
+impl Env {
+    fn submit_death_claim_by(&mut self, who: &Keypair) -> Result<(), String> {
+        let i = ix(
+            heirloom::accounts::SubmitDeathClaim {
+                beneficiary: who.pubkey(),
+                estate: self.estate,
+                beneficiary_account: beneficiary_pda(&self.estate, &who.pubkey()),
+            },
+            heirloom::instruction::SubmitDeathClaim { cert_hash: [7u8; 32] },
+        );
+        send(&mut self.svm, i, &[who])
+    }
+
+    fn submit_claim_by(&mut self, who: &Keypair, rule: Pubkey, payee_wallet: Pubkey, amount: u64) -> Result<Pubkey, String> {
+        let r: Rule = fetch(&self.svm, &rule);
+        let claim = claim_pda(&rule, r.claim_count);
+        let i = ix(
+            heirloom::accounts::SubmitClaim {
+                beneficiary: who.pubkey(),
+                estate: self.estate,
+                beneficiary_account: beneficiary_pda(&self.estate, &who.pubkey()),
+                rule,
+                payee: payee_pda(&self.estate, &payee_wallet),
+                claim,
+                system_program: system_program(),
+                year_cap: year_cap_pda(&rule),
+            },
+            heirloom::instruction::SubmitClaim { amount, evidence_hash: [1u8; 32] },
+        );
+        send(&mut self.svm, i, &[who]).map(|_| claim)
+    }
+
+    /// Writes the ApprovalStamp and approvals an earlier program left on a claim.
+    fn plant_approvals(&mut self, claim: Pubkey, approvals: u8, seat_index: u8, approved_at: i64) {
+        let mut c: Claim = fetch(&self.svm, &claim);
+        c.approvals = approvals;
+        self.plant(claim, &c);
+        let (address, bump) = Pubkey::find_program_address(&[b"stamp", claim.as_ref()], &heirloom::id());
+        let stamp = ApprovalStamp { target: claim, seat_index, approver: self.verifiers[0].pubkey(), approved_at, bump };
+        let mut data = Vec::new();
+        stamp.try_serialize(&mut data).unwrap();
+        let lamports = self.svm.minimum_balance_for_rent_exemption(data.len());
+        self.svm
+            .set_account(address, Account { lamports, data, owner: heirloom::id(), executable: false, rent_epoch: 0 })
+            .unwrap();
+    }
+
+    /// Seats 0 and 1 die with no backups: verifier 2 is the only one left.
+    fn leave_one_survivor(&mut self) {
+        let owner = self.kp(&self.owner);
+        for i in 0..2 {
+            self.set_seat_backups(&owner, i, [d(), d()]).unwrap();
+        }
+        let (v1, v2) = (self.v(1), self.v(2));
+        self.succeed(0, &v1);
+        self.succeed(1, &v2);
+        assert_eq!(self.estate_state().verifiers, [d(), d(), v2.pubkey()]);
+    }
+}
+
+/// kid1's living tuition rule, and a claim on it that the agent approved.
+fn living_claim(env: &mut Env) -> (Pubkey, Pubkey) {
+    let (kid, uni, until) = (env.kid1.pubkey(), env.university.pubkey(), now(&env.svm) + 365 * DAY);
+    let i = env.add_rule_ix(0, kid, PayeeKind::University, 600 * USDT, 1_000 * USDT, until, true, 0, 0, 0, None);
+    send(&mut env.svm, i, &[&env.owner]).unwrap();
+    let rule = rule_pda(&env.estate, 0);
+    let claim = env.submit_claim(true, rule, uni, 100 * USDT).unwrap();
+    env.review_claim(claim, true).unwrap();
+    (rule, claim)
+}
+
+// ------------------------------------------------------------------- R3 approvals count only after the unlock
+
+#[test]
+fn r03_a_removed_persons_early_approval_never_pays() {
+    let (mut env, _people) = guardian_env();
+    let (rule, claim) = living_claim(&mut env);
+    expect_err(env.approve_claim(claim, 0), HeirloomError::BadStatus);
+    let newbie = funded(&mut env.svm);
+    env.replace_seat(0, newbie.pubkey()).unwrap();
+    warp(&mut env.svm, WINDOW + 1);
+    env.death_pending_by_seats_1_and_2();
+    expect_err(env.approve_claim(claim, 1), HeirloomError::BadStatus);
+    warp(&mut env.svm, WAITING);
+    env.finalize_unlock().unwrap();
+    expect_err(env.execute_claim(rule, claim), HeirloomError::InsufficientApprovals);
+    assert_eq!(balance(&env.svm, &env.vault()), 5_000 * USDT);
+}
+
+impl Env {
+    fn death_pending_by_seats_1_and_2(&mut self) {
+        self.submit_death_claim(1).unwrap();
+        self.review_death(true).unwrap();
+        self.attest_death(1).unwrap();
+        self.attest_death(2).unwrap();
+    }
+}
+
+#[test]
+fn r03_a_stamp_from_before_the_death_neither_pays_nor_blocks_a_fresh_quorum() {
+    let (mut env, _people) = guardian_env();
+    let (rule, claim) = living_claim(&mut env);
+    let stamped_at = now(&env.svm);
+    env.plant_approvals(claim, 0b001, 0, stamped_at);
+    warp(&mut env.svm, DAY);
+    env.unlock();
+    expect_err(env.execute_claim(rule, claim), HeirloomError::InsufficientApprovals);
+
+    // The same seat can approve again, and the monitors get their window from then.
+    env.approve_claim(claim, 0).unwrap();
+    let s: ApprovalStamp = fetch(&env.svm, &stamp_pda(&claim));
+    assert_eq!((s.approved_at, s.seat_index), (now(&env.svm), 0));
+    expect_err(env.execute_claim(rule, claim), HeirloomError::ObjectionWindowOpen);
+    warp(&mut env.svm, WINDOW);
+    env.execute_claim(rule, claim).unwrap();
+}
+
+#[test]
+fn r03_a_partial_approval_from_before_the_death_does_not_add_up() {
+    let mut env = Env::configured();
+    let (rule, claim) = living_claim(&mut env);
+    let mut c: Claim = fetch(&env.svm, &claim);
+    c.agent_verdict = Verdict::Referred;
+    env.plant(claim, &c);
+    env.plant_approvals(claim, 0b001, 0, 0);
+    warp(&mut env.svm, DAY);
+    env.unlock();
+
+    env.approve_claim(claim, 1).unwrap();
+    let c: Claim = fetch(&env.svm, &claim);
+    assert_eq!(c.approvals, 0b010, "the early approval was dropped");
+    expect_err(env.execute_claim(rule, claim), HeirloomError::InsufficientApprovals);
+    env.approve_claim(claim, 2).unwrap();
+    env.execute_claim(rule, claim).unwrap();
+}
+
+#[test]
+fn r03_an_approval_without_a_stamp_from_before_the_death_never_pays() {
+    let mut env = Env::configured();
+    let (rule, claim) = living_claim(&mut env);
+    let mut c: Claim = fetch(&env.svm, &claim);
+    c.approvals = 0b111;
+    env.plant(claim, &c);
+    warp(&mut env.svm, DAY);
+    env.unlock();
+    expect_err(env.execute_claim(rule, claim), HeirloomError::InsufficientApprovals);
+    env.approve_claim(claim, 1).unwrap();
+    env.execute_claim(rule, claim).unwrap();
+}
+
+#[test]
+fn r03_the_owners_own_approval_still_pays_after_the_unlock() {
+    let mut env = Env::configured();
+    let (rule, claim) = living_claim(&mut env);
+    env.owner_approve_claim(rule, claim).unwrap();
+    env.unlock();
+    env.execute_claim(rule, claim).unwrap();
+}
+
+#[test]
+fn r03_an_objection_from_before_the_death_does_not_use_up_the_monitors_objection() {
+    let (mut env, people) = guardian_env();
+    let (_rule, claim) = living_claim(&mut env);
+    let mut c: Claim = fetch(&env.svm, &claim);
+    c.approvals = 0b001;
+    env.plant(claim, &c);
+    env.object(&people, TargetKind::Claim, claim, 0, Some(claim), None).unwrap();
+    let owner = env.kp(&env.owner);
+    env.vote_objection(&owner, claim, false, None, Some(claim), None).unwrap();
+    warp(&mut env.svm, DAY);
+    env.unlock();
+    env.approve_claim(claim, 0).unwrap();
+    env.object(&people, TargetKind::Claim, claim, 0, Some(claim), None).unwrap();
+}
+
+// ------------------------------------------------------------------- R8 one survivor
+
+#[test]
+fn r08_one_survivor_completes_the_death_quorum() {
+    let (mut env, _people) = fallback_env();
+    env.leave_one_survivor();
+    env.attest_death(2).unwrap();
+    let e = env.estate_state();
+    assert_eq!((e.status, e.death_pending_since), (EstateStatus::DeathPending, now(&env.svm)));
+    expect_err(env.finalize_unlock(), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, WAITING);
+    env.finalize_unlock().unwrap();
+}
+
+#[test]
+fn r08_a_survivor_who_already_attested_completes_the_dropped_quorum() {
+    let (mut env, _people) = fallback_env();
+    env.attest_death(2).unwrap();
+    expect_err(env.attest_death(2), HeirloomError::AlreadyApproved);
+    env.leave_one_survivor();
+    env.attest_death(2).unwrap();
+    let e = env.estate_state();
+    assert_eq!((e.status, e.death_pending_since), (EstateStatus::DeathPending, now(&env.svm)));
+    expect_err(env.attest_death(2), HeirloomError::AlreadyApproved);
+}
+
+#[test]
+fn r08_a_vacant_seats_attestation_does_not_count() {
+    let (mut env, _people) = fallback_env();
+    env.attest_death(0).unwrap();
+    let owner = env.kp(&env.owner);
+    env.set_seat_backups(&owner, 0, [d(), d()]).unwrap();
+    let v1 = env.v(1);
+    env.succeed(0, &v1);
+    env.attest_death(1).unwrap();
+    assert_eq!(env.estate_state().status, EstateStatus::Active);
+    env.attest_death(2).unwrap();
+    assert_eq!(env.estate_state().status, EstateStatus::DeathPending);
+}
+
+#[test]
+fn r08_a_successor_inherits_the_seats_attestation() {
+    let (mut env, _people) = fallback_env();
+    env.attest_death(0).unwrap();
+    let v1 = env.v(1);
+    env.succeed(0, &v1);
+    env.attest_death(1).unwrap();
+    assert_eq!(env.estate_state().status, EstateStatus::DeathPending);
+}
+
+#[test]
+fn r08_one_survivor_pays_a_referred_claim_after_a_fresh_window() {
+    let (mut env, _people, rule) = guarded_claims();
+    let uni = env.university.pubkey();
+    let claim = env.submit_claim(true, rule, uni, 100 * USDT).unwrap();
+    env.refer_claim(claim).unwrap();
+    env.approve_claim(claim, 2).unwrap();
+    expect_err(env.approve_claim(claim, 2), HeirloomError::AlreadyApproved);
+    // Nobody can change backups for the owner now, so each holder empties their own before dying.
+    for i in 0..2 {
+        let v = env.v(i);
+        env.set_seat_backups(&v, i as u8, [d(), d()]).unwrap();
+    }
+    let (v1, v2) = (env.v(1), env.v(2));
+    env.succeed(0, &v1);
+    env.succeed(1, &v2);
+
+    // The quorum dropped to one, but the window has not started.
+    expect_err(env.execute_claim(rule, claim), HeirloomError::ObjectionWindowOpen);
+    env.approve_claim(claim, 2).unwrap();
+    let s: ApprovalStamp = fetch(&env.svm, &stamp_pda(&claim));
+    assert_eq!((s.approved_at, s.seat_index), (now(&env.svm), 2));
+    expect_err(env.execute_claim(rule, claim), HeirloomError::ObjectionWindowOpen);
+    warp(&mut env.svm, WINDOW);
+    env.execute_claim(rule, claim).unwrap();
+}
+
+#[test]
+fn r08_a_lost_quorum_needs_another_approval_and_a_fresh_window() {
+    let (mut env, _people, rule) = guarded_claims();
+    let claim = approved_claim(&mut env, rule);
+    let v0 = env.v(0);
+    env.set_seat_backups(&v0, 0, [d(), d()]).unwrap();
+    let v1 = env.v(1);
+    env.succeed(0, &v1);
+    expect_err(env.execute_claim(rule, claim), HeirloomError::InsufficientApprovals);
+    env.approve_claim(claim, 1).unwrap();
+    expect_err(env.execute_claim(rule, claim), HeirloomError::ObjectionWindowOpen);
+    warp(&mut env.svm, WINDOW);
+    env.execute_claim(rule, claim).unwrap();
+}
+
+#[test]
+fn r08_one_survivor_completes_a_hardship_quorum() {
+    let mut s = Sale::build(true);
+    let h = s.submit_hardship().unwrap();
+    s.review_hardship(h, true).unwrap();
+    s.approve_hardship(h, 2).unwrap();
+    expect_err(s.approve_hardship(h, 2), HeirloomError::AlreadyApproved);
+    for i in 0..2 {
+        let v = s.env.v(i);
+        s.env.set_seat_backups(&v, i as u8, [d(), d()]).unwrap();
+    }
+    let (v1, v2) = (s.env.v(1), s.env.v(2));
+    s.env.succeed(0, &v1);
+    s.env.succeed(1, &v2);
+    s.approve_hardship(h, 2).unwrap();
+    let a: Asset = fetch(&s.env.svm, &s.asset);
+    assert_eq!(a.hardship_beneficiary, Some(s.env.kid2.pubkey()));
+}
+
+#[test]
+fn r08_zero_eligible_seats_never_pass() {
+    let (mut env, _people) = guardian_env();
+    let v2 = env.v(2);
+    env.add_beneficiary(v2.pubkey(), "Trusted child");
+    env.leave_one_survivor();
+    env.submit_death_claim_by(&v2).unwrap();
+    env.review_death(true).unwrap();
+    expect_err(env.attest_death(2), HeirloomError::OwnApproval);
+    assert!(!env.estate_state().quorum_met(0b111, &v2.pubkey(), 1));
+    assert_eq!(env.estate_state().status, EstateStatus::Active);
+}
+
+#[test]
+fn r08_a_survivor_who_already_voted_completes_the_agent_replacement() {
+    let (mut env, _people) = guardian_env();
+    env.unlock();
+    let next = Keypair::new().pubkey();
+    let v2 = env.v(2);
+    env.vote_agent(&v2, next).unwrap();
+    expect_err(env.vote_agent(&v2, next), HeirloomError::AlreadyApproved);
+    for i in 0..2 {
+        let v = env.v(i);
+        env.set_seat_backups(&v, i as u8, [d(), d()]).unwrap();
+    }
+    let v1 = env.v(1);
+    env.succeed(0, &v1);
+    env.succeed(1, &v2);
+    env.vote_agent(&v2, next).unwrap();
+    assert_eq!(env.estate_state().agent, next);
+}
+
+#[test]
+fn r08_a_vacant_seats_dispute_vote_does_not_count() {
+    let (mut env, _people, rule) = guarded_claims();
+    let claim = approved_claim(&mut env, rule);
+    env.kid_disputes(TargetKind::Claim, claim).unwrap();
+    let (v0, v1, v2) = (env.v(0), env.v(1), env.v(2));
+    env.resolve_dispute(&v0, claim, true, true).unwrap();
+    env.set_seat_backups(&v0, 0, [d(), d()]).unwrap();
+    env.succeed(0, &v1);
+    assert_eq!(env.objection(&claim).status, ObjectionStatus::Open);
+    env.resolve_dispute(&v1, claim, true, true).unwrap();
+    assert_eq!(env.objection(&claim).status, ObjectionStatus::Open, "one living vote is not two");
+    env.resolve_dispute(&v2, claim, true, true).unwrap();
+    assert_eq!(env.objection(&claim).status, ObjectionStatus::Upheld);
+}
+
+// ------------------------------------------------------------------- R11 nobody in their own favour
+
+#[test]
+fn r11_a_trusted_person_cannot_approve_their_own_claim() {
+    let mut env = Env::configured();
+    let (v0, uni, until) = (env.v(0), env.university.pubkey(), now(&env.svm) + 365 * DAY);
+    env.add_beneficiary(v0.pubkey(), "Trusted child");
+    let rule = env.add_rule(0, v0.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    env.unlock();
+    let claim = env.submit_claim_by(&v0, rule, uni, 100 * USDT).unwrap();
+    env.review_claim(claim, true).unwrap();
+    expect_err(env.approve_claim(claim, 0), HeirloomError::OwnApproval);
+    expect_err(env.execute_claim(rule, claim), HeirloomError::InsufficientApprovals);
+    env.approve_claim(claim, 1).unwrap();
+    env.execute_claim(rule, claim).unwrap();
+}
+
+#[test]
+fn r11_a_self_approval_already_on_chain_does_not_count() {
+    let mut env = Env::configured();
+    let (v0, uni, until) = (env.v(0), env.university.pubkey(), now(&env.svm) + 365 * DAY);
+    env.add_beneficiary(v0.pubkey(), "Trusted child");
+    let rule = env.add_rule(0, v0.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    env.unlock();
+    let claim = env.submit_claim_by(&v0, rule, uni, 100 * USDT).unwrap();
+    env.review_claim(claim, true).unwrap();
+    let t = now(&env.svm);
+    env.plant_approvals(claim, 0b001, 0, t);
+    expect_err(env.execute_claim(rule, claim), HeirloomError::InsufficientApprovals);
+}
+
+#[test]
+fn r11_a_trusted_person_cannot_approve_their_own_hardship() {
+    let mut s = Sale::new();
+    let h = s.submit_hardship().unwrap();
+    s.review_hardship(h, true).unwrap();
+    let mut e = s.env.estate_state();
+    e.verifiers[0] = s.env.kid2.pubkey();
+    let estate = s.env.estate;
+    s.env.plant(estate, &e);
+    let i = ix(
+        heirloom::accounts::ApproveHardship { verifier: s.env.kid2.pubkey(), estate, asset: s.asset, hardship: h },
+        heirloom::instruction::ApproveHardship {},
+    );
+    expect_err(send(&mut s.env.svm, i, &[&s.env.kid2]), HeirloomError::OwnApproval);
+    s.approve_hardship(h, 1).unwrap();
+    s.approve_hardship(h, 2).unwrap();
+}
+
+#[test]
+fn r11_whoever_gains_cannot_spend_the_one_objection() {
+    let (mut env, _people) = fallback_env();
+    let k1 = env.kid1.insecure_clone();
+    env.death_pending_from_approved();
+    let estate = env.estate;
+    expect_err(env.raise_dispute(&k1, TargetKind::Unlock, estate, true, [5u8; 32]), HeirloomError::OwnClaimDispute);
+    env.set_seat_monitors_by_planting(0, k1.pubkey());
+    let seat = Some(seat_pda(&env.estate, 0));
+    expect_err(env.raise_objection(&k1, TargetKind::Unlock, estate, 0, seat, false, None, None), HeirloomError::OwnClaimDispute);
+    env.kid_disputes(TargetKind::Unlock, estate).unwrap();
+}
+
+impl Env {
+    fn death_pending_from_approved(&mut self) {
+        self.attest_death(0).unwrap();
+        self.attest_death(1).unwrap();
+    }
+
+    fn set_seat_monitors_by_planting(&mut self, index: u8, monitor: Pubkey) {
+        let mut seat = self.seat(index);
+        seat.monitors[1] = monitor;
+        self.plant(seat_pda(&self.estate, index), &seat);
+    }
+}
+
+#[test]
+fn r11_the_claimant_cannot_object_to_use_up_the_claims_objection() {
+    let (mut env, people, rule) = guarded_claims();
+    let claim = approved_claim(&mut env, rule);
+    let k1 = env.kid1.insecure_clone();
+    env.set_seat_monitors_by_planting(0, k1.pubkey());
+    let seat = Some(seat_pda(&env.estate, 0));
+    expect_err(env.raise_objection(&k1, TargetKind::Claim, claim, 0, seat, false, Some(claim), None), HeirloomError::OwnClaimDispute);
+    env.object(&people, TargetKind::Claim, claim, 0, Some(claim), None).unwrap();
+}
+
+#[test]
+fn r11_the_next_recipient_cannot_spend_the_fallback_objection() {
+    let (mut env, people) = fallback_env();
+    vacate_all(&mut env, &people);
+    env.start_fallback().unwrap();
+    let (guard, k1, k2) = (guard_pda(&env.estate), env.kid1.insecure_clone(), env.kid2.insecure_clone());
+    expect_err(env.raise_objection(&k1, TargetKind::Fallback, guard, 255, None, true, None, None), HeirloomError::OwnClaimDispute);
+    env.raise_objection(&k2, TargetKind::Fallback, guard, 255, None, true, None, None).unwrap();
+}
+
+#[test]
+fn r11_a_claimant_cannot_dismiss_a_challenge_to_their_own_claim() {
+    let mut env = Env::configured();
+    let (v0, uni, until) = (env.v(0), env.university.pubkey(), now(&env.svm) + 365 * DAY);
+    env.add_beneficiary(v0.pubkey(), "Trusted child");
+    let rule = env.add_rule(0, v0.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    env.unlock();
+    let claim = env.submit_claim_by(&v0, rule, uni, 100 * USDT).unwrap();
+    env.kid_disputes(TargetKind::Claim, claim).unwrap();
+    expect_err(env.resolve_dispute(&v0, claim, false, true), HeirloomError::OwnApproval);
+    let v1 = env.v(1);
+    env.resolve_dispute(&v1, claim, false, true).unwrap();
+}
+
+#[test]
+fn r11_a_monitors_objection_cannot_be_dismissed_by_the_claimant() {
+    let (mut env, people) = guardian_env();
+    let (v2, uni, until) = (env.v(2), env.university.pubkey(), now(&env.svm) + 365 * DAY);
+    env.add_beneficiary(v2.pubkey(), "Trusted child");
+    let rule = env.add_rule(0, v2.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    env.unlock();
+    let claim = env.submit_claim_by(&v2, rule, uni, 100 * USDT).unwrap();
+    env.review_claim(claim, true).unwrap();
+    env.approve_claim(claim, 0).unwrap();
+    env.object(&people, TargetKind::Claim, claim, 0, Some(claim), None).unwrap();
+    expect_err(env.vote_objection(&v2, claim, false, None, Some(claim), None), HeirloomError::OwnApproval);
+    env.vote_objection(&v2, claim, true, None, Some(claim), None).unwrap();
 }

@@ -84,6 +84,7 @@ pub fn raise_dispute_handler(
         TargetKind::Unlock => {
             require_keys_eq!(target, estate_key, HeirloomError::BadStatus);
             require!(estate.status == EstateStatus::DeathPending, HeirloomError::BadStatus);
+            require!(estate.death_submitted_by != disputer, HeirloomError::OwnClaimDispute);
         }
         // Sales, hardship, successions and the fallback plan are covered by monitors' objections.
         _ => return err!(HeirloomError::BadStatus),
@@ -186,8 +187,16 @@ pub fn resolve_dispute_handler(ctx: Context<ResolveDispute>, uphold: bool) -> Re
     if uphold {
         objection.votes_uphold |= bit;
     } else {
+        let claimant = if objection.kind == TargetKind::Claim {
+            let info = ctx.accounts.target_account.as_ref().ok_or(HeirloomError::BadStatus)?.to_account_info();
+            read_account::<Claim>(&info)?.beneficiary
+        } else {
+            ctx.accounts.estate.death_submitted_by
+        };
+        require!(verifier != claimant, HeirloomError::OwnApproval);
         objection.votes_dismiss |= bit;
     }
+    let voting = ctx.accounts.estate.living_seats_except(&Pubkey::default());
     let objection_key = objection.key();
     emit!(DisputeVoted {
         objection: objection_key,
@@ -196,9 +205,9 @@ pub fn resolve_dispute_handler(ctx: Context<ResolveDispute>, uphold: bool) -> Re
         ts,
     });
 
-    let upheld = if count_bits(objection.votes_uphold) >= 2 {
+    let upheld = if count_bits(objection.votes_uphold & voting) >= 2 {
         true
-    } else if count_bits(objection.votes_dismiss) >= 2 {
+    } else if count_bits(objection.votes_dismiss & voting) >= 2 {
         false
     } else {
         return Ok(());

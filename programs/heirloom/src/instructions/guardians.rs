@@ -101,6 +101,17 @@ pub(crate) fn uphold_on_unlock(estate: &mut Estate) {
     }
 }
 
+/// Who gains if the challenged action goes ahead: they neither raise its one challenge nor dismiss it.
+fn interested_party(kind: TargetKind, estate: &Estate, guard: &Guard, target: Option<&AccountInfo>) -> Result<Pubkey> {
+    Ok(match kind {
+        TargetKind::Claim => read_account::<Claim>(target.ok_or(HeirloomError::BadStatus)?)?.beneficiary,
+        TargetKind::Hardship => read_account::<Hardship>(target.ok_or(HeirloomError::BadStatus)?)?.beneficiary,
+        TargetKind::Unlock => estate.death_submitted_by,
+        TargetKind::Fallback => guard.next_fallback_recipient(),
+        TargetKind::Sale | TargetKind::Succession => Pubkey::default(),
+    })
+}
+
 fn emit_seat_configured(seat: &Seat) -> Result<()> {
     emit!(SeatConfigured {
         estate: seat.estate,
@@ -784,7 +795,7 @@ pub fn raise_objection_handler(
     let target_info = ctx.accounts.target_account.as_ref().map(|a| a.to_account_info());
     match kind {
         TargetKind::Claim => {
-            let info = target_info.ok_or(HeirloomError::BadStatus)?;
+            let info = target_info.clone().ok_or(HeirloomError::BadStatus)?;
             let claim: Claim = read_account(&info)?;
             require!(claim.estate == estate_key, HeirloomError::BadStatus);
             require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
@@ -800,13 +811,13 @@ pub fn raise_objection_handler(
             );
         }
         TargetKind::Sale => {
-            let info = target_info.ok_or(HeirloomError::BadStatus)?;
+            let info = target_info.clone().ok_or(HeirloomError::BadStatus)?;
             let asset: Asset = read_account(&info)?;
             require!(asset.estate == estate_key, HeirloomError::BadStatus);
             require!(asset.status == AssetStatus::Listed, HeirloomError::BadStatus);
         }
         TargetKind::Hardship => {
-            let info = target_info.ok_or(HeirloomError::BadStatus)?;
+            let info = target_info.clone().ok_or(HeirloomError::BadStatus)?;
             let hardship: Hardship = read_account(&info)?;
             let asset = ctx.accounts.asset.as_ref().ok_or(HeirloomError::BadStatus)?;
             require_keys_eq!(asset.key(), hardship.asset, HeirloomError::BadStatus);
@@ -831,6 +842,12 @@ pub fn raise_objection_handler(
         }
     }
 
+    // Otherwise whoever gains could use up the one objection and shut the others out.
+    require!(
+        objector != interested_party(kind, estate, &ctx.accounts.guard, target_info.as_ref())?,
+        HeirloomError::OwnClaimDispute
+    );
+
     // ---- one objection per target at a time; a resolved one may be re-raised (overwritten),
     // except a dismissed objection on a one-off claim or hardship.
     let ts = now()?;
@@ -852,7 +869,12 @@ pub fn raise_objection_handler(
         // does: once per claim, hardship and waiting period; with a cooldown for sales and successions.
         if prev == ObjectionStatus::Dismissed && !was_dispute {
             match kind {
-                TargetKind::Claim | TargetKind::Hardship => return err!(HeirloomError::BadStatus),
+                // One dismissed before this death challenged approvals that no longer count.
+                TargetKind::Claim => require!(
+                    estate.status == EstateStatus::Unlocked && objection.raised_at < estate.death_pending_since,
+                    HeirloomError::BadStatus
+                ),
+                TargetKind::Hardship => return err!(HeirloomError::BadStatus),
                 TargetKind::Unlock => require!(
                     objection.raised_at < estate.death_pending_since,
                     HeirloomError::BadStatus
@@ -991,11 +1013,18 @@ pub fn vote_objection_handler(ctx: Context<VoteObjection>, uphold: bool) -> Resu
         if uphold {
             objection.votes_uphold |= bit;
         } else {
+            let info = ctx.accounts.target_account.as_ref().map(|a| a.to_account_info());
+            require!(
+                voter != interested_party(kind, estate, &ctx.accounts.guard, info.as_ref())?,
+                HeirloomError::OwnApproval
+            );
             objection.votes_dismiss |= bit;
         }
-        if count_bits(objection.votes_uphold) >= 2 {
+        // Monitors' bits are positions, not seats: the holders are all gone by then.
+        let voting = if kind == TargetKind::Fallback { u8::MAX } else { estate.living_seats_except(&Pubkey::default()) };
+        if count_bits(objection.votes_uphold & voting) >= 2 {
             Some(true)
-        } else if count_bits(objection.votes_dismiss) >= 2 {
+        } else if count_bits(objection.votes_dismiss & voting) >= 2 {
             Some(false)
         } else {
             None

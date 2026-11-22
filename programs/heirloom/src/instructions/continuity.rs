@@ -260,7 +260,7 @@ pub fn vote_agent_handler(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<
         vote.voters = [Pubkey::default(); VERIFIER_COUNT];
         vote.bump = ctx.bumps.agent_vote;
     }
-    require!(vote.voters[idx] != verifier, HeirloomError::AlreadyApproved);
+    let first_time = vote.voters[idx] != verifier;
     vote.voters[idx] = verifier;
 
     let (mut seats, mut count) = (0u8, 0u8);
@@ -275,6 +275,9 @@ pub fn vote_agent_handler(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<
         }
     }
     let needed = if estate.status == EstateStatus::Active { seats.max(2) } else { seats.min(2) };
+
+    // Voting again only completes a quorum that has dropped since.
+    require!(first_time || count >= needed, HeirloomError::AlreadyApproved);
 
     let (estate_key, ts) = (estate.key(), now()?);
     emit!(AgentVoted { estate: estate_key, candidate, verifier, count, ts });

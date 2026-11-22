@@ -197,32 +197,47 @@ pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
         .verifier_index(&verifier)
         .ok_or(HeirloomError::NotVerifier)?;
 
+    let estate = &ctx.accounts.estate;
     let claim = &mut ctx.accounts.claim;
+    // While the owner is alive only the owner approves; trusted people decide after the unlock.
+    require!(estate.status == EstateStatus::Unlocked, HeirloomError::BadStatus);
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
     require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
+    let claimant = claim.beneficiary;
+    require!(verifier != claimant, HeirloomError::OwnApproval);
 
-    let bit = 1u8 << idx;
-    require!(claim.approvals & bit == 0, HeirloomError::AlreadyApproved);
-    claim.approvals |= bit;
-
-    let ts = now()?;
-    let count = count_bits(claim.approvals);
     let claim_key = claim.key();
-    let estate_key = ctx.accounts.estate.key();
-    let threshold = claim.agent_verdict.quorum(ctx.accounts.estate.claim_threshold);
-
+    let estate_key = estate.key();
     let stamp = &mut ctx.accounts.approval_stamp;
-    if stamp.target == Pubkey::default() {
+    let new_stamp = stamp.target == Pubkey::default();
+    if !ApprovalStamp::votes_count((!new_stamp).then_some(&**stamp), claim, estate) {
+        claim.approvals = 0;
+        stamp.approved_at = 0;
+    }
+    if new_stamp {
         stamp.target = claim_key;
-        stamp.seat_index = idx as u8;
-        stamp.approver = verifier;
         stamp.bump = ctx.bumps.approval_stamp;
     }
-    // Only the approval that reaches the threshold starts the objection window.
-    if stamp.approved_at == 0 && count >= threshold {
+
+    let needed = claim.agent_verdict.quorum(estate.claim_threshold);
+    let was_met = estate.quorum_met(claim.approvals, &claimant, needed);
+    let bit = 1u8 << idx;
+    let first_time = claim.approvals & bit == 0;
+    claim.approvals |= bit;
+    // The approval that reaches the quorum starts the objection window, again if the quorum had been lost.
+    // Signing again only completes a quorum that has dropped since.
+    let starts = estate.quorum_met(claim.approvals, &claimant, needed) && (stamp.approved_at == 0 || !was_met);
+    require!(first_time || starts, HeirloomError::AlreadyApproved);
+
+    let ts = now()?;
+    let count = count_bits(claim.approvals & estate.living_seats_except(&claimant));
+    if starts {
         stamp.seat_index = idx as u8;
         stamp.approver = verifier;
         stamp.approved_at = ts;
+    } else if stamp.approved_at == 0 {
+        stamp.seat_index = NO_SEAT;
+        stamp.approver = verifier;
     }
 
     emit!(ClaimApproved {
@@ -290,7 +305,7 @@ pub struct ExecuteClaim<'info> {
     #[account(seeds = [GUARD_SEED, estate.key().as_ref()], bump)]
     pub guard: UncheckedAccount<'info>,
 
-    /// CHECK: the ["stamp", claim] PDA; may not exist. Read only when a Guard exists.
+    /// CHECK: the ["stamp", claim] PDA; may not exist. When the approvals were given (and, with a Guard, the window).
     #[account(seeds = [STAMP_SEED, claim.key().as_ref()], bump)]
     pub approval_stamp: UncheckedAccount<'info>,
 
@@ -313,11 +328,12 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
     require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
     // While the owner is alive (Active) only the owner can approve; after unlock the owner's
     // earlier approval or the verifier quorum counts.
-    let approved = if estate.status == EstateStatus::Active {
-        claim.owner_approved
-    } else {
-        claim.owner_approved || count_bits(claim.approvals) >= claim.agent_verdict.quorum(estate.claim_threshold)
-    };
+    let stamp_info = ctx.accounts.approval_stamp.to_account_info();
+    let stamp: Option<ApprovalStamp> = if account_exists(&stamp_info) { Some(read_account(&stamp_info)?) } else { None };
+    let approved = claim.owner_approved
+        || (estate.status == EstateStatus::Unlocked
+            && ApprovalStamp::votes_count(stamp.as_ref(), claim, estate)
+            && estate.quorum_met(claim.approvals, &claim.beneficiary, claim.agent_verdict.quorum(estate.claim_threshold)));
     require!(approved, HeirloomError::InsufficientApprovals);
 
     // Guardians: a monitor's open objection pauses the payment; with a Guard, a quorum approval
@@ -329,9 +345,7 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
     let guard_info = ctx.accounts.guard.to_account_info();
     if account_exists(&guard_info) && !claim.owner_approved {
         let guard: Guard = read_account(&guard_info)?;
-        let stamp_info = ctx.accounts.approval_stamp.to_account_info();
-        require!(account_exists(&stamp_info), HeirloomError::ObjectionWindowOpen);
-        let stamp: ApprovalStamp = read_account(&stamp_info)?;
+        let stamp = stamp.ok_or(HeirloomError::ObjectionWindowOpen)?;
         require!(stamp.approved_at > 0, HeirloomError::ObjectionWindowOpen);
         let window = guard.objection_window();
         let mut open_until = stamp

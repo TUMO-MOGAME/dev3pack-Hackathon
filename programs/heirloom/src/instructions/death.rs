@@ -129,15 +129,21 @@ pub fn attest_death_handler(ctx: Context<AttestDeath>) -> Result<()> {
         HeirloomError::BadStatus
     );
     require!(estate.death_verdict.open_to_people(), HeirloomError::AgentNotApproved);
+    let submitter = estate.death_submitted_by;
+    require!(verifier != submitter, HeirloomError::OwnApproval);
 
     let bit = 1u8 << idx;
-    require!(estate.death_attestations & bit == 0, HeirloomError::AlreadyApproved);
+    let first_time = estate.death_attestations & bit == 0;
     estate.death_attestations |= bit;
 
     let ts = now()?;
-    let count = count_bits(estate.death_attestations);
+    let count = count_bits(estate.death_attestations & estate.living_seats_except(&submitter));
+    let needed = estate.death_verdict.quorum(estate.death_threshold);
+    let starts = estate.status == EstateStatus::Active && estate.quorum_met(estate.death_attestations, &submitter, needed);
+    // Signing again only completes a quorum that has dropped since.
+    require!(first_time || starts, HeirloomError::AlreadyApproved);
     // Only the attestation that reaches the threshold starts the timer; later ones don't reset it.
-    if estate.status == EstateStatus::Active && count >= estate.death_verdict.quorum(estate.death_threshold) {
+    if starts {
         estate.status = EstateStatus::DeathPending;
         estate.death_pending_since = ts;
     }

@@ -364,7 +364,6 @@ pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
     let idx = estate
         .verifier_index(&verifier)
         .ok_or(HeirloomError::NotVerifier)?;
-    let threshold = estate.hardship_threshold;
     let estate_key = estate.key();
 
     let asset = &mut ctx.accounts.asset;
@@ -372,13 +371,18 @@ pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
     require!(asset.status != AssetStatus::Sold, HeirloomError::BadStatus);
     require!(hardship.status == HardshipStatus::Open, HeirloomError::BadStatus);
     require!(hardship.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
+    let claimant = hardship.beneficiary;
+    require!(verifier != claimant, HeirloomError::OwnApproval);
 
     let bit = 1u8 << idx;
-    require!(hardship.approvals & bit == 0, HeirloomError::AlreadyApproved);
+    let first_time = hardship.approvals & bit == 0;
     hardship.approvals |= bit;
 
-    let count = count_bits(hardship.approvals);
-    let quorum_reached = count >= hardship.agent_verdict.quorum(threshold);
+    let count = count_bits(hardship.approvals & estate.living_seats_except(&claimant));
+    let needed = hardship.agent_verdict.quorum(estate.hardship_threshold);
+    let quorum_reached = estate.quorum_met(hardship.approvals, &claimant, needed);
+    // Signing again only completes a quorum that has dropped since.
+    require!(first_time || quorum_reached, HeirloomError::AlreadyApproved);
     if quorum_reached {
         hardship.status = HardshipStatus::Approved;
         asset.hardship_beneficiary = Some(hardship.beneficiary);

@@ -173,6 +173,13 @@ impl Estate {
         })
     }
 
+    /// `votes` reach min(`needed`, the living seats that may decide), which is never zero. One seat, one vote:
+    /// a successor holds the seat's vote; a vacant seat's vote no longer counts.
+    pub fn quorum_met(&self, votes: u8, interested: &Pubkey, needed: u8) -> bool {
+        let eligible = self.living_seats_except(interested);
+        eligible != 0 && (votes & eligible).count_ones() >= u32::from(needed).min(eligible.count_ones())
+    }
+
     pub fn has_living_seat(&self) -> bool {
         self.living_seats_except(&Pubkey::default()) != 0
     }
@@ -453,9 +460,20 @@ pub struct ApprovalStamp {
     pub target: Pubkey,
     pub seat_index: u8,
     pub approver: Pubkey,
-    /// 0 = threshold not reached yet.
+    /// 0 = threshold not reached yet. Until it is, `seat_index` is NO_SEAT: the approvals being collected
+    /// were all given after the unlock.
     pub approved_at: i64,
     pub bump: u8,
+}
+
+impl ApprovalStamp {
+    /// The claim's approvals were given after the unlock. Those from before this death (an older program took
+    /// them) neither pay nor stand in the way of a fresh quorum.
+    pub fn votes_count(stamp: Option<&Self>, claim: &Claim, estate: &Estate) -> bool {
+        let since = estate.death_pending_since;
+        claim.created_at > since
+            || stamp.is_some_and(|s| if s.approved_at == 0 { s.seat_index == NO_SEAT } else { s.approved_at >= since })
+    }
 }
 
 /// Seeds: ["objection", target]. One per target; a resolved one can be re-raised (overwritten).
