@@ -25,6 +25,15 @@ const USDT: u64 = 1_000_000; // 6 decimals
 const WAITING: i64 = 120; // demo waiting period (2 minutes)
 const DAY: i64 = 86_400;
 
+thread_local! {
+    /// Compute units of the last successful `send` of this test.
+    static LAST_CU: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+fn last_cu() -> u64 {
+    LAST_CU.with(|c| c.get())
+}
+
 // ---------------------------------------------------------------- program ids
 
 fn token_program() -> Pubkey {
@@ -181,7 +190,7 @@ fn send(svm: &mut LiteSVM, instruction: Instruction, signers: &[&Keypair]) -> Re
     let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), signers).unwrap();
     let res = svm.send_transaction(tx);
     svm.expire_blockhash();
-    res.map(|_| ()).map_err(|e| format!("{:?}", e.err))
+    res.map(|meta| LAST_CU.with(|c| c.set(meta.compute_units_consumed))).map_err(|e| format!("{:?}", e.err))
 }
 
 fn expect_err<T>(res: Result<T, String>, err: HeirloomError) {
@@ -3246,4 +3255,56 @@ fn rule_count_is_capped_so_a_sweep_always_fits() {
     env.sweep(heir, &rules).unwrap();
     assert_eq!(balance(&env.svm, &env.vault()), 16 * USDT);
     assert_eq!(balance(&env.svm, &ata(&heir, &env.usdt_mint)), 4_984 * USDT);
+}
+
+// =================================================================== compute units
+
+/// The heaviest instructions fit the default 200k. Keys are random and PDA searches vary, so each runs a few
+/// times and the worst is printed (`cargo test -- --nocapture compute_units`).
+#[test]
+fn compute_units_of_the_heaviest_instructions_fit_the_default_limit() {
+    let mut worst = [0u64; 4];
+    let mut best = [u64::MAX; 4];
+    for _ in 0..16 {
+        let mut s = Sale::build(true);
+        s.approved_hardship();
+        s.place_offer(1, FLOOR).unwrap();
+        s.accept_offer(1).unwrap();
+        let accept = last_cu();
+
+        let (mut env, rule) = claims_env();
+        let _people = guarded(&mut env);
+        env.set_yearly_cap(rule, 800 * USDT, 0).unwrap();
+        env.unlock();
+        let claim = approved_claim(&mut env, rule);
+        warp(&mut env.svm, WINDOW);
+        env.execute_claim(rule, claim).unwrap();
+        let execute = last_cu();
+
+        let (mut env, people) = fallback_env();
+        vacate_all(&mut env, &people);
+        env.start_fallback().unwrap();
+        warp(&mut env.svm, FALLBACK_WAIT);
+        let heir = env.kid1.pubkey();
+        env.execute_fallback(heir).unwrap();
+        let fallback = last_cu();
+
+        let mut env = Env::configured();
+        let (kid, until) = (env.kid1.pubkey(), now(&env.svm) + 365 * DAY);
+        let rules: Vec<Pubkey> = (0..16).map(|id| env.add_rule(id, kid, PayeeKind::University, USDT, USDT, until)).collect();
+        let heir = env.kid2.pubkey();
+        env.set_residual(heir).unwrap();
+        env.unlock();
+        env.sweep(heir, &rules).unwrap();
+        let sweep = last_cu();
+
+        for (k, cu) in [accept, execute, fallback, sweep].into_iter().enumerate() {
+            worst[k] = worst[k].max(cu);
+            best[k] = best[k].min(cu);
+        }
+    }
+    for (k, name) in ["accept_offer", "execute_claim", "execute_fallback", "sweep_residual(16 rules)"].into_iter().enumerate() {
+        println!("CU {name}: {}..{}", best[k], worst[k]);
+        assert!(worst[k] < 200_000, "{name} needs {} compute units", worst[k]);
+    }
 }
