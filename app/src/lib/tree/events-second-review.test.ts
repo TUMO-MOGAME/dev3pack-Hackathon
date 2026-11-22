@@ -1,6 +1,6 @@
 /** Second security review on the Trust Tree: reused rule slots, released titles and cleared death reports. */
 import { describe, expect, it } from "vitest";
-import { snapshotFacts, treeEventsFromChain, type RawChainEvent } from "./events";
+import { mergeEvents, snapshotFacts, treeEventsFromChain, type RawChainEvent } from "./events";
 import type { EstateSnapshot } from "../service/types";
 
 const ev = (name: string, ts: number, data: Record<string, unknown>): RawChainEvent => ({ name, ts, signature: `s${ts}`, data });
@@ -28,6 +28,12 @@ describe("the tree after the second security review", () => {
     } as unknown as EstateSnapshot;
     const paid = snapshotFacts(snap).filter((e) => e.kind === "ClaimPaid");
     expect(paid.map((e) => (e as { rule: string }).rule)).toEqual(["R#0", "R"]);
+  });
+
+  it("one payment under an earlier rule stays one, when the activity line only knows the slot", () => {
+    const history = read(ev("ScheduledPaid", 10, { rule: "R" }), ev("RuleReused", 20, { rule: "R", first_claim_id: 65_536 }));
+    const line = { estate: "E", ts: 10, sig: "s10", kind: "ScheduledPaid" as const, rule: "R" };
+    expect(mergeEvents(history, [line]).map((e) => (e as { rule?: string }).rule)).toEqual(["R#0"]);
   });
 
   it("a released title leaves the tree; registered again, it is back", () => {

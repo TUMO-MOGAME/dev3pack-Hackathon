@@ -77,7 +77,8 @@ export function eventKey(e: TreeEvent): string {
     case "ClaimApproved": return `${e.kind}:${e.claim}:${e.verifier}`;
     case "ClaimOwnerApproved": return `${e.kind}:${e.claim}`;
     case "ClaimPaid": return `${e.kind}:${e.claim}`;
-    case "ScheduledPaid": return `${e.kind}:${e.rule}:${e.sig || e.ts}`;
+    // The slot, not which of its rules: an activity line knows only the address, the history knows the earlier rule.
+    case "ScheduledPaid": return `${e.kind}:${e.rule.split("#")[0]}:${e.sig || e.ts}`;
     case "HardshipSubmitted": return `${e.kind}:${e.hardship}`;
     case "HardshipApproved": return `${e.kind}:${e.hardship}:${e.verifier}`;
     case "SeatConfigured": return `${e.kind}:${e.estate}:${e.seat}:${e.holder ?? ""}`;
