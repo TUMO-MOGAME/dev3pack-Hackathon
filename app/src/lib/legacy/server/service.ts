@@ -149,7 +149,7 @@ export async function putBook(v: Viewer, book: LegacyBook): Promise<LegacyBook> 
   if (v.role !== "owner") throw new HttpError(403, "Only the estate owner can write the Legacy Book.", "forbidden");
   if (v.snap && v.snap.estate.status !== "Active") throw new HttpError(409, "The Legacy Book is sealed once a passing is reported.", "bad_status");
   // Keep child wallets in step with the on-chain beneficiaries where the names match.
-  const kids = v.snap?.beneficiaries ?? [];
+  const kids = (v.snap?.beneficiaries ?? []).filter((b) => b.active);
   const linked = {
     ...book,
     children: book.children.map((c) => c.wallet ? c : { ...c, wallet: kids.find((b) => b.label.split(/[ (]/)[0].toLowerCase() === c.name.split(" ")[0].toLowerCase())?.wallet }),

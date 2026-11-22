@@ -89,7 +89,7 @@ export function planFacts(snap: EstateSnapshot): string {
   const who = (w: Base58) => snap.beneficiaries.find((b) => b.wallet === w)?.label ?? "someone";
   const rules = snap.rules.map((r) => `- ${who(r.beneficiary)}: ${r.category}${r.recurringAmount > BigInt(0) ? `, ${fromBase(r.recurringAmount)} USD₮ a payment` : `, up to ${fromBase(r.maxPerClaim)} USD₮ a claim`}${r.startsNow ? ", starts now" : ", after the passing"}`);
   const assets = snap.assets.map((a) => `- ${a.title}: ${a.proceedsTo === snap.estate.address ? "sold; the money goes into the family vault" : `goes to ${who(a.proceedsTo)}`}`);
-  return [`Family members: ${snap.beneficiaries.map((b) => b.label).join(", ")}`, "Rules:", ...rules, "Assets:", ...assets].join("\n");
+  return [`Family members: ${snap.beneficiaries.filter((b) => b.active).map((b) => b.label).join(", ")}`, "Rules:", ...rules, "Assets:", ...assets].join("\n");
 }
 
 /** A tombstone as the owner sees it: no text, no occasion, no about. */

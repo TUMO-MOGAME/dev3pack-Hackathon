@@ -33,6 +33,9 @@ export interface RawSnapshot {
 
 const programId = () => new PublicKey(getIdl().address);
 
+/** An account of this program from a scan, as raw IDL fields. */
+export const decodeScanned = (type: string, account: ProgramAccount): Raw => decode(type, account.data);
+
 function decode(name: string, data: Uint8Array): Raw {
   // Anchor's coder takes a Node-style Buffer; web3.js already gives us one.
   return getCoder().accounts.decode(accountName(name), data as Parameters<ReturnType<typeof getCoder>["accounts"]["decode"]>[1]) as Raw;

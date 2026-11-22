@@ -4,13 +4,15 @@
  * in brackets, the bracket as the relationship. Never the sender, one entry per wallet, estate names first.
  */
 import type { Base58, SavedRecipient } from "../types";
+import { eligibleSeats } from "../death-rules";
 import type { EstateSnapshot } from "./types";
 
 export function estateRecipients(snap: Pick<EstateSnapshot, "estate" | "beneficiaries">, me: Base58): SavedRecipient[] {
   const e = snap.estate;
   const all: SavedRecipient[] = [
     ...snap.beneficiaries.filter((b) => b.active).map((b) => ({ label: b.label.replace(/\s*\(.*\)$/, ""), address: b.wallet, relationship: b.label.match(/\((.*)\)/)?.[1] })),
-    ...e.verifiers.map((v, i) => ({ label: e.verifierNames[i], address: v, relationship: i === 0 ? "executor" : "trusted person" })),
+    // An empty seat holds the all-zero key: money sent there would be gone.
+    ...eligibleSeats(e.verifiers).map((i) => ({ label: e.verifierNames[i], address: e.verifiers[i], relationship: i === 0 ? "executor" : "trusted person" })),
     { label: e.ownerName, address: e.owner, relationship: "estate owner" },
   ];
   return mergeRecipients(all.filter((r) => r.address !== me && r.label));

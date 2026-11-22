@@ -135,7 +135,7 @@ export function createChainTree(d: ChainTreeDeps): TreeService {
   async function children(snap: EstateSnapshot): Promise<{ inputs: TreeEstateInput[]; links: GenerationLink[] }> {
     if (!d.findEstateOf) return { inputs: [], links: [] };
     const find = d.findEstateOf;
-    const work = Promise.all(snap.beneficiaries.slice(0, 6).map(async (b) => {
+    const work = Promise.all(snap.beneficiaries.filter((b) => b.active).slice(0, 6).map(async (b) => {
       const child = await find(b.wallet).catch(() => null);
       if (!child || child === snap.estate.address) return null;
       const cs = await d.getEstate(child).catch(() => null);

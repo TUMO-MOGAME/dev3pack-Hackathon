@@ -384,6 +384,12 @@ describe("/api/reports (S5)", () => {
     expect((await read(owner, Date.now() + 90 * 86_400_000)).status).toBe(403);
   });
 
+  it("a removed beneficiary is no longer a member (R16)", async () => {
+    const gone = wallet();
+    h.accounts[`Beneficiary:${beneficiaryPda(programId, estate, gone.address).toBase58()}`] = { label: "Family member 2", active: false };
+    expect((await read(gone)).status).toBe(403);
+  });
+
   it("answers the owner, a beneficiary and a trusted person", async () => {
     for (const who of [owner, claimant, trusted]) expect((await read(who)).status).toBe(200);
   });

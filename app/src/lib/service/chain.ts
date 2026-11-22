@@ -9,7 +9,7 @@ import { createAssociatedTokenAccountIdempotentInstruction, createTransferChecke
 import type { HeirloomService, EstateSnapshot, TxResult } from "./types";
 import type { Locale } from "../i18n/locales";
 import type {
-  AgentReport, Base58, CarValuation, FxRate, OfferRanking, PaymentReceipt, PaymentReview, SavedRecipient, WillChatMessage, WillDraft,
+  AgentReport, Base58, CarValuation, FxRate, PaymentReceipt, PaymentReview, SavedRecipient, WillChatMessage, WillDraft,
 } from "../types";
 import { chainCtx } from "../chain/client";
 import { chainConfig } from "../chain/config";
@@ -17,9 +17,16 @@ import * as ix from "../chain/instructions";
 import { ata, claimPda, estatePda, offerPda, hardshipPda } from "../chain/pda";
 import { demoEstateFirst } from "../chain/demo-estate";
 import { base64ToBytes, bytesToBase64, ChainTxError, getConnection } from "../chain/tx";
-import { activityFrom, fetchAccountRaw, fetchEstateRaw, fetchEvents, fetchHistory, findEstateOf, invalidateProgramAccounts, scanAccounts } from "../chain/reads";
+import {
+  activityFrom, deathReviewHash, decodeScanned, fetchAccountRaw, fetchEstateRaw, fetchEvents, fetchHistory, findEstateOf, invalidateProgramAccounts, scanAccounts,
+} from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
-import { hex, key, num, type Raw } from "../chain/decoders";
+import { bool, hex, key, num, optKey, type Raw } from "../chain/decoders";
+import { ChainServiceError, must, writeFailure } from "./chain-errors";
+import { createChainContinuity } from "./chain-continuity";
+import { deathClaimStep } from "./chain-reports";
+import { checkPeople, planSetup } from "./chain-setup";
+import { acceptBestOffer, reviveRanking, type WireRanking } from "./chain-sale";
 import { getActiveSigner, peekActiveSigner } from "../wallet/signer";
 import {
   defaultReceiptStore, feeForReview, newPaymentId, openReceipts, recheck, resumeOnReconnect, runPayment, signSponsoredOrSelf, SponsorError, waitForFinal,
@@ -51,13 +58,8 @@ import {
 } from "@solana/spl-token";
 import { actionHeaders, ensureReadPass, readHeaders, readerKey } from "../access/client";
 import { actionBody, type AgentAction } from "../access/messages";
-import { MAX_RULES, clampWaiting, residualRecipient } from "../continuity/logic";
-import { practicePayees } from "../continuity/practice";
-import { residualPda as residualAddress, guardPda as guardAddress } from "../chain/pda";
-import { rulePda as rulePdaOf } from "../chain/pda";
-import type { PayeeKind } from "../types";
+import { clampWaiting } from "../continuity/logic";
 import { pack } from "../chain/pack";
-import { rulesStillToAdd } from "../continuity/resume";
 import { publicBeneficiaryLabel, publicPayeeName, withPrivateNames } from "../chain/public-names";
 
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
@@ -161,17 +163,28 @@ async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel
   const id = newPaymentId();
   const first = await pay(id, ixs, meta, opts.selfPay);
   const r = first.status === "failed" ? first : await waitForFinal(receipts, chainOps(), id, 60_000, 800);
-  if (!r || r.status === "failed") throw new ChainTxError(r?.signature ?? "", r?.error ?? "Transaction failed.");
-  if (!r.signature) throw new Error("Transaction was not signed.");
+  written(); // also when it failed or is unconfirmed: the next read must see the chain as it is
+  const failure = writeFailure(r);
+  if (failure) throw new ChainTxError(r?.signature ?? "", failure);
+  return { signature: r!.signature!, explorerUrl: explorerTx(r!.signature!) };
+}
+
+/** Something was written: the next read sees it. */
+function written(): void {
   forget("activity:"); forget("estates:"); forget("history:"); forget("tree:"); invalidateProgramAccounts();
-  return { signature: r.signature, explorerUrl: explorerTx(r.signature) };
+}
+
+/** The estate from the chain now, not from a scan of a few seconds ago. */
+function freshEstate(estate: Base58) {
+  invalidateProgramAccounts();
+  return fetchEstateRaw(estate);
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   // Reads carry this wallet's read pass: family records are for members only (lib/access).
   const res = await fetch(path, { cache: "no-store", ...init, headers: { ...readHeaders(), ...(init?.headers as Record<string, string> | undefined) } });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string };
+  if (!res.ok) throw Object.assign(new Error(data.error ?? `Request failed (${res.status})`), { code: data.code });
   return data;
 }
 const post = <T>(path: string, body: unknown) =>
@@ -183,17 +196,6 @@ async function signedPost<T>(path: string, action: AgentAction, estate: Base58, 
   return api<T>(path, { method: "POST", headers, body: JSON.stringify(body) });
 }
 
-/** Who a sweep would pay. */
-async function residualOf(estate: Base58): Promise<Base58 | null> {
-  const programId = chainCtx().programId;
-  const named = await fetchAccountRaw("Residual", residualAddress(programId, estate).toBase58());
-  if (named) return key(named, "recipient");
-  const guard = await fetchAccountRaw("Guard", guardAddress(programId, estate).toBase58());
-  if (!guard) return null;
-  const list = (guard as Record<string, unknown>).fallback;
-  const wallets = Array.isArray(list) ? list.map(String) : [];
-  return residualRecipient(null, { wallets, deadMask: num(guard, "fallback_dead") }, PublicKey.default.toBase58());
-}
 
 /** Rent for what a practice person does (a claim, a dispute, an offer). */
 const PRACTICE_SOL_LAMPORTS = 6_000_000;
@@ -225,11 +227,6 @@ async function saveMeta(meta: EstateMeta, draft?: WillDraft): Promise<void> {
 
 const fileHash = async (f: File) => sha256Hex(new Uint8Array(await f.arrayBuffer()));
 
-/** OfferRanking amounts come back from JSON as strings. */
-function reviveRanking(r: { bestOffer: Base58 | null; eligible: { offer: Base58; amount: string; reason: string }[]; ineligible: { offer: Base58; amount: string; reason: string }[] }): OfferRanking {
-  const f = (x: { offer: Base58; amount: string; reason: string }) => ({ ...x, amount: BigInt(x.amount) });
-  return { bestOffer: r.bestOffer, eligible: r.eligible.map(f), ineligible: r.ineligible.map(f) };
-}
 
 async function review(file: File, purpose: "death" | "claim" | "hardship" | "seat-death" | "fallback-death", estate: Base58, context: string, subject?: Base58, preview = false, index?: number) {
   const form = new FormData();
@@ -305,6 +302,8 @@ async function listEstatesUncached(wallet: Base58) {
   // Estate: [disc][owner][agent][usdt_mint][verifiers 3×32] → verifier i at 104 + 32i
   const verifierHits = await Promise.all([0, 1, 2].map((i) => scanAccounts("Estate", [{ offset: 104 + 32 * i, key: me }]).catch(() => [])));
   for (const b of bens) {
+    // Removed from the plan: the account stays, the role doesn't (R16).
+    if (!bool(decodeScanned("Beneficiary", b), "active")) continue;
     const estate = new PublicKey(b.data.subarray(8, 40)).toBase58();
     out.push({ estate, role: "beneficiary", ownerName: (await getMeta(estate))?.ownerName ?? "Family estate" });
   }
@@ -375,8 +374,17 @@ export function createChainService(): HeirloomService {
     signer: () => getActiveSigner(),
     usdtZar: async () => (await service.getFx()).usdtZar,
   })));
+  // Continuity, removal, rule slots (chain-continuity.ts).
+  const { residualOf, ...continuity } = createChainContinuity({
+    send: (ixs, opts) => send(ixs, { kind: "program" }, opts),
+    requireOwnerOf,
+    fetchRaw: (type, address) => fetchAccountRaw(type, address),
+    fetchEstate: freshEstate,
+    accountExists: async (address) => !!(await getConnection().getAccountInfo(address, "confirmed")),
+  });
   const service: HeirloomService = {
     mode: "chain",
+    ...continuity,
     listLetters: async (estate, opts) => (await letters()).listLetters(estate, opts),
     saveLetter: async (estate, input, version) => (await letters()).saveLetter(estate, input, version),
     deleteLetter: async (estate, id, version) => (await letters()).deleteLetter(estate, id, version),
@@ -418,10 +426,9 @@ export function createChainService(): HeirloomService {
         cached(`activity:${estate}`, 20_000, () => fetchEvents(estate)).catch(() => []),
       ]);
       const activity = activityFrom(events);
-      // The death review's report hash lives in the latest DeathReviewed event (the Estate account keeps only the cert hash).
-      const deathHash = raw.estate.death.certHash
-        ? activity.find((a) => a.kind === "DeathReviewed" || (a.kind === "ReviewReferred" && raw.estate.death.verdict === "Referred"))?.reportHash
-        : undefined;
+      // The death review's report hash lives in an event (the Estate account keeps only the cert hash): the review of
+      // the claim that stands, never of one it replaced.
+      const deathHash = deathReviewHash(events, raw.estate.death);
       const hashes = [...new Set([...Object.values(raw.reportHashes), ...(deathHash ? [deathHash] : [])])];
       const reports = hashes.length
         ? await api<Record<string, AgentReport>>(`/api/reports?estate=${estate}&hashes=${hashes.join(",")}`).catch(() => ({} as Record<string, AgentReport>))
@@ -429,8 +436,9 @@ export function createChainService(): HeirloomService {
       const snap = assembleSnapshot(raw, activity, reports);
       const deathReport = deathHash ? reports[deathHash] : undefined;
       const out = deathReport ? { ...snap, estate: { ...snap.estate, death: { ...snap.estate.death, agentReport: deathReport } } } : snap;
-      // Guardians: seat death reviews carry report hashes too (SeatDeathReviewed events).
-      const seatHashes = events.filter((e) => e.name.toLowerCase() === "seatdeathreviewed").map((e) => { try { return hex(e.data, "report_hash"); } catch { return ""; } })
+      // Guardians: seat and fallback death reviews carry report hashes too (their events).
+      const seatHashes = events.filter((e) => ["seatdeathreviewed", "fallbackdeathreviewed"].includes(e.name.toLowerCase()))
+        .map((e) => { try { return hex(e.data, "report_hash"); } catch { return ""; } })
         .filter((h) => h && !(h in reports));
       const seatReports = seatHashes.length
         ? await api<Record<string, AgentReport>>(`/api/reports?estate=${estate}&hashes=${[...new Set(seatHashes)].join(",")}`).catch(() => ({} as Record<string, AgentReport>))
@@ -478,7 +486,7 @@ export function createChainService(): HeirloomService {
 
     async rankOffers(asset) {
       const raw = await mustFetch("Asset", asset);
-      const r = await post<Parameters<typeof reviveRanking>[0]>("/api/rank-offers", { estate: key(raw, "estate"), asset });
+      const r = await post<WireRanking>("/api/rank-offers", { estate: key(raw, "estate"), asset });
       return reviveRanking(r);
     },
 
@@ -489,20 +497,26 @@ export function createChainService(): HeirloomService {
       const draft = willDraftSchema.parse(input); // the exact shape the server re-hashes
       const ctx = chainCtx();
       const owner = pk(getActiveSigner().address);
-      const missing = [...draft.beneficiaries.filter((b) => !b.wallet).map((b) => b.label), ...draft.verifiers.filter((v) => !v.wallet).map((v) => v.name)];
-      if (missing.length) throw new Error(`Add wallet addresses for: ${missing.join(", ")}.`);
-      if (draft.verifiers.length !== 3) throw new Error("Exactly three verifiers are needed.");
-      if (draft.rules.length > MAX_RULES) throw new Error(`TooManyRules: a plan can have at most ${MAX_RULES} rules.`);
       const { agentAddress } = await api<{ agentAddress: string | null }>("/api/agent");
       if (!agentAddress) throw new Error("The AI agent's wallet is not configured on the server.");
 
       const estate = estatePda(ctx.programId, owner);
+      const exists = await fetchAccountRaw("Estate", estate.toBase58());
+      // Everything below is decided before the first transaction: a refusal signs nothing (U2).
+      checkPeople(draft, owner.toBase58(), exists ? key(exists, "agent") : agentAddress);
       const willHash = await hashJson(draft);
       const { waitingSecsFor } = await import("../will-summary");
       const waiting = clampWaiting(waitingSecsFor(draft.waitingPeriodDays, "chain"));
       const txs: TxResult[] = [];
 
-      const exists = await fetchAccountRaw("Estate", estate.toBase58());
+      const savedMeta = exists ? await getMetaForWrite(estate.toBase58()) : null;
+      const privateNames: Record<Base58, string> = { ...guardianExtras(savedMeta, {}).names };
+      const before = exists ? withPrivateNames(await freshEstate(estate.toBase58()), privateNames) : null;
+      must(!before || before.estate.status === "Active", "BadStatus", "A plan can only be signed while it is active.");
+      const plan = planSetup({
+        draft, before, ruleCount: before?.ruleCount ?? 0, practice: !!opts.practice, now: Math.floor(Date.now() / 1000),
+        intervalSecs, newWallet: () => Keypair.generate().publicKey.toBase58(),
+      });
       const setup: TransactionInstruction[] = [];
       if (!exists) {
         setup.push(ix.createEstate(ctx, {
@@ -512,55 +526,28 @@ export function createChainService(): HeirloomService {
       }
       setup.push(ix.setWill(ctx, owner, willHash, `heirloom:will:${willHash.slice(0, 16)}`));
 
-      const savedMeta = exists ? await getMetaForWrite(estate.toBase58()) : null;
-      const privateNames: Record<Base58, string> = { ...guardianExtras(savedMeta, {}).names };
-      const before = exists ? withPrivateNames(await fetchEstateRaw(estate.toBase58()), privateNames) : null;
       // Names never go on-chain (POPIA): the ledger gets roles, the names stay with the estate's off-chain names.
       const family = new Set(draft.beneficiaries.map((b) => b.wallet!));
       for (const b of draft.beneficiaries) privateNames[b.wallet!] = b.label.slice(0, 64);
-      const existingBens = new Set((before?.beneficiaries ?? []).map((b) => b.wallet));
-      const benIxs = draft.beneficiaries.filter((b) => !existingBens.has(b.wallet!)).map((b, i) => ix.addBeneficiary(ctx, owner, pk(b.wallet!), publicBeneficiaryLabel(existingBens.size + i)));
-      setup.push(...benIxs);
-
-      let ruleId = exists ? num(exists, "rule_count") : 0;
-      // Recurring rules pay a fixed payee, which must already be an approved payee (matched by name).
-      const payees: { name: string; kind: PayeeKind; wallet: Base58 }[] = [...(before?.payees ?? [])];
-      if (opts.practice) {
-        // Practice institutions: fresh addresses on the test network, so every rule has someone to pay.
-        const made = practicePayees(draft.rules, payees).map((p) => ({ ...p, wallet: Keypair.generate().publicKey.toBase58() }));
-        for (const p of made) {
-          privateNames[p.wallet] = p.name;
-          setup.push(ix.addPayee(ctx, owner, pk(p.wallet), p.kind, publicPayeeName(p, family)));
-        }
-        payees.push(...made);
+      const labelled = before?.beneficiaries.length ?? 0;
+      // New family members, and removed ones who are added back (R16).
+      setup.push(...plan.beneficiaries.map((b, i) => ix.addBeneficiary(ctx, owner, pk(b.wallet!), publicBeneficiaryLabel(labelled + i))));
+      // Practice institutions: fresh addresses on the test network, so every rule has someone to pay.
+      for (const p of plan.payees) {
+        privateNames[p.wallet] = p.name;
+        setup.push(ix.addPayee(ctx, owner, pk(p.wallet), p.kind, publicPayeeName(p, family)));
       }
-      const now = Math.floor(Date.now() / 1000);
-      // Signing again after a dropped connection adds only the rules that are not there yet.
-      const ruleIxs = rulesStillToAdd(draft.rules, draft.beneficiaries, before?.rules ?? []).map((r) => {
-        const ben = draft.beneficiaries.find((b) => b.label === r.beneficiaryLabel);
-        if (!ben?.wallet) throw new Error(`Rule for unknown beneficiary "${r.beneficiaryLabel}".`);
-        let recurring: Parameters<typeof ix.addRule>[2]["recurring"];
-        if (r.recurring) {
-          const payee = payees.find((p) => p.name.toLowerCase() === r.recurring!.payeeName.toLowerCase() && p.kind === r.allowedPayeeKind);
-          if (payee) {
-            const every = intervalSecs(r.recurring.every);
-            recurring = { amount: toBase(r.recurring.amountUsdt), intervalSecs: every, firstDue: now + every, payeeWallet: pk(payee.wallet) };
-          } else {
-            // The payee's wallet is not known yet: the rule is created claim-based (same caps); add the payee and a
-            // recurring rule later with addRule({ recurring }).
-            console.warn(`Recurring payee "${r.recurring.payeeName}" is not an approved payee yet; rule created as claim-based.`);
-          }
-        }
-        return ix.addRule(ctx, owner, {
-          ruleId: ruleId++, beneficiaryWallet: pk(ben.wallet), category: r.category, allowedPayeeKind: r.allowedPayeeKind,
-          maxPerClaim: toBase(r.maxPerClaimUsdt), lifetimeCap: toBase(r.lifetimeCapUsdt), validUntil: Math.floor(Date.parse(r.validUntil) / 1000),
-          startsNow: r.startsNow, recurring,
-        });
-      });
-      setup.push(...ruleIxs);
+      for (const { recurring, beneficiary, ...r } of plan.rules) {
+        setup.push(ix.addRule(ctx, owner, {
+          ...r, beneficiaryWallet: pk(beneficiary),
+          recurring: recurring && { amount: recurring.amount, intervalSecs: recurring.intervalSecs, firstDue: recurring.firstDue, payeeWallet: pk(recurring.payee) },
+        }));
+      }
 
       const heir = draft.beneficiaries.find((b) => b.label === opts.residualLabel) ?? draft.beneficiaries[0];
       if (heir?.wallet && heir.wallet !== owner.toBase58()) setup.push(ix.setResidual(ctx, owner, pk(heir.wallet)));
+      // Before sending: if signing is interrupted, the next try must know the practice payees by name.
+      rememberOnDevice(privateNames);
       for (const group of pack(setup)) txs.push(await send(group));
 
       if (opts.practice) {
@@ -576,7 +563,6 @@ export function createChainService(): HeirloomService {
         }
       }
 
-      rememberOnDevice(privateNames);
       await saveMeta({
         estate: estate.toBase58(), ownerWallet: owner.toBase58(), ownerName: draft.ownerName,
         verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string],
@@ -627,36 +613,6 @@ export function createChainService(): HeirloomService {
       return tx;
     },
 
-    async addRule(estate, input) {
-      const o = requireOwnerOf(estate);
-      const raw = await mustFetch("Estate", estate);
-      return send([ix.addRule(chainCtx(), o, {
-        ruleId: num(raw, "rule_count"), beneficiaryWallet: pk(input.beneficiary), category: input.category, allowedPayeeKind: input.allowedPayeeKind,
-        maxPerClaim: toBase(input.maxPerClaimUsdt), lifetimeCap: toBase(input.lifetimeCapUsdt), validUntil: input.validUntil,
-        startsNow: input.startsNow,
-        recurring: input.recurring && {
-          amount: toBase(input.recurring.amountUsdt), intervalSecs: input.recurring.intervalSecs,
-          firstDue: input.recurring.firstDue, payeeWallet: pk(input.recurring.payee),
-        },
-      })]);
-    },
-
-    async endRule(estate, rule) {
-      return send([ix.endRule(chainCtx(), requireOwnerOf(estate), pk(rule))]);
-    },
-
-    async setResidual(estate, recipient) {
-      return send([ix.setResidual(chainCtx(), requireOwnerOf(estate), pk(recipient))]);
-    },
-
-    async sweepResidual(estate) {
-      const recipient = await residualOf(estate);
-      if (!recipient) throw new Error("NoResidualRecipient: the owner did not name anyone to receive what is left.");
-      const ctx = chainCtx();
-      const count = num(await mustFetch("Estate", estate), "rule_count");
-      const rules = Array.from({ length: count }, (_, i) => rulePdaOf(ctx.programId, estate, i));
-      return send([ix.sweepResidual(ctx, { payer: pk(getActiveSigner().address), estate: pk(estate), recipient: pk(recipient), rules })]);
-    },
 
     async requestStarter() {
       const { requestStarterFunds } = await import("../starter/client");
@@ -672,7 +628,9 @@ export function createChainService(): HeirloomService {
     async executeScheduled(estate, rule) {
       const raw = await mustFetch("Rule", rule);
       const fixed = key(raw, "fixed_payee");
-      return send([ix.executeScheduled(chainCtx(), { estate: pk(estate), payer: pk(getActiveSigner().address), rule: pk(rule), payeeWallet: pk(fixed) })],
+      return send([ix.executeScheduled(chainCtx(), {
+        estate: pk(estate), payer: pk(getActiveSigner().address), rule: pk(rule), beneficiary: pk(key(raw, "beneficiary")), payeeWallet: pk(fixed),
+      })],
         { kind: "scheduled", to: fixed, toLabel: "Scheduled payee", amount: String(raw.recurring_amount ?? "0") });
     },
 
@@ -680,10 +638,11 @@ export function createChainService(): HeirloomService {
     async submitDeathClaim(estate, certificate) {
       const me = pk(getActiveSigner().address);
       const h = await fileHash(certificate);
-      const tx = await send([ix.submitDeathClaim(chainCtx(), pk(estate), me, h)]);
+      const step = deathClaimStep(await mustFetch("Estate", estate), me.toBase58(), h, Math.floor(Date.now() / 1000));
+      const tx = step === "send" ? await send([ix.submitDeathClaim(chainCtx(), pk(estate), me, h)]) : null;
       const meta = await getMeta(estate);
       const r = await review(certificate, "death", estate, `Estate owner's name: ${meta?.ownerName ?? "unknown"}.`);
-      return { tx, report: r.report };
+      return { tx: (tx ?? r.tx)!, report: r.report };
     },
 
     async submitClaim(estate, input) {
@@ -728,6 +687,10 @@ export function createChainService(): HeirloomService {
 
     async approveHardship(estate, hardship) {
       const raw = await mustFetch("Hardship", hardship);
+      const standing = optKey(await mustFetch("Asset", key(raw, "asset")), "hardship_beneficiary");
+      if (standing && standing !== key(raw, "beneficiary")) {
+        throw new ChainServiceError("BadStatus", "Another person's approved hardship stands on this asset. It has to be objected to, and upheld, first.");
+      }
       return send([ix.approveHardship(pk(estate), pk(getActiveSigner().address), pk(key(raw, "asset")), pk(hardship))]);
     },
 
@@ -737,7 +700,8 @@ export function createChainService(): HeirloomService {
     async executeClaim(estate, claim) {
       const raw = await mustFetch("Claim", claim);
       return send([ix.executeClaim(chainCtx(), {
-        estate: pk(estate), payer: pk(getActiveSigner().address), rule: pk(key(raw, "rule")), claim: pk(claim), payeeWallet: pk(key(raw, "payee")),
+        estate: pk(estate), payer: pk(getActiveSigner().address), rule: pk(key(raw, "rule")), claim: pk(claim),
+        beneficiary: pk(key(raw, "beneficiary")), payeeWallet: pk(key(raw, "payee")),
       })], { kind: "claim-payout", to: key(raw, "payee"), toLabel: "Approved institution", amount: String(raw.amount ?? "0") });
     },
 
@@ -870,15 +834,11 @@ export function createChainService(): HeirloomService {
       return send([ix.withdrawOffer(chainCtx(), pk(estate), pk(asset), pk(me))]);
     },
 
-    async acceptBestOffer(estate, asset) {
-      const res = await fetch("/api/accept-offer", {
-        method: "POST", body: JSON.stringify({ estate, asset }),
-        headers: { "content-type": "application/json", ...(await actionHeaders(getActiveSigner(), "accept-offer", estate, actionBody.acceptOffer({ asset }))) },
-      });
-      const data = (await res.json()) as { tx: TxResult | null; ranking: Parameters<typeof reviveRanking>[0]; error?: string };
-      if (!res.ok || !data.tx) throw new Error(data.error ?? `Could not accept an offer (${res.status}).`);
-      return { tx: data.tx, ranking: reviveRanking(data.ranking) };
-    },
+    acceptBestOffer: (estate, asset) => acceptBestOffer({
+      fetchEstate: freshEstate,
+      latestBlockhash: async () => (await getConnection().getLatestBlockhash("confirmed")).blockhash,
+      headers: (e, body) => actionHeaders(getActiveSigner(), "accept-offer", e, body),
+    }, estate, asset).finally(written),
 
     legacyStatus: (estate, opts) => legacyApi.status(legacySigner(estate), opts),
     createLegacyVoice: (estate, input) => legacyApi.createVoice(legacySigner(estate), input),
