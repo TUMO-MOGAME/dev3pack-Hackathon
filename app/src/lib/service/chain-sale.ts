@@ -3,7 +3,7 @@
  * amount, and /api/accept-offer adds the agent's signature after checking the same bytes (lib/agent/sale.ts).
  */
 import type { Base58, OfferRanking } from "../types";
-import type { TxResult } from "./types";
+import type { SeenOffer, TxResult } from "./types";
 import { rankOffers } from "../agent/offers";
 import { saleTransaction } from "../agent/sale";
 import { eligibleSeats } from "../death-rules";
@@ -35,7 +35,7 @@ export function reviveRanking(r: WireRanking): OfferRanking {
   return { bestOffer: r.bestOffer, eligible: r.eligible.map(f), ineligible: r.ineligible.map(f) };
 }
 
-export async function acceptBestOffer(d: ChainSaleDeps, estate: Base58, assetAddress: Base58): Promise<{ tx: TxResult; ranking: OfferRanking }> {
+export async function acceptBestOffer(d: ChainSaleDeps, estate: Base58, assetAddress: Base58, seen?: SeenOffer): Promise<{ tx: TxResult; ranking: OfferRanking }> {
   const f = d.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
   const snap = await d.fetchEstate(estate);
   const { agent, verifiers } = snap.estate;
@@ -45,6 +45,8 @@ export async function acceptBestOffer(d: ChainSaleDeps, estate: Base58, assetAdd
   const best = offers.find((o) => o.address === rankOffers(asset, offers, { agent, verifiers }).bestOffer);
   must(best, asset.hardshipBeneficiary ? "BelowHardshipFloor" : "BelowFloor", "No offer can be accepted yet.");
 
+  // Nobody signs for an offer or amount other than the one they read.
+  must(!seen || (seen.offer === best.address && seen.amount === best.amount), "OfferChanged", "The offer changed after you read it. Check the new one before you sign.");
   const signer = getActiveSigner();
   const me = signer.address;
   const seats = eligibleSeats(verifiers);

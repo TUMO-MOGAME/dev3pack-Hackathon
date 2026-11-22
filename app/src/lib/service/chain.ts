@@ -826,11 +826,11 @@ export function createChainService(): HeirloomService {
       return send([ix.withdrawOffer(chainCtx(), pk(estate), pk(asset), pk(me))]);
     },
 
-    acceptBestOffer: (estate, asset) => acceptBestOffer({
+    acceptBestOffer: (estate, asset, seen) => acceptBestOffer({
       fetchEstate: freshEstate,
       latestBlockhash: async () => (await getConnection().getLatestBlockhash("confirmed")).blockhash,
       headers: (e, body) => actionHeaders(getActiveSigner(), "accept-offer", e, body),
-    }, estate, asset).finally(written),
+    }, estate, asset, seen).finally(written),
 
     legacyStatus: (estate, opts) => legacyApi.status(legacySigner(estate), opts),
     createLegacyVoice: (estate, input) => legacyApi.createVoice(legacySigner(estate), input),

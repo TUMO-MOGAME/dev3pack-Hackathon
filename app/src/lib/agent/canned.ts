@@ -26,7 +26,7 @@ export const DEMO_WILL: WillDraft = {
   ],
   rules: [
     { beneficiaryLabel: "Lerato (daughter)", category: "Tuition", allowedPayeeKind: "University", maxPerClaimUsdt: 4000, lifetimeCapUsdt: 16000, validUntil: "2031-12-31", notes: "University fees paid to the university only", startsNow: false },
-    { beneficiaryLabel: "Lerato (daughter)", category: "Accommodation", allowedPayeeKind: "Landlord", maxPerClaimUsdt: 600, lifetimeCapUsdt: 9000, validUntil: "2031-12-31", notes: "Residence rent paid automatically every month, starting now (living plan)", startsNow: true, recurring: { amountUsdt: 300, every: "month", payeeName: "Tugwell Residence" } },
+    { beneficiaryLabel: "Lerato (daughter)", category: "Accommodation", allowedPayeeKind: "Landlord", maxPerClaimUsdt: 600, lifetimeCapUsdt: 9000, validUntil: "2031-12-31", notes: "Residence rent on a monthly schedule, starting now (living plan)", startsNow: true, recurring: { amountUsdt: 300, every: "month", payeeName: "Tugwell Residence" } },
     { beneficiaryLabel: "Sipho (son)", category: "Tuition", allowedPayeeKind: "University", maxPerClaimUsdt: 4000, lifetimeCapUsdt: 16000, validUntil: "2033-12-31", notes: "University fees paid to the university only", startsNow: false },
     { beneficiaryLabel: "Naledi (daughter)", category: "Tuition", allowedPayeeKind: "School", maxPerClaimUsdt: 2500, lifetimeCapUsdt: 12000, validUntil: "2034-12-31", notes: "School fees, claimable now with Thabo's approval (living plan)", startsNow: true },
   ],
@@ -39,7 +39,7 @@ export const DEMO_WILL: WillDraft = {
   waitingPeriodDays: 14,
   plainLanguageSummary:
     "Thabo's USD₮ pays his children's education directly to their university, school or residence, within fixed caps. " +
-    "Two rules work now, while he is alive: Lerato's residence rent is paid automatically every month, and Naledi's school fees can be claimed with his approval. " +
+    "Two rules work now, while he is alive: Lerato's residence rent is scheduled every month, and Naledi's school fees can be claimed with his approval. " +
     "Everything else waits until two of three verifiers confirm his death and 14 days pass, and he can veto at any time. " +
     "The Corolla is sold for at least 12,500 USD₮, or at least 10,500 USD₮ if a child proves real hardship.",
 };

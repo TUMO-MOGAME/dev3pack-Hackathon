@@ -6,8 +6,9 @@
 import { useId, useState } from "react";
 import type { ReactNode } from "react";
 import { PenLine, Gavel } from "@/components/ui/icons";
-import type { EstateSnapshot, HeirloomService } from "@/lib/service";
-import type { Asset, Base58, Offer, OfferRanking } from "@/lib/types";
+import type { EstateSnapshot } from "@/lib/service";
+import type { SeenOffer } from "@/lib/service/types";
+import type { Asset, Offer, OfferRanking } from "@/lib/types";
 import { hasLivingSeat, isHeld } from "@/lib/guardians/decisions";
 import { useEstate } from "@/lib/hooks/estate";
 import { fromBase } from "@/lib/format";
@@ -19,10 +20,6 @@ import { useWho } from "@/components/guardians/decision";
 /** Every decimal there is: what is signed is what is read. */
 export const exactUsdt = (base: bigint) => `${fromBase(base).toLocaleString("en-ZA", { maximumFractionDigits: 6 })} USD₮`;
 
-interface Seen { offer: Base58; amount: bigint }
-type SettleWith = (estate: Base58, asset: Base58, seen: Seen) => ReturnType<HeirloomService["acceptBestOffer"]>;
-/** The mock checks `seen` itself. The service's type has no such argument yet, so it is also re-read just before signing. */
-const settleSeen = (s: HeirloomService): SettleWith => (s.acceptBestOffer as SettleWith).bind(s);
 const changed = () => Object.assign(new Error("OfferChanged: the offer changed after it was shown."), { code: "OfferChanged" });
 
 export function CoSign({ snap, asset, ranking, body, cta, working, done, refusalExtra }: {
@@ -39,7 +36,7 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
   const { session, run, busy } = useEstate();
   const who = useWho(snap);
   const id = useId();
-  const [seen, setSeen] = useState<Seen | null>(null);
+  const [seen, setSeen] = useState<SeenOffer | null>(null);
   const [moved, setMoved] = useState(false);
   const [blocked, setBlocked] = useState<{ code: string; message: string } | null>(null);
   const e = snap.estate;
@@ -56,13 +53,13 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
     setMoved(true);
   }
 
-  const sign = async (agreed: Seen | null) => {
+  const sign = async (agreed: SeenOffer | null) => {
     setBlocked(null);
     const res = await run("settle", async (s, est) => {
       if (!agreed) return s.acceptBestOffer(est, asset.address);
       const [latest, now] = await Promise.all([s.rankOffers(asset.address), s.getEstate(est)]);
       if (latest.bestOffer !== agreed.offer || now.offers.find((o) => o.address === agreed.offer)?.amount !== agreed.amount) throw changed();
-      return settleSeen(s)(est, asset.address, agreed);
+      return s.acceptBestOffer(est, asset.address, agreed);
     }, done, true);
     if (res.ok) { setSeen(null); setMoved(false); return; }
     if (res.code === "OfferChanged" || res.code === "sale_changed") setMoved(true);

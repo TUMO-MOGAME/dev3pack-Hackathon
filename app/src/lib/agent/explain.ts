@@ -12,7 +12,7 @@ export function plainExplanation(asset: RankAsset, r: OfferRanking): string {
   const which = rule === "floor" ? "the owner's floor price" : "the hardship floor (a hardship request was approved)";
   if (!r.bestOffer) return `No offer reaches ${which} of ${formatUsdt(min)}, so the contract will not allow a sale yet.`;
   const best = r.eligible[0];
-  return `The best offer is ${formatUsdt(best.amount)}, which meets ${which} of ${formatUsdt(min)}. ` +
+  return `The highest offer that can be accepted is ${formatUsdt(best.amount)}, which meets ${which} of ${formatUsdt(min)}. ` +
     `${r.eligible.length - 1} other offer(s) qualify and ${r.ineligible.length} do not.`;
 }
 

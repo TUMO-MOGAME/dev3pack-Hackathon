@@ -43,8 +43,6 @@ export type DemoStage = (typeof DEMO_STAGES)[number];
 
 export interface MockService extends HeirloomService {
   mode: "mock";
-  /** `seen`: the offer and exact amount on screen when the trusted person co-signed (R19). */
-  acceptBestOffer(estate: Base58, asset: Base58, seen?: { offer: Base58; amount: bigint }): ReturnType<HeirloomService["acceptBestOffer"]>;
   setActor(actor: MockActor | null): void;
   resetDemo(stage: DemoStage): void;
   balanceOf(address: Base58): bigint | null;

@@ -24,6 +24,9 @@ import type { AgentVoteInfo, ContinuityService, CreateEstateOptions } from "../c
 
 export interface TxResult { signature: string; explorerUrl: string }
 
+/** The offer and exact amount on screen when a trusted person co-signs a sale (R19). */
+export interface SeenOffer { offer: Base58; amount: bigint }
+
 export interface EstateSnapshot {
   estate: Estate;
   beneficiaries: Beneficiary[];
@@ -122,7 +125,7 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   placeOffer(estate: Base58, asset: Base58, amountUsdt: number, buyerName?: string): Promise<TxResult>;
   withdrawOffer(estate: Base58, asset: Base58): Promise<TxResult>;
   /** The trusted person signed in co-signs this exact offer and amount; the agent signs and pays. */
-  acceptBestOffer(estate: Base58, asset: Base58): Promise<{ tx: TxResult; ranking: OfferRanking }>;
+  acceptBestOffer(estate: Base58, asset: Base58, seen?: SeenOffer): Promise<{ tx: TxResult; ranking: OfferRanking }>;
 
   // Legacy voice (lib/legacy/*): the owner's consented voice clone + Legacy Book; after unlock a child who opts in
   // hears the owner's own messages for moments in that voice.
