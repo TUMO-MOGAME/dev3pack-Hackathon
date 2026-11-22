@@ -372,6 +372,8 @@ pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
     require!(hardship.status == HardshipStatus::Open, HeirloomError::BadStatus);
     require!(hardship.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
     let claimant = hardship.beneficiary;
+    // The first approved hardship keeps the sale's proceeds unless an objection to it is upheld.
+    require!(asset.hardship_beneficiary.map_or(true, |b| b == claimant), HeirloomError::BadStatus);
     require!(verifier != claimant, HeirloomError::OwnApproval);
 
     let bit = 1u8 << idx;
@@ -491,9 +493,11 @@ pub struct AcceptOffer<'info> {
     pub co_signer: Option<Signer<'info>>,
 }
 
-pub fn accept_offer_handler(ctx: Context<AcceptOffer>) -> Result<()> {
+/// `expected_amount` is what the agent and the co-signer agreed to: the buyer can't swap in another offer.
+pub fn accept_offer_handler(ctx: Context<AcceptOffer>, expected_amount: u64) -> Result<()> {
     let asset = &ctx.accounts.asset;
     require!(asset.status == AssetStatus::Listed, HeirloomError::BadStatus);
+    require!(ctx.accounts.offer.amount == expected_amount, HeirloomError::OfferChanged);
     require!(
         !objection_is_open(&ctx.accounts.objection.to_account_info(), &ctx.accounts.estate)?,
         HeirloomError::ObjectionOpen

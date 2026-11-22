@@ -663,3 +663,13 @@ pub struct FallbackReport {
     pub reported_at: i64,
     pub bump: u8,
 }
+
+impl FallbackReport {
+    /// An approved report on `recipient` holds payments to them until it has had time to be confirmed or
+    /// refuted: twice the refute wait, and no longer.
+    pub fn holds_payment(&self, guard: &Guard, recipient: &Pubkey, ts: i64) -> bool {
+        self.recipient == *recipient
+            && self.verdict == Verdict::Approved
+            && ts < self.reported_at.saturating_add(guard.refute_wait().saturating_mul(2))
+    }
+}

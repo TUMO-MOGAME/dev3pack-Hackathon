@@ -129,4 +129,6 @@ pub enum HeirloomError {
     DeathReportOpen,
     #[msg("The claim belongs to a rule that was ended and replaced")]
     ClaimFromEndedRule,
+    #[msg("The offer is no longer the amount that was agreed")]
+    OfferChanged,
 }
