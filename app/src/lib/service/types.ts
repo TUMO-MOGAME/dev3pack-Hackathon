@@ -20,7 +20,7 @@ import type { InvoiceRead } from "../bills/invoice";
 import type { AskNote, AskService } from "../ask/types";
 import type { TreeService } from "../tree/types";
 import type { LettersService } from "../letters/types";
-import type { ContinuityService, CreateEstateOptions } from "../continuity/types";
+import type { AgentVoteInfo, ContinuityService, CreateEstateOptions } from "../continuity/types";
 
 export interface TxResult { signature: string; explorerUrl: string }
 
@@ -48,6 +48,8 @@ export interface EstateSnapshot {
   asks?: Record<Base58, AskNote>;
   /** Who a sweep pays: the named person, else the first living fallback recipient. Null: nobody yet. */
   residual?: Base58 | null;
+  /** Open votes to replace the agent. Absent on older snapshots. */
+  agentVotes?: AgentVoteInfo[];
 }
 
 export interface HeirloomService extends GuardiansService, DisputesService, AskService, TreeService, LettersService, ContinuityService {
@@ -73,7 +75,7 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   heartbeat(estate: Base58): Promise<TxResult>;
   registerAsset(estate: Base58, input: { nftMint: Base58; title: string; floorUsdt: number; hardshipFloorUsdt: number; askingUsdt: number; proceedsTo: Base58; docFile?: File }): Promise<TxResult>;
   addPayee(estate: Base58, input: { wallet: Base58; kind: PayeeKind; name: string }): Promise<TxResult>;
-  addRule(estate: Base58, input: { beneficiary: Base58; category: Category; allowedPayeeKind: PayeeKind; maxPerClaimUsdt: number; lifetimeCapUsdt: number; validUntil: number; startsNow: boolean; recurring?: { amountUsdt: number; intervalSecs: number; firstDue: number; payee: Base58 } }): Promise<TxResult>;
+  addRule(estate: Base58, input: { beneficiary: Base58; category: Category; allowedPayeeKind: PayeeKind; maxPerClaimUsdt: number; lifetimeCapUsdt: number; validUntil: number; startsNow: boolean; recurring?: { amountUsdt: number; intervalSecs: number; firstDue: number; payee: Base58 }; /** An ended rule whose slot to reuse. */ reuse?: Base58 }): Promise<TxResult>;
   /** Living plan: owner approves a claim on a startsNow rule while alive (counts as full approval). */
   ownerApproveClaim(estate: Base58, claim: Base58): Promise<TxResult>;
   /** Scheduled payment: anyone (UI button, agent, cron) triggers a due recurring payout. */
@@ -119,6 +121,7 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   /** `buyerName`: the name the family sees beside the offer and on the sale (off-chain; the owner's names win). */
   placeOffer(estate: Base58, asset: Base58, amountUsdt: number, buyerName?: string): Promise<TxResult>;
   withdrawOffer(estate: Base58, asset: Base58): Promise<TxResult>;
+  /** The trusted person signed in co-signs this exact offer and amount; the agent signs and pays. */
   acceptBestOffer(estate: Base58, asset: Base58): Promise<{ tx: TxResult; ranking: OfferRanking }>;
 
   // Legacy voice (lib/legacy/*): the owner's consented voice clone + Legacy Book; after unlock a child who opts in

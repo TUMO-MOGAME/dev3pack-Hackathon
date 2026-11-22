@@ -29,6 +29,8 @@ export interface SeatSuccession {
   verdict: "Pending" | "Approved" | "Rejected";
   report?: AgentReport;
   confirmedBy: Base58 | null;
+  /** When it was reported (0 = before times were stored). See death-rules.ts for when it may be replaced. */
+  reportedAt?: number;
   pendingSince: number;             // unix seconds the wait started (at confirmation); 0 until confirmed
   readyAt: number;                  // pendingSince + successionWaitSecs; 0 until confirmed
   nextHolder: { wallet: Base58; name: string } | null;  // backups[0] (or [1]); null = seat becomes vacant
@@ -69,6 +71,18 @@ export interface FallbackRecipient {
   name: string;                     // "Lerato (daughter)", "Mokoena Family Trust", "Ithemba Children's Charity"
   kind: "family" | "heir" | "charity";
   dead: boolean;                    // proven dead (family/heir only)
+  /** An open report that they died: the agent reviews, then a second person confirms, or they refute. */
+  report?: FallbackDeathReport | null;
+}
+
+export interface FallbackDeathReport {
+  reporter: Base58;
+  certHash: string;
+  verdict: "Pending" | "Approved";
+  reportedAt: number;
+  /** reportedAt + max(fallback wait, 60 s): a second person may confirm from here. */
+  confirmableAt: number;
+  report?: AgentReport;
 }
 
 export interface FallbackPlan {
@@ -139,6 +153,8 @@ export interface GuardiansService {
   voteObjection(estate: Base58, objection: Base58, uphold: boolean): Promise<TxResult>;
   // fallback
   reportFallbackDeath(estate: Base58, recipientIndex: number, certificate: File): Promise<{ tx: TxResult; report: AgentReport }>;
+  /** dead: a second participant confirms. Otherwise the reported recipient says "I'm alive". */
+  resolveFallbackDeath(estate: Base58, recipientIndex: number, dead: boolean): Promise<TxResult>;
   startFallback(estate: Base58): Promise<TxResult>;
   /** Anyone: marks an Open Fallback objection that was not upheld in time as lapsed (dismissed). Added by Agent B. */
   lapseObjection(estate: Base58): Promise<TxResult>;

@@ -1122,3 +1122,26 @@ Decision: one seat, one vote. A successor after a death inherits that seat's vot
 ### 18.7 Only Tumo can do
 Supabase project and keys, a dedicated RPC URL, real interviews, the video, a physical-phone test, student proof,
 written event rules, and making the repo public.
+
+### 18.8 Decisions on the program's open items (lead, 22 Nov)
+The program round (R1-R17) was rebuilt by the lead from a clean archive: same hash, 211 tests. All 148 accounts on
+devnet decode with the new IDL, and none is in a state the new rules interrupt.
+
+Fix now:
+| ID | Item | Fix |
+|---|---|---|
+| R18 | The last holder with no monitor or second backup can't be confirmed dead (4 seats on devnet) | When no other seat is held and that seat has neither, an active beneficiary other than the reporter may confirm (optional account appended to `confirm_seat_death`) |
+| R19 | A lower offer can be swapped in under a co-signature | `accept_offer(expected_amount)`; error OfferChanged 6061 |
+| R20 | A sweep can pay someone reported dead | `sweep_residual` takes the next recipient's FallbackReport; when it pays by the fallback list an approved report holds it for the same bounded time |
+| R21 | A second hardship replaces the first recipient | Refused while one stands |
+| R22 | The agent can change what buyers see | `set_asset_media`: the living owner only |
+
+Product: setup warns when a trusted person is also a beneficiary; removing a member ends their rules and moves the
+residual; seeds give every seat a monitor.
+
+Accepted and disclosed as limits: a sole survivor who is the only claimant can't approve themselves; objection and
+agent votes can't always be revoked (bounded by the lapse); one survivor can't uphold an objection or replace the
+agent while Active; funds need at least one working path (trusted people or a fallback plan) to be recoverable;
+the upgrade authority is Heirloom's key.
+
+Service contract for wave 2: the types in app/src/lib (committed before the wave) and app/src/lib/death-rules.ts.

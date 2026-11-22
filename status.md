@@ -12,6 +12,7 @@
 - Reviewed fc693c3. Clean clone: 89 program tests, 965 app tests (one timeout under load, clean on re-run), build matches devnet. No code, chain or site changes.
 ### Next up
 - IN PROGRESS (Tumo, 22 Nov: fix everything from critical to low, update all docs, production fully up to date): plan §18, branch fix/second-review. Do not push this branch or main before the devnet upgrade is ready.
+- Merged on the branch (not deployed): R1-R17 (r2/program). Lead's clean rebuild: 834,304 bytes, 211 tests, 148/148 devnet accounts decode. Follow-up R18-R22 and the chain and product waves are running (plan §18.8); tsc fails on the branch until both services implement the new contract. Deployer holds 15.44 SOL, so size no longer limits the upgrade.
 - Merged on the branch (not deployed): S1-S6 (r2/server). Checked by the lead on the merge: vitest 1163/1163, tsc, eslint, mock and chain builds, production audit 0. Starter pace set to 6/hour, 24/day. Still to do: r2/program, chain and product waves, independent review, Supabase (waiting for the token file; migrations 0001-0009), release gates. Other replay stores (ask, letters, legacy, media, sponsor) move to the shared store in the chain wave.
 ### Decisions log
 - 22 Nov (Tumo): work before 27 Nov counts for this review (organisers allow it).

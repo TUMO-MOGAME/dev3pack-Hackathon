@@ -41,7 +41,10 @@ export interface Estate {
     submittedBy: Base58 | null;
     verdict: Verdict;
     attestations: boolean[]; // index = verifier index
+    /** When the quorum confirmed the death. Null while Active, also when a claim is open (see submittedAt). */
     pendingSince: number | null;
+    /** Active with an open claim: when it was submitted (0 = before times were stored). See death-rules.ts. */
+    submittedAt?: number | null;
     /** The agent's review of the death certificate (off-chain JSON; its hash is in the DeathReviewed event). */
     agentReport?: AgentReport;
   };
@@ -90,6 +93,8 @@ export interface Rule {
   every?: Recurrence;
   /** Optional cap per 12-month period (e.g. school fees up to N a year), on top of the per-claim and lifetime caps. */
   yearlyCap?: YearlyCap | null;
+  /** Next claim id. Its high 16 bits say which rule holds a reused slot (death-rules.ts isCurrentClaim). */
+  claimCount?: number;
 }
 
 export interface Claim {
@@ -108,6 +113,10 @@ export interface Claim {
   status: ClaimStatus;
   createdAt: number;
   txSignature?: string;
+  /** Made under a rule that held this slot before it was reused: can never be approved by the owner or paid. */
+  fromEndedRule?: boolean;
+  /** False: the trusted people's approvals predate the death, so they don't count and can be given again. */
+  approvalsCount?: boolean;
 }
 
 export interface Asset {
