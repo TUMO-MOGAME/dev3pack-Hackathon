@@ -344,4 +344,10 @@ pub mod heirloom {
     pub fn vote_agent(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<()> {
         instructions::continuity::vote_agent_handler(ctx, candidate)
     }
+
+    // ------------------------------------------------------------------ second review (22 Nov 2026)
+
+    pub fn release_asset(ctx: Context<ReleaseAsset>) -> Result<()> {
+        instructions::setup::release_asset_handler(ctx)
+    }
 }

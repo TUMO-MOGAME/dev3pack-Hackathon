@@ -26,11 +26,11 @@ fn compact_pair(pair: [Pubkey; 2]) -> Option<[Pubkey; 2]> {
     Some(out)
 }
 
-/// Backups must differ from the owner, from every current holder (this one included) and each other.
+/// Backups must differ from the owner, the agent, every current holder (this one included) and each other.
 fn validate_backups(estate: &Estate, backups: [Pubkey; 2]) -> Result<[Pubkey; 2]> {
     let b = compact_pair(backups).ok_or(HeirloomError::BadBackup)?;
     for k in b.iter().filter(|k| is_set(k)) {
-        require!(*k != estate.owner, HeirloomError::BadBackup);
+        require!(*k != estate.owner && *k != estate.agent, HeirloomError::BadBackup);
         require!(estate.verifier_index(k).is_none(), HeirloomError::BadBackup);
     }
     Ok(b)
@@ -738,6 +738,7 @@ pub fn owner_replace_seat_handler(ctx: Context<OwnerReplaceSeat>, _index: u8, ne
         is_set(&new_holder) && new_holder != estate.owner && estate.verifier_index(&new_holder).is_none(),
         HeirloomError::DuplicateVerifier
     );
+    require!(new_holder != estate.agent, HeirloomError::BadAgent);
 
     seat.holder = new_holder;
     seat.backups = without(seat.backups, &new_holder);

@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use super::{now, record_proof_of_life, transfer_checked_cpi};
+use super::{close_token_account_cpi, now, record_proof_of_life, transfer_checked_cpi};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -61,11 +61,16 @@ pub fn create_estate_handler(
     );
 
     for i in 0..VERIFIER_COUNT {
+        require!(verifiers[i] != Pubkey::default(), HeirloomError::InvalidWallet);
         require!(verifiers[i] != owner, HeirloomError::DuplicateVerifier);
         for j in (i + 1)..VERIFIER_COUNT {
             require!(verifiers[i] != verifiers[j], HeirloomError::DuplicateVerifier);
         }
     }
+    require!(
+        agent != Pubkey::default() && agent != owner && !verifiers.contains(&agent),
+        HeirloomError::BadAgent
+    );
 
     let ts = now()?;
     let usdt_mint = ctx.accounts.usdt_mint.key();
@@ -291,6 +296,8 @@ pub fn add_rule_handler(
         HeirloomError::InvalidAmount
     );
 
+    require!(valid_until > now()?, HeirloomError::TimeOutOfRange);
+
     let (interval_secs, next_due, fixed_payee) = if recurring_amount > 0 {
         require!(interval_secs > 0, HeirloomError::InvalidAmount);
         require!(
@@ -484,7 +491,11 @@ pub struct RegisterAsset<'info> {
     )]
     pub estate: Box<Account<'info, Estate>>,
 
-    #[account(constraint = nft_mint.decimals == 0 && nft_mint.supply == 1 @ HeirloomError::InvalidNft)]
+    /// A title: one of a kind, and nobody can mint another or freeze it.
+    #[account(constraint = nft_mint.decimals == 0
+        && nft_mint.supply == 1
+        && nft_mint.mint_authority.is_none()
+        && nft_mint.freeze_authority.is_none() @ HeirloomError::InvalidNft)]
     pub nft_mint: Box<Account<'info, Mint>>,
 
     #[account(
@@ -534,6 +545,10 @@ pub fn register_asset_handler(
         hardship_floor > 0 && floor_price >= hardship_floor && asking_price >= floor_price,
         HeirloomError::InvalidAmount
     );
+    require!(
+        proceeds_to != Pubkey::default() && proceeds_to != ctx.accounts.estate.key(),
+        HeirloomError::InvalidWallet
+    );
 
     transfer_checked_cpi(
         ctx.accounts.token_program.key(),
@@ -570,6 +585,81 @@ pub fn register_asset_handler(
         floor_price,
         hardship_floor,
         asking_price,
+        ts: now()?,
+    });
+    Ok(())
+}
+
+// ====================================================================== release_asset
+
+#[derive(Accounts)]
+pub struct ReleaseAsset<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(
+        seeds = [ESTATE_SEED, owner.key().as_ref()],
+        bump = estate.bump,
+        has_one = owner @ HeirloomError::NotOwner
+    )]
+    pub estate: Box<Account<'info, Estate>>,
+
+    /// Closed to the owner, so the same title can be registered again.
+    #[account(mut, has_one = estate, has_one = nft_mint @ HeirloomError::InvalidNft, close = owner)]
+    pub asset: Box<Account<'info, Asset>>,
+
+    pub nft_mint: Box<Account<'info, Mint>>,
+
+    #[account(
+        mut,
+        associated_token::mint = nft_mint,
+        associated_token::authority = estate,
+        associated_token::token_program = token_program
+    )]
+    pub nft_escrow: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        constraint = owner_nft.mint == nft_mint.key() @ HeirloomError::InvalidNft,
+        constraint = owner_nft.owner == owner.key() @ HeirloomError::NotOwner
+    )]
+    pub owner_nft: Box<Account<'info, TokenAccount>>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+/// Owner, estate Active, asset Held: the living owner takes the title back.
+pub fn release_asset_handler(ctx: Context<ReleaseAsset>) -> Result<()> {
+    let estate = &ctx.accounts.estate;
+    require!(estate.status == EstateStatus::Active, HeirloomError::BadStatus);
+    require!(ctx.accounts.asset.status == AssetStatus::Held, HeirloomError::BadStatus);
+
+    let (owner, bump) = (estate.owner, [estate.bump]);
+    let seeds: &[&[u8]] = &[ESTATE_SEED, owner.as_ref(), &bump];
+    let token_program = ctx.accounts.token_program.key();
+    // Everything in the escrow, so the close can't fail.
+    transfer_checked_cpi(
+        token_program,
+        ctx.accounts.nft_escrow.to_account_info(),
+        ctx.accounts.nft_mint.to_account_info(),
+        ctx.accounts.owner_nft.to_account_info(),
+        ctx.accounts.estate.to_account_info(),
+        ctx.accounts.nft_escrow.amount,
+        ctx.accounts.nft_mint.decimals,
+        &[seeds],
+    )?;
+    close_token_account_cpi(
+        token_program,
+        ctx.accounts.nft_escrow.to_account_info(),
+        ctx.accounts.owner.to_account_info(),
+        ctx.accounts.estate.to_account_info(),
+        &[seeds],
+    )?;
+
+    emit!(AssetReleased {
+        estate: ctx.accounts.estate.key(),
+        asset: ctx.accounts.asset.key(),
+        nft_mint: ctx.accounts.nft_mint.key(),
         ts: now()?,
     });
     Ok(())

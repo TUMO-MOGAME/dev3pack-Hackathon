@@ -153,6 +153,15 @@ fn set_token_state(svm: &mut LiteSVM, address: Pubkey, data: Vec<u8>) {
     .unwrap();
 }
 
+/// A digital title: one of a kind, with no mint or freeze authority.
+fn create_title(svm: &mut LiteSVM) -> Pubkey {
+    let mint = Keypair::new().pubkey();
+    let mut d = pack_mint(&Pubkey::default(), 1, 0);
+    d[..4].copy_from_slice(&0u32.to_le_bytes()); // mint_authority: None
+    set_token_state(svm, mint, d);
+    mint
+}
+
 fn create_mint(svm: &mut LiteSVM, authority: &Pubkey, supply: u64, decimals: u8) -> Pubkey {
     let mint = Keypair::new().pubkey();
     set_token_state(svm, mint, pack_mint(authority, supply, decimals));
@@ -632,7 +641,7 @@ impl Sale {
         let mut env = Env::configured();
         let people = if guarded_estate { Some(guarded(&mut env)) } else { None };
         let owner = env.owner.pubkey();
-        let nft_mint = create_mint(&mut env.svm, &owner, 1, 0);
+        let nft_mint = create_title(&mut env.svm);
         let owner_nft = fund_ata(&mut env.svm, &owner, &nft_mint, 1);
         let asset = asset_pda(&env.estate, &nft_mint);
 
@@ -722,7 +731,13 @@ impl Sale {
         send(&mut self.env.svm, i, &[kp])
     }
 
+    /// Accepted by the agent with verifier 1's co-signature.
     fn accept_offer(&mut self, n: usize) -> Result<(), String> {
+        let co = self.env.verifiers[1].insecure_clone();
+        self.accept_offer_with(n, Some(&co))
+    }
+
+    fn accept_offer_with(&mut self, n: usize, co_signer: Option<&Keypair>) -> Result<(), String> {
         let buyer = self.buyer(n).pubkey();
         let offer = offer_pda(&self.asset, &buyer);
         let a: Asset = fetch(&self.env.svm, &self.asset);
@@ -749,10 +764,13 @@ impl Sale {
                     .hardship_beneficiary
                     .map(|b| objection_pda(&hardship_pda(&self.asset, &b)))
                     .unwrap_or_else(system_program),
+                co_signer: co_signer.map(|k| k.pubkey()),
             },
             heirloom::instruction::AcceptOffer {},
         );
-        send(&mut self.env.svm, i, &[&self.env.agent])
+        let mut signers = vec![&self.env.agent];
+        signers.extend(co_signer.filter(|k| k.pubkey() != self.env.agent.pubkey()));
+        send(&mut self.env.svm, i, &signers)
     }
 
     fn submit_hardship(&mut self) -> Result<Pubkey, String> {
@@ -2280,7 +2298,7 @@ fn owner_heartbeat_voids_a_started_fallback() {
 fn asset_media_set_by_owner_or_agent() {
     let mut env = Env::configured();
     let owner = env.owner.pubkey();
-    let nft_mint = create_mint(&mut env.svm, &owner, 1, 0);
+    let nft_mint = create_title(&mut env.svm);
     let owner_nft = fund_ata(&mut env.svm, &owner, &nft_mint, 1);
     let asset = asset_pda(&env.estate, &nft_mint);
     let i = ix(
@@ -4540,4 +4558,241 @@ fn r10_the_agent_is_never_promoted() {
     let v1 = env.v(1);
     env.succeed(0, &v1);
     assert_eq!(env.seat(0).holder, people.backups[0][1].pubkey());
+}
+
+impl Env {
+    fn register_asset_ix(&self, nft_mint: Pubkey, proceeds_to: Pubkey) -> Instruction {
+        let owner = self.owner.pubkey();
+        ix(
+            heirloom::accounts::RegisterAsset {
+                owner,
+                estate: self.estate,
+                nft_mint,
+                owner_nft: ata(&owner, &nft_mint),
+                nft_escrow: ata(&self.estate, &nft_mint),
+                asset: asset_pda(&self.estate, &nft_mint),
+                token_program: token_program(),
+                associated_token_program: ata_program(),
+                system_program: system_program(),
+            },
+            heirloom::instruction::RegisterAsset {
+                floor_price: FLOOR,
+                hardship_floor: HARDSHIP_FLOOR,
+                asking_price: ASKING,
+                proceeds_to,
+                doc_hash: [3u8; 32],
+            },
+        )
+    }
+
+    /// The owner's title, registered.
+    fn registered_title(&mut self) -> Pubkey {
+        let nft_mint = create_title(&mut self.svm);
+        let owner = self.owner.pubkey();
+        fund_ata(&mut self.svm, &owner, &nft_mint, 1);
+        let i = self.register_asset_ix(nft_mint, self.executor.pubkey());
+        send(&mut self.svm, i, &[&self.owner]).unwrap();
+        nft_mint
+    }
+
+    fn release_asset_by(&mut self, who: &Keypair, nft_mint: Pubkey) -> Result<(), String> {
+        let i = ix(
+            heirloom::accounts::ReleaseAsset {
+                owner: who.pubkey(),
+                estate: self.estate,
+                asset: asset_pda(&self.estate, &nft_mint),
+                nft_mint,
+                nft_escrow: ata(&self.estate, &nft_mint),
+                owner_nft: ata(&who.pubkey(), &nft_mint),
+                token_program: token_program(),
+            },
+            heirloom::instruction::ReleaseAsset {},
+        );
+        send(&mut self.svm, i, &[who])
+    }
+
+    /// After the unlock: each holder empties their backups, then all three die.
+    fn vacate_all_after_unlock(&mut self, people: &People) {
+        for i in 0..3 {
+            let v = self.v(i);
+            self.set_seat_backups(&v, i as u8, [d(), d()]).unwrap();
+        }
+        let (v1, v2) = (self.v(1), self.v(2));
+        self.succeed(0, &v1);
+        self.succeed(1, &v2);
+        let m2 = self.kp(&people.monitors[2]);
+        self.succeed(2, &m2);
+    }
+}
+
+// ------------------------------------------------------------------- R12 the agent cannot sell alone
+
+#[test]
+fn r12_a_sale_needs_a_living_trusted_persons_co_signature() {
+    let mut s = Sale::new();
+    s.place_offer(1, FLOOR).unwrap();
+    let (agent, stranger, buyer) =
+        (s.env.agent.insecure_clone(), s.env.stranger.insecure_clone(), s.env.buyer1.insecure_clone());
+    expect_err(s.accept_offer_with(1, None), HeirloomError::CoSignerRequired);
+    for who in [&agent, &stranger, &buyer] {
+        expect_err(s.accept_offer_with(1, Some(who)), HeirloomError::CoSignerRequired);
+    }
+    let v2 = s.env.v(2);
+    s.accept_offer_with(1, Some(&v2)).unwrap();
+}
+
+#[test]
+fn r12_the_co_signer_cannot_be_the_buyer() {
+    let mut s = Sale::new();
+    s.place_offer(1, FLOOR).unwrap();
+    let mut e = s.env.estate_state();
+    e.verifiers[0] = s.env.buyer1.pubkey();
+    let estate = s.env.estate;
+    s.env.plant(estate, &e);
+    let buyer = s.env.buyer1.insecure_clone();
+    expect_err(s.accept_offer_with(1, Some(&buyer)), HeirloomError::CoSignerRequired);
+}
+
+#[test]
+fn r12_the_agent_cannot_sell_to_itself() {
+    let mut s = Sale::new();
+    s.place_offer(1, FLOOR).unwrap();
+    let mut e = s.env.estate_state();
+    e.agent = s.env.buyer1.pubkey();
+    let estate = s.env.estate;
+    s.env.plant(estate, &e);
+    s.env.agent = s.env.buyer1.insecure_clone();
+    expect_err(s.accept_offer(1), HeirloomError::BadAgent);
+}
+
+#[test]
+fn r12_with_no_seats_left_the_sale_waits_for_the_listing_to_end() {
+    let mut s = Sale::build(true);
+    let people = s.people.take().unwrap();
+    s.env.vacate_all_after_unlock(&people);
+    s.place_offer(1, FLOOR).unwrap();
+    expect_err(s.accept_offer_with(1, None), HeirloomError::ListingStillOpen);
+    let ends = fetch::<Asset>(&s.env.svm, &s.asset).listing_ends;
+    let wait = ends - now(&s.env.svm);
+    warp(&mut s.env.svm, wait - 1);
+    expect_err(s.accept_offer_with(1, None), HeirloomError::ListingStillOpen);
+    warp(&mut s.env.svm, 1);
+    s.accept_offer_with(1, None).unwrap();
+}
+
+// ------------------------------------------------------------------- R13 a title's authorities
+
+#[test]
+fn r13_a_title_must_have_no_mint_or_freeze_authority() {
+    let mut env = Env::configured();
+    let (owner, executor) = (env.owner.pubkey(), env.executor.pubkey());
+    let mintable = create_mint(&mut env.svm, &owner, 1, 0);
+    fund_ata(&mut env.svm, &owner, &mintable, 1);
+    let i = env.register_asset_ix(mintable, executor);
+    expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::InvalidNft);
+
+    let freezable = create_title(&mut env.svm);
+    let mut data = env.svm.get_account(&freezable).unwrap().data;
+    data[46..50].copy_from_slice(&1u32.to_le_bytes());
+    data[50..82].copy_from_slice(owner.as_ref());
+    set_token_state(&mut env.svm, freezable, data);
+    fund_ata(&mut env.svm, &owner, &freezable, 1);
+    let i = env.register_asset_ix(freezable, executor);
+    expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::InvalidNft);
+
+    env.registered_title();
+}
+
+// ------------------------------------------------------------------- R14 setup values
+
+#[test]
+fn r14_three_real_trusted_people_and_a_real_agent() {
+    let mut env = Env::new();
+    let v = env.verifier_keys();
+    let i = env.create_estate_ix([v[0], d(), v[2]], 2, 1, 2, WAITING);
+    expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::InvalidWallet);
+
+    let real = env.agent.insecure_clone();
+    for bad in [env.owner.insecure_clone(), env.v(1)] {
+        env.agent = bad;
+        let i = env.create_estate_ix(v, 2, 1, 2, WAITING);
+        expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::BadAgent);
+    }
+    let mut i = env.create_estate_ix(v, 2, 1, 2, WAITING);
+    i.data[8..40].copy_from_slice(&[0u8; 32]);
+    expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::BadAgent);
+
+    env.agent = real;
+    env.create_estate();
+}
+
+#[test]
+fn r14_the_agent_cannot_become_a_trusted_person() {
+    let (mut env, _people) = guardian_env();
+    let (agent, owner) = (env.agent.pubkey(), env.kp(&env.owner));
+    expect_err(env.replace_seat(0, agent), HeirloomError::BadAgent);
+    expect_err(env.set_seat_backups(&owner, 0, [agent, d()]), HeirloomError::BadBackup);
+}
+
+#[test]
+fn r14_proceeds_need_a_real_wallet() {
+    let mut env = Env::configured();
+    let nft_mint = create_title(&mut env.svm);
+    let owner = env.owner.pubkey();
+    fund_ata(&mut env.svm, &owner, &nft_mint, 1);
+    for bad in [d(), env.estate] {
+        let i = env.register_asset_ix(nft_mint, bad);
+        expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::InvalidWallet);
+    }
+    let i = env.register_asset_ix(nft_mint, env.executor.pubkey());
+    send(&mut env.svm, i, &[&env.owner]).unwrap();
+}
+
+#[test]
+fn r14_a_rules_end_date_is_in_the_future() {
+    let mut env = Env::configured();
+    let (kid, t) = (env.kid1.pubkey(), now(&env.svm));
+    let i = env.add_rule_ix(0, kid, PayeeKind::University, USDT, USDT, t, false, 0, 0, 0, None);
+    expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::TimeOutOfRange);
+    env.add_rule(0, kid, PayeeKind::University, USDT, USDT, t + 1);
+}
+
+// ------------------------------------------------------------------- R15 take an asset back
+
+#[test]
+fn r15_a_living_owner_takes_the_title_back_and_can_register_it_again() {
+    let mut env = Env::configured();
+    let nft_mint = env.registered_title();
+    let owner = env.owner.insecure_clone();
+    let (escrow, asset) = (ata(&env.estate, &nft_mint), asset_pda(&env.estate, &nft_mint));
+    env.release_asset_by(&owner, nft_mint).unwrap();
+    assert_eq!(balance(&env.svm, &ata(&owner.pubkey(), &nft_mint)), 1);
+    assert!(is_closed(&env.svm, &escrow) && is_closed(&env.svm, &asset));
+
+    let i = env.register_asset_ix(nft_mint, env.executor.pubkey());
+    send(&mut env.svm, i, &[&env.owner]).unwrap();
+    assert_eq!(balance(&env.svm, &escrow), 1);
+}
+
+#[test]
+fn r15_only_the_owner_while_active_and_held() {
+    let mut env = Env::configured();
+    let nft_mint = env.registered_title();
+    let (owner, stranger) = (env.owner.insecure_clone(), env.stranger.insecure_clone());
+    fund_ata(&mut env.svm, &stranger.pubkey(), &nft_mint, 0);
+    assert!(env.release_asset_by(&stranger, nft_mint).is_err());
+
+    let address = asset_pda(&env.estate, &nft_mint);
+    let held: Asset = fetch(&env.svm, &address);
+    let mut listed: Asset = fetch(&env.svm, &address);
+    listed.status = AssetStatus::Listed;
+    env.plant(address, &listed);
+    expect_err(env.release_asset_by(&owner, nft_mint), HeirloomError::BadStatus);
+    env.plant(address, &held);
+
+    env.death_pending();
+    expect_err(env.release_asset_by(&owner, nft_mint), HeirloomError::BadStatus);
+    warp(&mut env.svm, WAITING);
+    env.finalize_unlock().unwrap();
+    expect_err(env.release_asset_by(&owner, nft_mint), HeirloomError::BadStatus);
 }
