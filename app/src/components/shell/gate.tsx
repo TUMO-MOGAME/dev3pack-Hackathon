@@ -10,6 +10,7 @@ import { Button, ButtonLink, EmptyState, LoadingCards, PageHeader, Skeleton } fr
 import { fmt, useCopy } from "./copy";
 import { fullName, shortName } from "@/lib/names";
 import { endFreshVisit, firstDemoPersona } from "@/lib/service/fresh-visit";
+import { canStartOwnPlan } from "@/lib/wallet/roles";
 
 interface GateProps {
   /** Roles allowed on this screen. Omit for everyone. */
@@ -75,7 +76,9 @@ export function Gate({ roles, allowEmpty = false, children, frame, fresh }: Gate
         body={fmt(g.wrongRoleBody, { name: fullName(session.label), role: common.roles[session.role].toLowerCase() })}
         action={
           <>
-            {other && <Button onClick={() => wallet.switchTo(other.address)}>{fmt(common.demo.switchTo, { name: shortName(other.label) })}</Button>}
+            {canStartOwnPlan(roles, session.role, isMock)
+              ? <Button onClick={() => wallet.setRole(session.address, "owner")}>{g.startOwnPlan}</Button>
+              : other && <Button onClick={() => wallet.switchTo(other.address)}>{fmt(common.demo.switchTo, { name: shortName(other.label) })}</Button>}
             <ButtonLink href="/estate" variant="secondary">{g.backToEstate}</ButtonLink>
           </>
         }

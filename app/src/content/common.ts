@@ -129,6 +129,7 @@ export const common = {
     wrongRoleBody: "You're acting as {name} ({role}). Switch person to continue, or go back to the estate.",
     switchPerson: "Switch person",
     backToEstate: "Back to the estate",
+    startOwnPlan: "Start my own plan",
   },
   status: {
     estate: { Active: "Active", DeathPending: "Waiting period", Unlocked: "Unlocked", Frozen: "Frozen" },

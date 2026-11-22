@@ -362,6 +362,7 @@ export const af: Bundle = {
       wrongRoleBody: "Jy tree op as {name} ({role}). Ruil persoon om voort te gaan, of gaan terug na die boedel.",
       switchPerson: "Ruil persoon",
       backToEstate: "Terug na die boedel",
+      startOwnPlan: "Begin my eie plan",
     },
     status: {
       estate: { Active: "Aktief", DeathPending: "Wagtydperk", Unlocked: "Ontsluit", Frozen: "Gevries" },

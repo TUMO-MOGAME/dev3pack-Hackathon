@@ -129,7 +129,7 @@ export const legacy = {
     },
     book: {
       title: "Your Legacy Book",
-      body: "Your children can read everything here. Your messages for moments play in your voice. Nothing else is ever said in your voice.",
+      body: "Your children can read everything here. Your messages for moments play in your voice once you have recorded it; until then a labelled stand-in voice reads them. Nothing else is ever said in your voice.",
       calledBy: "What your children call you",
       calledByHint: "For example Dad, Papa, Baba, Tata, Mama.",
       pronoun: "Speak about you as",

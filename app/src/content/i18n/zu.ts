@@ -362,6 +362,7 @@ export const zu: Bundle = {
       wrongRoleBody: "Usebenza njengo-{name} ({role}). Shintsha umuntu ukuze uqhubeke, noma ubuyele efeni.",
       switchPerson: "Shintsha umuntu",
       backToEstate: "Buyela efeni",
+      startOwnPlan: "Qala uhlelo lwami",
     },
     status: {
       estate: { Active: "Iyasebenza", DeathPending: "Isikhathi sokulinda", Unlocked: "Livuliwe", Frozen: "Limisiwe" },

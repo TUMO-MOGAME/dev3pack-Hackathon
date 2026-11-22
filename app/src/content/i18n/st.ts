@@ -362,6 +362,7 @@ export const st: Bundle = {
       wrongRoleBody: "O sebetsa o le {name} ({role}). Fetola motho ho tswela pele, kapa o kgutlele lefeng.",
       switchPerson: "Fetola motho",
       backToEstate: "Kgutlela lefeng",
+      startOwnPlan: "Qala morero wa ka",
     },
     status: {
       estate: { Active: "E a sebetsa", DeathPending: "Nako ya ho emela", Unlocked: "Le bulehile", Frozen: "Le emisitswe" },

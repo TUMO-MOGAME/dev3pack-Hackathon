@@ -18,6 +18,11 @@ const KEY = "heirloom.wallets.v1";
 export const ACTIVE_WALLET_KEY = "heirloom.wallets.active";
 const ACTIVE = ACTIVE_WALLET_KEY;
 
+/** The stored list with one wallet's role changed (nothing else about the wallet changes). */
+export function withRole(list: StoredWallet[], address: Base58, role: Role): StoredWallet[] {
+  return list.map((w) => (w.address === address ? { ...w, role } : w));
+}
+
 export function loadWallets(): StoredWallet[] {
   try {
     const raw = localStorage.getItem(KEY);

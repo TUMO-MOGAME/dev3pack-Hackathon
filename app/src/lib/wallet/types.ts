@@ -21,6 +21,8 @@ export interface WalletApi {
    */
   connectPhone(label: string, role: Role, walletName: string): Promise<WalletSession>;
   switchTo(address: Base58): void;
+  /** Changes what this wallet does in Heirloom (e.g. a family member who starts her own plan). Chain only; the demo personas keep theirs. */
+  setRole(address: Base58, role: Role): void;
   remove(address: Base58): void;
   /** Forgets every unlocked key in memory; the next signature asks for the PIN again. Deletes nothing. */
   lockAll(): void;

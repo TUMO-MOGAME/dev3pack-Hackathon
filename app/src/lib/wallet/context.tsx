@@ -17,7 +17,7 @@ import type { Base58, Role, WalletSession } from "../types";
 import type { WalletApi } from "./types";
 import { chainConfig } from "../chain/config";
 import { decryptSeed, encryptSeed, assertPin } from "./crypto";
-import { isPhoneWallet, loadActive, loadWallets, saveActive, saveWallets, type StoredWallet } from "./store";
+import { isPhoneWallet, loadActive, loadWallets, saveActive, saveWallets, withRole, type StoredWallet } from "./store";
 import { loadPhoneDriver } from "./phone";
 import type { PhoneSigner } from "./phone-signer";
 import { isValidSeed, newSeedPhrase, openAccount, readOnly, wdkPartialSign, wdkSign, wdkSignAndSend, type WdkAccount } from "./wdk";
@@ -138,6 +138,12 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
 
   const switchTo = useCallback((address: Base58) => { setActiveAddr(address); saveActive(address); }, []);
 
+  const setRole = useCallback((address: Base58, role: Role) => {
+    if (isMock) return; // the demo personas have fixed roles
+    persist(withRole(stored.current, address, role));
+    setSessions((prev) => prev.map((s) => (s.address === address ? { ...s, role } : s)));
+  }, [isMock]);
+
   const remove = useCallback((address: Base58) => {
     unlocked.current.get(address)?.manager.dispose();
     unlocked.current.delete(address);
@@ -221,8 +227,8 @@ export function WalletProvider({ children, requestPin = defaultRequestPin }: { c
 
   const session = sessions.find((s) => s.address === activeAddr) ?? null;
   const api = useMemo<WalletApi>(() => ({
-    ready, session, sessions, create, importSeed, connectPhone, switchTo, remove, lockAll, refreshBalances, signAndSend,
-  }), [ready, session, sessions, create, importSeed, connectPhone, switchTo, remove, lockAll, refreshBalances, signAndSend]);
+    ready, session, sessions, create, importSeed, connectPhone, switchTo, setRole, remove, lockAll, refreshBalances, signAndSend,
+  }), [ready, session, sessions, create, importSeed, connectPhone, switchTo, setRole, remove, lockAll, refreshBalances, signAndSend]);
 
   return <WalletContext.Provider value={api}>{children}</WalletContext.Provider>;
 }
