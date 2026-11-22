@@ -61,6 +61,14 @@ describe("the sponsor's allowance", () => {
     expect(h.takes[0].map((t) => t.key.replace(/:[1-9A-HJ-NP-Za-km-z]{32,}$/, ""))).toEqual(["sponsor:minute", "sponsor:day", "sponsor:fees"]);
   });
 
+  it.each([["", 300_000_000], ["25000000", 25_000_000]])("SPONSOR_DAILY_BUDGET_LAMPORTS=%j: the takes follow a budget of %i", async (env, budget) => {
+    vi.stubEnv("SPONSOR_DAILY_BUDGET_LAMPORTS", env);
+    await sponsored();
+    vi.unstubAllEnvs();
+    expect(h.takes[0]).toEqual(sharedTakes("W", false, { ...DEFAULT_SPONSOR_LIMITS, dailyBudgetLamports: budget }, 20_000)
+      .map((t) => ({ ...t, key: expect.any(String) })));
+  });
+
   it("refuses when another instance used them up, and signs nothing", async () => {
     h.taken = { ok: false, retryAfterSecs: 30 };
     await expect(sponsored()).rejects.toMatchObject({ name: "SponsorLimited" });
@@ -99,7 +107,7 @@ describe("the sponsor's allowance", () => {
 });
 
 describe("sharedTakes", () => {
-  it.each([100_000_000, 25_000_000])("their worst case stays inside a budget of %i lamports", (dailyBudgetLamports) => {
+  it.each([300_000_000, 100_000_000, 25_000_000])("their worst case stays inside a budget of %i lamports", (dailyBudgetLamports) => {
     const limits = { ...DEFAULT_SPONSOR_LIMITS, dailyBudgetLamports };
     const max = (key: string) => sharedTakes("W", true, limits, 20_000).find((t) => t.key === key)!.max;
     expect(max("sponsor:fees") * 20_000 + max("sponsor:rent") * TOKEN_ACCOUNT_RENT).toBeLessThanOrEqual(dailyBudgetLamports);

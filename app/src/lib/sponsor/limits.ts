@@ -7,7 +7,10 @@ import type { Take } from "../server/shared-store";
 import { TOKEN_ACCOUNT_RENT } from "./policy";
 export interface SponsorLimits { perMinute: number; perDay: number; rentPerDay: number; dailyBudgetLamports: number }
 
-export const DEFAULT_SPONSOR_LIMITS: SponsorLimits = { perMinute: 12, perDay: 60, rentPerDay: 3, dailyBudgetLamports: 100_000_000 };
+/** Sized for a room of judges behind one address (room.test.ts has the arithmetic). */
+export const DEFAULT_SPONSOR_LIMITS: SponsorLimits = { perMinute: 20, perDay: 100, rentPerDay: 3, dailyBudgetLamports: 300_000_000 };
+/** /api/sponsor, for each IP address: one Wi-Fi is one address. */
+export const SPONSOR_PER_IP_MINUTE = 90;
 
 const MIN = 60_000, DAY = 86_400_000;
 

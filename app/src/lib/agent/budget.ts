@@ -24,9 +24,12 @@ export const AGENT_DAILY: Record<Exclude<AgentAction, "starter">, { wallet: numb
   "accept-offer": { wallet: 6, estate: 10 },
 };
 
-/** The chain backstop. Lamports, for everything but starter grants. */
+/**
+ * The chain backstop. Lamports, for everything but starter grants: the sponsor's whole daily budget (0.3 SOL) can be
+ * one judging hour, so the hour allows that plus 0.05 SOL of the agent's own signatures, the day that plus 0.1 SOL.
+ */
 export const AGENT_SPEND = {
-  hour: 150_000_000,
+  hour: 350_000_000,
   day: 400_000_000,
   /** A reading is used again for this long. */
   freshMs: 20_000,

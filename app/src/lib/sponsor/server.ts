@@ -7,7 +7,8 @@ import "server-only";
  *  SPONSOR_ENABLED=0               turn sponsorship off (default on whenever AGENT_SEED_PHRASE is set)
  *  SPONSOR_MAX_FEE_LAMPORTS=20000  max network fee per sponsored tx
  *  SPONSOR_PAYS_RENT=1             sponsor pays rent for the recipient's new USD₮ account (0 = sender pays)
- *  SPONSOR_DAILY_BUDGET_LAMPORTS   fees + rent a day (default 0.1 SOL), across instances with the shared store
+ *  SPONSOR_DAILY_BUDGET_LAMPORTS   fees + rent a day (default 0.3 SOL), across instances with the shared store;
+ *                                  without it per instance, and the agent's backstop (agent/budget.ts) caps it too
  *  SPONSOR_MIN_BALANCE_LAMPORTS    stop sponsoring below this sponsor balance (default 0.02 SOL)
  */
 import { PublicKey, VersionedTransaction, type Connection } from "@solana/web3.js";
