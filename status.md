@@ -7,6 +7,16 @@
 **Phase:** preparing for Dev3pack Global (27-29 Nov 2026; prework allowed and disclosed). Submitted to W3Node 13 Nov. Both sites deploy from `main`. The repo goes public on 27 Nov (Tumo).
 
 
+## SECOND REVIEW, DRY RUN (22 Nov 2026): review only, nothing fixed
+### Done
+- Reviewed fc693c3. Clean clone: 89 program tests, 965 app tests (one timeout under load, clean on re-run), build matches devnet. No code, chain or site changes.
+### Next up
+- IN PROGRESS (Tumo, 22 Nov: fix everything from critical to low, update all docs, production fully up to date): plan §18, branch fix/second-review. Do not push this branch or main before the devnet upgrade is ready.
+### Decisions log
+- 22 Nov (Tumo): work before 27 Nov counts for this review (organisers allow it).
+### Blockers
+- Written event rules not seen (prework, AI-generated code, team eligibility). Repo still private.
+
 ## JUDGE REVIEW + FIXES (22 Nov 2026): SHIPPED
 ### Done
 - Program: plan §17 P1-P9. 54 instructions, 89 LiteSVM tests. Devnet upgraded (tx 5pQ1yCmk...yaveb) and byte-identical to the build. Rollback binary: target/backup/ (local).

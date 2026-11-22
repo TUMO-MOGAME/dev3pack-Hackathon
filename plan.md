@@ -1001,7 +1001,7 @@ no live call in a parent's voice after death. This answers §16.13 "Legacy Voice
 
 ## 17. Judge-review fixes (22 Nov 2026, for Dev3pack 27-29 Nov): shipped 22 Nov, see status.md
 
-Target: 95/100 on the judge rubric. Every finding gets a test that fails on 65640d4 and passes after the fix.
+Every finding gets a test that fails on 65640d4 and passes after the fix.
 The program and both sites ship together: no push to main before the devnet upgrade is ready.
 
 ### 17.1 Program (no existing account layout changes)
@@ -1045,3 +1045,80 @@ The program and both sites ship together: no push to main before the devnet upgr
 
 ### 17.6 Only Tumo can do
 - Real user interviews (never invent them), a physical-phone wallet test, a new video, Supabase keys, making the repo public on 27 Nov.
+
+## 18. Second security review (22 Nov 2026): fix everything, then release
+
+Scope (Tumo, 22 Nov): every finding from critical to low, all documentation, and production fully up to date.
+Nothing reaches `main` before the devnet upgrade is ready: a push deploys both sites.
+
+### 18.1 Hard constraints
+- No change to an existing account layout. Enums and errors are append-only. Accounts already on devnet keep decoding.
+- Upgrade budget: the deployer has 5.437 SOL, rent is about 0.00000508 SOL a byte and the program account holds
+  993,648 bytes. `2N - 993,648` must fit the balance, so the binary N stays at or under 1,020,000 bytes. Measure
+  first; use size optimisation (and measure compute units) before dropping a fix.
+- Every check gets a test. R1-R9 each get a test that failed on fc693c3.
+- Both services (mock and chain), four languages, design tokens, copy in content files, 360 px.
+- No names on-chain. No invented users, interviews or partners.
+
+### 18.2 Program contract
+| ID | Severity | Defect | Fix |
+|---|---|---|---|
+| R1 | Critical | Check-in during a death claim doesn't stop the unlock | `heartbeat` by the owner clears any death claim, like the veto |
+| R2 | Critical | A replaced trusted person's attestation counts | `owner_replace_seat` is proof of life: clears the death claim and records a heartbeat |
+| R3 | Critical | A removed person's claim approval pays after unlock | `approve_claim` only when Unlocked; a quorum stamped before this death's wait doesn't count and can be redone |
+| R4 | Critical | The agent alone marks a fallback recipient dead | A report account by a participant, the agent's review, then a second person's confirmation after the fallback wait; the recipient can say "I'm alive"; reports can't squat |
+| R5 | Critical | An abandoned death claim blocks all others | Submission time kept in `death_pending_since` while Active. Unreviewed: another person may replace it after a grace (waiting period, clamped 60 s to 1 day), the same person after two. Reviewed without quorum: replaceable after two waiting periods |
+| R6 | Critical | A stranger's seat-death report blocks succession | Participants only; the same replacement rule; stale reports don't block backup changes |
+| R7 | High | Referred death + all seats vacant locks the vault | Fallback accepts Referred with twice the fallback wait |
+| R8 | High | One survivor can't reach a quorum of two | Quorum = min(needed, eligible living seats), never zero; only living seats count; a survivor who already voted can complete a quorum that has since dropped |
+| R9 | Medium | One monitor votes from two seats | One wallet, one vote across all seats |
+| R10 | High | Succession sticks when the only backup reported or confirmed it | Finalising clears it for a fresh report; vacate only if no backup could ever be eligible |
+| R11 | High | A trusted person approves their own claim or hardship | Refused; that seat is not counted as eligible |
+| R12 | Medium | The agent can sell to itself at the floor | A living trusted person (not buyer, not agent) co-signs `accept_offer`; with no seats left, only after the listing ends |
+| R13 | Medium | Title mint authority not checked | Mint and freeze authority must both be None |
+| R14 | Medium | Setup accepts unusable values | Three real trusted people; a real agent who is neither owner nor trusted; real proceeds wallet; end date in the future |
+| R15 | Low | A living owner can't take back an asset | `release_asset` while Active and Held |
+| R16 | Low | Payees and beneficiaries can't be removed | Removal while Active; every payout re-checks both, so open claims and schedules stop |
+| R17 | Low | 16 rules for the estate's lifetime | An ended rule's slot can be reused without reviving an old claim or breaking cap and sweep accounting |
+
+Decision: one seat, one vote. A successor after a death inherits that seat's vote; only the owner's replacement revokes.
+
+### 18.3 Server, tools and dependencies
+| ID | Severity | Defect | Fix |
+|---|---|---|---|
+| S1 | High | Ten failing schedules starve everyone | Skip what can't pay, failures don't use success slots, fair per estate and per tick, time budget |
+| S2 | Medium | Fifteen wallets lock out the starter | Smaller grant, pacing read from the chain, proof of work bound to wallet and time, faucet fallback |
+| S3 | Medium | Replay and limits per instance | Shared store when configured (migration); a spend backstop read from the chain without one |
+| S4 | Medium | Names vanish on restart | The owner's device restores them by a signed write; an honest notice while storage is not durable |
+| S5 | High | `build-program.sh` can replace the program id | Never syncs keys or copies sources back; verifies the id; safe on a fresh clone; explicit deploy |
+| S6 | Low | 12 production advisories | Safe upgrades, overrides or a replacement, proven by tests and build; document any not exploitable |
+
+### 18.4 Product, both services
+- U1: both "I'm still here" controls cancel a death claim and say so.
+- U2: signing never downgrades a recurring rule: it stops and says what is missing.
+- U3: replace a stale death or seat report; report, confirm and refute a fallback death.
+- U4: sale co-signature by a trusted person.
+- U5: screens for agent replacement, release asset, remove payee or beneficiary, reuse a rule slot.
+- U6: wording: rent needs SOL, schedules run daily on the hosted site, quorums after a vacancy.
+
+### 18.5 Agents (file ownership; one worktree and branch each)
+| Wave | Agent | Owns | Depends on |
+|---|---|---|---|
+| 1 | program | programs/, Cargo.*, IDL, docs/program-spec.md | this plan |
+| 1 | server | lib/server, lib/starter, lib/api, agent budget, db, build script, package files, a new migration | this plan |
+| 2 | chain | lib/chain, chain services, agent routes, sponsor policy, seed scripts | program |
+| 2 | product | mock services, components, content (four languages) | program, the service contract from chain |
+| 3 | reviewer | read-only adversarial review of the whole diff, not shown the findings | integration |
+| 4 | lead | merge, docs, release, live proof | all |
+
+### 18.6 Release gates
+1. cargo test, vitest, tsc, eslint, mock and chain builds, clean-clone build.
+2. All accounts on devnet decode with the new IDL; back up the live binary; check size and SOL.
+3. Upgrade, compare hashes, push main, confirm the commit on both sites and heirloom.tumoolo.tech.
+4. Both sites: 360 px and desktop, axe, Lighthouse, console.
+5. Throwaway estates on devnet: a fresh newcomer through the UI, death to payout, sale; R1-R9 refused or fixed.
+6. README proof, test counts, spec, architecture, submission, pitch, video script, privacy, status: no claim beyond the evidence.
+
+### 18.7 Only Tumo can do
+Supabase project and keys, a dedicated RPC URL, real interviews, the video, a physical-phone test, student proof,
+written event rules, and making the repo public.
