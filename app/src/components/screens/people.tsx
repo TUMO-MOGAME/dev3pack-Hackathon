@@ -92,16 +92,12 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
               return (
                 <li key={b.address} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line/70 py-2.5 last:border-0">
                   <Avatar name={b.label} role="beneficiary" />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-32 flex-1">
                     <p className="flex flex-wrap items-center gap-2 font-semibold">{b.label}{you(b.wallet)}</p>
                     <p className="font-mono text-[0.75rem] text-ink-2">{shortAddress(b.wallet)}</p>
+                    {b.active && <p className="text-small text-ink-2">{count === 1 ? copy.family.oneRule : fmt(copy.family.rules, { n: count })}</p>}
                   </div>
-                  {b.active ? (
-                    <>
-                      <span className="shrink-0 text-small text-ink-2">{count === 1 ? copy.family.oneRule : fmt(copy.family.rules, { n: count })}</span>
-                      <RemoveMember snap={snap} kind="beneficiary" wallet={b.wallet} name={b.label} />
-                    </>
-                  ) : <Badge>{gc.rules.remove.removed}</Badge>}
+                  {b.active ? <RemoveMember snap={snap} kind="beneficiary" wallet={b.wallet} name={b.label} /> : <Badge>{gc.rules.remove.removed}</Badge>}
                 </li>
               );
             })}
@@ -115,11 +111,11 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
             <ul className="mt-3 flex flex-col">
               {snap.payees.map((p) => (
                 <li key={p.address} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line/70 py-2.5 last:border-0">
-                  <div className="min-w-0">
-                    <p className="font-semibold">{p.name}</p>
+                  <div className="min-w-32 flex-1">
+                    <p className="font-semibold break-words">{p.name}</p>
                     <p className="font-mono text-[0.75rem] text-ink-2">{shortAddress(p.wallet)}</p>
+                    <Badge className="mt-1 max-w-full whitespace-normal! py-1">{common.status.payeeKind[p.kind]}</Badge>
                   </div>
-                  <Badge className="shrink whitespace-normal! py-1 text-right">{common.status.payeeKind[p.kind]}</Badge>
                   <RemoveMember snap={snap} kind="payee" wallet={p.wallet} name={p.name} />
                 </li>
               ))}

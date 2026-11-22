@@ -1067,7 +1067,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
         summary: bad
           ? `This does not look like a genuine Home Affairs death certificate for ${person}. Nothing has changed.`
           : purpose === "seat-death"
-            ? `This is an abridged death certificate for ${person}, issued by Home Affairs. The name matches the trusted person, and I found nothing unusual. Another trusted person must still confirm.`
+            ? `This is an abridged death certificate for ${person}, issued by Home Affairs. The name matches the trusted person, and I found nothing unusual. A second person must still confirm.`
             : `This is an abridged death certificate for ${person}, issued by Home Affairs. The name matches the fallback recipient. They can still say "I'm alive", and a second person must confirm after the wait before the plan skips them.`,
         reportHash: fakeHash(),
       };
@@ -1081,7 +1081,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
         confidence: bad ? 0.31 : 0.94,
         summary: bad
           ? "This does not look like a genuine Home Affairs death certificate. Parts of the form appear to have been edited. I have not passed it to the trusted people."
-          : `This is an abridged death certificate for ${ownerName}, issued by Home Affairs. The name matches the estate owner, the stamp and serial number are present, and I found nothing unusual. Two trusted people must still confirm.`,
+          : `This is an abridged death certificate for ${ownerName}, issued by Home Affairs. The name matches the estate owner, the stamp and serial number are present, and I found nothing unusual. The trusted people must still confirm.`,
         reportHash: fakeHash(),
       };
     }

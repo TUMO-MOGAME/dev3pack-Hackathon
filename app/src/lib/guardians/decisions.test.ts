@@ -6,7 +6,7 @@ import type { FallbackRecipient, GuardiansSnapshot, Seat } from "./types";
 import {
   agentVoteFor, agentVotesNeeded, canConfirmRecipient, canConfirmSeat, canReportRecipient, canReportSeat, canSign, canSubmitDeath,
   claimBlock, claimPayable, claimTally, claimVote, deathOpen, deathReplace, deathSince, deathTally, deathVote, hardshipStands,
-  hardshipTally, hardshipVote, interestedIn, NO_WALLET, ownerMayApprove, payoutHeldUntil, reportsAbout, seatReplace, successionOutcome, sweepHeldUntil,
+  hardshipTally, hardshipVote, interestedIn, NO_WALLET, ownerMayApprove, payoutHeldUntil, reportsAbout, seatReplace, successionOutcome, sweepHeldUntil, wasRemoved,
 } from "./decisions";
 
 const [A, B, C, KID, SIB, MON, BK1, BK2, AGENT, OWNER] = ["A", "B", "C", "KID", "SIB", "MON", "BK1", "BK2", "AGENT", "OWNER"];
@@ -274,5 +274,14 @@ describe("replacing the agent", () => {
 
   it("only votes by people who still hold a seat", () => {
     expect(agentVoteFor(snap({ agentVotes: [{ candidate: "N", voters: [A, "GONE"] }] }), "N")).toEqual({ got: 1, needed: 2, voters: [A] });
+  });
+});
+
+describe("someone the owner removed", () => {
+  it("is neither family nor a stranger", () => {
+    const s = snap({ beneficiaries: [{ address: "b1", wallet: KID, label: "Kid", active: false }, { address: "b2", wallet: SIB, label: "Sib", active: true }] });
+    expect(wasRemoved(s, KID)).toBe(true);
+    expect(wasRemoved(s, SIB)).toBe(false);
+    expect(wasRemoved(s, MON)).toBe(false);
   });
 });

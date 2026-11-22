@@ -64,9 +64,24 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
 
   const quick = tab === "deposit" ? [1000, 5000, 10000] : [500, 1000, 5000];
 
+  const checkInCard = e.status !== "Unlocked" && (
+    <Card className={clsx(cancels ? "mb-4" : "mt-4", "flex flex-wrap items-center justify-between gap-3", cancels && "border-2 border-l-8 border-ink")}>
+      <div className="min-w-0 max-w-md">
+        <h2 className="text-h3">{cancels ? here.title : copy.heartbeat.title}</h2>
+        <p className="mt-1 text-ink-2">{cancels ? here.body : copy.heartbeat.body}</p>
+        {cancels && <p className="mt-2 font-semibold">{here.warning}</p>}
+        <p className="mt-1 min-h-5 text-small text-ink-2">{now !== null ? fmt(copy.heartbeat.last, { when: timeAgo(e.lastHeartbeat, now, common.time) }) : ""}</p>
+      </div>
+      <Button variant={cancels ? "primary" : "secondary"} loading={busy === "heartbeat"} onClick={() => void checkIn()}>
+        <HeartPulse className="size-5" aria-hidden="true" />{cancels ? here.cta : copy.heartbeat.cta}
+      </Button>
+    </Card>
+  );
+
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />
+      {cancels && checkInCard}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <p className="flex items-center gap-2 text-small font-semibold text-accent"><Landmark className="size-4" aria-hidden="true" />{copy.balance}</p>
@@ -137,19 +152,7 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
         </Card>
       )}
 
-      {e.status !== "Unlocked" && (
-        <Card className={clsx("mt-4 flex flex-wrap items-center justify-between gap-3", cancels && "border-2 border-l-8 border-ink")}>
-          <div className="min-w-0 max-w-md">
-            <h2 className="text-h3">{cancels ? here.title : copy.heartbeat.title}</h2>
-            <p className="mt-1 text-ink-2">{cancels ? here.body : copy.heartbeat.body}</p>
-            {cancels && <p className="mt-2 font-semibold">{here.warning}</p>}
-            <p className="mt-1 min-h-5 text-small text-ink-2">{now !== null ? fmt(copy.heartbeat.last, { when: timeAgo(e.lastHeartbeat, now, common.time) }) : ""}</p>
-          </div>
-          <Button variant={cancels ? "primary" : "secondary"} loading={busy === "heartbeat"} onClick={() => void checkIn()}>
-            <HeartPulse className="size-5" aria-hidden="true" />{cancels ? here.cta : copy.heartbeat.cta}
-          </Button>
-        </Card>
-      )}
+      {!cancels && checkInCard}
     </div>
   );
 }

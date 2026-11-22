@@ -50,6 +50,8 @@ export const safeguards = {
     expired: "The rule has ended, so this can't be paid.",
     beneficiary: "The person who asked was removed from the plan, so this can't be paid.",
     payee: "The payee was removed from the plan, so this can't be paid.",
+    you: "The owner removed you from this plan, so you can't claim, ask for money or dispute a payment.",
+    badge: "Can't be paid",
     oldRule: "a rule that has ended",
   },
 

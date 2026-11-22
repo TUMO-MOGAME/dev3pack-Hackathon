@@ -31,7 +31,7 @@ import { useNow } from "@/lib/hooks/use-now";
 import { openDisputeOn } from "@/lib/disputes/types";
 import { openToPeople, outcomeOf } from "@/lib/verdict";
 import { ReferredNote } from "@/components/continuity/continuity";
-import { claimBlock, claimPayable, claimTally, isFamily, ownerMayApprove } from "@/lib/guardians/decisions";
+import { claimBlock, claimPayable, claimTally, isFamily, ownerMayApprove, wasRemoved } from "@/lib/guardians/decisions";
 import { ClaimState, useWho, VoteTally } from "@/components/guardians/decision";
 
 type Copy = ScreensCopy["claims"];
@@ -48,6 +48,8 @@ function ClaimsScreenBody({ copy: english }: { copy: Copy }) {
 
 function Claims({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapshot; session: WalletSession; role: Role }) {
   const { intent, setIntent } = useEstate();
+  const { guardians } = useCopy();
+  const removed = wasRemoved(snap, session.address);
   const askCopy = useLocalized(askEnglish, (t) => t.ask);
   const e = snap.estate;
   const myRules = snap.rules.filter((r) => r.beneficiary === session.address && r.recurringAmount === BigInt(0));
@@ -59,7 +61,7 @@ function Claims({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
   const [wizard, setWizard] = useState<{ rule?: string; payee?: string; amount?: number } | null>(null);
   const claims = role === "beneficiary" ? snap.claims.filter((c) => c.beneficiary === session.address) : snap.claims;
   // Family members can see (and dispute) each other's pending payments.
-  const family = role === "beneficiary" ? snap.claims.filter((c) => c.beneficiary !== session.address && c.status === "Open" && openToPeople(c.agentVerdict)) : [];
+  const family = role === "beneficiary" && !removed ? snap.claims.filter((c) => c.beneficiary !== session.address && c.status === "Open" && openToPeople(c.agentVerdict)) : [];
 
   useEffect(() => {
     if (!intent || !canClaim) return;
@@ -74,7 +76,7 @@ function Claims({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
     <div className="mx-auto max-w-2xl">
       <PageHeader
         eyebrow={copy.eyebrow} title={copy.title} body={copy.body}
-        action={role === "beneficiary" && !wizard ? (
+        action={role === "beneficiary" && !removed && !wizard ? (
           <div className="flex flex-wrap gap-2">
             {/* Everyday requests ("Ask for money"); the full claim wizard stays for fees with a statement. */}
             <Button variant={canClaim ? "secondary" : "primary"} onClick={() => setIntent({ kind: "ask" })}><HandCoins className="size-5" aria-hidden="true" />{askCopy.entry}</Button>
@@ -95,14 +97,15 @@ function Claims({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
         </section>
       )}
       {canClaim && e.status === "Active" && <Notice icon={<Zap className="size-5" aria-hidden="true" />} className="mb-5"><p className="text-body">{fmt(copy.living, { owner: ownerName })}</p></Notice>}
-      {role === "beneficiary" && e.status === "Unlocked" && myRules.length > 0 && <Notice tone="ok" className="mb-5"><p className="text-body">{fmt(copy.unlocked, { owner: ownerName })}</p></Notice>}
-      {role === "beneficiary" && !canClaim && myRules.length > 0 && (
+      {removed && <Notice tone="warn" className="mb-5"><p className="text-body">{guardians.rules.blocked.you}</p></Notice>}
+      {role === "beneficiary" && !removed && e.status === "Unlocked" && myRules.length > 0 && <Notice tone="ok" className="mb-5"><p className="text-body">{fmt(copy.unlocked, { owner: ownerName })}</p></Notice>}
+      {role === "beneficiary" && !removed && !canClaim && myRules.length > 0 && (
         <Notice tone="warn" icon={<Clock className="size-5" aria-hidden="true" />} title={fmt(copy.locked.title, { owner: ownerName })} className="mb-5">
           <p>{fmt(e.status === "DeathPending" ? copy.locked.pending : copy.locked.active, { owner: ownerName })}</p>
           <ButtonLink href="/family" small variant="secondary" className="mt-3">{copy.locked.cta}</ButtonLink>
         </Notice>
       )}
-      {role === "beneficiary" && myRules.length === 0 && <p className="mb-5 text-ink-2">{copy.noRules}</p>}
+      {role === "beneficiary" && !removed && myRules.length === 0 && <p className="mb-5 text-ink-2">{copy.noRules}</p>}
 
       <AnimatePresence mode="wait" initial={false}>
         {wizard && canClaim ? (
@@ -161,7 +164,7 @@ export function ClaimTracker({ claim, snap, copy, waitingFor }: { claim: Claim; 
 }
 
 function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; copy: Copy }) {
-  const { common } = useCopy();
+  const { common, guardians } = useCopy();
   const { fx } = useEstate();
   const nameOf = useWho(snap);
   const now = useNow(15000);
@@ -175,7 +178,7 @@ function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; 
   const askCopy = useLocalized(askEnglish, (t) => t.ask);
   const note = snap.asks?.[claim.address];
   const declined = askStatus(claim, snap.estate, note) === "declined";
-  const tone = claim.status === "Paid" ? "ok" : claim.status === "Rejected" || declined ? "danger" : "warn";
+  const tone = claim.status === "Paid" ? "ok" : claim.status === "Rejected" || declined || block ? "danger" : "warn";
   return (
     <motion.li layout className="rounded-lg border border-line bg-surface p-4 shadow-card">
       <div className="flex items-start gap-3">
@@ -185,7 +188,7 @@ function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; 
           <p className="text-small text-ink-2">{fmt(copy.card.to, { payee })} · {fmt(copy.card.forWho, { name: who })}</p>
           {note?.purpose && <p className="text-small font-medium">{fmt(askCopy.line.for, { purpose: note.purpose })}</p>}
         </div>
-        <Badge tone={tone}>{declined ? askCopy.status.declined : common.status.claim[claim.status]}</Badge>
+        <Badge tone={tone}>{declined ? askCopy.status.declined : block ? guardians.rules.blocked.badge : common.status.claim[claim.status]}</Badge>
       </div>
       {claim.status === "Open" && <ReferredNote verdict={claim.agentVerdict} />}
       {declined ? <p className="mt-3 text-small font-semibold">{fmt(askCopy.line.declined, { owner: snap.estate.ownerName.split(" ")[0] })}</p> : <div className="mt-4"><ClaimTracker claim={claim} snap={snap} copy={copy} waitingFor={!block && snap.estate.status === "Active" && rule?.startsNow ? fmt(copy.card.waitingOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : undefined} /></div>}

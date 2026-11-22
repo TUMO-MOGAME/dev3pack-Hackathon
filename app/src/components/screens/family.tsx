@@ -135,7 +135,7 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
       key: "unlocked", title: s.unlocked.title, state: state(unlocked, false), text: unlocked ? s.unlocked.done : s.unlocked.todo,
       extra: unlocked ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {role === "beneficiary" && <ButtonLink href="/claims" small>{copy.next.claims}<ArrowRight className="size-4" aria-hidden="true" /></ButtonLink>}
+          {role === "beneficiary" && family && <ButtonLink href="/claims" small>{copy.next.claims}<ArrowRight className="size-4" aria-hidden="true" /></ButtonLink>}
           {role === "verifier" && <ButtonLink href="/inbox" small>{copy.next.inbox}<ArrowRight className="size-4" aria-hidden="true" /></ButtonLink>}
           <ButtonLink href="/car" small variant="secondary">{copy.next.car}</ButtonLink>
         </div>

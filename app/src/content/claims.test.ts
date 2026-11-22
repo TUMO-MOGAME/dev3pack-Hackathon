@@ -32,6 +32,7 @@ const FALSE_CLAIMS = [
   /only to (approved )?institutions|the only places the vault can pay/i,
   /never take money for themselves/i,
   /money only ever moves/i,
+  /pays? the institution directly|nothing is paid to you/i,
 ];
 
 describe("claims the program supports", () => {

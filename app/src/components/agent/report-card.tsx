@@ -20,7 +20,7 @@ export function ReportCard({ report, compact = false }: { report: AgentReport; c
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-bg"><ScanSearch className="size-5" aria-hidden="true" /></span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-36 flex-1">
           <h3 className="font-sans text-body font-semibold tracking-normal">{c.title}</h3>
           <p className="text-small text-ink-2">{c.docTypes[report.documentType] ?? report.documentType} · {c.by}</p>
         </div>

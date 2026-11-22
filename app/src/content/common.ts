@@ -181,6 +181,7 @@ export const common = {
       death_certificate: "Death certificate",
       fee_statement: "Fee statement",
       affidavit: "Sworn affidavit",
+      request_note: "Request without a document",
     } as Record<string, string>,
     reviewing: "The agent is reading the document",
     reviewingSteps: ["Checking the document type", "Reading names, dates and amounts", "Looking for signs of editing", "Writing a report for the trusted people"],

@@ -415,6 +415,7 @@ export const af: Bundle = {
         death_certificate: "Doodsertifikaat",
         fee_statement: "Fooistaat",
         affidavit: "Beëdigde verklaring",
+        request_note: "Versoek sonder 'n dokument",
       },
       reviewing: "Die agent lees die dokument",
       reviewingSteps: ["Gaan die soort dokument na", "Lees name, datums en bedrae", "Soek tekens van verandering", "Skryf 'n verslag vir die vertroude persone"],
@@ -658,7 +659,7 @@ export const af: Bundle = {
         ownerPending: { title: "'n Afsterwe is aangemeld", body: "As dit 'n fout is, kanselleer dit nou. Die kluis bly gesluit.", cta: "Gaan na die tydlyn" },
         beneficiaryActive: { title: "Jou lewende plan is aktief", body: "Reëls gemerk \"Nou\" werk reeds: eis gelde en die eienaar keur dit goed. Die res begin nadat die boedel ontsluit.", cta: "Maak 'n eis" },
         beneficiaryPending: { title: "Die wagtydperk loop", body: "Die boedel ontsluit wanneer dit verby is. Jy kan dit op die tydlyn volg.", cta: "Maak die tydlyn oop" },
-        beneficiaryUnlocked: { title: "Jou reëls is gereed", body: "Eis gelde of huur en Heirloom betaal die instansie direk.", cta: "Maak 'n eis" },
+        beneficiaryUnlocked: { title: "Jou reëls is gereed", body: "Eis gelde of huur, en die kluis betaal 'n begunstigde wat die eienaar goedgekeur het.", cta: "Maak 'n eis" },
         ownerClaims: { title: "{count} wag vir jou goedkeuring", body: "Onder jou lewende plan keur jy elke betaling self goed. Die agent het die staat reeds gelees.", cta: "Gaan na en keur goed" },
         verifierWaiting: { title: "{count} wag vir jou", body: "Elke versoek kom met die agent se verslag.", cta: "Maak jou inkassie oop" },
         verifierClear: { title: "Niks het jou nou nodig nie", body: "Nuwe versoeke sal in jou inkassie verskyn.", cta: "Maak jou inkassie oop" },
@@ -1072,8 +1073,8 @@ export const af: Bundle = {
     },
     claims: {
       eyebrow: "Eise",
-      title: "Gelde en huur, aan die *instansie* betaal",
-      body: "Kies 'n reël, laai die staat op en Heirloom betaal die instansie direk. Niks word in kontant aan jou betaal nie.",
+      title: "Gelde en huur, *direk* betaal",
+      body: "Kies 'n reël en laai die staat op. Die kluis betaal 'n begunstigde wat die eienaar goedgekeur het: gewoonlik die instansie, of jou eie beursie net as die eienaar dit bygevoeg het.",
       locked: {
         title: "Jy kan dit eis nadat {owner} oorlede is",
         active: "{owner} leef, so hierdie reëls wag. Hulle open eers nadat die vertroude mense {owner} se afsterwe bevestig en die wagtydperk verby is.",
@@ -1084,7 +1085,7 @@ export const af: Bundle = {
       unlocked: "{owner} se afsterwe is bevestig en die boedel is ontsluit. Elke reël in die plan kan nou geëis word.",
       owner: {
         title: "Wag vir jou goedkeuring",
-        body: "Versoeke onder die reëls wat jy \"Nou\" gemerk het. Die agent het elke staat gelees. Keur goed, en die kluis betaal die instansie direk.",
+        body: "Versoeke onder die reëls wat jy \"Nou\" gemerk het. Lees die agent se verslag. Keur goed, en die kluis betaal die begunstigde wat jy toegelaat het.",
         empty: "Niks wag vir jou nie.",
         approve: "Keur goed en betaal",
         done: "Goedgekeur. Die kluis het {payee} direk betaal",

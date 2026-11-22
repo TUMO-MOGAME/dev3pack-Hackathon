@@ -274,7 +274,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
                     <li key={o.address} className="enter border-b border-line/70 py-3 last:border-0 [--from-y:6px]">
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                         <p className="min-w-0 font-semibold">{buyerName(o) ?? shortAddress(o.buyer)}{o.buyer === session.address && <span className="ml-2 text-small font-medium text-accent">({copy.offers.you})</span>}</p>
-                        <Badge tone={st.tone}>{st.text}</Badge>
+                        <Badge tone={st.tone} className="max-w-full whitespace-normal! py-1">{st.text}</Badge>
                       </div>
                       <p className="tabular-nums">{formatUsdt(o.amount)}{rate ? <span className="ml-2 text-small text-ink-2">≈ {formatZar(o.amount, rate)}</span> : null}</p>
                       {reason && <p className="mt-0.5 text-small text-ink-2">{reason}</p>}

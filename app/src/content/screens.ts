@@ -99,7 +99,7 @@ export const screens = {
       ownerPending: { title: "A passing has been reported", body: "If this is a mistake, cancel it now. The vault stays locked.", cta: "Go to the timeline" },
       beneficiaryActive: { title: "Your living plan is active", body: "Rules marked \"Now\" already work: claim fees and the owner approves them. The rest start after the estate unlocks.", cta: "Make a claim" },
       beneficiaryPending: { title: "The waiting period is running", body: "The estate unlocks when it ends. You can follow it on the timeline.", cta: "Open the timeline" },
-      beneficiaryUnlocked: { title: "Your rules are ready", body: "Claim fees or rent and Heirloom pays the institution directly.", cta: "Make a claim" },
+      beneficiaryUnlocked: { title: "Your rules are ready", body: "Claim fees or rent, and the vault pays a payee the owner approved.", cta: "Make a claim" },
       ownerClaims: { title: "{count} waiting for your approval", body: "Under your living plan you approve each payment yourself. The agent has already read the statement.", cta: "Review and approve" },
       verifierWaiting: { title: "{count} waiting for you", body: "Each request comes with the agent's report.", cta: "Open your inbox" },
       verifierClear: { title: "Nothing needs you right now", body: "New requests will appear in your inbox.", cta: "Open your inbox" },
@@ -516,8 +516,8 @@ export const screens = {
 
   claims: {
     eyebrow: "Claims",
-    title: "Fees and rent, paid to the *institution*",
-    body: "Pick a rule, upload the statement and Heirloom pays the institution directly. Nothing is paid to you in cash.",
+    title: "Fees and rent, paid *directly*",
+    body: "Pick a rule and upload the statement. The vault pays a payee the owner approved: usually the institution, or your own wallet only if the owner added it.",
     locked: {
       title: "You can claim these after {owner}'s passing",
       active: "{owner} is alive, so these rules are waiting. They open only after the trusted people confirm {owner}'s passing and the waiting period ends.",
@@ -528,7 +528,7 @@ export const screens = {
     unlocked: "{owner}'s passing has been confirmed and the estate is unlocked. Every rule in the plan can now be claimed.",
     owner: {
       title: "Waiting for your approval",
-      body: "Requests under the rules you marked \"Now\". The agent has read each statement. Approve, and the vault pays the institution directly.",
+      body: "Requests under the rules you marked \"Now\". Read the agent's report. Approve, and the vault pays the payee you allowed.",
       empty: "Nothing is waiting for you.",
       approve: "Approve and pay",
       done: "Approved. The vault paid {payee} directly",

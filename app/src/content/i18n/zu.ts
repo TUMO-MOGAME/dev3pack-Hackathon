@@ -415,6 +415,7 @@ export const zu: Bundle = {
         death_certificate: "Isitifiketi sokufa",
         fee_statement: "Isitatimende semali",
         affidavit: "Isifungo",
+        request_note: "Isicelo esingenadokhumenti",
       },
       reviewing: "I-agent ifunda idokhumenti",
       reviewingSteps: ["Ihlola uhlobo lwedokhumenti", "Ifunda amagama, izinsuku nezimali", "Ifuna izimpawu zokushintshwa", "Ibhalela abantu abathembekile umbiko"],
@@ -690,7 +691,7 @@ export const zu: Bundle = {
         ownerPending: { title: "Kubikwe ukudlula emhlabeni", body: "Uma lokhu kuyiphutha, kukhansele manje. Isisefo sihlala sivaliwe.", cta: "Iya kumlando" },
         beneficiaryActive: { title: "Uhlelo lwakho oluphilayo luyasebenza", body: "Imithetho emakwe ngokuthi \"Manje\" isivele iyasebenza: faka izicelo zezimali bese umnikazi ezivuma. Eminye iqala ngemva kokuvulwa kwefa.", cta: "Faka isicelo" },
         beneficiaryPending: { title: "Isikhathi sokulinda siyaqhubeka", body: "Ifa livuleka uma siphela. Ungasilandela kumlando.", cta: "Vula umlando" },
-        beneficiaryUnlocked: { title: "Imithetho yakho isilungile", body: "Cela izimali zesikole noma irenti futhi i-Heirloom ikhokhela isikhungo ngqo.", cta: "Faka isicelo" },
+        beneficiaryUnlocked: { title: "Imithetho yakho isilungile", body: "Faka isicelo sezimali noma serenti, bese isisefo sikhokhela ogunyazwe umnikazi.", cta: "Faka isicelo" },
         ownerClaims: { title: "{count} kulindele imvume yakho", body: "Ngaphansi kohlelo lwakho oluphilayo uvuma inkokhelo ngayinye ngokwakho. I-agent isivele isifundile isitatimende.", cta: "Hlola futhi uvume" },
         verifierWaiting: { title: "{count} kulindele wena", body: "Isicelo ngasinye siza nombiko we-agent.", cta: "Vula imiyalezo yakho" },
         verifierClear: { title: "Akukho okudinga wena manje", body: "Izicelo ezintsha zizovela emiyalezweni yakho.", cta: "Vula imiyalezo yakho" },
@@ -1071,8 +1072,8 @@ export const zu: Bundle = {
     },
     claims: {
       eyebrow: "Izicelo",
-      title: "Izimali zesikole nerenti, zikhokhelwa *isikhungo*",
-      body: "Khetha umthetho, layisha isitatimende futhi i-Heirloom ikhokhela isikhungo ngqo. Akukho okukhokhelwa wena ngokheshi.",
+      title: "Izimali zesikole nerenti, zikhokhwa *ngqo*",
+      body: "Khetha umthetho bese ulayisha isitatimende. Isisefo sikhokhela ogunyazwe umnikazi: ngokuvamile isikhungo, noma i-wallet yakho kuphela uma umnikazi eyengezile.",
       locked: {
         title: "Ungazicela lezi ngemva kokudlula emhlabeni kuka-{owner}",
         active: "U-{owner} uyaphila, ngakho le mithetho iyalinda. Ivulwa kuphela lapho abantu abathembekile beqinisekisa ukushona kuka-{owner} futhi isikhathi sokulinda siphelile.",
@@ -1083,7 +1084,7 @@ export const zu: Bundle = {
       unlocked: "Ukudlula emhlabeni kuka-{owner} kuqinisekisiwe futhi ifa livuliwe. Manje yonke imithetho esohlelweni ingacelwa.",
       owner: {
         title: "Kulindele imvume yakho",
-        body: "Izicelo ngaphansi kwemithetho oyimake ngokuthi \"Manje\". I-agent isifundile isitatimende ngasinye. Vuma, futhi isisefo sikhokhela isikhungo ngqo.",
+        body: "Izicelo ngaphansi kwemithetho oyimake \"Manje\". Funda umbiko we-agent. Vuma, bese isisefo sikhokhela omvumele.",
         empty: "Akukho okukulindile.",
         approve: "Vuma futhi ukhokhe",
         done: "Kuvunyiwe. Isisefo sikhokhele u-{payee} ngqo",

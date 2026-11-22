@@ -113,9 +113,11 @@ export function SuccessionTimeline({ snap }: { snap: EstateSnapshot }) {
                 <ShieldCheck className="size-4" aria-hidden="true" />{s.vacant ? c.vacant : s.holderName}
                 <span className="text-small font-normal text-ink-2">· {c.seats[s.index]}</span>
               </p>
-              <p className="mt-1 text-small text-ink-2">
-                {s.generation === 0 ? c.generation.first : fmt(c.generation.later, { n: s.generation + 1 })}
-              </p>
+              {!s.vacant && (
+                <p className="mt-1 text-small text-ink-2">
+                  {s.generation === 0 ? c.generation.first : fmt(c.generation.later, { n: s.generation + 1 })}
+                </p>
+              )}
               {s.succession && <SuccessionStatus seat={s} />}
             </li>
           ))}

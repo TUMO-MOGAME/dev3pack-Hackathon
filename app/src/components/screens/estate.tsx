@@ -26,7 +26,8 @@ import { YearlyCapEditor, YearlyUsage } from "@/components/disputes/yearly";
 import { Marked } from "@/components/ui/marked";
 import { ActivityText, useNameBook } from "@/components/shell/activity-text";
 import { useWho } from "@/components/guardians/decision";
-import { isFamily, isHeld } from "@/lib/guardians/decisions";
+import { isFamily, isHeld, wasRemoved } from "@/lib/guardians/decisions";
+import { ResidualCard } from "@/components/continuity/continuity";
 import { eligibleSeats } from "@/lib/death-rules";
 import { clock, guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
 
@@ -112,6 +113,8 @@ function Dashboard({ copy, snap, session, role }: { copy: Copy; snap: EstateSnap
       <div className="grid gap-5 *:min-w-0">
         {/* Guardians: the fallback plan once every trusted place is empty; objections the owner can decide. */}
         <FallbackStatus snap={snap} />
+        {/* The vault screen is the owner's: after the passing the family and trusted people find what is left here. */}
+        {e.status === "Unlocked" && snap.residual && <ResidualCard snap={snap} />}
         {role === "owner" && <ObjectionList snap={snap} onlyVotable className="rounded-lg border-2 border-ink bg-surface p-4 sm:p-5" />}
 
         {/* Car */}
@@ -241,6 +244,9 @@ function ForYou({ copy, snap, session, role, now, walletUsdt, rate }: {
   const f = copy.forYou;
   const e = snap.estate;
   const reported = !!e.death.certHash || e.status === "DeathPending";
+  if (role === "beneficiary" && wasRemoved(snap, session.address)) {
+    return <Card aria-label={f.title}><Eyebrow>{f.title}</Eyebrow><p className="mt-1.5 font-semibold">{guardians.rules.blocked.you}</p></Card>;
+  }
   let block: { title: string; body: string; cta: string; href: string } | null = null;
   if (role === "owner") {
     const mine = ownerPending(snap);

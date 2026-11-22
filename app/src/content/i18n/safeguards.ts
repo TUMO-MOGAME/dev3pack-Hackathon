@@ -51,6 +51,8 @@ export const safeguardsAf: SafeguardsCopy = {
     expired: "Die reël het geëindig, so dit kan nie betaal word nie.",
     beneficiary: "Die persoon wat gevra het, is uit die plan verwyder, so dit kan nie betaal word nie.",
     payee: "Die begunstigde is uit die plan verwyder, so dit kan nie betaal word nie.",
+    you: "Die eienaar het jou uit hierdie plan verwyder, so jy kan nie eis, geld vra of 'n betaling betwis nie.",
+    badge: "Kan nie betaal word nie",
     oldRule: "'n reël wat geëindig het",
   },
 
@@ -282,6 +284,8 @@ export const safeguardsSt: SafeguardsCopy = {
     expired: "Molao o fedile, kahoo sena se ke ke sa lefuwa.",
     beneficiary: "Motho ya kopileng o tlositswe moralong, kahoo sena se ke ke sa lefuwa.",
     payee: "Ya lefuwang o tlositswe moralong, kahoo sena se ke ke sa lefuwa.",
+    you: "Mong o o tlositse moralong ona, kahoo o ke ke wa etsa kopo, wa kopa tjhelete kapa wa hanyetsa tefo.",
+    badge: "E ke ke ya lefuwa",
     oldRule: "molao o fedileng",
   },
 
@@ -513,6 +517,8 @@ export const safeguardsZu: SafeguardsCopy = {
     expired: "Umthetho uphelile, ngakho lokhu ngeke kukhokhwe.",
     beneficiary: "Umuntu ocelile ususiwe ohlelweni, ngakho lokhu ngeke kukhokhwe.",
     payee: "Okhokhelwayo ususiwe ohlelweni, ngakho lokhu ngeke kukhokhwe.",
+    you: "Umnikazi ukususe kulolu hlelo, ngakho awukwazi ukufaka isicelo, ukucela imali noma ukuphikisa inkokhelo.",
+    badge: "Ngeke ikhokhwe",
     oldRule: "umthetho ophelile",
   },
 

@@ -15,6 +15,10 @@ export const hasLivingSeat = (e: Pick<Estate, "verifiers">) => eligibleSeats(e.v
 export const isFamily = (snap: Pick<EstateSnapshot, "beneficiaries">, w: Base58 | null | undefined) =>
   !!w && snap.beneficiaries.some((b) => b.wallet === w && b.active);
 
+/** Was in the family and the owner took them out: they still see the plan, and can do nothing in it as family. */
+export const wasRemoved = (snap: Pick<EstateSnapshot, "beneficiaries">, w: Base58 | null | undefined) =>
+  !!w && !isFamily(snap, w) && snap.beneficiaries.some((b) => b.wallet === w);
+
 /** A death claim that "I'm still here" would cancel. */
 export const deathOpen = (e: Pick<Estate, "status" | "death">) => e.status === "DeathPending" || (e.status === "Active" && !!e.death.certHash);
 

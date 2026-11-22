@@ -415,6 +415,7 @@ export const st: Bundle = {
         death_certificate: "Lengolo la lefu",
         fee_statement: "Statemente ya ditefello",
         affidavit: "Afidafiti e enweng",
+        request_note: "Kopo e se nang tokomane",
       },
       reviewing: "Agent e bala tokomane",
       reviewingSteps: ["E hlahloba mofuta wa tokomane", "E bala mabitso, matsatsi le dipalo", "E batla matshwao a phetolo", "E ngolla batho ba tshepahalang tlaleho"],
@@ -658,7 +659,7 @@ export const st: Bundle = {
         ownerPending: { title: "Lefu le tlalehilwe", body: "Haeba ena ke phoso, e hlakole hona jwale. Polokelo e dula e notletswe.", cta: "Ya tatellanong" },
         beneficiaryActive: { title: "Moralo wa hao o phelang o a sebetsa", body: "Melao e tshwailweng \"Jwale\" e se e sebetsa: kopa ditefo mme mong o a di dumella. E meng e qala ha lefa le notlolotswe.", cta: "Etsa kopo" },
         beneficiaryPending: { title: "Nako ya ho emela e a tsamaya", body: "Lefa le tla buleha ha e fela. O ka e latela tatellanong.", cta: "Bula tatellano" },
-        beneficiaryUnlocked: { title: "Melao ya hao e lokile", body: "Kopa ditefello kapa rente mme Heirloom e lefa setheo ka kotloloho.", cta: "Etsa kopo" },
+        beneficiaryUnlocked: { title: "Melao ya hao e lokile", body: "Etsa kopo ya ditefello kapa rente, mme polokelo e lefe ya dumelletsweng ke mong.", cta: "Etsa kopo" },
         ownerClaims: { title: "{count} di emetse tumello ya hao", body: "Tlasa moralo wa hao o phelang o dumella tefo e nngwe le e nngwe ka bowena. Agent e se e badile statemente.", cta: "Hlahloba mme o dumelle" },
         verifierWaiting: { title: "{count} di o emetse", body: "Kopo e nngwe le e nngwe e tla le tlaleho ya agent.", cta: "Bula inbox ya hao" },
         verifierClear: { title: "Ha ho letho le o hlokang hona jwale", body: "Dikopo tse ntjha di tla hlaha inbox ya hao.", cta: "Bula inbox ya hao" },
@@ -1097,8 +1098,8 @@ export const st: Bundle = {
     },
     claims: {
       eyebrow: "Dikopo",
-      title: "Ditefello le rente, di lefuwa *setheong*",
-      body: "Kgetha molao, kenya statemente mme Heirloom e lefa setheo ka kotloloho. Ha ho letho le lefuwang wena ka kheshe.",
+      title: "Ditefello le rente, di lefuwa *ka kotloloho*",
+      body: "Kgetha molao mme o kenye statemente. Polokelo e lefa ya dumelletsweng ke mong: hangata ke setheo, kapa wallet ya hao feela ha mong a e kentse.",
       locked: {
         title: "O ka kopa tsena kamora lefu la {owner}",
         active: "{owner} o a phela, kahoo melao ena e a ema. E bulwa feela ha batho ba tshepahalang ba netefatsa lefu la {owner} mme nako ya ho ema e fela.",
@@ -1109,7 +1110,7 @@ export const st: Bundle = {
       unlocked: "Lefu la {owner} le netefaditswe mme lefa le bulehile. Jwale molao o mong le o mong wa moralo o ka kopuwa.",
       owner: {
         title: "Di emetse tumello ya hao",
-        body: "Dikopo tlasa melao eo o e tshwaileng \"Jwale\". Agent e badile statemente ka nngwe. Dumella, mme polokelo e lefa setheo ka kotloloho.",
+        body: "Dikopo tlasa melao eo o e tshwaileng \"Hona jwale\". Bala tlaleho ya agent. Dumella, mme polokelo e lefe eo o mo dumelletseng.",
         empty: "Ha ho letho le o emetseng.",
         approve: "Dumella mme o lefe",
         done: "E dumetswe. Polokelo e lefile {payee} ka kotloloho",
