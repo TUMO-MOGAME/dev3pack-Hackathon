@@ -23,6 +23,7 @@ import {
 import { assembleSnapshot } from "../chain/snapshot";
 import { bool, hex, key, num, optKey, type Raw } from "../chain/decoders";
 import { ChainServiceError, must, writeFailure } from "./chain-errors";
+import { mayAskForSale } from "../agent/sale";
 import { createChainContinuity } from "./chain-continuity";
 import { deathClaimStep } from "./chain-reports";
 import { checkPeople, planSetup } from "./chain-setup";
@@ -813,8 +814,13 @@ export function createChainService(): HeirloomService {
     },
 
     // ----- Car sale -----
-    listAsset: (estate, asset, durationSecs) =>
-      signedPost<TxResult>("/api/list-asset", "list-asset", estate, { estate, asset, durationSecs }, actionBody.listAsset({ asset, durationSecs })),
+    async listAsset(estate, asset, durationSecs) {
+      const snap = await freshEstate(estate); // who holds a seat decides who may ask
+      must(mayAskForSale(snap.estate.verifiers, snap.beneficiaries, getActiveSigner().address),
+        "NotVerifier", "Only a trusted person can open the sale. Family members can when no trusted person is left.");
+      return signedPost<TxResult>("/api/list-asset", "list-asset", estate, { estate, asset, durationSecs }, actionBody.listAsset({ asset, durationSecs }))
+        .finally(written);
+    },
 
     async placeOffer(estate, asset, amountUsdt, buyerName) {
       const tx = await send([ix.placeOffer(chainCtx(), pk(estate), pk(asset), pk(getActiveSigner().address), toBase(amountUsdt))],

@@ -315,6 +315,21 @@ describe("/api/list-asset and /api/accept-offer (S1)", () => {
     expect(h.signed).toHaveLength(0);
   });
 
+  it.each([
+    ["no seat held: an active beneficiary lists", 0, "active", 200],
+    ["no seat held: a removed beneficiary doesn't", 0, "removed", 403],
+    ["no seat held: an outsider doesn't", 0, "outsider", 403],
+    ["one seat held: an active beneficiary doesn't", 1, "active", 403],
+    ["three seats held: an active beneficiary doesn't", 3, "active", 403],
+  ] as const)("%s", async (_, held, who, status) => {
+    const s = h.snapshot as { estate: { verifiers: string[] }; beneficiaries?: { wallet: string; active: boolean }[] };
+    s.estate.verifiers = [0, 1, 2].map((i) => (i < held ? key() : PublicKey.default.toBase58()));
+    s.beneficiaries = [{ wallet: claimant.address, active: who !== "removed" }];
+    expect((await listing(who === "outsider" ? outsider : claimant)).status).toBe(status);
+    expect(h.signed).toHaveLength(status === 200 ? 1 : 0);
+    if (status === 200) expect(getCoder().instruction.decode(Buffer.from(h.signed[0].data))!.name).toBe("list_asset");
+  });
+
   it("a trusted person can list", async () => {
     expect((await listing(trusted)).status).toBe(200);
     expect(h.signed).toHaveLength(1);

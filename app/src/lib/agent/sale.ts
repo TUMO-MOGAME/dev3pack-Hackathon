@@ -5,7 +5,8 @@
  * the same code.
  */
 import { PublicKey, Transaction, type TransactionInstruction } from "@solana/web3.js";
-import type { Asset, Base58, Offer } from "../types";
+import type { Asset, Base58, Beneficiary, Offer } from "../types";
+import { eligibleSeats } from "../death-rules";
 import { findInstruction } from "../chain/idl";
 import * as ix from "../chain/instructions";
 
@@ -16,6 +17,19 @@ export interface SaleInput {
   offer: Pick<Offer, "buyer" | "amount">;
   /** Null only when no seat has a holder. */
   coSigner: Base58 | null;
+}
+
+/**
+ * Who may ask the agent to open or settle a sale: a trusted person, and only when no seat has a holder an active
+ * family member, so the asset can't be stuck.
+ */
+export function mayAskForSale(
+  verifiers: readonly (Base58 | null)[],
+  beneficiaries: readonly Pick<Beneficiary, "wallet" | "active">[],
+  wallet: Base58,
+): boolean {
+  const seats = eligibleSeats(verifiers);
+  return seats.length ? seats.some((i) => verifiers[i] === wallet) : beneficiaries.some((b) => b.active && b.wallet === wallet);
 }
 
 /** accept_offer exactly as both signers must see it. */

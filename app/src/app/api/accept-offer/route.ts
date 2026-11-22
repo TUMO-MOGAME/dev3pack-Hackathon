@@ -2,7 +2,7 @@ import type { Transaction } from "@solana/web3.js";
 import { handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
 import { acceptOfferBody } from "@/lib/agent/schemas";
 import { rankOffers } from "@/lib/agent/offers";
-import { checkSaleTx, saleInstruction, SaleRefused } from "@/lib/agent/sale";
+import { checkSaleTx, mayAskForSale, saleInstruction, SaleRefused } from "@/lib/agent/sale";
 import { refusedByProgram } from "@/lib/agent/refusal";
 import { eligibleSeats } from "@/lib/death-rules";
 import { chainCtx } from "@/lib/chain/client";
@@ -38,10 +38,9 @@ export const POST = handler(async (req) => {
   const snap = await loadPublicSnapshot(b.estate);
   const { verifiers } = snap.estate;
   const seats = eligibleSeats(verifiers);
-  const mayAsk = seats.length
-    ? seats.some((i) => verifiers[i] === wallet)
-    : snap.beneficiaries.some((p) => p.wallet === wallet && p.active);
-  if (!mayAsk) throw new HttpError(403, "Only the estate's trusted people can settle a sale.", "forbidden");
+  if (!mayAskForSale(verifiers, snap.beneficiaries, wallet)) {
+    throw new HttpError(403, "Only the estate's trusted people can settle a sale.", "forbidden");
+  }
   const asset = snap.assets.find((a) => a.address === b.asset);
   if (!asset) throw new HttpError(404, "Asset not found in this estate.");
   const offers = snap.offers.filter((o) => o.asset === asset.address);
