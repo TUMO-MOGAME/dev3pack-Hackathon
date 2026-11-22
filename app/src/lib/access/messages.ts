@@ -28,6 +28,6 @@ export const actionBody = {
   review: (p: { purpose: string; subject?: string; index?: number; sha256: string }) =>
     `${p.purpose}|${p.subject ?? ""}|${p.index ?? ""}|${p.sha256}`,
   listAsset: (p: { asset: Base58; durationSecs: number }) => `${p.asset}|${p.durationSecs}`,
-  acceptOffer: (p: { asset: Base58 }) => p.asset,
+  acceptOffer: (p: { asset: Base58; tx?: string }) => `${p.asset}|${p.tx ?? ""}`,
   starter: () => "starter",
 };

@@ -7,14 +7,17 @@
 import type { z } from "zod";
 import type { estateFactsSchema } from "./facts-schema";
 import type { EstateSnapshot } from "../service/types";
+import { eligibleSeats } from "../death-rules";
 import { fromBase } from "../format";
 
 export type EstateFacts = z.infer<typeof estateFactsSchema>;
 
-const count = (b: boolean[]) => b.filter(Boolean).length;
-
 export function toEstateFacts(s: EstateSnapshot): EstateFacts {
   const label = (w: string) => s.beneficiaries.find((b) => b.wallet === w)?.label ?? w.slice(0, 6);
+  // As the program counts: held seats only, never the vote of whoever would gain.
+  const given = (votes: boolean[], interested: string | null) => eligibleSeats(s.estate.verifiers, interested).filter((i) => votes[i]).length;
+  // A removed family member can't claim or be paid, so the agent isn't told they can.
+  const removed = new Set(s.beneficiaries.filter((b) => !b.active).map((b) => b.wallet));
   const a = s.assets[0];
   return {
     estate: {
@@ -22,25 +25,29 @@ export function toEstateFacts(s: EstateSnapshot): EstateFacts {
       verifierNames: s.estate.verifierNames.filter(Boolean),
       waitingPeriodSecs: s.estate.waitingPeriodSecs, deathThreshold: s.estate.deathThreshold,
       claimThreshold: s.estate.claimThreshold, hardshipThreshold: s.estate.hardshipThreshold,
-      death: { verdict: s.estate.death.verdict, attestations: count(s.estate.death.attestations), pendingSince: s.estate.death.pendingSince },
+      death: { verdict: s.estate.death.verdict, attestations: given(s.estate.death.attestations, s.estate.death.submittedBy), pendingSince: s.estate.death.pendingSince },
     },
-    beneficiaries: s.beneficiaries.map((b) => ({ wallet: b.wallet, label: b.label })),
+    beneficiaries: s.beneficiaries.filter((b) => b.active).map((b) => ({ wallet: b.wallet, label: b.label })),
     payees: s.payees.map((p) => ({ wallet: p.wallet, name: p.name, kind: p.kind })),
-    rules: s.rules.map((r) => ({
+    rules: s.rules.filter((r) => !removed.has(r.beneficiary)).map((r) => ({
       address: r.address, id: r.id, beneficiary: r.beneficiary, beneficiaryLabel: label(r.beneficiary), category: r.category,
       allowedPayeeKind: r.allowedPayeeKind, maxPerClaimUsdt: fromBase(r.maxPerClaim), lifetimeCapUsdt: fromBase(r.lifetimeCap),
       spentUsdt: fromBase(r.spentTotal), remainingUsdt: fromBase(r.lifetimeCap - r.spentTotal), validUntil: r.validUntil, startsNow: r.startsNow,
     })),
     claims: s.claims.slice(0, 20).map((c) => ({
-      address: c.address, rule: c.rule, amountUsdt: fromBase(c.amount), status: c.status, agentVerdict: c.agentVerdict,
-      approvals: count(c.approvals), redFlags: c.agentReport?.redFlags,
+      address: c.address, rule: c.rule, amountUsdt: fromBase(c.amount),
+      status: c.status !== "Open" ? c.status
+        : c.fromEndedRule ? "Cannot be paid: its rule ended and was replaced"
+          : removed.has(c.beneficiary) ? "Cannot be paid: this person is no longer in the plan" : c.status,
+      agentVerdict: c.agentVerdict,
+      approvals: c.approvalsCount === false ? 0 : given(c.approvals, c.beneficiary), redFlags: c.agentReport?.redFlags,
     })),
     asset: a ? {
       address: a.address, title: a.title, status: a.status, floorUsdt: fromBase(a.floorPrice), hardshipFloorUsdt: fromBase(a.hardshipFloor),
       askingUsdt: fromBase(a.askingPrice), hardshipApproved: a.hardshipBeneficiary !== null, listingEnds: a.listingEnds,
     } : null,
     offers: s.offers.map((o) => ({ address: o.address, buyer: o.buyerName ?? o.buyer.slice(0, 6), amountUsdt: fromBase(o.amount), createdAt: o.createdAt })),
-    hardships: s.hardships.map((h) => ({ address: h.address, status: h.status, agentVerdict: h.agentVerdict, approvals: count(h.approvals) })),
+    hardships: s.hardships.map((h) => ({ address: h.address, status: h.status, agentVerdict: h.agentVerdict, approvals: given(h.approvals, h.beneficiary) })),
     recentActivity: s.activity.slice(0, 10).map((x) => x.text),
   };
 }
