@@ -18,6 +18,7 @@ import { FilePicker } from "@/components/ui/client";
 import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import type { AgentReport } from "@/lib/types";
 import { usePay } from "@/components/pay/payment";
+import { NamesNotice } from "@/components/continuity/names-notice";
 import { checkFallback, clock, isMonitor, objectionFor, fallbackStage, fallbackWinner, MAX_FALLBACK, moveItem, secondsLeft, waitFraction, type DraftRecipient } from "./derive";
 import { RaiseObjection } from "./objections";
 import { ActionResult, CountdownRing, PausedNotice, useAction, useGuardians, useWaitText } from "./parts";
@@ -106,6 +107,7 @@ function FallbackEditor({ snap, initial, busy, onSave, onCancel }: { snap: Estat
 
   return (
     <form onSubmit={submit} noValidate className="mt-3 flex flex-col gap-3">
+      <NamesNotice />
       <ol className="flex flex-col gap-3">
         {rows.map((r, i) => {
           const label = r.name.trim() || fmt(f.position, { n: i + 1 });

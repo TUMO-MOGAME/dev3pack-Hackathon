@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { handler, HttpError, isChainMode, json, rateLimit } from "@/lib/api/http";
+import { handler, HttpError, isChainMode, json, rateLimitShared } from "@/lib/api/http";
 import { reviewFields } from "@/lib/agent/schemas";
 import { reviewDocument } from "@/lib/agent/review";
 import { loadReviewTarget } from "@/lib/agent/review-target";
@@ -29,7 +29,7 @@ export const maxDuration = 90;
  * Returns { report, evidence: { sha256 }, tx: { signature, explorerUrl } | null, onChain: string }.
  */
 export const POST = handler(async (req) => {
-  rateLimit(req, "review", 8);
+  await rateLimitShared(req, "review", 8);
   if (Number(req.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES + 64_000) throw new HttpError(413, "The file is larger than 10 MB.");
   const form = await req.formData().catch(() => { throw new HttpError(400, "Expected a form upload with the document as `file`."); });
   const file = form.get("file");
@@ -51,13 +51,13 @@ export const POST = handler(async (req) => {
   }
 
   const { purpose, estate, subject, index } = fields;
-  const wallet = verifyAction(req, "review", estate, actionBody.review({ purpose, subject, index, sha256 }));
+  const wallet = await verifyAction(req, "review", estate, actionBody.review({ purpose, subject, index, sha256 }));
   if (!hasAgentWallet()) throw new HttpError(503, "The agent wallet is not configured.", "unavailable");
   const agent = await agentAddress();
   const target = await loadReviewTarget({ purpose, estate, subject, index, sha256 });
   if (target.submitter !== wallet) throw new HttpError(403, "Only the person who submitted this can ask for its review.", "forbidden");
   assertServedEstate(target.estate, agent);
-  spendAgentAllowance("review", wallet, estate);
+  await spendAgentAllowance("review", wallet, estate);
 
   const report = await reviewDocument({ ...read, facts: target.facts });
   let outcome: ReviewOutcome = outcomeOf(report.verdict);

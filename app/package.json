@@ -18,6 +18,7 @@
     "@elevenlabs/react": "^1.22.0",
     "@flaticon/flaticon-uicons": "^3.3.1",
     "@google/genai": "^3.1.0",
+    "@noble/hashes": "^1.8.0",
     "@solana-mobile/wallet-standard-mobile": "0.7.0",
     "@solana/kit": "^4.0.0",
     "@solana/spl-token": "^0.4.15",
@@ -26,6 +27,7 @@
     "@tetherto/wdk-wallet-solana": "^1.0.0-beta.20",
     "@wallet-standard/app": "1.1.1",
     "@wallet-standard/base": "1.1.1",
+    "bigint-buffer": "file:vendor/bigint-buffer",
     "bs58": "^6.0.0",
     "buffer": "^6.0.3",
     "clsx": "^2.1.1",
@@ -50,6 +52,9 @@
     "vitest": "^5.1.0"
   },
   "overrides": {
-    "@solana-mobile/mobile-wallet-adapter-protocol": "3.0.1"
+    "@solana-mobile/mobile-wallet-adapter-protocol": "3.0.1",
+    "bigint-buffer": "$bigint-buffer",
+    "jayson": "5.0.0",
+    "toml": "5.0.1"
   }
 }

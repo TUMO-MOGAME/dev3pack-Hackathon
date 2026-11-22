@@ -34,7 +34,7 @@ const deps: EstateMetaRouteDeps = {
   estate: async (e) => (e === E ? { owner: owner.address, willHash } : null),
   hasOffer: async (e, asset, b) => e === E && offers.has(`${asset}:${b}`),
   get: async (e) => store.get(e) ?? null,
-  save: async (m) => { store.set(m.estate, m); },
+  save: async (m) => { store.set(m.estate, m); return true; },
   saveDraft: async (_o, _d, h) => { drafts.push(h); },
 };
 let routes = estateMetaRoutes(deps);

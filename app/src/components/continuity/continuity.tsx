@@ -11,6 +11,7 @@ import { formatUsdt, shortAddress } from "@/lib/format";
 import { residualName } from "@/lib/continuity/names";
 import { surplusOf } from "@/lib/continuity/logic";
 import { personKey, type MissingPerson } from "@/lib/continuity/practice";
+import { FAUCET_URL, starterRefusalText, type RefusalText } from "@/lib/starter/refusal";
 import type { EstateSnapshot } from "@/lib/service/types";
 import type { Rule, Verdict, WillDraft } from "@/lib/types";
 import { Button, Card, Field, inputClass } from "@/components/ui/primitives";
@@ -26,6 +27,7 @@ export function StarterBanner() {
   const { isMock, run, busy } = useEstate();
   const path = usePathname();
   const [done, setDone] = useState<string | null>(null);
+  const [refused, setRefused] = useState<(RefusalText & { wallet: string }) | null>(null);
   const address = session?.address ?? null;
   const known = !!session?.balanceKnown;
   // Balances show as zero until read: offer only after a real read, so a funded wallet never sees this.
@@ -34,20 +36,38 @@ export function StarterBanner() {
   }, [isMock, ready, address, known, refreshBalances]);
   // Not while the recovery phrase is on screen.
   if (isMock || !session || !known || done === session.address || path?.startsWith("/start")) return null;
-  // A practice family member holds a little SOL for rent and needs no grant of their own.
-  if (session.solBalance >= 0.002 || session.usdtBalance > BigInt(0)) return null;
+  // A practice family member holds a little SOL for rent and needs no grant of their own. Someone who used the public
+  // faucet holds far more, and still needs test USD₮ (the starter then sends only that).
+  if (session.usdtBalance > BigInt(0) || (session.solBalance >= 0.002 && session.solBalance < 0.5)) return null;
   const get = async () => {
-    const r = await run("starter", (s) => s.requestStarter(), t.starter.done, true);
+    setRefused(null);
+    let why: { code?: string; retryAfterSecs?: number } = {};
+    const r = await run("starter", (s) => s.requestStarter().catch((e: unknown) => { why = e as typeof why; throw e; }), t.starter.done, true);
     if (r.ok) {
       setDone(session.address);
       await refreshBalances();
+    } else {
+      setRefused({ ...starterRefusalText(t.starter, why, Date.now()), wallet: session.address });
     }
   };
   return (
     <Card className="mb-4" aria-label={t.starter.title}>
       <h2 className="text-h3">{t.starter.title}</h2>
       <p className="mt-1 text-ink-2">{t.starter.body}</p>
-      <Button className="mt-3" loading={busy === "starter"} onClick={get}>{t.starter.cta}</Button>
+      <Button className="mt-3" loading={busy === "starter"} onClick={get}>{busy === "starter" ? t.starter.working : t.starter.cta}</Button>
+      <div role="status">
+        {refused?.wallet === session.address && (
+          <>
+            <p className="mt-3 text-small font-semibold">{refused.text}</p>
+            {refused.faucet && (
+              <p className="mt-1 text-small text-ink-2">
+                {t.starter.faucet}{" "}
+                <a href={FAUCET_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">faucet.solana.com</a>
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </Card>
   );
 }

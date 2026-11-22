@@ -24,7 +24,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/api/http", async (original: () => Promise<object>) => ({ ...(await original()), isChainMode: () => true, rateLimit: () => undefined }));
+vi.mock("@/lib/api/http", async (original: () => Promise<object>) => ({ ...(await original()), isChainMode: () => true, rateLimit: () => undefined, rateLimitShared: async () => undefined }));
 vi.mock("@/lib/chain/config", async (original: () => Promise<{ chainConfig: object }>) => {
   const m = await original();
   return { ...m, chainConfig: { ...m.chainConfig, usdtMint: h.mint, cluster: "devnet" } };
@@ -38,6 +38,9 @@ vi.mock("@/lib/agent/agent-wallet", () => ({
   hasAgentWallet: () => true,
   agentAddress: async () => h.agent,
   agentSignAndSend: async (ixs: { data: Uint8Array }[]) => { h.signed.push(...ixs); return { signature: "sig", explorerUrl: "url" }; },
+}));
+vi.mock("@/lib/server/agent-ledger", async (original: () => Promise<object>) => ({
+  ...(await original()), agentLedger: () => ({ spend: async () => ({ hour: 0, day: 0, complete: true }) }),
 }));
 vi.mock("@/lib/agent/review", () => ({
   reviewDocument: async (input: { facts?: string; untrusted?: string }) => {
@@ -255,6 +258,22 @@ describe("/api/list-asset and /api/accept-offer (S1)", () => {
   });
 });
 
+describe("every caller waits for the async checks (§18.3 S3)", () => {
+  it("verifyAction, spendAgentAllowance and rateLimitShared are always awaited", () => {
+    const root = path.resolve(process.cwd(), "src");
+    let calls = 0;
+    for (const f of readdirSync(root, { recursive: true, encoding: "utf8" })) {
+      if (!/\.tsx?$/.test(f) || f.includes(".test.")) continue;
+      for (const line of readFileSync(path.join(root, f), "utf8").split("\n")) {
+        if (!/\b(verifyAction|spendAgentAllowance|rateLimitShared)\(/.test(line) || /export async function/.test(line)) continue;
+        calls++;
+        expect(line, f).toMatch(/await (verifyAction|spendAgentAllowance|rateLimitShared)\(/);
+      }
+    }
+    expect(calls).toBeGreaterThanOrEqual(9);
+  });
+});
+
 describe("/api/reports (S5)", () => {
   async function read(who: W | null, exp = Date.now() + 3_600_000) {
     const headers = who
@@ -293,7 +312,7 @@ describe("specimens (S4)", () => {
 });
 
 describe("the agent's SOL (S6)", () => {
-  it("the scheduler pays only for served estates, nothing trivial, a few per estate", () => {
+  it("the scheduler pays only for served estates and nothing trivial", () => {
     const due = (e: string, amount = 5_000_000n) => ({ estate: e, rule: { recurringAmount: amount } });
     const estates = new Map([
       ["ours", { agent: h.agent, usdtMint: h.mint }],
@@ -301,16 +320,18 @@ describe("the agent's SOL (S6)", () => {
       ["theirAgent", { agent: "x", usdtMint: h.mint }],
     ]);
     const all = [due("theirMint"), due("theirAgent"), due("unknown"), due("ours", 1n), due("ours"), due("ours"), due("ours"), due("ours")];
-    expect(servedPayments(all, estates, h.agent, h.mint)).toEqual([due("ours"), due("ours"), due("ours")]);
+    // A few per estate per tick, and fairness: lib/server/scheduler.test.ts.
+    expect(servedPayments(all, estates, h.agent, h.mint)).toEqual([due("ours"), due("ours"), due("ours"), due("ours")]);
   });
 
-  it("starter funds: once per wallet, a daily cap and a reserve", () => {
-    const ok = { walletLamports: 0, walletHasUsdtAccount: false, grantsToday: 0, agentLamports: 2e9, agentUsdt: 10_000_000_000n };
+  it("starter funds: once per wallet, a pace and a reserve", () => {
+    const now = 2_000_000;
+    const ok = { walletLamports: 0, walletHasUsdtAccount: false, grantedBefore: false, grantTimes: [], now, agentLamports: 2e9, agentUsdt: 10_000_000_000n };
     expect(starterRefusal(ok)).toBeNull();
-    expect(starterRefusal({ ...ok, walletHasUsdtAccount: true })).toBe("already_funded");
-    expect(starterRefusal({ ...ok, walletLamports: STARTER.alreadyFundedLamports })).toBe("already_funded");
-    expect(starterRefusal({ ...ok, grantsToday: STARTER.perDay })).toBe("daily_cap");
-    expect(starterRefusal({ ...ok, agentLamports: STARTER.reserveLamports })).toBe("empty");
-    expect(starterRefusal({ ...ok, agentUsdt: 0n })).toBe("empty");
+    expect(starterRefusal({ ...ok, walletHasUsdtAccount: true })?.code).toBe("already_funded");
+    expect(starterRefusal({ ...ok, grantedBefore: true })?.code).toBe("already_funded");
+    expect(starterRefusal({ ...ok, grantTimes: Array.from({ length: STARTER.perDay }, (_, i) => now - 7_200 - i) })?.code).toBe("daily_cap");
+    expect(starterRefusal({ ...ok, agentLamports: STARTER.reserveLamports })?.code).toBe("empty");
+    expect(starterRefusal({ ...ok, agentUsdt: 0n })?.code).toBe("empty");
   });
 });

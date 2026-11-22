@@ -12,6 +12,7 @@ import { Avatar } from "@/components/shell/app-shell";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { GuardiansPeople } from "@/components/guardians/section";
+import { NamesNotice } from "@/components/continuity/names-notice";
 
 type Copy = ScreensCopy["people"];
 const KINDS: PayeeKind[] = ["University", "School", "Landlord", "Other"];
@@ -115,6 +116,7 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
           )}
           {adding && (
             <form onSubmit={submit} noValidate className="mt-4 flex flex-col gap-3 rounded-md border border-line bg-surface-2/50 p-3">
+              <NamesNotice />
               <Field label={copy.payees.name} htmlFor="payee-name">
                 <input id="payee-name" value={name} maxLength={64} onChange={(ev) => setName(ev.target.value)} className={inputClass} autoComplete="organization" />
               </Field>

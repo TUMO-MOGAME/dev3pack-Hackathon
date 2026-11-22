@@ -22,6 +22,7 @@ import { ruleKey, signedEvery, waitingSecsFor, waitingText, withOwnerSummary } f
 import { isMockService } from "@/lib/service/is-mock";
 import { willView } from "@/lib/hooks/pick-estate";
 import { ConnectPeople, EndRule, ResidualPicker } from "@/components/continuity/continuity";
+import { NamesNotice } from "@/components/continuity/names-notice";
 import { missingPeople, withWallets } from "@/lib/continuity/practice";
 
 type Copy = ScreensCopy["will"];
@@ -228,6 +229,7 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
         blocked={missing.length > 0}
         setup={(
           <>
+            <NamesNotice className="mt-4" />
             <ResidualPicker draft={draft} value={residualLabel || draft.beneficiaries[0]?.label || ""} onChange={setResidualLabel} />
             {!isMock && (
               <ConnectPeople draft={draft} missing={missing} wallets={wallets} onWallets={(next, made) => { setWallets(next); if (made) setPractice(true); }} />
@@ -245,6 +247,7 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
         eyebrow={copy.eyebrow} title={copy.title} body={copy.body}
         action={<Button variant="secondary" small onClick={() => openAgent("call")}><Phone className="size-4" aria-hidden="true" />{copy.talk}</Button>}
       />
+      <NamesNotice className="mb-4" />
       {/* Two aligned cards of equal height; each scrolls inside itself so chatting never pushes the page down. */}
       <div className="grid gap-5 *:min-w-0 lg:h-[max(32rem,calc(100dvh-var(--header-h)-15rem))] lg:grid-cols-[1.2fr_1fr] lg:items-stretch">
         <section aria-label={copy.eyebrow} className="flex h-[min(42rem,72dvh)] min-h-0 min-w-0 flex-col rounded-xl border border-line bg-surface shadow-card lg:h-full">

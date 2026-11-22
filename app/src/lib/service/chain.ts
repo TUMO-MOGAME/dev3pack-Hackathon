@@ -31,6 +31,7 @@ import { explorerTx, fromBase, toBase } from "../format";
 import { hashJson, sha256Hex } from "../agent/hash";
 import type { EstateMeta } from "../db";
 import { signedMetaRequest } from "../estate-meta/signed";
+import { createNamesKeeper } from "../estate-meta/keeper";
 import { legacyApi, type LegacySigner } from "../legacy/client";
 import { createChainGuardians, guardianExtras, loadGuardians, rememberOnDevice } from "./chain-guardians";
 import { createChainDisputes, loadDisputes } from "./chain-disputes";
@@ -197,6 +198,14 @@ async function residualOf(estate: Base58): Promise<Base58 | null> {
 /** Rent for what a practice person does (a claim, a dispute, an offer). */
 const PRACTICE_SOL_LAMPORTS = 6_000_000;
 
+/** The owner's device copy of the names, put back quietly when the server lost them (lib/estate-meta/keeper.ts). */
+const namesKeeper = createNamesKeeper({
+  signer: peekActiveSigner,
+  owns: (estate, wallet) => estatePda(chainCtx().programId, wallet).toBase58() === estate,
+  post: (body) => post("/api/estate-meta", body),
+  storage: () => { try { return typeof window === "undefined" ? null : window.localStorage; } catch { return null; } },
+});
+
 /**
  * Saves an estate's names (and, once, the signed will draft), signed by the owner's wallet (lib/estate-meta). The
  * wallet is usually unlocked right after the txs this follows, so the signature is quiet; a locked wallet asks for
@@ -205,9 +214,12 @@ const PRACTICE_SOL_LAMPORTS = 6_000_000;
 async function saveMeta(meta: EstateMeta, draft?: WillDraft): Promise<void> {
   const payload = {
     ownerName: meta.ownerName, verifierNames: meta.verifierNames, assetTitles: meta.assetTitles, buyerNames: meta.buyerNames,
+    basedOn: meta.updatedAt ?? 0,
     ...(draft ? { draft } : {}),
   };
-  await post("/api/estate-meta", await signedMetaRequest(getActiveSigner(), "save", meta.estate, payload));
+  namesKeeper.remember(meta);
+  const { updatedAt } = await post<{ updatedAt?: number }>("/api/estate-meta", await signedMetaRequest(getActiveSigner(), "save", meta.estate, payload));
+  if (updatedAt !== undefined) namesKeeper.remember(meta, updatedAt);
   forget(`meta:${meta.estate}`);
 }
 
@@ -273,7 +285,7 @@ async function getMeta(estate: Base58): Promise<EstateMeta | null> {
 async function getMetaForWrite(estate: Base58): Promise<EstateMeta | null> {
   await ensureReadPass(getActiveSigner());
   forget(`meta:${estate}`);
-  return getMeta(estate);
+  return namesKeeper.view(estate, await getMeta(estate));
 }
 
 function chunk<T>(xs: T[], n: number): T[][] {
@@ -287,7 +299,7 @@ async function listEstatesUncached(wallet: Base58) {
   const out: { estate: Base58; role: string; ownerName: string }[] = [];
   const me = pk(wallet);
   const own = await findEstateOf(wallet);
-  if (own) out.push({ estate: own, role: "owner", ownerName: (await getMeta(own))?.ownerName ?? "You" });
+  if (own) out.push({ estate: own, role: "owner", ownerName: namesKeeper.view(own, await getMeta(own))?.ownerName ?? "You" });
   // Beneficiary PDAs: [disc][estate 32][wallet 32]
   const bens = await scanAccounts("Beneficiary", [{ offset: 40, key: me }]).catch(() => []);
   // Estate: [disc][owner][agent][usdt_mint][verifiers 3×32] → verifier i at 104 + 32i
@@ -396,9 +408,10 @@ export function createChainService(): HeirloomService {
     ...createChainDisputes({ send: (ixs) => send(ixs), requireOwnerOf }),
 
     async getEstate(estate): Promise<EstateSnapshot> {
-      const meta = await getMeta(estate);
-      // Names are off-chain. Without Supabase the server keeps them in memory only, so after a restart fall back to
-      // the owner's wallet label when that wallet is on this device.
+      const serverMeta = await getMeta(estate);
+      const meta = namesKeeper.view(estate, serverMeta);
+      // Names are off-chain. Without Supabase the server keeps them in memory only, so after a restart the owner's
+      // device shows (and puts back) its own copy; failing that, the owner's wallet label when it is on this device.
       const localOwner = meta && meta.ownerName !== "Estate owner" ? undefined : loadWallets().find((w) => estatePda(chainCtx().programId, w.address).toBase58() === estate)?.label;
       const [raw, events] = await Promise.all([
         fetchEstateRaw(estate, { ...meta, ...(localOwner ? { ownerName: localOwner } : {}) }),
@@ -440,6 +453,11 @@ export function createChainService(): HeirloomService {
       const withBuyers = out.activity.map((a) => (a.sale && !a.sale.buyerName && names[a.sale.buyer] ? { ...a, sale: { ...a.sale, buyerName: names[a.sale.buyer] } } : a));
       const bills = billActivity(estate, out.estate.ownerName);
       const withBills = bills.length ? [...withBuyers, ...bills].sort((a, b) => b.ts - a.ts) : withBuyers;
+      // Never waited for, and never a PIN prompt: an unlocked owner's wallet signs quietly or not at all.
+      void namesKeeper.sync(estate, serverMeta, {
+        estate: out.estate, names, labels: Object.fromEntries(loadWallets().map((w) => [w.address, w.label])),
+        people: [out.beneficiaries, out.payees, out.offers, guardians, residual],
+      }).then((saved) => { if (saved) forget(`meta:${estate}`); }).catch(() => undefined);
       return { ...withPrivateNames(out, names), activity: withBills, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names, asks: askNotes, residual };
     },
 
@@ -563,6 +581,7 @@ export function createChainService(): HeirloomService {
         estate: estate.toBase58(), ownerWallet: owner.toBase58(), ownerName: draft.ownerName,
         verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string],
         assetTitles: savedMeta?.assetTitles ?? {}, buyerNames: { ...savedMeta?.buyerNames, ...privateNames },
+        updatedAt: savedMeta?.updatedAt,
       }, draft).catch(() => undefined); // names are cosmetic; the estate itself is already on-chain
       return { estate: estate.toBase58(), txs };
     },
@@ -640,8 +659,8 @@ export function createChainService(): HeirloomService {
     },
 
     async requestStarter() {
-      const wallet = getActiveSigner().address;
-      return signedPost<TxResult>("/api/starter", "starter", wallet, { wallet }, actionBody.starter());
+      const { requestStarterFunds } = await import("../starter/client");
+      return requestStarterFunds(getActiveSigner());
     },
 
     async ownerApproveClaim(estate, claim) {

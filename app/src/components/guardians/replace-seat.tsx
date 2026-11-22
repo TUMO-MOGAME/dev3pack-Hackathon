@@ -9,6 +9,7 @@ import { Button, Consent, Field, inputClass, Notice } from "@/components/ui/prim
 import { fmt, useCopy } from "@/components/shell/copy";
 import type { Seat } from "@/lib/guardians/types";
 import type { Base58 } from "@/lib/types";
+import { NamesNotice } from "@/components/continuity/names-notice";
 import { afterReplacement, checkReplacement, shortName, type Person, type ReplaceError } from "./derive";
 
 export function ReplaceSeatForm({
@@ -72,6 +73,7 @@ export function ReplaceSeatForm({
       </h4>
       <p className="text-small text-ink-2">{vacant ? c.fillBody : fmt(c.body, { name: holderName })}</p>
 
+      <NamesNotice />
       <Field label={c.newName} htmlFor={`${id}-name`} error={nameError}>
         <input
           id={`${id}-name`} ref={nameRef} value={person.name} maxLength={64} autoComplete="off" className={inputClass}

@@ -17,6 +17,8 @@ export interface EstateMeta {
   verifierNames: [string, string, string];
   assetTitles: Record<string, string>;
   buyerNames: Record<string, string>;
+  /** Milliseconds: when the owner saved these names. A save names the one it was built on (lib/estate-meta). */
+  updatedAt?: number;
 }
 
 export interface ReportRow {
@@ -54,25 +56,47 @@ function warn(what: string, err: { message: string } | null) {
   if (err) console.warn(`[db] ${what} failed: ${err.message}`);
 }
 
-export async function upsertEstateMeta(m: EstateMeta): Promise<void> {
+/** False while names live only in this server's memory (no Supabase): a restart loses them. */
+export const metaIsDurable = (): boolean => getSupabase() !== null;
+
+/**
+ * Stores names only if what is stored is still `prev` (null: nothing stored), so an older copy can never replace a
+ * newer one, even across instances. Returns false when it changed meanwhile; throws when the store fails.
+ */
+export async function saveEstateMeta(m: EstateMeta, prev: EstateMeta | null): Promise<boolean> {
   const sb = getSupabase();
-  if (!sb) { mem.estates.set(m.estate, m); return; }
-  const { error } = await sb.from("estate_meta").upsert({
+  if (!sb) {
+    const held = mem.estates.get(m.estate) ?? null;
+    if (!held !== !prev || (held?.updatedAt ?? 0) !== (prev?.updatedAt ?? 0)) return false;
+    mem.estates.set(m.estate, m);
+    return true;
+  }
+  const row = {
     estate: m.estate, owner_wallet: m.ownerWallet, owner_name: m.ownerName, verifier_names: m.verifierNames,
-    asset_titles: m.assetTitles, buyer_names: m.buyerNames, updated_at: new Date().toISOString(),
-  });
-  warn("upsertEstateMeta", error);
+    asset_titles: m.assetTitles, buyer_names: m.buyerNames, updated_at: new Date(m.updatedAt ?? Date.now()).toISOString(),
+  };
+  const table = sb.from("estate_meta");
+  const at = prev?.updatedAt ?? 0;
+  const { data, error } = prev
+    // A millisecond range: Postgres keeps microseconds, JavaScript doesn't.
+    ? await table.update(row).eq("estate", m.estate).gte("updated_at", new Date(at).toISOString()).lt("updated_at", new Date(at + 1).toISOString()).select("estate")
+    : await table.upsert(row, { onConflict: "estate", ignoreDuplicates: true }).select("estate");
+  if (error) throw new Error(`Could not save the names: ${error.message}`);
+  return (data?.length ?? 0) > 0;
 }
 
-export async function getEstateMeta(estate: string): Promise<EstateMeta | null> {
+/** `strict` throws when the store can't be read, so "couldn't read" is never taken for "nothing saved". */
+export async function getEstateMeta(estate: string, opts: { strict?: boolean } = {}): Promise<EstateMeta | null> {
   const sb = getSupabase();
   if (!sb) return mem.estates.get(estate) ?? null;
   const { data, error } = await sb.from("estate_meta").select("*").eq("estate", estate).maybeSingle();
+  if (error && opts.strict) throw new Error(`Could not read the names: ${error.message}`);
   warn("getEstateMeta", error);
   if (!data) return null;
   return {
     estate: data.estate, ownerWallet: data.owner_wallet, ownerName: data.owner_name, verifierNames: data.verifier_names,
     assetTitles: data.asset_titles ?? {}, buyerNames: data.buyer_names ?? {},
+    updatedAt: data.updated_at ? Date.parse(data.updated_at) : 0,
   };
 }
 

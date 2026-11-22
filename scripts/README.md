@@ -22,11 +22,23 @@ npx tsx --tsconfig ../scripts/tsconfig.json ../scripts/seed-demo.ts
 4. Mints test USD₮ to the dad and sends the buyers theirs with WDK `transfer` (SPL USD₮).
 5. Writes `scripts/.env.devnet`. Copy its lines into `app/.env.local` (it contains `AGENT_SEED_PHRASE`, keep it private).
 
-## 2. Deploy the program
-Build and deploy `programs/heirloom` (inside WSL: `anchor build && anchor deploy --provider.cluster devnet`), then set
-`NEXT_PUBLIC_HEIRLOOM_PROGRAM_ID` in `app/.env.local` and copy `target/idl/heirloom.json` over
-`app/src/lib/chain/idl/heirloom.json`. Run `npm test` in `app/`: `instructions.test.ts` fails loudly if the IDL's
-account or arg names drift from the client.
+## 2. Build and upgrade the program (`build-program.sh`, inside WSL)
+```bash
+bash scripts/build-program.sh          # build, check the program id, cargo test
+bash scripts/build-program.sh idl      # the same, then update app/src/lib/chain/idl/heirloom.json
+bash scripts/build-program.sh deploy   # the same, then upgrade the devnet program
+```
+- The program id is fixed at `b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`. The script checks it in `lib.rs`,
+  `Anchor.toml` and the built IDL, never syncs keys and never copies sources back, so it is safe on a fresh clone.
+  Don't run `anchor keys sync`: without the program's keypair it writes a new id into the repo.
+- `test` (the default) and `idl` need no keypair, wallet or SOL. `test` changes no tracked file.
+- `deploy` only upgrades the existing program, by id, with its upgrade authority's wallet (`HEIRLOOM_WALLET`, default
+  `~/.config/solana/id.json`). It first prints the size, the SOL needed (a second copy's rent, which comes back, plus
+  any growth and fees) and the balance, and refuses when the balance is short.
+- The build runs in `~/heirloom-build`. Set `HEIRLOOM_WORK` to use another directory (empty, or an earlier build's).
+
+After updating the IDL run `npm test` in `app/`: `instructions.test.ts` fails loudly if its account or arg names drift
+from the client.
 
 ## 3. `seed-demo.ts`
 Creates the demo estate from the fixed WillDraft in `app/src/lib/agent/canned.ts` (`DEMO_WILL`) with the persona
