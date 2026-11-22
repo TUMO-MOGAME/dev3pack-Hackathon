@@ -18,11 +18,12 @@ import { ata, claimPda, estatePda, offerPda, hardshipPda } from "../chain/pda";
 import { demoEstateFirst } from "../chain/demo-estate";
 import { base64ToBytes, bytesToBase64, ChainTxError, getConnection } from "../chain/tx";
 import {
-  activityFrom, deathReviewHash, decodeScanned, fetchAccountRaw, fetchEstateRaw, fetchEvents, fetchHistory, findEstateOf, invalidateProgramAccounts, scanAccounts,
+  activityFrom, deathReviewHash, fetchAccountRaw, fetchEstateRaw, fetchEvents, fetchHistory, findEstateOf, invalidateProgramAccounts,
 } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
-import { bool, hex, key, num, optKey, type Raw } from "../chain/decoders";
+import { hex, key, num, optKey, type Raw } from "../chain/decoders";
 import { ChainServiceError, must, writeFailure } from "./chain-errors";
+import { mayAskToList } from "../agent/sale";
 import { createChainContinuity } from "./chain-continuity";
 import { deathClaimStep } from "./chain-reports";
 import { checkPeople, planSetup } from "./chain-setup";
@@ -46,7 +47,8 @@ import { createChainAsk } from "./chain-ask";
 import { estateRecipients, mergeRecipients } from "./recipients";
 import type { TreeService } from "../tree/types";
 import type { LettersService } from "../letters/types";
-import { disabledGuardians, SEAT_MONITOR_OFFSETS } from "../chain/guardians";
+import { disabledGuardians } from "../chain/guardians";
+import { estateRolesOf } from "../chain/estate-roles";
 import { SystemProgram } from "@solana/web3.js";
 import type { ActivityItem } from "../types";
 import type { PaidBill } from "../bills/types";
@@ -291,32 +293,17 @@ function chunk<T>(xs: T[], n: number): T[][] {
   return out;
 }
 
-/** Estates this wallet owns, inherits from, verifies or monitors (owner lookup is a PDA read; the rest are program scans). */
+/**
+ * Estates this wallet owns, inherits from, verifies, or stands by for as a monitor, backup or fallback recipient
+ * (owner lookup is a PDA read; the rest is one program scan, chain/estate-roles.ts).
+ */
 async function listEstatesUncached(wallet: Base58) {
   const out: { estate: Base58; role: string; ownerName: string }[] = [];
-  const me = pk(wallet);
   const own = await findEstateOf(wallet);
   if (own) out.push({ estate: own, role: "owner", ownerName: namesKeeper.view(own, await getMeta(own))?.ownerName ?? "You" });
-  // Beneficiary PDAs: [disc][estate 32][wallet 32]
-  const bens = await scanAccounts("Beneficiary", [{ offset: 40, key: me }]).catch(() => []);
-  // Estate: [disc][owner][agent][usdt_mint][verifiers 3×32] → verifier i at 104 + 32i
-  const verifierHits = await Promise.all([0, 1, 2].map((i) => scanAccounts("Estate", [{ offset: 104 + 32 * i, key: me }]).catch(() => [])));
-  for (const b of bens) {
-    // Removed from the plan: the account stays, the role doesn't (R16).
-    if (!bool(decodeScanned("Beneficiary", b), "active")) continue;
-    const estate = new PublicKey(b.data.subarray(8, 40)).toBase58();
-    out.push({ estate, role: "beneficiary", ownerName: (await getMeta(estate))?.ownerName ?? "Family estate" });
-  }
-  for (const v of verifierHits.flat()) {
-    const estate = v.pubkey.toBase58();
-    out.push({ estate, role: "verifier", ownerName: (await getMeta(estate))?.ownerName ?? "Family estate" });
-  }
-  // Monitors (guardians): Seat = [disc][estate 32][index 1][holder 32][backups 2×32][monitors 2×32] → monitor j at 137 + 32j.
-  const monitorHits = await Promise.all(SEAT_MONITOR_OFFSETS.map((offset) => scanAccounts("Seat", [{ offset, key: me }]).catch(() => [])));
-  for (const s of monitorHits.flat()) {
-    const estate = new PublicKey(s.data.subarray(8, 40)).toBase58();
-    if (out.some((o) => o.estate === estate)) continue;
-    out.push({ estate, role: "monitor", ownerName: (await getMeta(estate))?.ownerName ?? "Family estate" });
+  for (const { estate, role } of await estateRolesOf(wallet)) {
+    if (role === "monitor" && estate === own) continue;
+    out.push({ estate, role, ownerName: (await getMeta(estate))?.ownerName ?? "Family estate" });
   }
   return demoEstateFirst(out);
 }
@@ -813,8 +800,13 @@ export function createChainService(): HeirloomService {
     },
 
     // ----- Car sale -----
-    listAsset: (estate, asset, durationSecs) =>
-      signedPost<TxResult>("/api/list-asset", "list-asset", estate, { estate, asset, durationSecs }, actionBody.listAsset({ asset, durationSecs })),
+    async listAsset(estate, asset, durationSecs) {
+      const snap = await freshEstate(estate); // who holds a seat decides who may ask
+      must(mayAskToList(snap.estate.verifiers, snap.beneficiaries, getActiveSigner().address, snap.assets.find((a) => a.address === asset)),
+        "NotVerifier", "Only a trusted person can open the sale. Family can list a held asset when no trusted person is left.");
+      return signedPost<TxResult>("/api/list-asset", "list-asset", estate, { estate, asset, durationSecs }, actionBody.listAsset({ asset, durationSecs }))
+        .finally(written);
+    },
 
     async placeOffer(estate, asset, amountUsdt, buyerName) {
       const tx = await send([ix.placeOffer(chainCtx(), pk(estate), pk(asset), pk(getActiveSigner().address), toBase(amountUsdt))],
