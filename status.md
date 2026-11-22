@@ -3,7 +3,7 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-19 (docs brought up to date: README, architecture, pitch, ElevenLabs guide; ElevenLabs voices only + warmer letters live on both sites; before that: Letters for later and Legacy Voice words only merged)
+**Last updated:** 2026-11-22 (run-through videos of both sites; 30 bugs from them fixed: estate switcher, gen-3 own plan, signed estate-meta, Legacy Book without cloning, wording fixes)
 **Phase:** SUBMITTED to W3Node (13 Nov). The same project is now being prepared for a second hackathon (same name), which ends **30 Nov 2026**; post-hackathon work is listed in plan.md §14. Both sites deploy from `main`.
 
 
@@ -16,6 +16,15 @@
 6. The second hackathon's prize brief and rubric (ends 30 Nov 2026).
 7. `app/.env.example`: remove `LEGACY_SPEAK_SECRET` (unused); `ELEVENLABS_HEIRLOOM_VOICE_ID` and new `ELEVENLABS_STANDIN_VOICE_ID` are optional overrides (.env* files are Tumo's to edit).
 8. Decide whether to clone a real voice for the demo Thabo (consenting speaker) instead of the stock stand-in.
+
+## RUN-THROUGH VIDEOS + FIXES (22 Nov 2026)
+- Tumo asked for full recorded run-throughs of both sites (≤ 20 min in total, saved to Downloads\Heirloom run-through\), with the right ElevenLabs voices playing and small live devnet transactions. Bugs found on the way were fixed in this batch.
+- Demo cut 1 (10:25) recorded before these fixes. Devnet test pass done on throwaway estates (thabo2's demo estate untouched): passing → 2 confirmations → 300 s → unlock, trick claim rejected, 2 USD₮ UCT claim paid, car sold for 4 USD₮ (atomic swap), gen-3 estate for the child (by script).
+- Fixed (demo): voice status no longer claims a clone when the stand-in reads (also on chain: a voice id with 0 recordings is a stand-in); the disclosure says "a stand-in voice" then; declined-document copy; /will keeps the signed interval (mock); plain names in agent report fields; "Confirmed by {got} trusted people ({need} of {total} needed)"; the owner's legacy card hides after the passing; demo book no longer says "phone your gogo" (DEMO_VOICE_VERSION 2); chat nudge says "Your … payment" to the payee; "Dispute the unlock" label; disputes voted on show under Inbox → Handled.
+- Fixed (devnet): estate switcher + `?estate=` links (demo estate still first by default); "Start my own plan" on /will for a non-owner (generation 3 in the UI, chain only); **/api/estate-meta POST now signed by the owner's wallet** (ed25519, 5 min, single use; buyers may set only their own name); valuation answers the deterministic estimate after 45 s instead of a 504; the passing report shows its accepted state and receipt; the inbox says when the agent's report is missing; no PIN on load for /claims; buyer names; /send lists the family by name; the title-mint tx is self-paid (no sponsor 422); Legacy Book can be written without cloning (the stand-in reads it); the child's /legacy empty state; the will review shows the real waiting period (and chain.ts no longer creates a 0 s waiting period when NEXT_PUBLIC_DEMO_WAITING_SECS is unset); letters chainNote names the owner; a gift letter on a claim rule no longer shows the cap as the payment.
+- Checks: vitest 910/910, tsc, eslint.
+- Not fixed, Tumo to decide: Corolla demo data is inconsistent ("Good" / "A rated" / roadworthy faults), but changing the spec changes the devnet media root committed on-chain (costs SOL). Devnet letters, estate names, agent reports and car photos vanish because Supabase is off (open item 3: real fix). The child's /legacy asks for the PIN once (the book read is signed). New af/st/zu strings need the native read.
+- Blocked: the dramatised scenes (cast + scripts in the scratchpad) need the ElevenLabs key for the recording agents; the auto-mode check stopped them reading the root .env.local.
 
 ## ELEVENLABS VOICES ONLY + WARMER LETTERS (18 Nov 2026, evening)
 - Decision (Tumo): **ElevenLabs voices always, never the browser's own speech voice.** The browser fallback is gone (components/legacy/use-player.ts plays audio only; with no audio it shows "The voice can't play right now. The words are shown here.").

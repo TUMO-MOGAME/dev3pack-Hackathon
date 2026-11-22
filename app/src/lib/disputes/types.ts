@@ -74,6 +74,12 @@ export function openDisputeOn(disputes: Dispute[] | undefined, target: Base58, n
   return disputes?.find((d) => d.target === target && effectiveStatus(d, now) === "Open") ?? null;
 }
 
+/** Disputes this trusted person (verifier index) has voted on, newest first: the Inbox lists them under Handled. */
+export function disputesVotedBy(disputes: Dispute[] | undefined, verifierIndex: number): Dispute[] {
+  if (verifierIndex < 0) return [];
+  return (disputes ?? []).filter((d) => d.voted.includes(verifierIndex)).sort((a, b) => b.raisedAt - a.raisedAt);
+}
+
 /** The latest dispute on `target` (any status). */
 export function disputeOn(disputes: Dispute[] | undefined, target: Base58): Dispute | null {
   return [...(disputes ?? [])].filter((d) => d.target === target).sort((a, b) => b.raisedAt - a.raisedAt)[0] ?? null;

@@ -19,7 +19,8 @@ import { letterErrorKey } from "@/lib/letters/errors";
 import { browserStorage, markSeen } from "@/lib/letters/device";
 import { LetterList } from "./letter-list";
 import { LetterCard } from "./letter-card";
-import { letterWords, type Copy } from "./words";
+import { fill, letterWords, type Copy } from "./words";
+import { shortName } from "@/lib/names";
 
 // The editor (form, review, "Help me write it") loads only when the owner opens it.
 const LetterEditor = dynamic(() => import("./letter-editor").then((m) => m.LetterEditor), { ssr: false });
@@ -115,7 +116,7 @@ export default function LettersView({ copy, snap, role, viewer }: { copy: Copy; 
   const locked = view.sealed || view.paused;
   return (
     <div className="grid gap-5 *:min-w-0">
-      <Notice tone={isMock ? "warn" : "accent"} icon={<Info className="size-5" aria-hidden="true" />}>{isMock ? copy.demoNote : copy.chainNote}</Notice>
+      <Notice tone={isMock ? "warn" : "accent"} icon={<Info className="size-5" aria-hidden="true" />}>{isMock ? copy.demoNote : fill(copy.chainNote, { owner: shortName(snap.estate.ownerName) || snap.estate.ownerName })}</Notice>
       {locked && <Notice icon={<Lock className="size-5" aria-hidden="true" />}>{view.sealed ? copy.sealed : copy.paused}</Notice>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-h3">{copy.list.title}</h2>

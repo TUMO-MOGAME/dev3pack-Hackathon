@@ -39,3 +39,25 @@ describe("mock hardship (mirrors submit_hardship's one account per family member
       .rejects.toThrow(/already asked once/);
   }, 20_000);
 });
+
+describe("mock agent reports carry plain names (no role labels in document data)", () => {
+  it("a claim's fee statement names the student without '(daughter)', and a rejected one is not sent on", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("funded");
+    const lerato = DEMO_PERSONAS.find((p) => p.key === "lerato")!;
+    // The wallet persona's label, as the demo sign-in sets it.
+    svc.setActor({ address: lerato.address, role: lerato.role, label: "Lerato Mokoena (daughter)" });
+    const [{ estate }] = await svc.listEstatesFor(lerato.address);
+    const snap = await svc.getEstate(estate);
+    const rule = snap!.rules.find((r) => r.startsNow && r.category === "Tuition")!;
+    const payee = snap!.payees.find((p) => p.kind === rule.allowedPayeeKind)!;
+    const pdf = (name: string) => new File(["%PDF-1.4 demo"], name, { type: "application/pdf" });
+    const ok = await svc.submitClaim(estate, { rule: rule.address, payee: payee.wallet, amountUsdt: 1000, evidence: pdf("fees.pdf") });
+    expect(ok.report.extracted["Student"]).toBe("Lerato Mokoena");
+    expect(ok.report.summary).not.toMatch(/\(daughter\)/);
+    const bad = await svc.submitClaim(estate, { rule: rule.address, payee: payee.wallet, amountUsdt: 1000, evidence: pdf("fee-statement-edited.pdf") });
+    expect(bad.report.verdict).toBe("reject");
+    expect(bad.report.summary).not.toMatch(/declined this claim/);
+    expect(bad.report.summary).toMatch(/clear copy/);
+  });
+});

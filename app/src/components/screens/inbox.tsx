@@ -2,14 +2,14 @@
 import { useState, type ReactNode } from "react";
 import { AnimatePresence, m as motion } from "motion/react";
 import { MotionScope } from "@/components/ui/motion-provider";
-import { Banknote, Check, FileHeart, HandHeart, Inbox as InboxIcon, Undo2 } from "@/components/ui/icons";
+import { Banknote, Check, FileHeart, HandHeart, Inbox as InboxIcon, ScanSearch, Undo2 } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
 import type { AgentReport, WalletSession } from "@/lib/types";
 import { formatUsdt, formatZar } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
-import { Badge, Button, EmptyState, PageHeader } from "@/components/ui/primitives";
+import { Badge, Button, EmptyState, ExplorerLink, Notice, PageHeader } from "@/components/ui/primitives";
 import { Quorum } from "@/components/ui/client";
 import { ReportCard } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
@@ -20,7 +20,7 @@ import { PausedNotice } from "@/components/guardians/parts";
 import { GuardiansInbox } from "@/components/guardians/section";
 import { ClaimWindow } from "@/components/guardians/claim-window";
 import { DisputeList, DisputePanel } from "@/components/disputes/disputes";
-import { openDisputeOn } from "@/lib/disputes/types";
+import { disputesVotedBy, effectiveStatus, openDisputeOn } from "@/lib/disputes/types";
 import { useNow } from "@/lib/hooks/use-now";
 
 type Copy = ScreensCopy["inbox"];
@@ -32,6 +32,8 @@ interface Item {
   body: string;
   amountZar?: string;
   report?: AgentReport;
+  /** The agent's review tx, for when its report can't be loaded (the chain keeps only the report's hash). */
+  reviewTx?: string;
   approvals: boolean[];
   need: number;
   mine: boolean; // this person has already approved
@@ -54,7 +56,7 @@ function InboxScreenBody({ copy: english }: { copy: Copy }) {
 }
 
 function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; session: WalletSession }) {
-  const { common } = useCopy();
+  const { common, disputes: dc } = useCopy();
   const { fx, run, busy } = useEstate();
   const [declined, setDeclined] = useState<string[]>([]);
   const { pay } = usePay();
@@ -76,6 +78,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       title: fmt(copy.death.title, { name: e.ownerName }),
       body: fmt(copy.death.body, { by: d.submittedBy ? label(d.submittedBy) : "" }),
       report: d.agentReport,
+      reviewTx: snap.activity.find((a) => a.kind === "DeathReviewed")?.txSignature,
       approvals: d.attestations, need: e.deathThreshold, mine: !!d.attestations[me], approveLabel: copy.death.approve,
       act: async () => { await run("death", (s, est) => s.attestDeath(est), copy.death.done); },
     });
@@ -129,6 +132,13 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
   const handled: { key: string; text: string; tag: string }[] = [
     ...(e.status !== "Active" && d.attestations[me] ? [{ key: "death", text: fmt(copy.death.title, { name: e.ownerName }), tag: copy.confirmed }] : []),
     ...snap.claims.filter((c) => c.status === "Paid" && c.approvals[me]).map((c) => ({ key: c.address, text: fmt(copy.claim.title, { amount: formatUsdt(c.amount, { decimals: 0 }), payee: snap.payees.find((p) => p.wallet === c.payee)?.name ?? "" }), tag: copy.paid })),
+    // Disputes this trusted person voted on (upheld, dismissed, lapsed, or still waiting for a second vote).
+    ...disputesVotedBy(snap.disputes, me).map((x) => {
+      const claim = x.kind === "Claim" ? snap.claims.find((c) => c.address === x.target) : undefined;
+      const about = x.kind === "Unlock" ? dc.card.aboutUnlock
+        : claim ? fmt(dc.card.aboutClaim, { amount: formatUsdt(claim.amount, { decimals: 0 }), payee: snap.payees.find((p) => p.wallet === claim.payee)?.name ?? "" }) : "";
+      return { key: x.address, text: [fmt(dc.card.by, { name: x.disputerName }), about].filter(Boolean).join(" · "), tag: dc.card.status[now === null ? x.status : effectiveStatus(x, now)] };
+    }),
   ];
   const icons: Record<Item["kind"], ReactNode> = {
     death: <FileHeart className="size-5" aria-hidden="true" />, claim: <Banknote className="size-5" aria-hidden="true" />, hardship: <HandHeart className="size-5" aria-hidden="true" />,
@@ -150,7 +160,14 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
         </div>
         {it.target && <PausedNotice target={it.target} className="mt-3" />}
         {it.target && it.kind === "claim" && <DisputePanel kind="Claim" target={it.target} className="mt-3" />}
-        {it.report && <div className="mt-4"><ReportCard report={it.report} /></div>}
+        {it.report ? <div className="mt-4"><ReportCard report={it.report} /></div> : (
+          // The card only shows what the agent approved; without its report the trusted person is told so, and where
+          // the review is recorded, before confirming.
+          <Notice className="mt-4" tone="neutral" icon={<ScanSearch className="size-5" aria-hidden="true" />} title={copy.reportMissing.title}>
+            <p>{copy.reportMissing.body}</p>
+            {it.reviewTx && <ExplorerLink className="mt-1" signature={it.reviewTx} label={copy.reportMissing.link} srLabel={copy.reportMissing.sr} />}
+          </Notice>
+        )}
         <div className="mt-4"><Quorum approvals={it.approvals} needed={it.need} names={e.verifierNames} label={fmt(copy.quorum, { got, need: it.need })} /></div>
         {it.payable && it.target ? (
           <ClaimWindow claim={it.target} {...it.payable} />

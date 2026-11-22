@@ -12,6 +12,8 @@ export interface LegacySigner {
   wallet: string;
   /** Returns a hex ed25519 signature, or "demo" on a demo deployment. */
   sign(message: string): Promise<string>;
+  /** False when signing would ask for something (the PIN, a phone wallet app). Absent: assume it can. */
+  canSignQuietly?(): boolean;
   demoRole?: "owner" | "child";
   demoLabel?: string;
 }
@@ -53,7 +55,16 @@ export const legacyApi = {
     if (!res?.ok) return { elevenlabs: false, available: false };
     return res.json() as Promise<{ elevenlabs: boolean; available: boolean }>;
   },
-  status: (s: LegacySigner) => send<LegacyStatus>(s, "book.read", "GET", "/api/legacy/book"),
+  /**
+   * The book and voice status. `quiet` is for background reads (the chat home's legacy card): if signing would ask
+   * for the PIN, it fails at once with code "locked" instead, and nothing is sent.
+   */
+  status: (s: LegacySigner, opts: { quiet?: boolean } = {}) => {
+    if (opts.quiet && s.canSignQuietly?.() === false) {
+      return Promise.reject(Object.assign(new Error("The wallet is locked."), { code: "locked" }));
+    }
+    return send<LegacyStatus>(s, "book.read", "GET", "/api/legacy/book");
+  },
   saveBook: async (s: LegacySigner, book: LegacyBook) => (await send<{ book: LegacyBook }>(s, "book.write", "PUT", "/api/legacy/book", { book })).book,
   deleteBook: async (s: LegacySigner) => { await send(s, "book.delete", "DELETE", "/api/legacy/book"); },
   optIn: async (s: LegacySigner, on: boolean) => { await send(s, "optin", "PATCH", "/api/legacy/book", { optIn: on }); },

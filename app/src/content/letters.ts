@@ -9,7 +9,7 @@ export const letters = {
   title: "Letters for *later*",
   line: "Your own words for your family, opened at the right moment.",
   demoNote: "Demo: letters stay in this browser. On the live network they are signed by the owner's wallet and kept off-chain.",
-  chainNote: "Letters are signed by Thabo's wallet and never go on the public ledger. Until the family's server store is switched on, a letter is kept on the device that wrote it and on this server.",
+  chainNote: "Letters are signed by {owner}'s wallet and never go on the public ledger. Until the family's server store is switched on, a letter is kept on the device that wrote it and on this server.",
   notWill: "This letter is personal. It is not part of your will and does not change who receives what.",
   privacy: "How letters are kept",
   loading: "Loading letters",
@@ -47,6 +47,8 @@ export const letters = {
     date: "Opens on {date}",
     payment: "Opens with {name}'s gift, {amount}, due {date}",
     paymentNoDate: "Opens with {name}'s next payment, {amount}",
+    /** A claim rule (no set amount): the per-claim limit is not the payment, so no amount is named. */
+    paymentNext: "Opens with {name}'s next payment",
     send: "Opens when your transfer is confirmed",
     opened: "Opened {date}",
   },

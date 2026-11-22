@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { DEMO_WILL } from "./agent/canned";
 import { screens } from "@/content/screens";
 import { af } from "@/content/i18n/af";
-import { planSummary, ruleKey, timingChanged, withOwnerSummary } from "./will-summary";
+import { planSummary, ruleKey, signedEvery, timingChanged, waitingSecsFor, waitingText, withOwnerSummary } from "./will-summary";
+import { createMockService, DEMO_PERSONAS } from "./service/mock";
 import type { WillDraft } from "./types";
 
 const words = screens.will.review;
@@ -70,5 +71,43 @@ describe("the review summary follows the Now / After toggles", () => {
       const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort();
       expect(ph(afReview[k]), k).toEqual(ph(words[k]));
     }
+  });
+});
+
+describe("the signed plan's interval words (/will after signing)", () => {
+  it("uses the interval the owner signed, not the 60 s demo clock", () => {
+    expect(signedEvery({ every: "month", intervalSecs: 60 })).toBe("month");
+  });
+  it("falls back to the interval in seconds when the signed word isn't known (chain accounts)", () => {
+    expect(signedEvery({ intervalSecs: 30 * 86_400 })).toBe("month");
+    expect(signedEvery({ intervalSecs: 365 * 86_400 })).toBe("year");
+    expect(signedEvery({ intervalSecs: 60 })).toBe("minute");
+  });
+  it("the demo's signed book allowance reads every month, though it pays on the demo clock", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("funded");
+    const thabo = DEMO_PERSONAS.find((p) => p.key === "thabo")!;
+    const [{ estate }] = await svc.listEstatesFor(thabo.address);
+    const snap = await svc.getEstate(estate);
+    const books = snap!.rules.find((r) => r.category === "Books" && r.recurringAmount > 0n)!;
+    expect(books.intervalSecs).toBe(60);
+    expect(signedEvery(books)).toBe("month");
+  });
+});
+
+describe("the waiting period the review shows is the one the estate gets", () => {
+  const words = { periodDays: screens.will.preview.periodDays, periodDemo: screens.will.preview.periodDemo };
+  it("chain: NEXT_PUBLIC_DEMO_WAITING_SECS wins when set; unset or empty means the drafted days", () => {
+    expect(waitingSecsFor(0, "chain", "300")).toBe(300);
+    expect(waitingSecsFor(30, "chain", undefined)).toBe(30 * 86_400);
+    expect(waitingSecsFor(30, "chain", "")).toBe(30 * 86_400);
+  });
+  it("mock: the demo clock", () => {
+    expect(waitingSecsFor(30, "mock")).toBe(60);
+    expect(waitingSecsFor(0, "mock")).toBe(5);
+  });
+  it("reads as seconds on a demo clock, never \"0 days\"", () => {
+    expect(waitingText(300, words)).toBe("300 seconds (demo clock)");
+    expect(waitingText(30 * 86_400, words)).toBe("30 days");
   });
 });

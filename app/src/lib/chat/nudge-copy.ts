@@ -12,6 +12,8 @@ const en = {
     scheduledDue: {
       title: "A payment is due today",
       body: "{name}'s {category} payment ({amount}{zar}) to {payee} is due. Want me to pay it now?",
+      /** To the person the payment is for: never speak about them in the third person. */
+      bodyYours: "Your {category} payment ({amount}{zar}) to {payee} is due. Want me to pay it now?",
       cta: "Pay it now",
     },
     claimOwner: {

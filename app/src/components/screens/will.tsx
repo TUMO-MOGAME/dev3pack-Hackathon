@@ -18,7 +18,9 @@ import { GuardiansPlanLink } from "@/components/guardians/section";
 import { BillTemplates } from "@/components/everyday/bill-templates";
 import { WillLettersCard } from "@/components/letters/lazy";
 import { FRESH_ATTR, firstDemoPersona } from "@/lib/service/fresh-visit";
-import { ruleKey, withOwnerSummary } from "@/lib/will-summary";
+import { ruleKey, signedEvery, waitingSecsFor, waitingText, withOwnerSummary } from "@/lib/will-summary";
+import { isMockService } from "@/lib/service/is-mock";
+import { willView } from "@/lib/hooks/pick-estate";
 
 type Copy = ScreensCopy["will"];
 type BillsCopy = ScreensCopy["bills"];
@@ -27,12 +29,11 @@ const usd = (n: number) => formatUsdt(toBase(n), { decimals: 0 });
 const longDate =(iso: string | number) => new Date(typeof iso === "number" ? iso * 1000 : iso).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
 
 /** The schedule's interval as a preview word (the demo clock repeats every 60 seconds, shown as "minute"). */
-function everyKey(secs: number): keyof Copy["preview"]["every"] {
-  if (secs <= 60) return "minute";
-  if (secs <= 8 * 86400) return "week";
-  if (secs <= 32 * 86400) return "month";
-  if (secs <= 200 * 86400) return "term";
-  return "year";
+/** The waiting period as this estate will get it (demo clock or NEXT_PUBLIC_DEMO_WAITING_SECS), not only the days drafted. */
+function useWaitPeriod(copy: Copy) {
+  const { service } = useEstate();
+  const mode = isMockService(service) ? "mock" : "chain";
+  return (days: number) => waitingText(waitingSecsFor(days, mode), copy.preview);
 }
 
 export function WillScreen({ copy: english, bills: billsEnglish }: { copy: Copy; bills: BillsCopy }) {
@@ -49,9 +50,36 @@ export function WillScreen({ copy: english, bills: billsEnglish }: { copy: Copy;
 function WillFlow({ copy, bills, snap, session, firstVisit }: { copy: Copy; bills: BillsCopy; snap: EstateSnapshot | null; session: WalletSession; firstVisit?: boolean }) {
   // Kept here so the "locked in" moment survives the estate appearing underneath it.
   const [txs, setTxs] = useState<TxResult[] | null>(null);
+  // A family member or trusted person who plans for her own family sees the estate she belongs to here; this page
+  // is about her own plan, so she is offered the plan builder (on chain it creates an estate owned by her wallet).
+  const [ownPlan, setOwnPlan] = useState(false);
+  const { chooseEstate, estates } = useEstate();
+  const signed = (r: { estate: string; txs: TxResult[] }) => { setTxs(r.txs); chooseEstate(r.estate); };
+  const view = willView(snap?.estate.owner ?? null, session.address, estates, snap?.estate.address ?? null);
   if (txs) return <Done copy={copy} txs={txs} />;
-  if (snap) return <Locked copy={copy} bills={bills} snap={snap} />;
-  return <Writer copy={copy} bills={bills} session={session} onSigned={setTxs} firstVisit={firstVisit} />;
+  if (snap && view.kind === "locked") return <Locked copy={copy} bills={bills} snap={snap} />;
+  if (snap && view.kind !== "builder" && !(view.kind === "startOwn" && ownPlan)) {
+    return <NotYourPlan copy={copy} snap={snap} session={session} own={view.kind === "openOwn" ? view.estate : null} onStart={() => setOwnPlan(true)} />;
+  }
+  return <Writer copy={copy} bills={bills} session={session} onSigned={signed} firstVisit={firstVisit} />;
+}
+
+/** The estate on screen belongs to someone else: open her own plan if she has one, else start one. */
+function NotYourPlan({ copy, snap, session, own, onStart }: { copy: Copy; snap: EstateSnapshot; session: WalletSession; own: string | null; onStart: () => void }) {
+  const { chooseEstate } = useEstate();
+  const n = copy.notYours;
+  const name = snap.estate.ownerName;
+  return (
+    <div className="mx-auto max-w-xl">
+      <PageHeader eyebrow={copy.eyebrow} title={fmt(n.title, { name })} body={fmt(own ? n.bodyOwn : n.body, { name, me: session.label.split(/[ (]/)[0] })} />
+      <div className="flex flex-col gap-3 sm:flex-row">
+        {own
+          ? <Button onClick={() => chooseEstate(own)}>{n.openOwn}<ArrowRight className="size-5" aria-hidden="true" /></Button>
+          : <Button onClick={onStart}><PenLine className="size-5" aria-hidden="true" />{n.start}</Button>}
+        <ButtonLink href="/estate" variant="secondary">{fmt(n.view, { name: name.split(" ")[0] })}</ButtonLink>
+      </div>
+    </div>
+  );
 }
 
 function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
@@ -80,7 +108,7 @@ function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
 /* ---------- Conversation + live preview + review + sign ---------- */
 
 /** `firstVisit`: the server-rendered copy shown to a first demo visit before the app loads (see Gate `fresh`). */
-function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: Copy; bills: BillsCopy; session: WalletSession; onSigned: (txs: TxResult[]) => void; firstVisit?: boolean }) {
+function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: Copy; bills: BillsCopy; session: WalletSession; onSigned: (r: { estate: string; txs: TxResult[] }) => void; firstVisit?: boolean }) {
   // The opening message fades in with CSS, so the server-rendered first visit shows it without JavaScript. When this
   // writer replaces that copy, the message is already on screen and appears without a second fade.
   const [greetingEnter] = useState<"css" | "none">(() => (!firstVisit && typeof document !== "undefined" && document.documentElement.hasAttribute(FRESH_ATTR) ? "none" : "css"));
@@ -182,7 +210,7 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
   const sign = async () => {
     if (!draft) return;
     const res = await run("sign", (s) => s.createEstateFromWill(draft));
-    if (res.ok) onSigned(res.value.txs);
+    if (res.ok) onSigned(res.value);
   };
 
   if (view === "review" && draft) {
@@ -269,6 +297,7 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
 }) {
   const { common } = useCopy();
   const p = copy.preview;
+  const waitText = useWaitPeriod(copy);
   const parts = [!!draft?.beneficiaries.length, !!draft?.rules.length, (draft?.verifiers.length ?? 0) >= 3, !!draft?.assets.length];
   const done = parts.filter(Boolean).length;
   return (
@@ -355,7 +384,7 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
           ))}
         </Slot>
         {draft && (
-          <p className="flex items-center gap-2 px-1 text-small text-ink-2"><Clock className="size-4 shrink-0" aria-hidden="true" />{p.waiting}: {fmt(p.waitingValue, { days: draft.waitingPeriodDays })}</p>
+          <p className="flex items-center gap-2 px-1 text-small text-ink-2"><Clock className="size-4 shrink-0" aria-hidden="true" />{p.waiting}: {fmt(p.waitingValue, { period: waitText(draft.waitingPeriodDays) })}</p>
         )}
       </div>
       {footer}
@@ -369,6 +398,7 @@ function Review({ copy, draft, edited, onBack, onSign, signing }: { copy: Copy; 
   const { common } = useCopy();
   const r = copy.review;
   const need = 2;
+  const waitText = useWaitPeriod(copy);
   return (
     <div className="enter mx-auto max-w-2xl [--enter-dur:0.3s] [--from-y:12px]">
       <button type="button" onClick={onBack} className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-full pr-3 text-small font-semibold text-accent"><ArrowLeft className="size-4" aria-hidden="true" />{r.back}</button>
@@ -413,7 +443,7 @@ function Review({ copy, draft, edited, onBack, onSign, signing }: { copy: Copy; 
 
       <section className="mt-6">
         <h2 className="text-h3">{r.trustedTitle}</h2>
-        <p className="mt-2 text-ink-2">{fmt(r.trusted, { need, days: draft.waitingPeriodDays })}</p>
+        <p className="mt-2 text-ink-2">{fmt(r.trusted, { need, period: waitText(draft.waitingPeriodDays) })}</p>
         <ul className="mt-3 grid gap-2 sm:grid-cols-3">
           {draft.verifiers.map((v) => (
             <li key={v.name} className="rounded-md border border-line bg-surface p-3">
@@ -473,7 +503,7 @@ function Locked({ copy, bills, snap }: { copy: Copy; bills: BillsCopy; snap: Est
               <div className="min-w-0">
                 <Badge tone={rule.startsNow ? "gold" : "neutral"}>{rule.startsNow ? <Zap className="size-3.5" aria-hidden="true" /> : <Hourglass className="size-3.5" aria-hidden="true" />}{rule.startsNow ? copy.preview.now : copy.preview.later}</Badge>
                 <p className="mt-1.5">{recurring
-                  ? fmt(copy.review.recurringRule, { ...base, amount: formatUsdt(rule.recurringAmount, { decimals: 0 }), payee: snap.payees.find((x) => x.wallet === rule.fixedPayee)?.name ?? "", every: copy.preview.every[everyKey(rule.intervalSecs)] })
+                  ? fmt(copy.review.recurringRule, { ...base, amount: formatUsdt(rule.recurringAmount, { decimals: 0 }), payee: snap.payees.find((x) => x.wallet === rule.fixedPayee)?.name ?? "", every: copy.preview.every[signedEvery(rule)] })
                   : fmt(rule.allowedPayeeKind === "Other" ? copy.review.ruleOther : copy.review.rule, base)}</p>
               </div>
             </li>

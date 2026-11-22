@@ -12,6 +12,7 @@ import { chainConfig } from "../chain/config";
 import type { DemoStage } from "../service/mock";
 import type { FxRate, Role, WalletSession } from "../types";
 import { useWallet } from "./wallet-source";
+import { linkedEstate, pickEstate, uniqueEstates, type EstateChoice } from "./pick-estate";
 
 export type RunResult<T> = { ok: true; value: T } | { ok: false; code: string; message: string };
 export type Intent =
@@ -29,6 +30,12 @@ interface EstateCtx {
   isMock: boolean;
   phase: "loading" | "empty" | "ready" | "error";
   snap: EstateSnapshot | null;
+  /** Every estate the acting wallet belongs to (one entry each), for the estate switcher. */
+  estates: EstateChoice[];
+  /** The estate on screen (it may be one the wallet has no role in, opened from a listing link). */
+  estate: string | null;
+  /** Opens another estate and remembers the choice on this device (heirloom.lastEstate). */
+  chooseEstate(estate: string): void;
   fx: FxRate | null;
   loadError: string | null;
   session: WalletSession | null;
@@ -77,6 +84,11 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
     setPhase((p) => (p === "loading" ? "empty" : p));
   }, []);
   const [snap, setSnap] = useState<EstateSnapshot | null>(null);
+  const [estates, setEstates] = useState<EstateChoice[]>([]);
+  const [current, setCurrent] = useState<string | null>(null);
+  // A choice made in this visit: the switcher (for this wallet and role) or a shared listing link (?estate=).
+  const chosen = useRef<{ estate: string; who: string | null; link: boolean } | null>(null);
+  const linkRead = useRef(false);
   const [fx, setFx] = useState<FxRate | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -135,11 +147,24 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
         address ? service.listEstatesFor(address) : Promise.resolve([]),
         service.getFx().catch(() => null),
       ]);
-      let estate: string | null = list[0]?.estate ?? null;
-      if (!estate && !isMockService(service)) {
-        try { estate = window.localStorage.getItem(LAST_ESTATE); } catch { /* ignore */ }
+      const chain = !isMockService(service);
+      if (!linkRead.current) {
+        linkRead.current = true;
+        const linked = linkedEstate(window.location.search);
+        if (linked) {
+          chosen.current = { estate: linked, who: null, link: true };
+          // Kept for later visits too: a buyer who sets up a wallet after opening the link still finds the listing.
+          try { window.localStorage.setItem(LAST_ESTATE, linked); } catch { /* ignore */ }
+        }
       }
+      let remembered: string | null = null;
+      try { remembered = window.localStorage.getItem(LAST_ESTATE); } catch { /* ignore */ }
+      const who = `${address}:${sessionRole}`;
+      const pick = chosen.current && (chosen.current.who === null || chosen.current.who === who) ? chosen.current : null;
+      const unique = uniqueEstates(list);
+      const estate = pickEstate(unique, { chosen: pick?.estate ?? null, chosenByLink: pick?.link, remembered, role: sessionRole, chain });
       if (seq !== loadSeq.current) return;
+      setEstates((prev) => (contentKey(prev) === contentKey(unique) ? prev : unique));
       // The background poll re-fetches every few seconds; unchanged data keeps the same object, so the app
       // doesn't re-render for nothing (phones notice).
       if (rate) setFx((prev) => (prev && prev.usdtZar === rate.usdtZar && prev.source === rate.source ? prev : rate));
@@ -147,6 +172,7 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
       if (!estate) {
         estateRef.current = null;
         snapKey.current = null;
+        setCurrent(null);
         setSnap(null);
         setPhase("empty");
         return;
@@ -154,6 +180,7 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
       const next = await service.getEstate(estate);
       if (seq !== loadSeq.current) return;
       estateRef.current = estate;
+      setCurrent(estate);
       try { window.localStorage.setItem(LAST_ESTATE, estate); } catch { /* ignore */ }
       const key = contentKey(next);
       if (key !== snapKey.current) { snapKey.current = key; setSnap(next); }
@@ -181,6 +208,12 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
     }, isMockService(service) ? 5000 : 15000); // public RPCs rate-limit: poll the chain less often
     return () => window.clearInterval(id);
   }, [service, load]);
+
+  const chooseEstate = useCallback((estate: string) => {
+    chosen.current = { estate, who: `${address}:${sessionRole}`, link: false };
+    try { window.localStorage.setItem(LAST_ESTATE, estate); } catch { /* ignore */ }
+    void load(false);
+  }, [address, sessionRole, load]);
 
   const refresh = useCallback(async () => {
     await load(true);
@@ -245,10 +278,10 @@ export function EstateProvider({ children, errors }: { children: ReactNode; erro
   }, [service, load, notify, explain]);
 
   const value = useMemo<EstateCtx>(() => ({
-    service, isMock: isMockService(service), phase, snap, fx, loadError, session, role: session?.role ?? null, walletUsdt, busy,
+    service, isMock: isMockService(service), phase, snap, estates, estate: current, chooseEstate, fx, loadError, session, role: session?.role ?? null, walletUsdt, busy,
     refresh, run, explain, toasts, notify, dismiss, intent, setIntent,
     agent, openAgent: setAgent, closeAgent: () => setAgent(null), proofOpen, setProofOpen, resetDemo, demoShortcut,
-  }), [demoShortcut, service, phase, snap, fx, loadError, session, walletUsdt, busy, refresh, run, explain, toasts, notify, dismiss, intent, agent, proofOpen, resetDemo]);
+  }), [demoShortcut, service, phase, snap, estates, current, chooseEstate, fx, loadError, session, walletUsdt, busy, refresh, run, explain, toasts, notify, dismiss, intent, agent, proofOpen, resetDemo]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

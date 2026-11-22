@@ -10,7 +10,7 @@
 import { HeartHandshake, Mic } from "@/components/ui/icons";
 import { legacyEntry as copy } from "@/content/legacy";
 import { useEstate } from "@/lib/hooks/estate";
-import { findMoment, pronouns } from "@/lib/legacy/rules";
+import { findMoment, isStandin, pronouns } from "@/lib/legacy/rules";
 import type { LegacyStatus } from "@/lib/legacy/schema";
 import { ButtonLink, Card } from "@/components/ui/primitives";
 import { fmt } from "@/components/shell/copy";
@@ -30,6 +30,8 @@ export function LegacyEntry() {
   if (!snap || (!status && !passive) || (role !== "owner" && role !== "beneficiary")) return null;
   const v = vars(status);
   if (role === "owner") {
+    // Once a passing is reported the book and the voice are sealed: "keep your Legacy Book up to date" would be wrong.
+    if (snap.estate.status !== "Active") return null;
     const ready = Boolean(status?.voice);
     return (
       <Card className="flex flex-wrap items-center gap-3 border-ink">
@@ -42,15 +44,16 @@ export function LegacyEntry() {
       </Card>
     );
   }
-  // Passive (live network, not visited yet): we can't know if a voice exists without a signature, so offer the door.
-  if (status ? !status.voice : snap.estate.status !== "Unlocked") return null;
+  // Passive (live network, not visited yet): we can't know if a book exists without a signature, so offer the door.
+  // Once known, the card shows only when there is a Legacy Book (a stand-in voice reads one with no cloned voice).
+  if (status ? !status.book : snap.estate.status !== "Unlocked") return null;
   const unlocked = status ? status.unlocked : true;
   return (
     <Card className="flex flex-wrap items-center gap-3 border-ink">
       <span className="grid size-11 shrink-0 place-items-center rounded-full border border-ink text-ink" aria-hidden="true"><HeartHandshake className="size-5" /></span>
       <div className="min-w-0 flex-1 basis-48">
         <h2 className="text-body font-semibold">{fmt(copy.childTitle, v)}</h2>
-        <p className="text-small text-ink-2">{unlocked ? fmt(status ? copy.childBody : copy.childMaybe, v) : fmt(copy.childLocked, v)}</p>
+        <p className="text-small text-ink-2">{unlocked ? fmt(status ? (isStandin(status.voice) ? copy.childBodyStandin : copy.childBody) : copy.childMaybe, v) : fmt(copy.childLocked, v)}</p>
       </div>
       {unlocked && <ButtonLink href="/legacy" small>{fmt(copy.childCta, v)}</ButtonLink>}
     </Card>
@@ -62,7 +65,7 @@ export function MilestoneMoment() {
   const { status, passive } = useLegacyStatus({ passive: true });
   const { play, stop, playing } = useLegacyPlayer();
   if (role !== "beneficiary" || !snap || !session || snap.estate.status !== "Unlocked") return null;
-  if (status && (!status.voice || !status.unlocked)) return null;
+  if (status && (!status.book || !status.unlocked)) return null;
   if (!status && !passive) return null;
   const v = vars(status);
   const uni = new Set(snap.payees.filter((p) => p.kind === "University").map((p) => p.wallet));
@@ -101,7 +104,7 @@ export function MilestoneMoment() {
         </div>
         <PlayButton playing={playing === m.id} onPlay={() => void listen()} onStop={stop} label={fmt(copy.moment.play, v)} stopLabel={copy.moment.stop} />
       </div>
-      <DisclosureLabel className="mt-3" text={fmt(copy.moment.label, v)} simulated={Boolean(status.voice?.simulated)} simulatedText={fmt(copy.moment.simulated, v)} />
+      <DisclosureLabel className="mt-3" text={fmt(copy.moment.label, v)} simulated={isStandin(status.voice)} simulatedText={fmt(copy.moment.simulated, v)} />
     </Card>
   );
 }
@@ -111,12 +114,12 @@ export function LegacySheetLink({ onGo }: { onGo?: () => void }) {
   const { snap } = useEstate();
   const { status, passive } = useLegacyStatus({ passive: true });
   if (role !== "beneficiary" || snap?.estate.status !== "Unlocked") return null;
-  if (status ? !status.voice : !passive) return null;
+  if (status ? !status.book : !passive) return null;
   const v = vars(status);
   return (
     <div className="w-full rounded-md border border-ink p-3 text-left">
       <ButtonLink href="/legacy" small variant="secondary" onClick={onGo}><HeartHandshake className="size-4" aria-hidden="true" />{fmt(copy.sheetCta, v)}</ButtonLink>
-      <p className="mt-1.5 text-[0.75rem] text-ink-2">{fmt(copy.sheetHint, v)}</p>
+      <p className="mt-1.5 text-[0.75rem] text-ink-2">{fmt(status && isStandin(status.voice) ? copy.sheetHintStandin : copy.sheetHint, v)}</p>
     </div>
   );
 }

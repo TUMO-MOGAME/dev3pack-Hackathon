@@ -38,7 +38,8 @@ export function useNudges(): NudgesApi {
     if (!wantsLegacy || !service || !estate) return;
     let alive = true;
     // The Legacy Book helpers are only needed here, so they load with the book rather than with every page.
-    Promise.all([service.legacyStatus(estate), import("@/lib/legacy/rules")]).then(([st, { milestonesFor }]) => {
+    // A background read on every page: quiet, so a locked wallet is never asked for its PIN here (no card then).
+    Promise.all([service.legacyStatus(estate, { quiet: true }), import("@/lib/legacy/rules")]).then(([st, { milestonesFor }]) => {
       if (!alive) return;
       const hint: LegacyHint | null = st.book
         ? { calledBy: st.book.calledBy, milestones: milestonesFor(st.book, st.childId).filter((m) => m.kind === "firstFees").map((m) => ({ id: m.id, title: m.title })) }

@@ -3,7 +3,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import bs58 from "bs58";
 import { consentLine, legacyBookSchema, sniffAudio, validateVoiceInput, matchChild, type VoiceInput } from "./schema";
 import { demoLegacyBook, DEMO_MILESTONE_UCT } from "./demo-book";
-import { disclosureLine, findMoment } from "./rules";
+import { disclosureLine, findMoment, isStandin, starterBook } from "./rules";
 import { authMessage, encodeAuth, AUTH_HEADER } from "./auth-message";
 import { authorize, verifyEd25519 } from "./server/auth";
 import { HttpError } from "../api/http";
@@ -64,6 +64,12 @@ describe("what the voice says", () => {
     expect(disclosureLine(book)).toBe("This is Heirloom. Next you will hear your dad's own words, in his voice: an AI copy made with his consent.");
     expect(disclosureLine({ calledBy: "Mama", pronoun: "she" })).toBe("This is Heirloom. Next you will hear your mama's own words, in her voice: an AI copy made with her consent.");
   });
+  it("with no cloned voice, the disclosure says a stand-in reads the words (never \"in his voice\")", () => {
+    expect(disclosureLine(book, true)).toBe("This is Heirloom. Next you will hear your dad's own words, read by a stand-in voice, not his own.");
+    expect(isStandin(null)).toBe(true);
+    expect(isStandin({ ownerName: "T", consentedAt: 1, samples: 0, simulated: true })).toBe(true);
+    expect(isStandin({ ownerName: "T", consentedAt: 1, samples: 4, simulated: false })).toBe(false);
+  });
   it("ties the UCT fee message to the first-fees moment", () => {
     expect(findMoment(book, lerato, "firstFees")?.id).toBe(DEMO_MILESTONE_UCT);
     expect(findMoment(book, book.children[1], "firstFees")).toBeNull();
@@ -104,5 +110,27 @@ describe("request authorisation", () => {
     await expect(authorize(req({ estate, wallet, ts: stale, sig }), "book.read", "h")).rejects.toMatchObject({ code: "expired" });
     const wrong = sign(null, Buffer.from(authMessage("book.write", estate, wallet, ts, "h")), privateKey).toString("hex");
     await expect(authorize(req({ estate, wallet, ts, sig: wrong }), "book.read", "h")).rejects.toMatchObject({ status: 401 });
+  });
+});
+
+describe("the demo book fits the family story", () => {
+  it("never asks the children to phone Gogo Martha, who passed in 2019 (the tree)", () => {
+    const words = [...book.phrases, ...book.milestones.map((m) => m.text)].join(" ");
+    expect(words).not.toMatch(/phone your gogo/i);
+    expect(words).toMatch(/Gogo's grave/);
+  });
+});
+
+describe("a Legacy Book without a cloned voice", () => {
+  it("starts empty with one entry per family member (wallets kept), and passes the schema", () => {
+    const b = starterBook("Lerato Mokoena", [
+      { label: "Amahle Mokoena (daughter)", wallet: "AmAhLe1111111111111111111111111111111111111" },
+      { label: "Amahle Dlamini" }, { label: "" },
+    ]);
+    expect(b.children.map((c) => [c.id, c.name, c.wallet])).toEqual([
+      ["amahle", "Amahle Mokoena", "AmAhLe1111111111111111111111111111111111111"], ["amahle-2", "Amahle Dlamini", undefined],
+    ]);
+    expect(b.milestones).toEqual([]);
+    expect(legacyBookSchema.safeParse(b).success).toBe(true);
   });
 });

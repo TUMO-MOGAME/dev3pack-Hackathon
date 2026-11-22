@@ -4,14 +4,17 @@ import { HeartHandshake, Pause, Phone, Play, ShieldCheck } from "@/components/ui
 import type { LegacySafetyCopy } from "@/content/legacy";
 import { fmt } from "@/components/shell/copy";
 
-/** Persistent "AI voice" label (rule 3). Always visible while the legacy voice is on screen. */
+/**
+ * Persistent "AI voice" label (rule 3). Always visible while the legacy voice is on screen.
+ * With no cloned voice (a stock stand-in reads the words) only the stand-in statement shows: saying "AI voice,
+ * created with consent" next to it would contradict it.
+ */
 export function DisclosureLabel({ text, simulated, simulatedText, className }: { text: string; simulated: boolean; simulatedText: string; className?: string }) {
   return (
     <div className={clsx("flex flex-wrap items-center gap-2", className)}>
-      <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-ink bg-surface px-3 text-small font-semibold text-ink">
-        <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />{text}
+      <span className={clsx("inline-flex min-h-7 items-center gap-1.5 rounded-full border border-ink bg-surface px-3 text-small font-semibold text-ink", simulated && "border-dashed")}>
+        <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />{simulated ? simulatedText : text}
       </span>
-      {simulated && <span className="inline-flex min-h-7 items-center rounded-full border border-dashed border-ink bg-surface px-3 text-small font-semibold text-ink">{simulatedText}</span>}
     </div>
   );
 }

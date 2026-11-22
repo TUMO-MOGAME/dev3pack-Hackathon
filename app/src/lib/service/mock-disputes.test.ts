@@ -1,7 +1,7 @@
 /** Disputes (U9) and yearly caps in the mock service: the twin of the program's rules, one test per check. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockService, DEMO_PERSONAS } from "./mock";
-import { currentPeriod, effectiveStatus, openDisputeOn, yearlyLeft, YEAR_SECS } from "../disputes/types";
+import { currentPeriod, disputesVotedBy, effectiveStatus, openDisputeOn, yearlyLeft, YEAR_SECS } from "../disputes/types";
 
 type Svc = ReturnType<typeof createMockService>;
 const P = (key: string) => DEMO_PERSONAS.find((p) => p.key === key)!;
@@ -46,6 +46,11 @@ describe("disputes on a claim", () => {
     act(svc, "david"); await svc.resolveDispute(estate, d.address, true);
     const after = await snap();
     expect(after.disputes![0].status).toBe("Upheld");
+    // Inbox → Handled: each voter sees the dispute they decided; the one who raised it (not a voter) doesn't.
+    const idx = (k: string) => after.estate.verifiers.indexOf(P(k).address);
+    expect(disputesVotedBy(after.disputes, idx("nomsa")).map((x) => x.address)).toEqual([d.address]);
+    expect(disputesVotedBy(after.disputes, idx("david")).map((x) => x.address)).toEqual([d.address]);
+    expect(disputesVotedBy(after.disputes, -1)).toEqual([]);
     expect(after.claims.find((c) => c.address === claim)!.status).toBe("Rejected");
     await expect(svc.executeClaim(estate, claim)).rejects.toThrow(/^BadStatus/);
   });

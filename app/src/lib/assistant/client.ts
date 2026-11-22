@@ -20,9 +20,9 @@ export interface AssistantResult {
 
 const fill = (s: string, v: Record<string, string>) => s.replace(/\{(\w+)\}/g, (_, k: string) => v[k] ?? "");
 
-export async function interpretRequest(text: string, service: HeirloomService, rate: number | null, copy: AssistantCopy["wallet"]): Promise<AssistantResult> {
+export async function interpretRequest(text: string, service: HeirloomService, rate: number | null, copy: AssistantCopy["wallet"], estate?: string): Promise<AssistantResult> {
   const [family, payees, usdtZar] = await Promise.all([
-    service.savedRecipients().catch(() => [] as SavedRecipient[]),
+    service.savedRecipients(estate).catch(() => [] as SavedRecipient[]),
     Promise.resolve().then(() => service.billPayees()).catch(() => [] as BillPayee[]),
     rate ? Promise.resolve(rate) : service.getFx().then((f) => f.usdtZar).catch(() => null),
   ]);

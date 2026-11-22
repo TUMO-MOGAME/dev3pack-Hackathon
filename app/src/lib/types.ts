@@ -62,6 +62,9 @@ export interface Payee {
   name: string; // e.g. "University of Cape Town"
 }
 
+/** How often a scheduled payment repeats ("minute" exists for demos). */
+export type Recurrence = "minute" | "week" | "month" | "term" | "year";
+
 export interface Rule {
   address: Base58;
   id: number;
@@ -79,6 +82,12 @@ export interface Rule {
   intervalSecs: number;
   nextDue: number | null;
   fixedPayee: Base58 | null;
+  /**
+   * The interval the owner signed ("month"), when it is known apart from intervalSecs: the demo runs schedules on a
+   * fast demo clock (60 s), so the signed plan must not read "every minute". The mock keeps it from the will draft;
+   * chain accounts don't store it (chain rules fall back to the interval in seconds).
+   */
+  every?: Recurrence;
   /** Optional cap per 12-month period (e.g. school fees up to N a year), on top of the per-claim and lifetime caps. */
   yearlyCap?: YearlyCap | null;
 }
@@ -161,7 +170,7 @@ export interface WillDraft {
     validUntil: string; // ISO date
     notes: string;
     startsNow: boolean; // living plan (pay while alive) vs legacy (after death)
-    recurring?: { amountUsdt: number; every: "minute" | "week" | "month" | "term" | "year"; payeeName: string };
+    recurring?: { amountUsdt: number; every: Recurrence; payeeName: string };
   }[];
   assets: {
     title: string;
@@ -186,6 +195,8 @@ export interface CarValuation {
   highUsdt: number;
   comparables: { title: string; priceZar: number; source: string; url?: string }[];
   rationale: string;
+  /** True when no live listings were checked (the time budget ran out): the figures are Heirloom's own estimate. */
+  estimate?: boolean;
 }
 
 export interface OfferRanking {

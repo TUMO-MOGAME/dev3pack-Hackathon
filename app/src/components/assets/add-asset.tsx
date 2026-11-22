@@ -56,6 +56,8 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
   const [description, setDescription] = useState("");
   const [valuing, setValuing] = useState(false);
   const [valuation, setValuation] = useState<CarValuation | null>(null);
+  // Shown beside the valuation button, not with the form's errors further down, so a failed valuation is seen.
+  const [valuationError, setValuationError] = useState<string | null>(null);
   const [asking, setAsking] = useState("");
   const [floor, setFloor] = useState("");
   const [hardship, setHardship] = useState("");
@@ -84,15 +86,16 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
   const value = async (ev?: FormEvent) => {
     ev?.preventDefault();
     if (!service) return;
-    setValuing(true); setError(null);
+    setValuing(true); setError(null); setValuationError(null);
     try {
       const v = await service.valueCar({ make, model, year: Number(year), mileageKm: num(mileage), condition, kind });
       setValuation(v);
       setAsking(String(v.suggestedAskingUsdt));
       setFloor(String(v.lowUsdt));
       setHardship(String(Math.round(v.lowUsdt * 0.84 / 50) * 50));
-    } catch (e) {
-      setError(explain(e).message);
+    } catch {
+      // A timeout or a busy agent: the owner can try again or type the prices.
+      setValuationError(r.valuationFailed);
     } finally {
       setValuing(false);
     }
@@ -183,6 +186,7 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
                 <Sparkles className="size-5" aria-hidden="true" />{valuing ? r.valuing : valuation ? r.revalue : r.value}
               </Button>
             </form>
+            {valuationError && !valuing && <p role="alert" className="mt-3 border-l-4 border-ink pl-2 text-small font-semibold text-ink">{valuationError}</p>}
             <p className="sr-only" role="status" aria-live="polite">{valuing ? r.valuing : valuation ? `${r.valuationTitle}: ${valuation.suggestedAskingUsdt} USD₮` : ""}</p>
           </Card>
         )}
@@ -196,8 +200,8 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
               </div>
               <Money base={toBase(valuation.suggestedAskingUsdt)} rate={rate} size="xl" className="mt-1" />
               <p className="mt-1 text-small text-ink-2">{fmt(r.range, { low: formatUsdt(toBase(valuation.lowUsdt), { decimals: 0 }), high: formatUsdt(toBase(valuation.highUsdt), { decimals: 0 }) })}</p>
-              <p className="mt-3">{valuation.rationale}</p>
-              <h3 className="mt-4 font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{r.comparables}</h3>
+              <p className="mt-3">{valuation.estimate ? r.estimateNote : valuation.rationale}</p>
+              {valuation.comparables.length > 0 && <h3 className="mt-4 font-sans text-small font-semibold uppercase tracking-[0.12em] text-ink-2">{r.comparables}</h3>}
               <ul className="mt-1">
                 {valuation.comparables.map((c) => (
                   <li key={c.title} className="flex items-center justify-between gap-3 border-b border-line/70 py-2 text-small last:border-0">

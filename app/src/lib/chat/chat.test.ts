@@ -84,6 +84,12 @@ describe("deriveNudges", () => {
     expect(n.secondary).toEqual({ label: chatCopy().nudges.dismiss, dismiss: true });
   });
 
+  it("scheduled-due: to the person it is for, it says \"Your\", not their own name", () => {
+    const [n] = deriveNudges(snapshot({ rules: [books()] }), "beneficiary", NOW, { address: LERATO }).filter((x) => x.kind === "scheduled-due");
+    expect(n.body).toMatch(/^Your books payment \(85 USD₮/);
+    expect(n.body).not.toContain("Lerato's");
+  });
+
   it("scheduled-due: not before it's due, not for another child, not for a buyer, not paused during a death report", () => {
     expect(kinds(deriveNudges(snapshot({ rules: [books({ nextDue: NOW + 10 })] }), "owner", NOW))).not.toContain("scheduled-due");
     expect(kinds(deriveNudges(snapshot({ rules: [books()] }), "beneficiary", NOW, { address: "someone-else" }))).not.toContain("scheduled-due");

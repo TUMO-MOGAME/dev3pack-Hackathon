@@ -108,6 +108,8 @@ export const common = {
       done: { title: "The story is complete", body: "Open Proof to see every receipt, or reset and try the hardship path." },
     },
   },
+  /** The estate switcher, when a wallet belongs to more than one estate (components/shell/estate-switcher.tsx). */
+  estateSwitcher: { label: "Estate", option: "{name} · {role}", yours: "My own plan", other: "A listed estate" },
   gate: {
     loading: "Loading the estate",
     walletLoading: "Opening your wallet",
@@ -182,6 +184,8 @@ export const common = {
     reviewing: "The agent is reading the document",
     reviewingSteps: ["Checking the document type", "Reading names, dates and amounts", "Looking for signs of editing", "Writing a report for the trusted people"],
     advisory: "The agent only recommends. A trusted person decides.",
+    /** Under a report the agent did not accept: nothing went to the trusted people, so say what happens next instead. */
+    advisoryRejected: "The agent only checks the document. Send a clear copy and a trusted person decides.",
   },
   blocked: {
     title: "Blocked by the contract",

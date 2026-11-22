@@ -58,7 +58,7 @@ export function ReportCard({ report, compact = false }: { report: AgentReport; c
       )}
 
       <p className="mt-3 text-[0.75rem] text-ink-2">
-        {c.advisory} · {c.hash}: <span className="font-mono">{shortAddress(report.reportHash, 6)}</span>
+        {report.verdict === "reject" ? c.advisoryRejected : c.advisory} · {c.hash}: <span className="font-mono">{shortAddress(report.reportHash, 6)}</span>
       </p>
     </section>
   );

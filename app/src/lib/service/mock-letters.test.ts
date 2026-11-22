@@ -92,10 +92,14 @@ describe("mock letters", () => {
     const everyday = snap.rules.find((r) => r.category === "General" && r.beneficiary === P("lerato").address)!;
     const ask = snap.claims.find((c) => c.rule === everyday.address && c.status === "Open")!;
     await svc.saveLetter(E, letter({ opens: { kind: "payment", rule: everyday.address } }), 1);
+    // A claim rule has no set payment: its per-claim limit is never shown as the gift.
+    expect((await svc.listLetters(E)).letters.find((l) => l.id === letter().id)!.hint.giftUsdt).toBeUndefined();
     await svc.ownerApproveClaim(E, ask.address);
     await svc.executeClaim(E, ask.address);
     svc.as("lerato");
-    expect((await svc.listLetters(E)).letters.find((l) => l.id === letter().id)?.state).toBe("open");
+    const opened = (await svc.listLetters(E)).letters.find((l) => l.id === letter().id)!;
+    expect(opened.state).toBe("open");
+    expect(opened.hint.giftUsdt).toBe(Number(ask.amount) / 1e6); // the amount actually paid
     svc.as("sipho");
     expect(ids((await svc.listLetters(E)).letters)).not.toContain(letter().id);
   });

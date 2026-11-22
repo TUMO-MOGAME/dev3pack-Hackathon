@@ -27,7 +27,7 @@ export function demoLegacyBook(wallets: Partial<Record<"lerato" | "sipho" | "nal
       "Hamba kahle, and do it properly.",
       "Slowly, slowly catches the monkey.",
       "Lift as you rise.",
-      "Phone your gogo on Sunday.",
+      "Phone Uncle Bongani on Sundays.",
     ],
     guidance: {
       study: "Go to every lecture, even the early ones. Sit in front. Ask the tutor when you don't understand; that is what they are paid for.",
@@ -73,7 +73,7 @@ export function demoLegacyBook(wallets: Partial<Record<"lerato" | "sipho" | "nal
       },
       {
         id: "all-hard-day", childId: "all", kind: "hardDay", title: "For a hard day",
-        text: "Some days will be heavy. That's alright. Phone your gogo, phone Uncle Bongani, phone each other. Have something warm to eat and sleep early. Tomorrow you try again. Slowly, slowly catches the monkey.",
+        text: "Some days will be heavy. That's alright. Phone Uncle Bongani, phone each other, and visit Gogo's grave when you miss her. Have something warm to eat and sleep early. Tomorrow you try again. Slowly, slowly catches the monkey.",
       },
       {
         id: "all-graduation", childId: "all", kind: "graduation", title: "Graduation day",
@@ -85,7 +85,7 @@ export function demoLegacyBook(wallets: Partial<Record<"lerato" | "sipho" | "nal
       },
       {
         id: "naledi-birthday", childId: "naledi", kind: "birthday", title: "Happy birthday, my star",
-        text: "Happy birthday, Naledi. Another year of you shining. Eat cake, laugh loud, and phone your gogo.",
+        text: "Happy birthday, Naledi. Another year of you shining. Eat cake, laugh loud, and phone Uncle Bongani so he can sing for you.",
       },
     ],
   };

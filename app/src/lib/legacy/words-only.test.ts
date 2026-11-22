@@ -70,6 +70,24 @@ describe("mock service: words only", () => {
   }, 10_000);
 });
 
+describe("mock service: a Legacy Book without a cloned voice", () => {
+  it("the owner writes a book with no voice; the child hears it read by the stand-in, with the stand-in disclosure", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("funded");
+    act(svc, "thabo");
+    const [{ estate }] = await svc.listEstatesFor(P("thabo").address);
+    const book = (await svc.legacyStatus(estate)).book!;
+    await svc.deleteLegacyVoice(estate);
+    await svc.deleteLegacyBook(estate);
+    expect(await svc.legacyStatus(estate)).toMatchObject({ voice: null, book: null });
+    await svc.saveLegacyBook(estate, book); // no voice needed to write it
+    expect((await svc.legacyStatus(estate)).voice).toBeNull();
+    // The owner previews a message: the stand-in reads the demo's prepared words.
+    expect(await svc.legacySpeak(estate, { milestoneId: DEMO_MILESTONE_UCT })).toMatchObject({ voice: "parent", simulated: true, audioUrl: demoVoiceUrl(DEMO_MILESTONE_UCT) });
+    expect(demoVoiceText("disclosure")?.text).toMatch(/read by a stand-in voice, not his own/);
+  }, 10_000);
+});
+
 describe("demo voice: ElevenLabs lines only, never the browser voice", () => {
   it("knows only the demo book's fixed lines", () => {
     expect(demoVoiceText("sample")).toEqual({ text: legacyVoiceSample, voice: "parent" });

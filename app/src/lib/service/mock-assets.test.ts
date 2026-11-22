@@ -142,6 +142,14 @@ describe("selling after Thabo's passing (escrowed offers, any asset)", () => {
     expect(sold.status).toBe("Sold");
   });
 
+  it("an offer carries the buyer's name; a name the estate already knows wins", async () => {
+    const { svc, estate, car } = await start("listed");
+    act(svc, "zanele");
+    await svc.placeOffer(estate, car.address, 13000, "Someone Else");
+    const mine = (await svc.getEstate(estate)).offers.find((o) => o.asset === car.address && o.buyer === P("zanele").address)!;
+    expect(mine.buyerName).toBe("Pieter van Wyk");
+  });
+
   it("lowOffers: no offer reaches the minimum, so the sale is blocked", async () => {
     const { svc, estate, car } = await start("lowOffers");
     act(svc, "nomsa");

@@ -5,7 +5,7 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 import { getCoder } from "./idl";
 import type { Raw } from "./decoders";
 import { assembleDisputes, decodeYearCap, isDisputeRaw } from "./disputes";
-import { effectiveStatus, YEAR_SECS } from "../disputes/types";
+import { disputesVotedBy, effectiveStatus, YEAR_SECS } from "../disputes/types";
 import type { Estate, Rule } from "../types";
 
 const k = () => Keypair.generate().publicKey;
@@ -36,6 +36,10 @@ describe("disputes from Objection accounts", () => {
     });
     expect(effectiveStatus(out.disputes[0], 1_119)).toBe("Open");
     expect(effectiveStatus(out.disputes[0], 1_120)).toBe("Lapsed");
+    // Inbox → Handled on devnet: the voters (trusted people 0 and 2) see it, the one who didn't vote (1) doesn't.
+    expect(disputesVotedBy(out.disputes, 0).map((d) => d.address)).toEqual(["D1"]);
+    expect(disputesVotedBy(out.disputes, 2).map((d) => d.address)).toEqual(["D1"]);
+    expect(disputesVotedBy(out.disputes, 1)).toEqual([]);
   });
 
   it("a monitor's objection is not a dispute; a verifier disputer gets their trusted-person name", async () => {

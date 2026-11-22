@@ -23,6 +23,7 @@ import { Avatar } from "./avatar";
 import { CopyProvider, fmt, useCopy } from "./copy";
 import { PinGate } from "./pin-gate";
 import { DemoGuide } from "./demo-guide";
+import { EstateSwitcher } from "./estate-switcher";
 import { Sidebar } from "./sidebar";
 import { applyTheme, useTheme } from "./theme";
 import { LanguageSwitcher } from "@/components/site/language-switcher";
@@ -251,6 +252,7 @@ function Chrome({ children }: { children: ReactNode }) {
           id="main" tabIndex={-1}
           className={clsx("min-w-0 flex-1 outline-none", framed && isChat ? "flex flex-col" : clsx("mx-auto w-full max-w-6xl px-4 pt-5", framed ? "pb-28 lg:pb-16" : "pb-10"))}
         >
+          {framed && <EstateSwitcher inset={isChat} />}
           {children}
         </main>
       </div>

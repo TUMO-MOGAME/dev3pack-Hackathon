@@ -71,7 +71,7 @@ export function RaiseDispute({ kind, target }: { kind: DisputeKind; target: Base
   if (!open) {
     return (
       <>
-        <Button variant="secondary" small onClick={() => setOpen(true)}><Gavel className="size-4" aria-hidden="true" />{r.cta}</Button>
+        <Button variant="secondary" small onClick={() => setOpen(true)}><Gavel className="size-4" aria-hidden="true" />{kind === "Unlock" ? r.ctaUnlock : r.cta}</Button>
         <ActionResult receipt={receipt} refusal={refusal} />
       </>
     );

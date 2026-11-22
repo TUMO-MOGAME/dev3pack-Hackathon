@@ -13,6 +13,8 @@ export const disputes = {
 
   raise: {
     cta: "Dispute this",
+    /** On the waiting-period step: it stops the estate unlocking, so it must not read like a claim dispute. */
+    ctaUnlock: "Dispute the unlock",
     titleClaim: "Dispute this payment",
     titleUnlock: "Dispute the unlock",
     body: "A dispute pauses it until two trusted people decide. If they don't decide within {period}, the dispute lapses and the step goes ahead.",

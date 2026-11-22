@@ -25,7 +25,8 @@ import type { AskNote } from "../ask/types";
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, mediaRootHex } from "../assets/spec";
 import { DEMO_ASSETS } from "./demo-asset-photos";
-import { shortName } from "../names";
+import { fullName, shortName } from "../names";
+import { waitingSecsFor } from "../will-summary";
 import { DEMO_FX, estimateValuation } from "./mock-valuation";
 import { checkInPlan, heartbeatFor } from "../checkin";
 import type { BillDetails, BillPayee } from "../bills/types";
@@ -121,7 +122,7 @@ const PAYEES = [
 
 export { DEMO_FX };
 /** Demo clock: a 30 day waiting period lasts 60 seconds, and every schedule repeats every 60 seconds. */
-export const DEMO_SECONDS_PER_DAY = 2;
+export { DEMO_SECONDS_PER_DAY } from "../will-summary";
 export const DEMO_INTERVAL_SECS = 60;
 
 /* ---------- state ---------- */
@@ -325,7 +326,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     e.verifiers = [0, 1, 2].map((i) => draft.verifiers[i]?.wallet ?? s.bind[vKeys[i]]) as [Base58, Base58, Base58];
     e.verifierNames = [0, 1, 2].map((i) => draft.verifiers[i]?.name ?? name(e.verifiers[i])) as [string, string, string];
     e.verifiers.forEach((v, i) => { s.names[v] = e.verifierNames[i]; });
-    e.waitingPeriodSecs = Math.max(5, Math.round(draft.waitingPeriodDays * DEMO_SECONDS_PER_DAY));
+    e.waitingPeriodSecs = waitingSecsFor(draft.waitingPeriodDays, "mock");
     e.status = "Active";
     e.lastHeartbeat = nowSecs();
     e.willHash = fakeHash();
@@ -366,6 +367,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
         startsNow: r.startsNow,
         recurringAmount: r.recurring && fixed ? toBase(r.recurring.amountUsdt) : 0n,
         intervalSecs: r.recurring && fixed ? DEMO_INTERVAL_SECS : 0,
+        // The demo clock pays every 60 s; the signed plan still reads the interval the owner chose.
+        ...(r.recurring && fixed ? { every: r.recurring.every } : {}),
         // Living schedules are due straight away; legacy schedules start when the estate unlocks.
         nextDue: r.recurring && fixed && r.startsNow ? nowSecs() : null,
         fixedPayee: r.recurring && fixed ? fixed.wallet : null,
@@ -674,7 +677,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     return t;
   }
 
-  function placeOffer(assetAddr: Base58, amountUsdt: number): TxResult {
+  function placeOffer(assetAddr: Base58, amountUsdt: number, buyerName?: string): TxResult {
     needCreated();
     const a = s.snap.assets.find((x) => x.address === assetAddr) ?? fail("BadStatus", "That listing does not exist.");
     need(a.status === "Listed", "ListingClosed", "This listing is not open for offers.");
@@ -686,7 +689,8 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     need(available >= amt, "InsufficientFunds", "Your wallet does not hold that much USD₮.");
     if (existing) s.snap.offers = s.snap.offers.filter((o) => o !== existing);
     s.balances[me()] = available - amt;
-    s.names[me()] = s.names[me()] ?? actor?.label ?? "Buyer";
+    // The name the buyer gave with the offer, unless the estate already names this wallet.
+    s.names[me()] = s.names[me()] ?? (buyerName?.trim().slice(0, 64) || actor?.label || "Buyer");
     s.snap.offers.push({ address: fakeAddr(), asset: a.address, buyer: me(), buyerName: name(me()), amount: amt, createdAt: nowSecs() });
     const t = tx();
     log("OfferPlaced", `${name(me())} put ${usd(amt)} in escrow as an offer`, t, amt);
@@ -818,9 +822,10 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
 
   function report(purpose: "death" | "claim" | "hardship" | "seat-death" | "fallback-death", file: File, ctx: { amountUsdt?: number; payee?: string; who?: string; person?: string }): AgentReport {
     const bad = suspicious(file);
-    const who = ctx.who ?? (actor ? actor.label : "Applicant");
+    // A document carries plain names: the app's role labels ("Lerato Mokoena (daughter)") never show as extracted data.
+    const who = fullName(ctx.who ?? (actor ? actor.label : "Applicant"));
     if (purpose === "seat-death" || purpose === "fallback-death") {
-      const person = ctx.person ?? "the person named";
+      const person = ctx.person ? fullName(ctx.person) : "the person named";
       return {
         verdict: bad ? "reject" : "approve", documentType: "death_certificate",
         extracted: { "Full name": person, "Date of death": today(), "Issued by": "Department of Home Affairs", "Form": "DHA-5 (abridged death certificate)", "Serial number": "C 5528 1307", "Reported by": who },
@@ -835,14 +840,15 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
       };
     }
     if (purpose === "death") {
+      const ownerName = fullName(est().ownerName);
       return {
         verdict: bad ? "reject" : "approve", documentType: "death_certificate",
-        extracted: { "Full name": est().ownerName, "Date of death": today(), "Issued by": "Department of Home Affairs", "Form": "DHA-5 (abridged death certificate)", "Serial number": "C 4471 0892", "Reported by": who },
+        extracted: { "Full name": ownerName, "Date of death": today(), "Issued by": "Department of Home Affairs", "Form": "DHA-5 (abridged death certificate)", "Serial number": "C 4471 0892", "Reported by": who },
         redFlags: bad ? ["The typeface in the name field differs from the rest of the form", "The serial number does not follow the Home Affairs pattern", "No official stamp is visible"] : [],
         confidence: bad ? 0.31 : 0.94,
         summary: bad
           ? "This does not look like a genuine Home Affairs death certificate. Parts of the form appear to have been edited. I have not passed it to the trusted people."
-          : `This is an abridged death certificate for ${est().ownerName}, issued by Home Affairs. The name matches the estate owner, the stamp and serial number are present, and I found nothing unusual. Two trusted people must still confirm.`,
+          : `This is an abridged death certificate for ${ownerName}, issued by Home Affairs. The name matches the estate owner, the stamp and serial number are present, and I found nothing unusual. Two trusted people must still confirm.`,
         reportHash: fakeHash(),
       };
     }
@@ -854,7 +860,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
         redFlags: bad ? ["The amount due appears to have been altered", "The bank reference does not match the institution's format"] : [],
         confidence: bad ? 0.38 : 0.92,
         summary: bad
-          ? "The statement appears to have been altered, so I have declined this claim. You can submit a clean copy from the institution."
+          ? "The statement appears to have been altered, so I could not accept it and have not passed it to the trusted people. Nothing was paid. You can submit a clear copy from the institution."
           : `This is a fee statement from ${ctx.payee ?? "the institution"} in ${who}'s name. The amount due is ${zar(amount)}, which matches the ${amount.toLocaleString("en-ZA")} USD₮ requested at today's rate. The payee is on the approved list.`,
         reportHash: fakeHash(),
       };
@@ -1304,7 +1310,7 @@ export function createMockService(opts: { instant?: boolean } = {}): MockService
     executeClaim: (_e, claim) => mutate(1100, () => executeClaim(claim)),
 
     listAsset: (_e, asset, durationSecs) => mutate(900, () => listAsset(asset, durationSecs)),
-    placeOffer: (_e, asset, amountUsdt) => mutate(1000, () => placeOffer(asset, amountUsdt)),
+    placeOffer: (_e, asset, amountUsdt, buyerName) => mutate(1000, () => placeOffer(asset, amountUsdt, buyerName)),
     withdrawOffer: (_e, asset) => mutate(800, () => withdrawOffer(asset)),
     async acceptBestOffer(_e, asset) {
       const { t, ranking } = await mutate(1600, () => acceptBest(asset));

@@ -30,10 +30,12 @@ import { loadWallets } from "../wallet/store";
 import { explorerTx, fromBase, toBase } from "../format";
 import { hashJson, sha256Hex } from "../agent/hash";
 import type { EstateMeta } from "../db";
+import { signedMetaRequest } from "../estate-meta/signed";
 import { legacyApi, type LegacySigner } from "../legacy/client";
 import { createChainGuardians, guardianExtras, loadGuardians } from "./chain-guardians";
 import { createChainDisputes, loadDisputes } from "./chain-disputes";
 import { createChainAsk } from "./chain-ask";
+import { estateRecipients, mergeRecipients } from "./recipients";
 import type { TreeService } from "../tree/types";
 import type { LettersService } from "../letters/types";
 import { disabledGuardians, SEAT_MONITOR_OFFSETS } from "../chain/guardians";
@@ -50,7 +52,7 @@ import {
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
 function legacySigner(estate: Base58): LegacySigner {
   const s = getActiveSigner();
-  return { estate, wallet: s.address, sign: (m) => s.signMessage(m) };
+  return { estate, wallet: s.address, sign: (m) => s.signMessage(m), canSignQuietly: s.canSignQuietly ? () => s.canSignQuietly!() : undefined };
 }
 
 // ---------- small helpers ----------
@@ -121,7 +123,7 @@ type Ixs = TransactionInstruction[] | ((feePayer: PublicKey) => TransactionInstr
  * Builds the tx (fee payer = Heirloom's sponsor when available, else the user), WDK signs it (sign-only; partial
  * when sponsored, then the server co-signs), the signature is persisted, then broadcast; returns the receipt.
  */
-async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill">) {
+async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill">, selfPay = false) {
   const signer = getActiveSigner();
   return runPayment(receipts, chainOps(), id, () => signSponsoredOrSelf({
     user: signer.address,
@@ -134,7 +136,8 @@ async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to"
     },
     signPartial: signer.signPartial ? (b64) => signer.signPartial!(b64) : undefined,
     signOnly: (b64) => signer.signOnly(b64),
-    sponsor: sponsorClient,
+    // A self-paid tx (a title mint: the sponsor never pays for mints) doesn't ask the sponsor at all.
+    sponsor: selfPay ? undefined : sponsorClient,
     onFallback: (reason) => console.warn(`Fee sponsor unavailable, paying the fee from the wallet: ${reason}`),
   }), meta);
 }
@@ -143,9 +146,9 @@ async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to"
  * Every user-initiated program tx goes through the same pay-once pipeline and waits for confirmation. `ixs` may depend
  * on the fee payer (e.g. approve_claim lets the sponsor pay the approval stamp's rent when it is the fee payer).
  */
-async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount"> = { kind: "program" }): Promise<TxResult> {
+async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount"> = { kind: "program" }, opts: { selfPay?: boolean } = {}): Promise<TxResult> {
   const id = newPaymentId();
-  const first = await pay(id, ixs, meta);
+  const first = await pay(id, ixs, meta, opts.selfPay);
   const r = first.status === "failed" ? first : await waitForFinal(receipts, chainOps(), id, 60_000, 800);
   if (!r || r.status === "failed") throw new ChainTxError(r?.signature ?? "", r?.error ?? "Transaction failed.");
   if (!r.signature) throw new Error("Transaction was not signed.");
@@ -161,6 +164,20 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 const post = <T>(path: string, body: unknown) =>
   api<T>(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+/**
+ * Saves an estate's names (and, once, the signed will draft), signed by the owner's wallet (lib/estate-meta). The
+ * wallet is usually unlocked right after the txs this follows, so the signature is quiet; a locked wallet asks for
+ * the PIN now.
+ */
+async function saveMeta(meta: EstateMeta, draft?: WillDraft): Promise<void> {
+  const payload = {
+    ownerName: meta.ownerName, verifierNames: meta.verifierNames, assetTitles: meta.assetTitles, buyerNames: meta.buyerNames,
+    ...(draft ? { draft } : {}),
+  };
+  await post("/api/estate-meta", await signedMetaRequest(getActiveSigner(), "save", meta.estate, payload));
+  forget(`meta:${meta.estate}`);
+}
 
 const fileHash = async (f: File) => sha256Hex(new Uint8Array(await f.arrayBuffer()));
 
@@ -193,8 +210,6 @@ async function mustFetch(type: string, address: Base58): Promise<Raw> {
   if (!raw) throw new Error(`${type} ${address.slice(0, 6)}… was not found on-chain.`);
   return raw;
 }
-
-const DEMO_WAIT = Number(process.env.NEXT_PUBLIC_DEMO_WAITING_SECS ?? "");
 
 /**
  * Short-lived memo for reads that rarely change. The public devnet RPC rate-limits hard (HTTP 429), and the
@@ -329,7 +344,7 @@ export function createChainService(): HeirloomService {
       send: (ixs) => send(ixs),
       review: (file, purpose, estate, context, index) => review(file, purpose, estate, context, undefined, false, index),
       getMeta,
-      saveMeta: async (meta) => { await post("/api/estate-meta", meta); forget(`meta:${meta.estate}`); },
+      saveMeta: (meta) => saveMeta(meta),
       requireOwnerOf,
       getEstate: (estate) => service.getEstate(estate),
     }),
@@ -416,7 +431,8 @@ export function createChainService(): HeirloomService {
 
       const estate = estatePda(ctx.programId, owner);
       const willHash = await hashJson(draft);
-      const waiting = Number.isFinite(DEMO_WAIT) && DEMO_WAIT >= 0 ? DEMO_WAIT : Math.round(draft.waitingPeriodDays * 86_400);
+      const { waitingSecsFor } = await import("../will-summary");
+      const waiting = waitingSecsFor(draft.waitingPeriodDays, "chain");
       const txs: TxResult[] = [];
 
       const exists = await fetchAccountRaw("Estate", estate.toBase58());
@@ -461,10 +477,10 @@ export function createChainService(): HeirloomService {
       });
       for (const group of chunk(ruleIxs, 2)) txs.push(await send(group));
 
-      await post("/api/estate-meta", {
+      await saveMeta({
         estate: estate.toBase58(), ownerWallet: owner.toBase58(), ownerName: draft.ownerName,
-        verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string], assetTitles: {}, buyerNames: {}, draft,
-      }).catch(() => undefined); // names are cosmetic; the estate itself is already on-chain
+        verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string], assetTitles: {}, buyerNames: {},
+      }, draft).catch(() => undefined); // names are cosmetic; the estate itself is already on-chain
       return { estate: estate.toBase58(), txs };
     },
 
@@ -479,7 +495,8 @@ export function createChainService(): HeirloomService {
       let nftMint = input.nftMint;
       if (!nftMint) {
         const fresh = await newTitleMint(o);
-        await send(fresh.ixs);
+        // The sponsor refuses mints (422), so the owner pays this one without asking it.
+        await send(fresh.ixs, { kind: "program" }, { selfPay: true });
         nftMint = fresh.mint.toBase58();
       }
       const docHash = input.docFile ? await fileHash(input.docFile) : await sha256Hex(`heirloom:asset:${nftMint}:${input.title}`);
@@ -489,8 +506,7 @@ export function createChainService(): HeirloomService {
       })]);
       const meta = await getMeta(estate);
       if (meta) {
-        await post("/api/estate-meta", { ...meta, assetTitles: { ...meta.assetTitles, [nftMint]: input.title } }).catch(() => undefined);
-        forget(`meta:${estate}`);
+        await saveMeta({ ...meta, assetTitles: { ...meta.assetTitles, [nftMint]: input.title } }).catch(() => undefined);
       }
       return tx;
     },
@@ -673,14 +689,14 @@ export function createChainService(): HeirloomService {
       return out;
     },
 
-    async savedRecipients(): Promise<SavedRecipient[]> {
+    async savedRecipients(estate?: Base58): Promise<SavedRecipient[]> {
       const me = getActiveSigner().address;
-      const seen = new Map<string, SavedRecipient>();
-      for (const w of loadWallets()) if (w.address !== me) seen.set(w.address, { label: w.label, address: w.address, relationship: w.role });
-      for (const r of receipts.list()) {
-        if (r.kind === "p2p" && r.to && r.toLabel && !seen.has(r.to) && r.to !== me) seen.set(r.to, { label: r.toLabel, address: r.to });
-      }
-      return [...seen.values()];
+      // The estate on screen first (its family and trusted people by name), then this device's wallets, then people
+      // paid before.
+      const people = estate ? await service.getEstate(estate).then((s) => estateRecipients(s, me)).catch(() => []) : [];
+      const devices = loadWallets().filter((w) => w.address !== me).map((w) => ({ label: w.label, address: w.address, relationship: w.role }));
+      const paid = receipts.list().filter((r) => r.kind === "p2p" && r.to && r.toLabel && r.to !== me).map((r) => ({ label: r.toLabel!, address: r.to! }));
+      return mergeRecipients(people, devices, paid);
     },
 
     // ----- Pay a bill once: same WDK transfer as a send, with the bill's details on the receipt -----
@@ -702,9 +718,16 @@ export function createChainService(): HeirloomService {
     // ----- Car sale -----
     listAsset: (estate, asset, durationSecs) => post<TxResult>("/api/list-asset", { estate, asset, durationSecs }),
 
-    async placeOffer(estate, asset, amountUsdt) {
-      return send([ix.placeOffer(chainCtx(), pk(estate), pk(asset), pk(getActiveSigner().address), toBase(amountUsdt))],
+    async placeOffer(estate, asset, amountUsdt, buyerName) {
+      const tx = await send([ix.placeOffer(chainCtx(), pk(estate), pk(asset), pk(getActiveSigner().address), toBase(amountUsdt))],
         { kind: "offer", to: asset, toLabel: "Offer escrow", amount: toBase(amountUsdt).toString() });
+      // The buyer's own name beside the offer and on the sale (off-chain; never replaces a name the owner gave).
+      const name = buyerName?.trim().slice(0, 64);
+      if (name && getActiveSigner().canSignQuietly?.() !== false) {
+        await post("/api/estate-meta", await signedMetaRequest(getActiveSigner(), "buyer-name", estate, { asset, name }))
+          .then(() => forget(`meta:${estate}`)).catch(() => undefined);
+      }
+      return tx;
     },
 
     async withdrawOffer(estate, asset) {
@@ -720,7 +743,7 @@ export function createChainService(): HeirloomService {
       return { tx: data.tx, ranking: reviveRanking(data.ranking) };
     },
 
-    legacyStatus: (estate) => legacyApi.status(legacySigner(estate)),
+    legacyStatus: (estate, opts) => legacyApi.status(legacySigner(estate), opts),
     createLegacyVoice: (estate, input) => legacyApi.createVoice(legacySigner(estate), input),
     deleteLegacyVoice: (estate) => legacyApi.deleteVoice(legacySigner(estate)),
     saveLegacyBook: (estate, book) => legacyApi.saveBook(legacySigner(estate), book),

@@ -6,12 +6,12 @@ import { MotionScope } from "@/components/ui/motion-provider";
 import { ArrowRight, Check, FileHeart, HeartPulse, LockOpen, TriangleAlert } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
-import type { EstateSnapshot } from "@/lib/service";
+import type { EstateSnapshot, TxResult } from "@/lib/service";
 import type { AgentReport, Role } from "@/lib/types";
 import { formatUsdt, shortAddress } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
-import { Button, ButtonLink, Card, Consent, Notice, PageHeader } from "@/components/ui/primitives";
+import { Button, ButtonLink, Card, Consent, ExplorerLink, Notice, PageHeader } from "@/components/ui/primitives";
 import { FilePicker, Quorum } from "@/components/ui/client";
 import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
@@ -48,6 +48,8 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
   const { common } = useCopy();
   const { run, busy, session, intent, setIntent } = useEstate();
   const now = useNow();
+  // Kept here, not in the form: once the report is in, the estate leaves "Active" and the form is no longer shown.
+  const [accepted, setAccepted] = useState<{ report: AgentReport; tx: TxResult } | null>(null);
   const e = snap.estate;
   const d = e.death;
   const got = d.attestations.filter(Boolean).length;
@@ -86,7 +88,7 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
     },
     {
       key: "confirmed", title: s.confirmed.title, state: state(confirmed, reported && !confirmed),
-      text: confirmed ? fmt(s.confirmed.done, { got: Math.max(got, e.deathThreshold), need: e.deathThreshold }) : fmt(s.confirmed.todo, { need: e.deathThreshold }),
+      text: confirmed ? fmt(s.confirmed.done, { got: Math.max(got, e.deathThreshold), need: e.deathThreshold, total: e.verifiers.length }) : fmt(s.confirmed.todo, { need: e.deathThreshold, total: e.verifiers.length }),
       extra: reported && !confirmed ? (
         <div className="mt-2"><Quorum approvals={d.attestations} needed={e.deathThreshold} names={e.verifierNames} label={fmt(s.confirmed.progress, { got, need: e.deathThreshold })} /></div>
       ) : undefined,
@@ -174,9 +176,11 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
         ))}
       </ol>
 
-      {e.status === "Active" && !d.certHash && (
+      {accepted ? (
+        <div className="mt-6"><ReportAccepted copy={copy} report={accepted.report} tx={accepted.tx} /></div>
+      ) : e.status === "Active" && !d.certHash && (
         <div ref={reportRef} className="mt-6 scroll-mt-32">
-          {isFamily ? <ReportForm copy={copy} /> : role !== "owner" ? <p className="text-small text-ink-2">{copy.report.onlyFamily}</p> : null}
+          {isFamily ? <ReportForm copy={copy} onAccepted={setAccepted} /> : role !== "owner" ? <p className="text-small text-ink-2">{copy.report.onlyFamily}</p> : null}
         </div>
       )}
       <SuccessionTimeline snap={snap} />
@@ -196,7 +200,19 @@ function CountdownRing({ fraction }: { fraction: number }) {
   );
 }
 
-function ReportForm({ copy }: { copy: Copy }) {
+/** The report went in: what the agent found, and the receipt. */
+function ReportAccepted({ copy, report, tx }: { copy: Copy; report: AgentReport; tx: TxResult }) {
+  const r = copy.report;
+  return (
+    <Card>
+      <Notice tone="ok" icon={<Check className="size-5" aria-hidden="true" />} title={r.acceptedTitle}><p role="status">{r.acceptedBody}</p></Notice>
+      <div className="mt-3"><ReportCard report={report} /></div>
+      {tx.signature && <ExplorerLink className="mt-3" signature={tx.signature} label={r.receipt} srLabel={r.receiptSr} />}
+    </Card>
+  );
+}
+
+function ReportForm({ copy, onAccepted }: { copy: Copy; onAccepted: (r: { report: AgentReport; tx: TxResult }) => void }) {
   const { common } = useCopy();
   const { run, busy } = useEstate();
   const r = copy.report;
@@ -212,6 +228,7 @@ function ReportForm({ copy }: { copy: Copy }) {
     setError(null);
     const res = await run("death", (s, est) => s.submitDeathClaim(est, file));
     if (res.ok && res.value.report.verdict !== "approve") setRejected(res.value.report);
+    else if (res.ok) onAccepted({ report: res.value.report, tx: res.value.tx });
   };
 
   if (busy === "death") return <Reviewing />;

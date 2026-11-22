@@ -10,13 +10,14 @@ import { disclosureLine } from "./rules";
 
 export type DemoVoiceLine = { text: string; voice: "parent" | "heirloom" };
 
-/** Bump when a demo line's words change, so browsers and the CDN fetch the new audio. */
-export const DEMO_VOICE_VERSION = 1;
+/** Bump when a demo line's words change, so browsers and the CDN fetch the new audio (2: no more "phone your gogo"). */
+export const DEMO_VOICE_VERSION = 2;
 
 export function demoVoiceText(line: string): DemoVoiceLine | null {
   const book = demoLegacyBook();
   if (line === "sample") return { text: legacyVoiceSample, voice: "parent" };
-  if (line === "disclosure") return { text: disclosureLine(book), voice: "heirloom" };
+  // The demo has no cloned voice: a stock voice stands in, and the disclosure says so.
+  if (line === "disclosure") return { text: disclosureLine(book, true), voice: "heirloom" };
   const m = book.milestones.find((x) => x.id === line);
   return m ? { text: m.text, voice: "parent" } : null;
 }

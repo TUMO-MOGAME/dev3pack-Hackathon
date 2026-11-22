@@ -6,7 +6,7 @@ import type { LegacyCopy } from "@/content/legacy";
 import type { EstateSnapshot } from "@/lib/service";
 import { useEstate } from "@/lib/hooks/estate";
 import {
-  consentLine, legacyBookSchema, MIN_SAMPLES, MILESTONE_KINDS, GUIDANCE_TOPICS,
+  consentLine, isStandin, legacyBookSchema, MIN_SAMPLES, MILESTONE_KINDS, GUIDANCE_TOPICS, starterBook,
   type LegacyBook, type LegacyStatus, type Milestone,
 } from "@/lib/legacy/schema";
 import { Button, Card, Consent, Field, inputClass, Notice } from "@/components/ui/primitives";
@@ -27,6 +27,9 @@ export function OwnerStudio({ copy, status, snap, reload }: { copy: Copy; status
   const [recording, setRecording] = useState(false);
   const voice = recording ? null : status.voice;
   const step = !voice ? 0 : 3;
+  // The book never waits for a cloned voice: a new owner starts from an empty book, and the labelled stand-in reads
+  // the messages until (unless) they record. The consent and recording steps are unchanged.
+  const book = useMemo(() => status.book ?? (active ? starterBook(snap.estate.ownerName, snap.beneficiaries.filter((b) => b.active)) : null), [status.book, active, snap.estate.ownerName, snap.beneficiaries]);
 
   return (
     <div className="grid gap-5">
@@ -58,8 +61,11 @@ export function OwnerStudio({ copy, status, snap, reload }: { copy: Copy; status
         <VoiceCard copy={copy} status={status} canChange={active} onRerecord={() => setRecording(true)} reload={reload} />
       )}
 
-      {status.book && <BookEditor copy={copy} initial={status.book} readOnly={!active} reload={reload} />}
-      {status.book && voice && <Preview copy={copy} book={status.book} />}
+      {book && active && (isStandin(status.voice) || !status.book) && (
+        <Notice tone="neutral"><p>{[status.book ? "" : copy.owner.book.starterNote, isStandin(status.voice) ? copy.owner.book.standinNote : ""].filter(Boolean).join(" ")}</p></Notice>
+      )}
+      {book && <BookEditor key={status.book ? "saved" : "starter"} copy={copy} initial={book} readOnly={!active} reload={reload} />}
+      {status.book && <Preview copy={copy} book={status.book} />}
     </div>
   );
 }
@@ -226,7 +232,8 @@ function VoiceCard({ copy, status, canChange, onRerecord, reload }: { copy: Copy
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-h3"><Volume2 className="size-5" aria-hidden="true" />{o.title}</h2>
-          <p className="mt-1 text-small text-ink-2">{fmt(o.created, { date: fmtDate(v.consentedAt) })} · {fmt(o.samples, { n: v.samples })}</p>
+          {/* A stand-in voice was not made from recordings: only the stand-in statement below describes it. */}
+          {!v.simulated && <p className="mt-1 text-small text-ink-2">{fmt(o.created, { date: fmtDate(v.consentedAt) })} · {fmt(o.samples, { n: v.samples })}</p>}
         </div>
         {/* The sample line is for the owner while alive (the server refuses it after); hide it rather than fail. */}
         {canChange && <PlayButton playing={playing === "sample"} onPlay={() => void hear()} onStop={stop} label={o.hear} stopLabel={copy.owner.record.stop} disabled={busy === "hear"} />}

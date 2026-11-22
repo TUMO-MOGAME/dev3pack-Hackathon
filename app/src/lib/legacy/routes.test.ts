@@ -127,6 +127,22 @@ describe("/api/legacy routes", () => {
     expect((await DELETE(jsonReq("DELETE", "child"))).status).toBe(403);
     expect((await DELETE(jsonReq("DELETE", "owner"))).status).toBe(200);
   });
+
+  it("no cloned voice: the owner still writes the book, and the stand-in reads it (disclosure says so)", async () => {
+    const { PUT, GET } = await import("@/app/api/legacy/book/route");
+    const { POST: speak } = await import("@/app/api/legacy/speak/route");
+    // The voice was deleted above: write a fresh book from nothing, with no voice at all.
+    const book = { ...demoLegacyBook({ lerato: child }), milestones: [{ id: "m-new", childId: "all", kind: "hardDay" as const, title: "For a hard day", text: "Eat something warm and phone each other." }] };
+    expect((await PUT(jsonReq("PUT", "owner", { book }))).status).toBe(200);
+    const st = await (await GET(jsonReq("GET", "owner"))).json() as { voice: unknown; book: { milestones: { id: string }[] } };
+    expect(st.voice).toBeNull();
+    expect(st.book.milestones.map((m) => m.id)).toEqual(["m-new"]);
+    const m = await speak(jsonReq("POST", "child", { milestoneId: "m-new" })); // opted in above
+    expect(m.status).toBe(200);
+    expect(await m.json()).toEqual({ simulated: true, text: "Eat something warm and phone each other." });
+    const d = await speak(jsonReq("POST", "child", { disclosure: true }));
+    expect(((await d.json()) as { text: string }).text).toMatch(/read by a stand-in voice, not his own/);
+  });
 });
 
 describe("/api/legacy/demo-voice", () => {

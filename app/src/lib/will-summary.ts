@@ -1,7 +1,41 @@
-import type { WillDraft } from "./types";
+import type { Recurrence, Rule as ChainRule, WillDraft } from "./types";
 import { fullName } from "./names";
 
 type Rule = WillDraft["rules"][number];
+
+/** Demo clock (mock): a 30 day waiting period lasts 60 seconds. */
+export const DEMO_SECONDS_PER_DAY = 2;
+
+/**
+ * The waiting period the plan will really get, in seconds, so the review shows what the estate will use:
+ * - the demo (mock) runs days on its demo clock (DEMO_SECONDS_PER_DAY, at least 5 s);
+ * - chain uses NEXT_PUBLIC_DEMO_WAITING_SECS when it is set (demo deployments, e.g. 300 s), else the days drafted.
+ * An unset or empty variable is "not set" (Number("") is 0, which once made every chain wait 0 s).
+ */
+export function waitingSecsFor(days: number, mode: "mock" | "chain", demoWaitEnv: string | undefined = process.env.NEXT_PUBLIC_DEMO_WAITING_SECS): number {
+  if (mode === "mock") return Math.max(5, Math.round(days * DEMO_SECONDS_PER_DAY));
+  const demo = demoWaitEnv === undefined || demoWaitEnv.trim() === "" ? NaN : Number(demoWaitEnv);
+  return Number.isFinite(demo) && demo >= 0 ? demo : Math.round(days * 86_400);
+}
+
+/** "30 days", or "300 seconds (demo clock)" when the period is shorter than a day. */
+export function waitingText(secs: number, words: { periodDays: string; periodDemo: string }): string {
+  return secs >= 86_400 ? fill(words.periodDays, { days: Math.round(secs / 86_400) }) : fill(words.periodDemo, { secs });
+}
+
+/**
+ * The interval word for a signed rule on /will: the interval the owner signed when it is known (the demo's 60 s clock
+ * would otherwise read "every minute" for a monthly payment), else the nearest word for the interval in seconds.
+ */
+export function signedEvery(rule: Pick<ChainRule, "every" | "intervalSecs">): Recurrence {
+  if (rule.every) return rule.every;
+  const secs = rule.intervalSecs;
+  if (secs <= 60) return "minute";
+  if (secs <= 8 * 86400) return "week";
+  if (secs <= 32 * 86400) return "month";
+  if (secs <= 200 * 86400) return "term";
+  return "year";
+}
 
 /** Same key as the will screen's Now / After toggles: who + what, so a re-ordered draft keeps each choice on its rule. */
 export const ruleKey = (r: Rule) => `${r.beneficiaryLabel}|${r.category}|${r.recurring ? "recurring" : "claim"}`;

@@ -109,7 +109,7 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
       push({
         id: `scheduled-due:${r.address}:${r.nextDue}`, kind: "scheduled-due", urgency: "now",
         title: c.scheduledDue.title,
-        body: fill(c.scheduledDue.body, { name: personName(r.beneficiary), category: r.category.toLowerCase(), amount: usd(r.recurringAmount), zar: zar(r.recurringAmount), payee: payeeName(r.fixedPayee) }),
+        body: fill(r.beneficiary === me ? c.scheduledDue.bodyYours : c.scheduledDue.body, { name: personName(r.beneficiary), category: r.category.toLowerCase(), amount: usd(r.recurringAmount), zar: zar(r.recurringAmount), payee: payeeName(r.fixedPayee) }),
         primary: { label: c.scheduledDue.cta, action: { type: "run", op: "executeScheduled", target: r.address } },
       });
     }

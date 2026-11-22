@@ -8,7 +8,7 @@ import type { AssetsCopy } from "@/content/assets";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
 import type { Asset, OfferRanking, Role, WalletSession } from "@/lib/types";
-import { formatUsdt, formatZar, fromBase, toBase } from "@/lib/format";
+import { formatUsdt, formatZar, fromBase, shortAddress, toBase } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Badge, Button, ButtonLink, Card, Consent, EmptyState, Eyebrow, ExplorerLink, Field, inputClass, Money, Notice, TickDisc } from "@/components/ui/primitives";
@@ -28,6 +28,8 @@ import { isSellerSide, saleOf } from "@/lib/assets/handover";
 import type { AssetMediaView } from "@/lib/media/api";
 import { clock } from "@/components/guardians/derive";
 import { PausedNotice } from "@/components/guardians/parts";
+import { listingLink } from "@/lib/hooks/pick-estate";
+import { fullName } from "@/lib/names";
 
 type Copy = ScreensCopy["car"];
 const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
@@ -231,6 +233,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
         {editing !== "spec" && <SpecSheet spec={media?.spec} kind={kind} copy={a.spec} />}
 
         {car.status === "Listed" && role === "buyer" && <OfferForm copy={copy} car={car} mine={mine?.amount ?? null} />}
+        {car.status === "Listed" && (sellerSide || isFamily || isVerifier) && <ShareListing copy={copy} estate={e.address} />}
         {car.status === "Listed" && role !== "buyer" && !isFamily && !isVerifier && <p className="text-small text-ink-2">{copy.offer.onlyBuyers}</p>}
         {car.status === "Sold" && mine && (
           <Card>
@@ -270,7 +273,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
                   return (
                     <li key={o.address} className="enter border-b border-line/70 py-3 last:border-0 [--from-y:6px]">
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                        <p className="min-w-0 font-semibold">{buyerName(o) ?? common.roles.buyer}{o.buyer === session.address && <span className="ml-2 text-small font-medium text-accent">({copy.offers.you})</span>}</p>
+                        <p className="min-w-0 font-semibold">{buyerName(o) ?? shortAddress(o.buyer)}{o.buyer === session.address && <span className="ml-2 text-small font-medium text-accent">({copy.offers.you})</span>}</p>
                         <Badge tone={st.tone}>{st.text}</Badge>
                       </div>
                       <p className="tabular-nums">{formatUsdt(o.amount)}{rate ? <span className="ml-2 text-small text-ink-2">≈ {formatZar(o.amount, rate)}</span> : null}</p>
@@ -378,9 +381,30 @@ function Protect({ copy, car, offers, owner, rate, hardshipName }: {
 
 /* ---------- Buyer: escrowed offer ---------- */
 
+/** The link a seller sends to buyers: it opens this estate's listing for anyone, family or not (?estate=). */
+function ShareListing({ copy, estate }: { copy: Copy; estate: string }) {
+  const s = copy.share;
+  const [copied, setCopied] = useState(false);
+  // Rendered only in the browser, once the estate has loaded (never server-side), so the origin is known here.
+  const link = typeof window === "undefined" ? "" : listingLink(window.location.origin, estate);
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(link); setCopied(true); window.setTimeout(() => setCopied(false), 3000); } catch { /* the link is shown to copy by hand */ }
+  };
+  return (
+    <Card>
+      <h2 className="text-h3">{s.title}</h2>
+      <p className="mt-1 text-small text-ink-2">{s.body}</p>
+      <label htmlFor="listing-link" className="sr-only">{s.label}</label>
+      <input id="listing-link" readOnly value={link} onFocus={(ev) => ev.currentTarget.select()} className={`${inputClass} mt-3 font-mono text-small`} />
+      <Button variant="secondary" small className="mt-3" onClick={() => void copyLink()} disabled={!link}>{s.copy}</Button>
+      <p className="mt-1 text-small text-ink-2" role="status">{copied ? s.copied : ""}</p>
+    </Card>
+  );
+}
+
 function OfferForm({ copy, car, mine }: { copy: Copy; car: Asset; mine: bigint | null }) {
   const { common } = useCopy();
-  const { fx, run, busy, walletUsdt } = useEstate();
+  const { fx, run, busy, walletUsdt, session } = useEstate();
   const o = copy.offer;
   const { pay } = usePay();
   const rate = fx?.usdtZar ?? null;
@@ -399,7 +423,8 @@ function OfferForm({ copy, car, mine }: { copy: Copy; car: Asset; mine: bigint |
     const res = await pay({
       kind: "offer", to: car.address, toLabel: `${o.escrowLabel}: ${car.title}`, amount: toBase(n),
       warnings: toBase(n) < car.floorPrice ? [fmt(o.belowFloor, { floor: formatUsdt(car.floorPrice, { decimals: 0 }) })] : [],
-      execute: (s, est) => s.placeOffer(est, car.address, n), successText: o.placed,
+      // The buyer's own name travels with the offer, so the family sees "Pieter van Wyk", not a wallet address.
+      execute: (s, est) => s.placeOffer(est, car.address, n, session ? fullName(session.label) || undefined : undefined), successText: o.placed,
     });
     if (res.ok) setAmount("");
   };

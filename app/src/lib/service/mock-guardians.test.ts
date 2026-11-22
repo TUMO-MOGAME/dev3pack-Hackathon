@@ -293,7 +293,7 @@ describe("mock guardians: fallback plan", () => {
     expect((await guardians()).fallback.canStart).toBe(true);
     act(svc, "sipho");
     const { report } = await svc.reportFallbackDeath(estate, 0, pdf());
-    expect(report.extracted["Full name"]).toBe("Lerato (daughter)");
+    expect(report.extracted["Full name"]).toBe("Lerato"); // the plain name, never the role label
     expect((await guardians()).fallback.recipients[0].dead).toBe(true);
     await expect(svc.reportFallbackDeath(estate, 0, pdf())).rejects.toThrow(/^BadStatus/); // already recorded
     await svc.startFallback(estate);

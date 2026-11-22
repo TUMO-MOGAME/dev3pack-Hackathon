@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useEstate } from "@/lib/hooks/estate";
 import type { LegacyStatus } from "@/lib/legacy/schema";
 
@@ -25,31 +25,26 @@ export function useLegacyStatus({ passive = false }: { passive?: boolean } = {})
   const who = session?.address ?? null;
   const key = `${estate}|${who}`;
   const [fetched, setFetched] = useState<{ key: string; status: LegacyStatus } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const seq = useRef(0);
+  const [failed, setFailed] = useState<{ key: string; message: string } | null>(null);
   const quiet = passive && service?.mode === "chain";
 
-  const store = useCallback((k: string, s: LegacyStatus) => { cache.set(k, s); setFetched({ key: k, status: s }); setError(null); }, []);
+  // Every answer is stored under the estate + wallet it was asked for, and only the one for the key on screen shows.
+  // No answer is dropped for being "not the latest": a later read for the same key that was slow or never settled
+  // left /legacy loading forever on devnet (22 Nov 2026).
+  const store = useCallback((k: string, s: LegacyStatus) => { cache.set(k, s); setFetched({ key: k, status: s }); setFailed(null); }, []);
+  const fail = useCallback((k: string, e: unknown) => setFailed({ key: k, message: legacyError(e, "Could not load the legacy voice.") }), []);
 
   const reload = useCallback(async () => {
     if (!service || !estate || !who) return;
-    const n = ++seq.current;
-    try {
-      const s = await service.legacyStatus(estate);
-      if (n === seq.current) store(key, s);
-    } catch (e) {
-      if (n === seq.current) setError(legacyError(e, "Could not load the legacy voice."));
-    }
-  }, [service, estate, who, key, store]);
+    try { store(key, await service.legacyStatus(estate)); } catch (e) { fail(key, e); }
+  }, [service, estate, who, key, store, fail]);
 
   useEffect(() => {
     if (!service || !estate || !who || quiet) return;
-    const n = ++seq.current;
-    service.legacyStatus(estate)
-      .then((s) => { if (n === seq.current) store(key, s); })
-      .catch((e) => { if (n === seq.current) setError(legacyError(e, "Could not load the legacy voice.")); });
-  }, [service, estate, who, estateStatus, quiet, key, store]);
+    service.legacyStatus(estate).then((s) => store(key, s)).catch((e: unknown) => fail(key, e));
+  }, [service, estate, who, estateStatus, quiet, key, store, fail]);
 
   const status = fetched?.key === key ? fetched.status : cache.get(key) ?? null;
+  const error = failed?.key === key ? failed.message : null;
   return { status, error, reload, estate, passive: quiet };
 }

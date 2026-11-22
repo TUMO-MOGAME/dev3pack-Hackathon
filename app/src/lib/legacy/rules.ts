@@ -55,10 +55,44 @@ export function pronouns(p: LegacyBook["pronoun"]): Pronouns {
       : { subject: "he", object: "him", possessive: "his" };
 }
 
-/** Said in Heirloom's own voice before the first message plays (honest disclosure). */
-export function disclosureLine(book: Pick<LegacyBook, "calledBy" | "pronoun">): string {
+/**
+ * Said in Heirloom's own voice before the first message plays (honest disclosure). With no cloned voice (`standin`)
+ * an ElevenLabs stock voice reads the parent's words, so the line must not claim it is the parent's voice.
+ */
+export function disclosureLine(book: Pick<LegacyBook, "calledBy" | "pronoun">, standin = false): string {
   const p = pronouns(book.pronoun).possessive;
-  return `This is Heirloom. Next you will hear your ${book.calledBy.toLowerCase()}'s own words, in ${p} voice: an AI copy made with ${p} consent.`;
+  const called = book.calledBy.toLowerCase();
+  return standin
+    ? `This is Heirloom. Next you will hear your ${called}'s own words, read by a stand-in voice, not ${p} own.`
+    : `This is Heirloom. Next you will hear your ${called}'s own words, in ${p} voice: an AI copy made with ${p} consent.`;
+}
+
+/**
+ * True when no cloned voice reads the book: there is no voice, or the voice has no recordings behind it (the demo,
+ * a devnet demo stock voice) or no ElevenLabs voice. A labelled ElevenLabs stock voice then stands in.
+ */
+export const isStandin = (voice: LegacyVoiceInfo | null | undefined): boolean => !voice || voice.simulated;
+
+/**
+ * An empty Legacy Book for an owner who has not written one yet: one entry per family member in the plan (matched
+ * by wallet), no messages. Writing the book never needs a cloned voice; the stand-in reads it until there is one.
+ */
+export function starterBook(ownerName: string, family: readonly { label: string; wallet?: string }[]): LegacyBook {
+  const blank = { study: "", money: "", faith: "", family: "", other: "" };
+  const used = new Set<string>();
+  const children = family.slice(0, 8).flatMap((f) => {
+    const name = f.label.replace(/\s*\(.*\)$/, "").trim();
+    const first = name.split(/\s+/)[0] ?? "";
+    let id = first.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 28) || "child";
+    for (let n = 2; used.has(id); n++) id = `${id.replace(/-\d+$/, "")}-${n}`;
+    if (!name) return [];
+    used.add(id);
+    return [{ id, name: name.slice(0, 40), ...(f.wallet ? { wallet: f.wallet } : {}), guidance: { ...blank }, note: "" }];
+  });
+  return {
+    version: 1, ownerName: ownerName.trim().slice(0, 80) || "Me", calledBy: "Dad", pronoun: "he",
+    values: [], lessons: [], phrases: [], guidance: { ...blank }, children, milestones: [],
+  };
 }
 
 /* ---------- consent ---------- */

@@ -25,7 +25,7 @@ export function SendScreen({ copy: english }: { copy: Copy }) {
 }
 
 function Send({ copy }: { copy: Copy }) {
-  const { service, fx, walletUsdt, session, explain } = useEstate();
+  const { service, fx, walletUsdt, session, explain, estate } = useEstate();
   const { pay, online } = usePay();
   const rate = fx?.usdtZar ?? null;
   const [people, setPeople] = useState<SavedRecipient[] | null>(null);
@@ -44,18 +44,18 @@ function Send({ copy }: { copy: Copy }) {
   const [heard, setHeard] = useState<{ text: string; engine: IntentEngine; note: string } | null>(null);
 
   // A different person or service: forget the old list and choice (adjusted during render, not in an effect).
-  const [seen, setSeen] = useState({ service, person });
-  if (seen.service !== service || seen.person !== person) {
-    setSeen({ service, person });
+  const [seen, setSeen] = useState({ service, person, estate });
+  if (seen.service !== service || seen.person !== person || seen.estate !== estate) {
+    setSeen({ service, person, estate });
     setPeople(null); setTo(null);
   }
 
   useEffect(() => {
     let alive = true;
     if (!service) return;
-    service.savedRecipients().then((r) => { if (!alive) return; setPeople(r); if (r.length === 0) setOther(true); /* nobody saved yet: go straight to the address field */ }).catch(() => { if (alive) setPeople([]); });
+    service.savedRecipients(estate ?? undefined).then((r) => { if (!alive) return; setPeople(r); if (r.length === 0) setOther(true); /* nobody saved yet: go straight to the address field */ }).catch(() => { if (alive) setPeople([]); });
     return () => { alive = false; };
-  }, [service, person]);
+  }, [service, person, estate]);
 
   const n = Number(amount);
   const valid = Number.isFinite(n) && n > 0;
@@ -94,7 +94,7 @@ function Send({ copy }: { copy: Copy }) {
     if (!service || asking || busy || !ask.trim()) return;
     setAsking(true); setHeard(null); setProblem(null); setFieldError({});
     try {
-      const r = await interpretRequest(ask, service, rate, w);
+      const r = await interpretRequest(ask, service, rate, w, estate ?? undefined);
       setHeard({ text: describeResult(r, w), engine: r.engine, note: r.note });
       const p = r.plan;
       const usdt = p.ok ? p.amountUsdt : p.intent.amountUsdt ?? (p.intent.amountZar && r.rate ? Math.round((p.intent.amountZar / r.rate) * 100) / 100 : null);

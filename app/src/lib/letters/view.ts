@@ -29,11 +29,14 @@ export function checkCtx(snap: EstateSnapshot, nowMs: number, canTranscribe: (pe
   };
 }
 
-/** The rule's payment in USD₮: a schedule's amount, else the most a claim may pay. */
+/**
+ * The rule's payment in USD₮: a schedule's fixed amount. A claim rule has no set payment (its per-claim limit is a
+ * ceiling, not what will be paid), so it has none until a claim is paid.
+ */
 export function giftOf(snap: EstateSnapshot, rule: Base58): number | undefined {
   const r = snap.rules.find((x) => x.address === rule);
-  if (!r) return undefined;
-  return fromBase(r.recurringAmount > BigInt(0) ? r.recurringAmount : r.maxPerClaim);
+  if (!r || r.recurringAmount <= BigInt(0)) return undefined;
+  return fromBase(r.recurringAmount);
 }
 
 function hintFor(l: Letter, snap: EstateSnapshot): LetterHint {
@@ -46,8 +49,11 @@ function hintFor(l: Letter, snap: EstateSnapshot): LetterHint {
   const paid = snap.activity
     .filter((a) => a.payment?.rule === o.rule && (a.kind === "ScheduledPaid" || a.kind === "ClaimPaid") && a.ts >= l.createdAt - 5)
     .sort((a, b) => a.ts - b.ts)[0];
+  // A claim payout that opened it gives the amount actually paid.
+  const paidClaim = paid?.payment?.claim ? snap.claims.find((c) => c.address === paid.payment!.claim) : undefined;
+  const gift = giftOf(snap, o.rule) ?? (paidClaim ? fromBase(paidClaim.amount) : undefined);
   return {
-    ...(r.nextDue ? { on: r.nextDue } : {}), giftUsdt: giftOf(snap, o.rule), ruleLabel: r.category,
+    ...(r.nextDue ? { on: r.nextDue } : {}), ...(gift !== undefined ? { giftUsdt: gift } : {}), ruleLabel: r.category,
     ...(paid?.txSignature ? { paidSig: paid.txSignature, paidAt: paid.ts } : {}),
   };
 }

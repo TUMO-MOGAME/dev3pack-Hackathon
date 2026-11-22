@@ -99,7 +99,8 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   /** Re-checks a payment by id (after reconnect / reload). Never re-sends if a signature exists. */
   getReceipt(id: string): Promise<PaymentReceipt | null>;
   listPendingReceipts(): Promise<PaymentReceipt[]>;
-  savedRecipients(): Promise<SavedRecipient[]>;
+  /** People this wallet can send to: `estate`'s family and trusted people by name (chain; the demo always lists them), this device's wallets and people paid before. */
+  savedRecipients(estate?: Base58): Promise<SavedRecipient[]>;
 
   // Pay a bill once (lib/bills, plan.md §13.2): from the signed-in wallet through reviewSend/confirmSend with `bill`.
   // Never from the vault. Payees are an off-chain address book for this wallet.
@@ -112,14 +113,16 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
 
   // Car sale
   listAsset(estate: Base58, asset: Base58, durationSecs: number): Promise<TxResult>;
-  placeOffer(estate: Base58, asset: Base58, amountUsdt: number): Promise<TxResult>;
+  /** `buyerName`: the name the family sees beside the offer and on the sale (off-chain; the owner's names win). */
+  placeOffer(estate: Base58, asset: Base58, amountUsdt: number, buyerName?: string): Promise<TxResult>;
   withdrawOffer(estate: Base58, asset: Base58): Promise<TxResult>;
   acceptBestOffer(estate: Base58, asset: Base58): Promise<{ tx: TxResult; ranking: OfferRanking }>;
 
   // Legacy voice (lib/legacy/*): the owner's consented voice clone + Legacy Book; after unlock a child who opts in
   // hears the owner's own messages for moments in that voice.
   // Writes are owner-only; the voice id never reaches the browser. Mock: browser speech stands in, clearly labelled.
-  legacyStatus(estate: Base58): Promise<LegacyStatus>;
+  /** `quiet`: a background read that must not ask for the PIN (chain: fails with code "locked" when it would). */
+  legacyStatus(estate: Base58, opts?: { quiet?: boolean }): Promise<LegacyStatus>;
   /** Owner, while alive: spoken consent line + ticked box + ≥ 3 samples → Instant Voice Clone. */
   createLegacyVoice(estate: Base58, input: LegacyVoiceUpload): Promise<LegacyVoiceInfo>;
   /** Owner: deletes the voice everywhere (ElevenLabs too), with its recordings and rendered messages. */

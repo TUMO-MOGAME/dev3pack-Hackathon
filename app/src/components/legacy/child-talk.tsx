@@ -1,11 +1,11 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
-import { HeartHandshake, Lock, Power } from "@/components/ui/icons";
+import { HeartHandshake, Lock, Mail, Power } from "@/components/ui/icons";
 import type { LegacyCopy, LegacySafetyCopy } from "@/content/legacy";
 import type { EstateSnapshot } from "@/lib/service";
 import { useEstate } from "@/lib/hooks/estate";
-import { GUIDANCE_TOPICS, milestonesFor, pronouns, type LegacySpeech, type LegacyStatus } from "@/lib/legacy/rules";
-import { Button, ButtonLink, Card, Notice } from "@/components/ui/primitives";
+import { GUIDANCE_TOPICS, isStandin, milestonesFor, pronouns, type LegacySpeech, type LegacyStatus } from "@/lib/legacy/rules";
+import { Button, ButtonLink, Card, EmptyState, Notice } from "@/components/ui/primitives";
 import { fmt } from "@/components/shell/copy";
 import { DisclosureLabel, PlayButton, SafetyCard } from "./parts";
 import { useLegacyPlayer } from "./use-player";
@@ -27,7 +27,12 @@ export function ChildTalk({ copy, safety, status, snap, reload }: { copy: Legacy
   const vars = { called, calledLower: called.toLowerCase(), pronoun: p.subject, possessive: p.possessive };
   const [busy, setBusy] = useState(false);
 
-  if (!status.voice) return <Notice tone="neutral" title={fmt(c.noVoice, vars)} />;
+  // No Legacy Book: a clear empty state. A book without a cloned voice is read by the labelled stand-in voice.
+  if (!status.book) {
+    return <EmptyState icon={<HeartHandshake className="size-6" aria-hidden="true" />} title={fmt(c.noBook, vars)} body={fmt(c.noBookBody, vars)}
+      action={<ButtonLink href="/letters" variant="secondary"><Mail className="size-4" aria-hidden="true" />{c.lettersCta}</ButtonLink>} />;
+  }
+  const standin = isStandin(status.voice);
   if (!status.unlocked) {
     return (
       <Notice tone="neutral" icon={<Lock className="size-5" aria-hidden="true" />} title={fmt(c.locked, vars)}>
@@ -45,9 +50,9 @@ export function ChildTalk({ copy, safety, status, snap, reload }: { copy: Legacy
     };
     return (
       <Card className="border-2 border-ink">
-        <h2 className="flex items-center gap-2 text-h3"><HeartHandshake className="size-5" aria-hidden="true" />{fmt(c.optIn.title, vars)}</h2>
-        <p className="mt-2">{fmt(c.optIn.body, vars)}</p>
-        <DisclosureLabel className="mt-3" text={fmt(c.label, { called, date: fmtDate(status.voice.consentedAt) })} simulated={status.voice.simulated} simulatedText={c.labelSimulated} />
+        <h2 className="flex items-center gap-2 text-h3"><HeartHandshake className="size-5" aria-hidden="true" />{fmt(standin ? c.optIn.titleStandin : c.optIn.title, vars)}</h2>
+        <p className="mt-2">{fmt(standin ? c.optIn.bodyStandin : c.optIn.body, vars)}</p>
+        <DisclosureLabel className="mt-3" text={fmt(c.label, { called, date: status.voice ? fmtDate(status.voice.consentedAt) : "" })} simulated={standin} simulatedText={c.labelSimulated} />
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <Button loading={busy} onClick={() => void choose()}>{c.optIn.yes}</Button>
           <ButtonLink href="/family" variant="ghost">{c.optIn.notNow}</ButtonLink>
@@ -62,7 +67,8 @@ function Messages({ copy, safety, status, snap, reload }: { copy: LegacyCopy; sa
   const c = copy.child;
   const { service, notify } = useEstate();
   const book = status.book!;
-  const voiceInfo = status.voice!;
+  const voiceInfo = status.voice;
+  const standin = isStandin(voiceInfo);
   const called = book.calledBy;
   const p = pronouns(book.pronoun);
   const vars = { called, calledLower: called.toLowerCase(), pronoun: p.subject, possessive: p.possessive };
@@ -109,7 +115,7 @@ function Messages({ copy, safety, status, snap, reload }: { copy: LegacyCopy; sa
   return (
     <div className="grid gap-5">
       <div className="sticky top-[calc(var(--header-h,3.5rem)+0.25rem)] z-10 -mx-1 rounded-full bg-surface/90 px-1 py-1 backdrop-blur-sm">
-        <DisclosureLabel text={fmt(c.label, { called, date: fmtDate(voiceInfo.consentedAt) })} simulated={voiceInfo.simulated} simulatedText={c.labelSimulated} />
+        <DisclosureLabel text={fmt(c.label, { called, date: voiceInfo ? fmtDate(voiceInfo.consentedAt) : "" })} simulated={standin} simulatedText={c.labelSimulated} />
       </div>
 
       <Card>

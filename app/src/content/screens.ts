@@ -216,7 +216,10 @@ export const screens = {
       trusted: "Trusted people",
       car: "The car",
       waiting: "Waiting period",
-      waitingValue: "{days} days after a passing is confirmed",
+      waitingValue: "{period} after a passing is confirmed",
+      /** The waiting period as the estate will get it: days, or the demo clock's seconds (mock, or a demo chain). */
+      periodDays: "{days} days",
+      periodDemo: "{secs} seconds (demo clock)",
       pending: "Still to decide",
       emptyHint: "Your plan will appear here as we talk.",
       ruleLine: "{category}: up to {max} per claim, {cap} in total",
@@ -250,7 +253,7 @@ export const screens = {
       rule: "{name}: {category} is paid only to a {kind}, up to {max} at a time and {cap} in total, until {date}.",
       ruleOther: "{name}: {category} is paid only to an approved payee, up to {max} at a time and {cap} in total, until {date}.",
       trustedTitle: "Who confirms your passing",
-      trusted: "Any {need} of these three must confirm. Then a waiting period of {days} days runs, and you can cancel it with one tap.",
+      trusted: "Any {need} of these three must confirm. Then a waiting period of {period} runs, and you can cancel it with one tap.",
       carTitle: "The car",
       car: "{title} sells to the best offer at or above {floor}. The money goes to: {proceeds}.",
       carHardship: "{policy} The hardship floor is {floor}.",
@@ -273,6 +276,15 @@ export const screens = {
       receipts: "Receipts",
       receipt: "Receipt {n}",
       receiptSr: "Opens Solana Explorer in a new tab",
+    },
+    /** /will when the estate on screen is someone else's (a family member planning for her own family). */
+    notYours: {
+      title: "This is {name}'s plan",
+      body: "You're part of {name}'s plan, and it stays exactly as it is. Your own plan is separate: the agent helps you build it, and it becomes a new estate in your own wallet.",
+      bodyOwn: "You're looking at {name}'s plan. Your own plan is separate; open it to see or change your rules.",
+      start: "Start my own plan",
+      openOwn: "Open my own plan",
+      view: "See {name}'s estate",
     },
     locked: {
       title: "Your plan is signed and locked",
@@ -326,6 +338,8 @@ export const screens = {
       defaults: { make: "Toyota", model: "Corolla 1.8 Exclusive CVT", year: "2017", mileage: "124455" },
       value: "Get a valuation",
       valuing: "Checking current South African listings",
+      valuationFailed: "The valuation didn't finish. Try again in a moment, or set the prices yourself below.",
+      estimateNote: "Live listings couldn't be checked in time, so this is Heirloom's own estimate from the age, mileage and condition. Your minimum price is yours to set; it is what the contract enforces.",
       valuationTitle: "Suggested asking price",
       range: "Likely range {low} to {high}",
       comparables: "Similar cars for sale now",
@@ -390,6 +404,7 @@ export const screens = {
       withdrawn: "Your USD₮ is back in your wallet",
       onlyBuyers: "Offers are made by buyers. Switch to a buyer to try it.",
     },
+    share: { title: "Share the listing", body: "Send this link to buyers. It opens this listing for anyone, even someone who isn't part of the family.", label: "Listing link", copy: "Copy link", copied: "Link copied" },
     list: { title: "Open the sale", body: "The estate is unlocked. As a trusted person you can list the car at the asking price for 7 days.", cta: "List the car for sale", done: "The car is listed", wait: "The sale opens after the estate is unlocked. Until then the digital title stays safely with the estate." },
     settle: {
       title: "Settle the sale",
@@ -458,7 +473,7 @@ export const screens = {
     steps: {
       signed: { title: "Plan signed and vault funded", done: "Signed by {name}. The vault holds {amount}. Living rules are already paying.", todo: "The owner signs the plan and funds the vault." },
       reported: { title: "A passing is reported", done: "Reported by {name}. The agent read the certificate.", todo: "A family member uploads the death certificate. The agent reads it first." },
-      confirmed: { title: "Trusted people confirm", done: "Confirmed by {got} of {need} trusted people.", todo: "{need} of the 3 trusted people must confirm.", progress: "{got} of {need} confirmed" },
+      confirmed: { title: "Trusted people confirm", done: "Confirmed by {got} trusted people ({need} of {total} needed).", todo: "{need} of the {total} trusted people must confirm.", progress: "{got} of {need} confirmed" },
       waiting: { title: "Waiting period", done: "The waiting period has ended.", todo: "A safety pause of {period}. The owner can cancel with one tap.", running: "{time} left", ready: "The waiting period is over." },
       unlocked: { title: "Estate unlocked", done: "The whole plan is in force. Fees can be claimed, schedules run and the car can be sold.", todo: "The rest of the plan comes into force." },
     },
@@ -481,6 +496,8 @@ export const screens = {
       again: "Submit a different document",
       acceptedTitle: "Report received",
       acceptedBody: "The trusted people have been asked to confirm.",
+      receipt: "Receipt",
+      receiptSr: "Opens Solana Explorer in a new tab",
       onlyFamily: "Only a family member named in the will can report a passing.",
     },
     veto: {
@@ -551,8 +568,8 @@ export const screens = {
       submitted: "Claim submitted",
       submittedBody: "The agent has checked your statement. One trusted person now needs to approve it.",
       submittedBodyOwner: "The agent has checked your statement. {owner} now needs to approve it.",
-      declined: "Claim declined",
-      declinedBody: "The agent could not accept the document, so nothing was sent to the trusted people.",
+      declined: "The document was not accepted",
+      declinedBody: "Nothing was paid and nothing has changed. You can submit a clear copy of the original document.",
       another: "Start another claim",
       tryAgain: "Change the amount",
     },
@@ -747,6 +764,13 @@ export const screens = {
     handledEmpty: "Nothing yet.",
     paid: "Paid",
     confirmed: "Confirmed",
+    /** Shown when the agent's report can't be loaded (the chain keeps only its fingerprint). */
+    reportMissing: {
+      title: "The agent's report",
+      body: "The agent checked this document and approved it, and its report's fingerprint is on Solana. The full report can't be shown on this device right now. Confirm only what you know to be true.",
+      link: "Open the agent's review on Solana Explorer",
+      sr: "Opens Solana Explorer in a new tab",
+    },
   },
 
   /** Public, read-only record of an estate (/audit/<estate address>). No wallet needed; documents only as hashes. */

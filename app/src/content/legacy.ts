@@ -35,11 +35,14 @@ export const legacyEntry = {
   ownerReadyCta: "Open your Legacy Book",
   childTitle: "{called}'s messages for you",
   childBody: "{called} wrote messages for you while {pronoun} was alive. Hear them in {possessive} own words, in {possessive} voice.",
+  /** No cloned voice: a labelled stand-in reads the words, so never "in his voice". */
+  childBodyStandin: "{called} wrote messages for you while {pronoun} was alive. Hear them in {possessive} own words, read by a stand-in voice.",
   childCta: "Hear {called}'s messages",
   childLocked: "{called} left words for you. They open once the estate unlocks.",
   childMaybe: "If {called} recorded {possessive} voice for you, you can hear the words {pronoun} left here.",
   sheetCta: "Hear {called}'s messages",
   sheetHint: "{called}'s own words, in {possessive} voice: an AI copy made with {possessive} consent. It only plays what {pronoun} wrote.",
+  sheetHintStandin: "{called}'s own words, read by a stand-in voice. It only plays what {pronoun} wrote.",
   moment: {
     title: "{called} left you a message for this moment",
     play: "Play {called}'s message",
@@ -157,6 +160,9 @@ export const legacy = {
       deleteBookConfirm: "Delete everything in your Legacy Book? This cannot be undone.",
       deletedBook: "Legacy Book deleted.",
       invalid: "Please check the highlighted fields.",
+      /** Shown above the book while no voice is recorded: the book never waits for a cloned voice. */
+      standinNote: "You can write your messages now. Until you record your voice, a stand-in voice (an ElevenLabs stock voice, labelled as such) reads them to your children.",
+      starterNote: "Your Legacy Book is empty. Write what you want your children to read, and messages for the moments you may miss, then save it.",
     },
     preview: {
       title: "Hear how it sounds to {name}",
@@ -169,18 +175,26 @@ export const legacy = {
   child: {
     title: "{called}'s messages for you",
     body: "{called} recorded {possessive} voice and wrote these messages for you while {pronoun} was alive. The voice only says {possessive} own words. It doesn't answer questions or take calls.",
+    /** No cloned voice: the words are {called}'s, the voice is a labelled stand-in. */
+    bodyStandin: "{called} wrote these messages for you while {pronoun} was alive. {called} did not record {possessive} voice, so a stand-in voice reads {possessive} own words. It doesn't answer questions or take calls.",
+    /** No Legacy Book at all. */
+    bodyNone: "Messages and words {called} wrote for you in a Legacy Book appear here.",
     label: "AI voice, created with {called}'s consent on {date}",
     labelSimulated: "Stand-in voice: an ElevenLabs stock voice reads these words",
     optIn: {
       title: "Would you like to hear {called}'s messages in {possessive} voice?",
       body: "You will hear {called}'s messages in {possessive} own words, in {possessive} voice. The voice is an AI copy, made with {possessive} consent. It only plays what {pronoun} wrote, and it can't decide anything about money. You can switch it off at any time, and it's okay to not be ready.",
+      titleStandin: "Would you like to hear {called}'s messages read aloud?",
+      bodyStandin: "You will hear {called}'s messages in {possessive} own words, read by a stand-in voice: an ElevenLabs stock voice, not {possessive} own. It only plays what {pronoun} wrote, and it can't decide anything about money. You can switch it off at any time, and it's okay to not be ready.",
       yes: "Yes, switch it on",
       notNow: "Not now",
       off: "Switch the voice off",
       offDone: "The legacy voice is off. You can switch it on again here.",
     },
     locked: "{called}'s words open once the estate unlocks.",
-    noVoice: "{called} did not leave a recorded voice.",
+    noBook: "{called} didn't leave a Legacy Book",
+    noBookBody: "There are no messages here. If {called} wrote you a letter, you'll find it under Letters.",
+    lettersCta: "Open your letters",
     messages: "Messages {called} left for you",
     noMessages: "{called} didn't leave a message for you to play yet.",
     play: "Play",

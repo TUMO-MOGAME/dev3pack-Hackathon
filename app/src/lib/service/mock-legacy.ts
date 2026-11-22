@@ -160,7 +160,8 @@ export function createMockLegacy(d: Deps): LegacyMethods & { resetLegacy(): void
     async legacySpeak(_e, input) {
       needTalk();
       if (await isRemote()) return legacyApi.speak(signer(), input);
-      if (!st.voice) fail("NoVoice", "No legacy voice has been created.");
+      // No voice recorded: the labelled stand-in reads the owner's words (same as the server). A book is needed.
+      if (!st.book) fail("NotFound", "There is no Legacy Book for this estate.");
       let text: string;
       let line: string;
       if ("milestoneId" in input) {
@@ -168,7 +169,8 @@ export function createMockLegacy(d: Deps): LegacyMethods & { resetLegacy(): void
         if (!m) fail("NotFound", "That message was not found.");
         text = m!.text; line = m!.id;
       } else if ("disclosure" in input) {
-        return demoSpeech("disclosure", disclosureLine(st.book ?? demoLegacyBook()), "heirloom");
+        // The demo never clones a voice: the stand-in disclosure.
+        return demoSpeech("disclosure", disclosureLine(st.book ?? demoLegacyBook(), true), "heirloom");
       } else {
         // Same rule as the server: only the owner, while alive, hears the fixed sample line. Never free text.
         if (!isOwner()) fail("Forbidden", "The legacy voice only speaks the messages in the Legacy Book.");

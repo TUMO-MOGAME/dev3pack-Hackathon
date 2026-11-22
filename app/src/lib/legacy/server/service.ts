@@ -11,7 +11,7 @@ import { HttpError } from "@/lib/api/http";
 import { sha256Hex } from "@/lib/agent/hash";
 import { legacyVoiceSample } from "@/content/legacy";
 import {
-  baseMime, consentLine, disclosureLine, matchChild, sniffAudio, validateVoiceInput,
+  baseMime, consentLine, disclosureLine, isStandin, matchChild, sniffAudio, validateVoiceInput,
   type LegacyBook, type LegacyChild, type LegacyStatus, type LegacyVoiceInfo,
 } from "../schema";
 import type { Viewer } from "./auth";
@@ -23,7 +23,9 @@ const isUnlocked = (v: Viewer) => (v.snap ? v.snap.estate.status === "Unlocked" 
 
 function voiceInfo(row: store.VoiceRow): LegacyVoiceInfo {
   return {
-    ownerName: row.ownerName, consentedAt: row.consentedAt, samples: row.samplePaths.length, simulated: !row.voiceId,
+    // No ElevenLabs voice, or one with no recordings behind it (the devnet demo's stock voice), is not a clone of the
+    // owner: the app labels it a stand-in and never says "created with consent from N recordings".
+    ownerName: row.ownerName, consentedAt: row.consentedAt, samples: row.samplePaths.length, simulated: !row.voiceId || row.samplePaths.length === 0,
     needsVerification: row.requiresVerification || undefined,
   };
 }
@@ -207,7 +209,7 @@ export async function speak(v: Viewer, req: SpeakRequest): Promise<{ text: strin
     if (!m) throw new HttpError(404, "That message was not found.", "not_found");
     text = m.text; milestoneId = m.id;
   } else if ("disclosure" in req) {
-    text = disclosureLine(ctx.book);
+    text = disclosureLine(ctx.book, isStandin(ctx.voice ? voiceInfo(ctx.voice) : null));
   } else {
     // The owner hears one fixed line while alive. The line is the app's, never text the client sends.
     if (v.role !== "owner") throw new HttpError(403, "The legacy voice only speaks the messages in the Legacy Book.", "forbidden");

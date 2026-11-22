@@ -137,6 +137,16 @@ describe("fee sponsorship (signSponsoredOrSelf / feeForReview)", () => {
     expect(off.built).toEqual(["USER"]);
   });
 
+  it("a self-paid tx (a title mint) never asks the sponsor, so no 422 is logged", async () => {
+    const { signSponsoredOrSelf } = await import("./payments");
+    const { d, built } = deps();
+    const status = vi.spyOn(d.sponsor!, "status");
+    const r = await signSponsoredOrSelf({ ...d, sponsor: undefined });
+    expect(r).toMatchObject({ sponsored: false, feePayer: "USER" });
+    expect(built).toEqual(["USER"]);
+    expect(status).not.toHaveBeenCalled();
+  });
+
   it("does not retry as user-paid when the program would reject the tx anyway", async () => {
     const { signSponsoredOrSelf, SponsorError } = await import("./payments");
     const { d } = deps({ sponsor: { status: async () => ({ available: true, feePayer: "SPONSOR", maxFeeLamports: 1, paysRent: false }), cosign: async () => { throw new SponsorError("simulation_failed", "Rejected by the Heirloom program"); } } });

@@ -47,5 +47,7 @@ export function stateText(l: LetterView, snap: EstateSnapshot, copy: Copy, local
   if (o.kind === "send") return copy.state.send;
   const name = l.to.kind === "person" ? nameOf(snap, l.to.wallet) : "";
   const amount = l.hint.giftUsdt !== undefined ? usdt(l.hint.giftUsdt) : "";
+  // A claim rule has no set amount until it pays: say only that it opens with the next payment.
+  if (!amount) return fill(copy.state.paymentNext, { name });
   return l.hint.on ? fill(copy.state.payment, { name, amount, date: dateText(l.hint.on, locale) }) : fill(copy.state.paymentNoDate, { name, amount });
 }
