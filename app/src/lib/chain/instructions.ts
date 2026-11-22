@@ -458,13 +458,14 @@ export function vetoSeatDeath(ctx: Ctx, holder: PublicKey, estate: PublicKey, in
 
 /**
  * Anyone: `caller` is any wallet that signs (so the sponsor can pay the fee; it gains no rights).
- * `confirmedBy` adds that wallet's Beneficiary PDA as a remaining account: the program reads it when only the
- * beneficiary route could have confirmed and the owner showed life since. Otherwise it is not read.
+ * `confirmedBy` = seat.death_confirmed_by. Its Beneficiary PDA always goes as the remaining account, whether or not it
+ * exists: without it the one case where only a beneficiary could have confirmed fails (NotConfirmer). In every other
+ * case the program ignores it.
  */
-export function finalizeSuccession(ctx: Ctx, estate: PublicKey, index: number, caller: PublicKey, confirmedBy?: PublicKey | null) {
+export function finalizeSuccession(ctx: Ctx, estate: PublicKey, index: number, caller: PublicKey, confirmedBy: PublicKey) {
   const seat = seatPda(ctx.programId, estate, index);
   const t = buildIx("finalize_succession", [index], { estate, guard: guardPda(ctx.programId, estate), seat, objection: objectionPda(ctx.programId, seat), caller });
-  if (confirmedBy) t.keys.push({ pubkey: beneficiaryPda(ctx.programId, estate, confirmedBy), isSigner: false, isWritable: false });
+  t.keys.push({ pubkey: beneficiaryPda(ctx.programId, estate, confirmedBy), isSigner: false, isWritable: false });
   return t;
 }
 
@@ -509,7 +510,7 @@ export function voteObjection(ctx: Ctx, p: {
   return t;
 }
 
-/** The owner only, estate Active: records the asset's photo root (photos stay off-chain). */
+/** The owner only, estate Active (nobody after the unlock): records the asset's photo root (photos stay off-chain). */
 export function setAssetMedia(ctx: Ctx, p: { authority: PublicKey; estate: PublicKey; asset: PublicKey; kind: AssetKind; photosRootHex: string; photoCount: number }) {
   return buildIx("set_asset_media", [assetKind(p.kind), hash32(p.photosRootHex), p.photoCount], {
     authority: p.authority, payer: p.authority, estate: p.estate, asset: p.asset, media: mediaPda(ctx.programId, p.asset),

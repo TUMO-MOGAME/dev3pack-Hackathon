@@ -138,7 +138,7 @@ const CASES: Record<string, Case[]> = {
   ],
   veto_seat_death: [{ build: () => ix.vetoSeatDeath(ctx, v[2], E, 2), accounts: { holder: v[2], seat: seats[2] }, args: [2] }],
   finalize_succession: [
-    { build: () => ix.finalizeSuccession(ctx, E, 2, caller), accounts: { seat: seats[2], objection: objectionPda(P, seats[2]), caller }, args: [2] },
+    { build: () => ix.finalizeSuccession(ctx, E, 2, caller, NONE), accounts: { seat: seats[2], objection: objectionPda(P, seats[2]), caller }, args: [2], remaining: [ben(NONE)] },
     { build: () => ix.finalizeSuccession(ctx, E, 2, caller, who), accounts: { seat: seats[2], objection: objectionPda(P, seats[2]), caller }, args: [2], remaining: [ben(who)] },
   ],
   raise_objection: [

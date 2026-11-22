@@ -245,7 +245,7 @@ describe("permissionless instructions with a signing caller (finalize_succession
   const ctx: ix.Ctx = { programId, usdtMint: mint };
   const estate = estatePda(programId, Keypair.generate().publicKey);
   const build = (caller: PublicKey) => [
-    ix.finalizeSuccession(ctx, estate, 2, caller), ix.startFallback(ctx, estate, caller),
+    ix.finalizeSuccession(ctx, estate, 2, caller, Keypair.generate().publicKey), ix.startFallback(ctx, estate, caller),
     ix.finalizeUnlock(estate, caller), ix.lapseObjection(ctx, estate, caller),
   ];
 

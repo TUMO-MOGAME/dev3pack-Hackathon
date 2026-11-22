@@ -59,7 +59,7 @@ const built: Record<string, () => ReturnType<typeof ix.buildIx>> = {
   review_seat_death: () => ix.reviewSeatDeath(estate, agent, 2, true, H, H),
   confirm_seat_death: () => ix.confirmSeatDeath(ctx, v[0], estate, 2),
   veto_seat_death: () => ix.vetoSeatDeath(ctx, v[2], estate, 2),
-  finalize_succession: () => ix.finalizeSuccession(ctx, estate, 2, ben),
+  finalize_succession: () => ix.finalizeSuccession(ctx, estate, 2, ben, v[0]),
   raise_objection: () => ix.raiseObjection(ctx, { objector: ben, estate, kind: "Claim", target: k(), seatIndex: 2, reasonHashHex: H, monitorSeat: 2 }),
   vote_objection: () => ix.voteObjection(ctx, { voter: v[0], estate, kind: "Claim", target: k(), uphold: true }),
   set_asset_media: () => ix.setAssetMedia(ctx, { authority: owner, estate, asset, kind: "Car", photosRootHex: H, photoCount: 3 }),
@@ -94,7 +94,8 @@ describe("instruction builders vs IDL", () => {
       const t = build();
       expect(t.programId.equals(programId)).toBe(true);
       // buildIx throws if any account is missing; check the count matches the IDL too.
-      expect(t.keys.length).toBe(findInstruction(name).accounts.length);
+      // finalize_succession always appends the confirmer's Beneficiary PDA (builders.test.ts checks which).
+      expect(t.keys.length).toBe(findInstruction(name).accounts.length + (name === "finalize_succession" ? 1 : 0));
       const decoded = getCoder().instruction.decode(Buffer.from(t.data));
       expect(decoded?.name).toBe(findInstruction(name).name);
     });
@@ -130,7 +131,7 @@ describe("instruction builders vs IDL", () => {
     expect(at("execute_claim", ex, "objection").equals(objectionPda(programId, claim))).toBe(true);
     expect(at("finalize_unlock", ix.finalizeUnlock(estate, ben), "objection").equals(objectionPda(programId, estate))).toBe(true);
     const seat = seatPda(programId, estate, 2);
-    expect(at("finalize_succession", ix.finalizeSuccession(ctx, estate, 2, ben), "objection").equals(objectionPda(programId, seat))).toBe(true);
+    expect(at("finalize_succession", ix.finalizeSuccession(ctx, estate, 2, ben, v[0]), "objection").equals(objectionPda(programId, seat))).toBe(true);
     const guard = guardPda(programId, estate);
     expect(at("lapse_objection", ix.lapseObjection(ctx, estate, ben), "objection").equals(objectionPda(programId, guard))).toBe(true);
     const exf = ix.executeFallback(ctx, { payer: ben, estate, recipient: ben, recipientIndex: 0 });
@@ -174,7 +175,7 @@ describe("instruction builders vs IDL", () => {
     const sc = ix.submitClaim(ctx, { estate, signer: ben, ruleId: 0, claimId: 0, payeeWallet: payee, amount: 1n, evidenceHashHex: H });
     expect(slot("submit_claim", sc, "year_cap").pubkey.equals(yearCapPda(programId, rule0))).toBe(true);
     // The permissionless calls take any wallet as a signing caller, so the sponsor can pay their fee.
-    for (const [n, t] of [["finalize_unlock", ix.finalizeUnlock(estate, ben)], ["finalize_succession", ix.finalizeSuccession(ctx, estate, 2, ben)],
+    for (const [n, t] of [["finalize_unlock", ix.finalizeUnlock(estate, ben)], ["finalize_succession", ix.finalizeSuccession(ctx, estate, 2, ben, v[0])],
       ["start_fallback", ix.startFallback(ctx, estate, ben)], ["lapse_objection", ix.lapseObjection(ctx, estate, ben)]] as const) {
       expect(slot(n, t, "caller")).toMatchObject({ pubkey: ben, isSigner: true, isWritable: false });
     }
