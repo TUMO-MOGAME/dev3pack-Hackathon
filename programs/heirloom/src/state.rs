@@ -43,6 +43,8 @@ pub const MAX_LISTING_SECS: i64 = 90 * 86_400;
 pub const MAX_RULES: u16 = 16;
 /// People needed for anything the agent referred instead of approving.
 pub const REFERRED_MIN_APPROVALS: u8 = 2;
+/// An unreviewed death report keeps its place for one waiting period, at least 60 s and at most this long.
+pub const MAX_REPORT_GRACE_SECS: i64 = 86_400;
 
 // ---------------------------------------------------------------- enums (Borsh order matters)
 
@@ -145,6 +147,8 @@ pub struct Estate {
     pub death_verdict: Verdict,
     /// Bitmap: verifier i sets bit 1 << i.
     pub death_attestations: u8,
+    /// While Active with a death claim: when it was submitted. Afterwards: when the quorum confirmed it.
+    /// Read the state from `status` and `death_cert_hash`, never from this being non-zero.
     pub death_pending_since: i64,
     pub last_heartbeat: i64,
     pub rule_count: u16,
@@ -160,6 +164,42 @@ impl Estate {
     /// The waiting period, clamped for estates created before the bound existed.
     pub fn waiting_secs(&self) -> i64 {
         self.waiting_period_secs.clamp(0, MAX_WAITING_SECS)
+    }
+
+    /// Bitmap of the seats someone holds, leaving out `who` (nobody decides in their own favour).
+    pub fn living_seats_except(&self, who: &Pubkey) -> u8 {
+        self.verifiers.iter().enumerate().fold(0u8, |mask, (i, v)| {
+            if *v != Pubkey::default() && v != who { mask | 1 << i } else { mask }
+        })
+    }
+
+    pub fn has_living_seat(&self) -> bool {
+        self.living_seats_except(&Pubkey::default()) != 0
+    }
+
+    /// How long a reviewed death report keeps its place.
+    pub fn reviewed_hold(&self) -> i64 {
+        self.waiting_secs().max(MIN_WAITING_SECS).saturating_mul(2)
+    }
+
+    /// An unconfirmed death report (the estate's, a seat's or a fallback recipient's) may give way to one by
+    /// `who`. Whoever made it waits one grace longer, so nobody refreshes their own hold ahead of the others.
+    /// A report from before the times were stored (since = 0) is long stale.
+    pub fn report_replaceable(
+        &self,
+        verdict: Verdict,
+        since: i64,
+        reporter: &Pubkey,
+        who: &Pubkey,
+        reviewed_hold: i64,
+        ts: i64,
+    ) -> bool {
+        let grace = self.waiting_secs().clamp(MIN_WAITING_SECS, MAX_REPORT_GRACE_SECS);
+        let mut hold = if verdict == Verdict::Pending { grace } else { reviewed_hold };
+        if reporter == who {
+            hold = hold.saturating_add(grace);
+        }
+        ts >= since.saturating_add(hold)
     }
 
     pub fn clear_death_claim(&mut self) {
@@ -459,10 +499,15 @@ impl Objection {
             .saturating_add(estate.waiting_secs().max(DISPUTE_MIN_SECS))
     }
 
+    /// The owner showed life after it was raised, so the death it challenged, and any votes on it, are void.
+    pub fn voided_by_owner(&self, estate: &Estate) -> bool {
+        matches!(self.kind, TargetKind::Unlock | TargetKind::Fallback) && self.raised_at < estate.last_heartbeat
+    }
+
     /// Open and still binding: a challenge past its lapse time no longer blocks anything.
     pub fn is_effectively_open(&self, estate: &Estate, ts: i64) -> bool {
         self.status == ObjectionStatus::Open
-            && (self.kind == TargetKind::Fallback || ts < self.lapses_at(estate))
+            && (self.kind == TargetKind::Fallback || (ts < self.lapses_at(estate) && !self.voided_by_owner(estate)))
     }
 }
 

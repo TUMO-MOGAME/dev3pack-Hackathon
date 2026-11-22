@@ -112,4 +112,21 @@ pub enum HeirloomError {
     NothingToSweep,
     #[msg("It is too soon to object to this again")]
     ObjectionCooldown,
+    // ---- second security review (added 2026-11-22; append only, never reorder)
+    #[msg("Signer is not one of the people who may report or refute this")]
+    NotParticipant,
+    #[msg("You cannot approve or dismiss in your own favour")]
+    OwnApproval,
+    #[msg("A living trusted person who is neither the buyer nor the agent must co-sign this sale")]
+    CoSignerRequired,
+    #[msg("With no trusted people left, a sale waits for the listing to end")]
+    ListingStillOpen,
+    #[msg("A real wallet is required")]
+    InvalidWallet,
+    #[msg("The report changed since it was read")]
+    ReportChanged,
+    #[msg("A reported death of this recipient is waiting to be confirmed")]
+    DeathReportOpen,
+    #[msg("The claim belongs to a rule that was ended and replaced")]
+    ClaimFromEndedRule,
 }

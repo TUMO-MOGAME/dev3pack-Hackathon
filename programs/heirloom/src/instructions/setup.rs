@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use super::{now, transfer_checked_cpi};
+use super::{now, record_proof_of_life, transfer_checked_cpi};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -466,7 +466,7 @@ pub fn heartbeat_handler(ctx: Context<Heartbeat>) -> Result<()> {
         estate.status == EstateStatus::Active || estate.status == EstateStatus::DeathPending,
         HeirloomError::BadStatus
     );
-    estate.last_heartbeat = now()?;
+    record_proof_of_life(estate.key(), estate, now()?);
     Ok(())
 }
 

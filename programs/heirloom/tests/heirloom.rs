@@ -7,7 +7,7 @@
 use anchor_lang::{
     prelude::{Clock, Pubkey},
     solana_program::instruction::Instruction,
-    AccountDeserialize, InstructionData, ToAccountMetas,
+    AccountDeserialize, AccountSerialize, InstructionData, ToAccountMetas,
 };
 use heirloom::{
     AssetStatus, ClaimStatus, Estate, EstateStatus, HeirloomError, PayeeKind, Category, Rule, Claim,
@@ -24,6 +24,8 @@ use solana_transaction::versioned::VersionedTransaction;
 const USDT: u64 = 1_000_000; // 6 decimals
 const WAITING: i64 = 120; // demo waiting period (2 minutes)
 const DAY: i64 = 86_400;
+/// A realistic clock: LiteSVM starts at 0, which would read as "never" in the stored times.
+const GENESIS: i64 = 1_790_000_000;
 
 thread_local! {
     /// Compute units of the last successful `send` of this test.
@@ -240,6 +242,7 @@ impl Env {
         let mut svm = LiteSVM::new();
         let bytes = include_bytes!(concat!(env!("CARGO_TARGET_TMPDIR"), "/../deploy/heirloom.so"));
         svm.add_program(heirloom::id(), bytes).unwrap();
+        warp(&mut svm, GENESIS);
 
         let owner = Keypair::new();
         let env_keys: Vec<Keypair> = (0..11).map(|_| Keypair::new()).collect();
@@ -446,9 +449,15 @@ impl Env {
     }
 
     fn review_death(&mut self, approve: bool) -> Result<(), String> {
+        self.review_death_as(if approve { ReviewOutcome::Approve } else { ReviewOutcome::Reject }, None)
+    }
+
+    /// `read` = the certificate the agent read; None = the one on-chain.
+    fn review_death_as(&mut self, outcome: ReviewOutcome, read: Option<[u8; 32]>) -> Result<(), String> {
+        let cert_hash = read.unwrap_or_else(|| self.estate_state().death_cert_hash);
         let i = ix(
             heirloom::accounts::ReviewDeath { agent: self.agent.pubkey(), estate: self.estate },
-            heirloom::instruction::ReviewDeath { outcome: if approve { ReviewOutcome::Approve } else { ReviewOutcome::Reject }, report_hash: [9u8; 32] },
+            heirloom::instruction::ReviewDeath { outcome, report_hash: [9u8; 32], cert_hash },
         );
         send(&mut self.svm, i, &[&self.agent])
     }
@@ -2794,11 +2803,7 @@ fn agent_vote_pda(estate: &Pubkey, candidate: &Pubkey) -> Pubkey {
 
 impl Env {
     fn refer_death(&mut self) -> Result<(), String> {
-        let i = ix(
-            heirloom::accounts::ReviewDeath { agent: self.agent.pubkey(), estate: self.estate },
-            heirloom::instruction::ReviewDeath { outcome: ReviewOutcome::Refer, report_hash: [9u8; 32] },
-        );
-        send(&mut self.svm, i, &[&self.agent])
+        self.review_death_as(ReviewOutcome::Refer, None)
     }
 
     fn refer_claim(&mut self, claim: Pubkey) -> Result<(), String> {
@@ -3307,4 +3312,264 @@ fn compute_units_of_the_heaviest_instructions_fit_the_default_limit() {
         println!("CU {name}: {}..{}", best[k], worst[k]);
         assert!(worst[k] < 200_000, "{name} needs {} compute units", worst[k]);
     }
+}
+
+// =================================================================== second security review (2026-11-22, plan 18)
+// r01 to r09 each reproduce a defect that was present on fc693c3.
+
+impl Env {
+    fn heartbeat(&mut self) -> Result<(), String> {
+        let i = ix(
+            heirloom::accounts::Heartbeat { owner: self.owner.pubkey(), estate: self.estate },
+            heirloom::instruction::Heartbeat {},
+        );
+        send(&mut self.svm, i, &[&self.owner])
+    }
+
+    fn replace_seat(&mut self, index: u8, new_holder: Pubkey) -> Result<(), String> {
+        let i = ix(
+            heirloom::accounts::OwnerReplaceSeat { owner: self.owner.pubkey(), estate: self.estate, seat: seat_pda(&self.estate, index) },
+            heirloom::instruction::OwnerReplaceSeat { index, new_holder },
+        );
+        send(&mut self.svm, i, &[&self.owner])
+    }
+
+    /// Overwrites an account with a value an earlier program version could have left behind.
+    fn plant<T: AccountSerialize>(&mut self, address: Pubkey, value: &T) {
+        let mut account = self.svm.get_account(&address).expect("account missing");
+        let mut data = Vec::new();
+        value.try_serialize(&mut data).unwrap();
+        account.data[..data.len()].copy_from_slice(&data);
+        self.svm.set_account(address, account).unwrap();
+    }
+}
+
+// ------------------------------------------------------------------- R1 a check-in is proof of life
+
+#[test]
+fn r01_check_in_during_the_wait_stops_the_unlock() {
+    let mut env = Env::configured();
+    env.death_pending();
+    warp(&mut env.svm, WAITING - 1);
+    env.heartbeat().unwrap();
+    let e = env.estate_state();
+    assert_eq!((e.status, e.death_cert_hash, e.death_attestations), (EstateStatus::Active, [0u8; 32], 0));
+    assert_eq!((e.death_verdict, e.death_pending_since, e.last_heartbeat), (Verdict::Pending, 0, now(&env.svm)));
+    warp(&mut env.svm, 2);
+    expect_err(env.finalize_unlock(), HeirloomError::BadStatus);
+}
+
+#[test]
+fn r01_check_in_clears_a_claim_that_has_no_quorum_yet() {
+    let mut env = Env::configured();
+    env.submit_death_claim(1).unwrap();
+    env.review_death(true).unwrap();
+    env.attest_death(0).unwrap();
+    env.heartbeat().unwrap();
+    expect_err(env.attest_death(1), HeirloomError::NoDeathClaim);
+}
+
+#[test]
+fn r01_check_in_is_refused_after_the_unlock() {
+    let mut env = Env::configured();
+    env.unlock();
+    expect_err(env.heartbeat(), HeirloomError::BadStatus);
+}
+
+#[test]
+fn r01_check_in_voids_an_unlock_objection_and_its_votes() {
+    let (mut env, people) = guardian_env();
+    env.death_pending();
+    let estate = env.estate;
+    env.object(&people, TargetKind::Unlock, estate, 0, None, None).unwrap();
+    let (v0, v1) = (env.v(0), env.v(1));
+    env.vote_objection(&v0, estate, true, None, None, None).unwrap();
+    warp(&mut env.svm, 1);
+    env.heartbeat().unwrap();
+    warp(&mut env.svm, 1);
+    env.death_pending();
+    // The old vote cannot help cancel the new claim, and the old objection does not hold it.
+    expect_err(env.vote_objection(&v1, estate, true, None, None, None), HeirloomError::ObjectionLapsed);
+    env.object(&people, TargetKind::Unlock, estate, 1, None, None).unwrap();
+    assert_eq!((env.objection(&estate).votes_uphold, env.guard().open_objections), (0, 1));
+}
+
+// ------------------------------------------------------------------- R2 replacing a trusted person
+
+#[test]
+fn r02_replacing_a_trusted_person_clears_their_attestation_and_the_claim() {
+    let (mut env, _people) = guardian_env();
+    env.submit_death_claim(1).unwrap();
+    env.review_death(true).unwrap();
+    env.attest_death(0).unwrap();
+    let newbie = funded(&mut env.svm);
+    warp(&mut env.svm, 5);
+    env.replace_seat(0, newbie.pubkey()).unwrap();
+    let e = env.estate_state();
+    assert_eq!((e.death_cert_hash, e.death_attestations, e.last_heartbeat), ([0u8; 32], 0, now(&env.svm)));
+    expect_err(env.attest_death(1), HeirloomError::NoDeathClaim);
+
+    // A fresh claim counts the new person and starts from nothing.
+    env.submit_death_claim(1).unwrap();
+    env.review_death(true).unwrap();
+    env.attest_death_by(&newbie).unwrap();
+    assert_eq!(env.estate_state().status, EstateStatus::Active);
+}
+
+#[test]
+fn r02_replacing_is_refused_once_the_death_is_pending() {
+    let (mut env, _people) = guardian_env();
+    env.death_pending();
+    let newbie = Keypair::new().pubkey();
+    expect_err(env.replace_seat(0, newbie), HeirloomError::BadStatus);
+}
+
+// ------------------------------------------------------------------- R5 a death claim cannot squat
+
+#[test]
+fn r05_an_unreviewed_death_claim_can_be_replaced_after_a_grace() {
+    let mut env = Env::configured();
+    env.submit_death_claim(1).unwrap();
+    assert_eq!(env.estate_state().death_pending_since, now(&env.svm));
+    warp(&mut env.svm, WAITING - 1);
+    expect_err(env.submit_death_claim(2), HeirloomError::BadStatus);
+    warp(&mut env.svm, 1);
+    env.submit_death_claim(2).unwrap();
+    let e = env.estate_state();
+    assert_eq!((e.death_submitted_by, e.death_pending_since), (env.kid2.pubkey(), now(&env.svm)));
+}
+
+#[test]
+fn r05_the_same_person_waits_two_graces() {
+    let mut env = Env::configured();
+    env.submit_death_claim(1).unwrap();
+    warp(&mut env.svm, 2 * WAITING - 1);
+    expect_err(env.submit_death_claim(1), HeirloomError::BadStatus);
+    warp(&mut env.svm, 1);
+    env.submit_death_claim(1).unwrap();
+}
+
+#[test]
+fn r05_a_reviewed_claim_without_a_quorum_is_replaceable_after_two_waiting_periods() {
+    let mut env = Env::configured();
+    env.submit_death_claim(1).unwrap();
+    env.review_death(true).unwrap();
+    env.attest_death(0).unwrap();
+    warp(&mut env.svm, 2 * WAITING - 1);
+    expect_err(env.submit_death_claim(2), HeirloomError::BadStatus);
+    warp(&mut env.svm, 1);
+    // Whoever made it does not go first.
+    expect_err(env.submit_death_claim(1), HeirloomError::BadStatus);
+    env.submit_death_claim(2).unwrap();
+    let e = env.estate_state();
+    assert_eq!((e.death_verdict, e.death_attestations), (Verdict::Pending, 0));
+}
+
+#[test]
+fn r05_the_grace_is_at_most_a_day() {
+    let mut env = Env::new();
+    let i = env.create_estate_ix(env.verifier_keys(), 2, 1, 2, 30 * DAY);
+    send(&mut env.svm, i, &[&env.owner]).unwrap();
+    let (k1, k2) = (env.kid1.pubkey(), env.kid2.pubkey());
+    env.add_beneficiary(k1, "Child 1");
+    env.add_beneficiary(k2, "Child 2");
+    env.submit_death_claim(1).unwrap();
+    warp(&mut env.svm, DAY);
+    env.submit_death_claim(2).unwrap();
+}
+
+#[test]
+fn r05_a_confirmed_claim_cannot_be_replaced() {
+    let mut env = Env::configured();
+    env.death_pending();
+    warp(&mut env.svm, 10 * 365 * DAY);
+    expect_err(env.submit_death_claim(2), HeirloomError::BadStatus);
+}
+
+#[test]
+fn r05_the_wait_runs_from_the_quorum_not_the_submission() {
+    let mut env = Env::configured();
+    env.submit_death_claim(1).unwrap();
+    env.review_death(true).unwrap();
+    warp(&mut env.svm, WAITING);
+    env.attest_death(0).unwrap();
+    env.attest_death(1).unwrap();
+    assert_eq!(env.estate_state().death_pending_since, now(&env.svm));
+    expect_err(env.finalize_unlock(), HeirloomError::WaitingPeriodNotOver);
+}
+
+#[test]
+fn r05_a_legacy_claim_with_time_zero_is_stale_at_once() {
+    let mut env = Env::configured();
+    env.submit_death_claim(1).unwrap();
+    let mut e = env.estate_state();
+    e.death_pending_since = 0;
+    let address = env.estate;
+    env.plant(address, &e);
+    env.submit_death_claim(2).unwrap();
+}
+
+#[test]
+fn r05_the_agent_cannot_review_a_claim_that_replaced_the_one_it_read() {
+    let mut env = Env::configured();
+    env.submit_death_claim(1).unwrap();
+    expect_err(env.review_death_as(ReviewOutcome::Approve, Some([1u8; 32])), HeirloomError::ReportChanged);
+    env.review_death_as(ReviewOutcome::Approve, Some([7u8; 32])).unwrap();
+}
+
+// ------------------------------------------------------------------- R7 referred death, nobody left
+
+#[test]
+fn r07_referred_death_with_all_seats_vacant_pays_after_twice_the_wait() {
+    let (mut env, people) = guardian_env();
+    let k1 = env.kid1.pubkey();
+    env.set_fallback([k1, d(), d(), d()]).unwrap();
+    env.submit_death_claim(1).unwrap();
+    env.refer_death().unwrap();
+    vacate_all(&mut env, &people);
+    env.start_fallback().unwrap();
+    warp(&mut env.svm, FALLBACK_WAIT);
+    expect_err(env.execute_fallback(k1), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, FALLBACK_WAIT);
+    env.execute_fallback(k1).unwrap();
+    assert_eq!(balance(&env.svm, &ata(&k1, &env.usdt_mint)), 5_000 * USDT);
+    assert_eq!(env.estate_state().status, EstateStatus::Unlocked);
+}
+
+#[test]
+fn r07_an_unreviewed_death_does_not_start_the_fallback() {
+    let (mut env, people) = guardian_env();
+    let k1 = env.kid1.pubkey();
+    env.set_fallback([k1, d(), d(), d()]).unwrap();
+    env.submit_death_claim(1).unwrap();
+    vacate_all(&mut env, &people);
+    expect_err(env.start_fallback(), HeirloomError::FallbackNotReady);
+}
+
+#[test]
+fn r07_a_reviewed_claim_cannot_be_swapped_out_when_nobody_is_left() {
+    let (mut env, people) = fallback_env();
+    vacate_all(&mut env, &people);
+    warp(&mut env.svm, 10 * WAITING);
+    expect_err(env.submit_death_claim(2), HeirloomError::BadStatus);
+    env.start_fallback().unwrap();
+}
+
+#[test]
+fn r07_a_countdown_for_an_earlier_claim_does_not_count_for_the_next() {
+    let (mut env, people) = fallback_env();
+    vacate_all(&mut env, &people);
+    env.start_fallback().unwrap();
+    warp(&mut env.svm, FALLBACK_WAIT);
+    // As an upheld unlock objection leaves it: the claim is gone, the countdown is still stored.
+    let mut e = env.estate_state();
+    e.clear_death_claim();
+    let address = env.estate;
+    env.plant(address, &e);
+    env.submit_death_claim(2).unwrap();
+    env.review_death(true).unwrap();
+    let k1 = env.kid1.pubkey();
+    expect_err(env.execute_fallback(k1), HeirloomError::FallbackNotReady);
+    env.start_fallback().unwrap();
+    expect_err(env.execute_fallback(k1), HeirloomError::WaitingPeriodNotOver);
 }

@@ -117,8 +117,13 @@ pub mod heirloom {
         instructions::death::submit_death_claim_handler(ctx, cert_hash)
     }
 
-    pub fn review_death(ctx: Context<ReviewDeath>, outcome: ReviewOutcome, report_hash: [u8; 32]) -> Result<()> {
-        instructions::death::review_death_handler(ctx, outcome, report_hash)
+    pub fn review_death(
+        ctx: Context<ReviewDeath>,
+        outcome: ReviewOutcome,
+        report_hash: [u8; 32],
+        cert_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::death::review_death_handler(ctx, outcome, report_hash, cert_hash)
     }
 
     pub fn attest_death(ctx: Context<AttestDeath>) -> Result<()> {

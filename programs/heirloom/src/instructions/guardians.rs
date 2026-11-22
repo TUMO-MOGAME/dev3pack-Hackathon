@@ -6,7 +6,8 @@ use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use super::{
-    account_exists, count_bits, now, objection_is_open, read_account, transfer_checked_cpi, write_account,
+    account_exists, count_bits, now, objection_is_open, read_account, record_proof_of_life, transfer_checked_cpi,
+    write_account,
 };
 use crate::errors::HeirloomError;
 use crate::events::*;
@@ -50,16 +51,33 @@ fn without(pair: [Pubkey; 2], key: &Pubkey) -> [Pubkey; 2] {
     if is_set(&p[0]) { p } else { [p[1], Pubkey::default()] }
 }
 
-/// The owner's death is established for the fallback: estate Unlocked, or the agent approved the death claim.
+/// The owner's death is established for the fallback: estate Unlocked, or the agent did not reject the claim.
 fn owner_death_established(estate: &Estate) -> bool {
-    estate.status == EstateStatus::Unlocked || estate.death_verdict == Verdict::Approved
+    estate.status == EstateStatus::Unlocked || estate.death_verdict.open_to_people()
+}
+
+/// A death the agent only referred, with no trusted people to decide it, waits twice as long.
+fn fallback_delay(estate: &Estate, guard: &Guard) -> i64 {
+    let times = if estate.status == EstateStatus::Active && estate.death_verdict == Verdict::Referred { 2 } else { 1 };
+    guard.fallback_wait().saturating_mul(times)
+}
+
+/// The countdown still runs: started for this death, and the owner has shown no life since.
+fn countdown_valid(estate: &Estate, guard: &Guard) -> bool {
+    guard.fallback_started_at != 0
+        && estate.last_heartbeat < guard.fallback_started_at
+        && estate.death_pending_since <= guard.fallback_started_at
 }
 
 /// An Open Fallback objection lapses (counts as Dismissed) once `fallback_wait_secs` have passed since it
-/// was raised without it being upheld, so a missing or tied vote can never lock the vault forever.
-fn fallback_objection_lapsed(o: &Objection, wait: i64, ts: i64) -> Result<bool> {
+/// was raised without it being upheld, so a missing or tied vote can never lock the vault forever. One raised
+/// before the owner's last sign of life is void, with its votes.
+fn fallback_objection_lapsed(o: &Objection, estate: &Estate, wait: i64, ts: i64) -> Result<bool> {
     if o.kind != TargetKind::Fallback || o.status != ObjectionStatus::Open {
         return Ok(false);
+    }
+    if o.voided_by_owner(estate) {
+        return Ok(true);
     }
     let lapses_at = o.raised_at.checked_add(wait).ok_or(HeirloomError::MathOverflow)?;
     Ok(ts >= lapses_at)
@@ -673,6 +691,8 @@ pub fn owner_replace_seat_handler(ctx: Context<OwnerReplaceSeat>, _index: u8, ne
     seat.generation = seat.generation.checked_add(1).ok_or(HeirloomError::MathOverflow)?;
     seat.clear_succession();
     estate.verifiers[seat.index as usize] = new_holder;
+    // Only the living owner can do this, and it revokes what the replaced person attested.
+    record_proof_of_life(estate.key(), estate, now()?);
     emit_seat_configured(seat)
 }
 
@@ -807,7 +827,7 @@ pub fn raise_objection_handler(
             require_keys_eq!(target, guard_key, HeirloomError::BadStatus);
             let g = &ctx.accounts.guard;
             require!(!g.fallback_done, HeirloomError::FallbackDone);
-            require!(g.fallback_started_at != 0, HeirloomError::FallbackNotReady);
+            require!(countdown_valid(estate, g), HeirloomError::FallbackNotReady);
         }
     }
 
@@ -936,7 +956,7 @@ pub fn vote_objection_handler(ctx: Context<VoteObjection>, uphold: bool) -> Resu
     require!(!objection.is_dispute(), HeirloomError::BadStatus);
     let kind = objection.kind;
     require!(
-        !fallback_objection_lapsed(objection, ctx.accounts.guard.fallback_wait(), now()?)?,
+        !fallback_objection_lapsed(objection, &ctx.accounts.estate, ctx.accounts.guard.fallback_wait(), now()?)?,
         HeirloomError::ObjectionLapsed
     );
 
@@ -1217,11 +1237,8 @@ pub fn start_fallback_handler(ctx: Context<StartFallback>) -> Result<()> {
     let estate = &ctx.accounts.estate;
     let guard = &mut ctx.accounts.guard;
     require!(!guard.fallback_done, HeirloomError::FallbackDone);
-    // Not started, or a start the owner has since disproved by a heartbeat / veto.
-    require!(
-        guard.fallback_started_at == 0 || estate.last_heartbeat >= guard.fallback_started_at,
-        HeirloomError::BadStatus
-    );
+    // Not started, or a start the owner has since disproved, or one made for an earlier death claim.
+    require!(!countdown_valid(estate, guard), HeirloomError::BadStatus);
     require!(
         all_vacant([&ctx.accounts.seat0, &ctx.accounts.seat1, &ctx.accounts.seat2]),
         HeirloomError::SeatsNotVacant
@@ -1235,7 +1252,7 @@ pub fn start_fallback_handler(ctx: Context<StartFallback>) -> Result<()> {
     let ts = now()?;
     guard.fallback_started_at = ts;
     let runs_at = ts
-        .checked_add(guard.fallback_wait())
+        .checked_add(fallback_delay(estate, guard))
         .ok_or(HeirloomError::MathOverflow)?;
 
     emit!(FallbackStarted {
@@ -1306,7 +1323,7 @@ pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
     let mut lapsed: Option<Objection> = None;
     let objection_open = if account_exists(&obj_info) {
         let mut o: Objection = read_account(&obj_info)?;
-        if fallback_objection_lapsed(&o, wait, ts)? {
+        if fallback_objection_lapsed(&o, &ctx.accounts.estate, wait, ts)? {
             o.status = ObjectionStatus::Dismissed;
             write_account(&obj_info, &o)?;
             lapsed = Some(o);
@@ -1333,12 +1350,8 @@ pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
     let guard = &ctx.accounts.guard;
 
     require!(!guard.fallback_done, HeirloomError::FallbackDone);
-    require!(guard.fallback_started_at != 0, HeirloomError::FallbackNotReady);
-    // The owner showed signs of life after the start (heartbeat / veto): the countdown is void.
-    require!(
-        estate.last_heartbeat < guard.fallback_started_at,
-        HeirloomError::FallbackNotReady
-    );
+    // Not started, void after the owner's sign of life, or made for an earlier death claim.
+    require!(countdown_valid(estate, guard), HeirloomError::FallbackNotReady);
     require!(owner_death_established(estate), HeirloomError::FallbackNotReady);
     require!(
         all_vacant([&ctx.accounts.seat0, &ctx.accounts.seat1, &ctx.accounts.seat2]),
@@ -1346,7 +1359,7 @@ pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
     );
     let runs_at = guard
         .fallback_started_at
-        .checked_add(guard.fallback_wait())
+        .checked_add(fallback_delay(estate, guard))
         .ok_or(HeirloomError::MathOverflow)?;
     require!(ts >= runs_at, HeirloomError::WaitingPeriodNotOver);
     require!(!objection_open, HeirloomError::ObjectionOpen);
@@ -1371,7 +1384,12 @@ pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
     }
 
     ctx.accounts.guard.fallback_done = true;
-    ctx.accounts.estate.status = EstateStatus::Unlocked;
+    let estate = &mut ctx.accounts.estate;
+    // From submission time to the time the death took effect.
+    if estate.status == EstateStatus::Active {
+        estate.death_pending_since = ts;
+    }
+    estate.status = EstateStatus::Unlocked;
 
     emit!(FallbackExecuted {
         estate: ctx.accounts.estate.key(),
@@ -1411,7 +1429,7 @@ pub fn lapse_objection_handler(ctx: Context<LapseObjection>) -> Result<()> {
     require!(objection.status == ObjectionStatus::Open, HeirloomError::BadStatus);
     let ts = now()?;
     let lapsed = if objection.kind == TargetKind::Fallback {
-        fallback_objection_lapsed(objection, ctx.accounts.guard.fallback_wait(), ts)?
+        fallback_objection_lapsed(objection, &ctx.accounts.estate, ctx.accounts.guard.fallback_wait(), ts)?
     } else {
         !objection.is_effectively_open(&ctx.accounts.estate, ts)
     };
