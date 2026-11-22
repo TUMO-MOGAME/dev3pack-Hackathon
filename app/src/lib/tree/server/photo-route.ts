@@ -24,6 +24,7 @@ import { defaultPeople, PERSON_ID, TREE_MAX_SKEW_MS, treeBody, treeMessage } fro
 import { checkPhoto, PHOTO_MAX_BODY, photoConsent, type PhotoSubject } from "../photos";
 import { getLinks, getPhotos, putPhoto } from "./store";
 import { requireMember, type MemberCheck } from "@/lib/access/server";
+import { createNonces } from "@/lib/access/nonces";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 const body = z.object({
@@ -44,7 +45,7 @@ export interface PhotoRouteDeps {
 const defaults: PhotoRouteDeps = { fetchRaw: fetchAccountRaw, now: () => Date.now(), chain: isChainMode };
 
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
-const seen = new Map<string, number>();
+const firstUse = createNonces("tree-photo", TREE_MAX_SKEW_MS * 2);
 
 /** What the server knows of a person on this estate's tree: the declared family (demo estate) and hidden flags. */
 async function subjectOf(estate: string, person: string): Promise<PhotoSubject> {
@@ -73,9 +74,7 @@ export function photoRoutes(deps: PhotoRouteDeps = defaults) {
     if (Math.abs(now - b.ts) > TREE_MAX_SKEW_MS) throw new HttpError(401, "This request is too old. Please try again.", "stale");
     const signed = treeBody({ action: "photo", person: b.person, photo: b.photo });
     if (!verifyEd25519(b.wallet, treeMessage("photo", b.estate, b.wallet, b.ts, sha(signed)), b.sig)) throw new HttpError(401, "The signature does not match this wallet.", "unauthorized");
-    for (const [k, t] of seen) if (now - t > TREE_MAX_SKEW_MS * 2) seen.delete(k);
-    if (seen.has(b.sig)) throw new HttpError(401, "This request was already used. Please try again.", "replay");
-    seen.set(b.sig, now);
+    if (!(await firstUse(b.sig, now))) throw new HttpError(401, "This request was already used. Please try again.", "replay");
 
     if (b.photo !== null) {
       const why = checkPhoto(b.photo);

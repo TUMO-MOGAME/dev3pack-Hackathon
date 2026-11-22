@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { handler, json, parseJson, rateLimit } from "@/lib/api/http";
+import { handler, json, parseJson, rateLimit, rateLimitShared } from "@/lib/api/http";
 import { interpret, qvacStatus } from "@/lib/assistant/qvac";
 
 // QVAC needs Node (it spawns a Bare worker with native llama.cpp). Route handlers run on the Node.js runtime by
@@ -20,7 +20,7 @@ const body = z.object({
  * Only reads the request. It never sends anything: the app resolves the intent and opens the payment review.
  */
 export const POST = handler(async (req) => {
-  rateLimit(req, "assistant-qvac", 30);
+  await rateLimitShared(req, "assistant-qvac", 30);
   const { text, recipients } = await parseJson(req, body, 20_000);
   return json(await interpret(text, recipients));
 });

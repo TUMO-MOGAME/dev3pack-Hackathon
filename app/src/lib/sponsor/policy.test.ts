@@ -272,6 +272,77 @@ describe("permissionless instructions with a signing caller (finalize_succession
   });
 });
 
+describe("second security review (22 Nov 2026)", () => {
+  const ctx: ix.Ctx = { programId, usdtMint: mint };
+  const k = () => Keypair.generate().publicKey;
+  const [u, nft, asset] = [user.publicKey, k(), k()];
+  const estate = estatePda(programId, u);
+  const H = "ab".repeat(32);
+  const payerSlot = findInstruction("approve_claim").accounts.findIndex((a) => a.name === "payer");
+  const withSlot = policy({ heirloomRentPayerSlots: { approve_claim: payerSlot } });
+  /** The new and changed instructions, as the app builds them. */
+  const built: Record<string, () => TransactionInstruction> = {
+    report_fallback_death: () => ix.reportFallbackDeath(ctx, u, estate, 1, H, { monitorSeat: 0, beneficiary: true }),
+    resolve_fallback_death: () => ix.resolveFallbackDeath(ctx, { signer: u, estate, index: 1, dead: false, rentTo: k(), as: { monitorSeat: 0, beneficiary: true } }),
+    release_asset: () => ix.releaseAsset(ctx, u, asset, nft),
+    remove_member: () => ix.removeMember(ctx, u, { beneficiary: k(), payee: k() }),
+    add_rule: () => ix.addRule(ctx, u, { ruleId: 1, beneficiaryWallet: k(), category: "Books", allowedPayeeKind: "School", maxPerClaim: 1n, lifetimeCap: 2n, validUntil: 2e9 }),
+    report_seat_death: () => ix.reportSeatDeath(ctx, u, estate, 1, H, { beneficiary: true }),
+    confirm_seat_death: () => ix.confirmSeatDeath(ctx, u, estate, 1, { beneficiary: true }),
+    finalize_succession: () => ix.finalizeSuccession(ctx, estate, 1, u, k()),
+    vote_objection: () => ix.voteObjection(ctx, { voter: u, estate, kind: "Fallback", target: k(), uphold: true }),
+    execute_claim: () => ix.executeClaim(ctx, { estate, payer: u, rule: k(), claim: k(), beneficiary: k(), payeeWallet: k() }),
+    execute_scheduled: () => ix.executeScheduled(ctx, { estate, payer: u, rule: k(), beneficiary: k(), payeeWallet: k() }),
+    execute_fallback: () => ix.executeFallback(ctx, { payer: u, estate, recipient: k(), recipientIndex: 0 }),
+    sweep_residual: () => ix.sweepResidual(ctx, { payer: u, estate, recipient: k(), reportIndex: 255, rules: [k(), k()] }),
+    withdraw_offer: () => ix.withdrawOffer(ctx, estate, asset, u),
+    set_agent: () => ix.setAgent(ctx, u, k()),
+    vote_agent: () => ix.voteAgent(ctx, estate, u, k()),
+    approve_claim: () => ix.approveClaim(estate, u, k(), k()),
+  };
+
+  it.each(Object.keys(built))("%s: sponsored, with no rent from the sponsor", (name) => {
+    expect(SPONSORED_HEIRLOOM_IXS).toContain(name);
+    expect(validateSponsoredTx(wire([built[name]()]), withSlot)).toMatchObject({ rentLamports: 0, summary: [`heirloom ${name}`] });
+  });
+
+  // Reporter, rent_to, payer, close destination, optional and remaining accounts: every slot of every one.
+  it.each(Object.keys(built))("%s: the sponsor can be none of its accounts", (name) => {
+    const original = built[name]();
+    original.keys.forEach((meta, i) => {
+      if (name === "approve_claim" && i === payerSlot) return;
+      const t = new TransactionInstruction({
+        programId, data: original.data,
+        keys: original.keys.map((m, j) => (j === i ? { ...m, pubkey: sponsor.publicKey } : m)),
+      });
+      // Another instruction keeps the user a signer, whichever slot the sponsor took.
+      rejects(wire([t, heirloomIx("heartbeat")]), "sponsor_in_instruction", withSlot);
+      expect(meta.pubkey.equals(sponsor.publicKey)).toBe(false);
+    });
+  });
+
+  it("never a reporter's rent: report_fallback_death has no rent slot", () => {
+    const t = ix.reportFallbackDeath(ctx, sponsor.publicKey, estate, 1, H);
+    rejects(wire([t, heirloomIx("heartbeat")]), "sponsor_in_instruction", withSlot);
+  });
+
+  it("a co-signed sale is never a sponsored transaction", () => {
+    rejects(wire([ix.acceptOffer(ctx, { estate, agent: k(), asset, nftMint: nft, buyer: k(), recipient: k(), expectedAmount: 1n, coSigner: u })], { signers: [] }), "missing_signature");
+    expect(SPONSORED_HEIRLOOM_IXS).not.toContain("accept_offer");
+  });
+
+  it("the agent's reviews stay out, the owner's photos stay in", () => {
+    for (const n of AGENT_ALLOWED.filter((x) => x !== "execute_scheduled")) expect(SPONSORED_HEIRLOOM_IXS).not.toContain(n);
+    expect(SPONSORED_HEIRLOOM_IXS).toContain("set_asset_media");
+  });
+
+  it("rent for one account in a transaction: not a stamp and a token account together", () => {
+    const stamp = built.approve_claim();
+    stamp.keys[payerSlot] = { ...stamp.keys[payerSlot], pubkey: sponsor.publicKey };
+    rejects(wire([stamp, createAta(), transfer()]), "rent_not_allowed", withSlot);
+  });
+});
+
 describe("disputes and yearly caps (15 Nov 2026)", () => {
   const USER = ["raise_dispute", "resolve_dispute", "set_yearly_cap"];
   it("are sponsored family / trusted-person / owner instructions, never signed by the agent", () => {

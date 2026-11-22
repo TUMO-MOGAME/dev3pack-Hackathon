@@ -1,4 +1,4 @@
-import { handler, HttpError, rateLimit } from "@/lib/api/http";
+import { handler, HttpError, rateLimitShared } from "@/lib/api/http";
 import { demoVoiceText } from "@/lib/legacy/demo-voice";
 import { hasElevenLabs, textToSpeech } from "@/lib/legacy/server/elevenlabs";
 import { heirloomVoice, standinVoice } from "@/lib/legacy/server/standin";
@@ -21,7 +21,7 @@ export const GET = handler(async (req) => {
   if (!hasElevenLabs()) throw new HttpError(503, "The voice is not available right now.", "unavailable");
   let audio = cache.get(line);
   if (!audio) {
-    rateLimit(req, "legacy-demo-voice", 20);
+    await rateLimitShared(req, "legacy-demo-voice", 20);
     audio = await textToSpeech(found.voice === "heirloom" ? heirloomVoice() : standinVoice("he"), found.text).catch((e: unknown) => {
       console.error("[legacy] demo voice failed:", e instanceof Error ? e.message : e);
       throw new HttpError(503, "The voice is not available right now.", "unavailable");

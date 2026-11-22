@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { handler, HttpError, isChainMode, json, parseJson, rateLimit } from "@/lib/api/http";
+import { handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
 import { rankOffersBody } from "@/lib/agent/schemas";
 import { rankOffers, type RankAsset, type RankOffer, type SaleSigners } from "@/lib/agent/offers";
 import { explainRanking } from "@/lib/agent/explain";
@@ -15,7 +15,7 @@ const byAddress = z.object({ estate: addr, asset: addr, explain: z.boolean().opt
  * → OfferRanking + explanation. Ranking is deterministic TS (same rule as accept_offer); Gemini only explains.
  */
 export const POST = handler(async (req) => {
-  rateLimit(req, "rank-offers", 20);
+  await rateLimitShared(req, "rank-offers", 20);
   const raw: unknown = await req.clone().json().catch(() => null);
   let asset: RankAsset & { title?: string };
   let offers: RankOffer[];

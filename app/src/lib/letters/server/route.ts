@@ -5,7 +5,7 @@ import "server-only";
  *
  * Checks, in this order: the body's shape (400 bad_input) and size (413 too_large); the demo deployment
  * (503 unavailable: the demo keeps letters in the browser); the time (401 stale); the signature (401 unauthorized);
- * single use on this instance (401 replay); the estate from the chain (404). Then:
+ * single use, across instances when the shared store is there (401 replay); the estate from the chain (404). Then:
  *  - list: the owner gets all their letters (tombstones without text), an active beneficiary the open letters they
  *    may read, both the counts; anyone else 403 not_family. Newly open letters are marked opened (sticky).
  *  - write: owner only (403 forbidden), Active only (409 paused / sealed), an open letter is no longer edited
@@ -28,6 +28,7 @@ import { LETTER_MAX_BODY, LETTER_MAX_CHARS, type Letter } from "../types";
 import { checkCtx, lettersFor, readCtx, tomb, viewOf } from "../view";
 import { seededLetters, withSeeded } from "./demo-letters";
 import { getLetters, markOpened, putLetter } from "./store";
+import { createNonces } from "@/lib/access/nonces";
 
 export interface LettersRouteDeps {
   chain(): boolean;
@@ -51,7 +52,7 @@ function cachedSnapshot(estate: string): Promise<EstateSnapshot | null> {
 const defaults: LettersRouteDeps = { chain: isChainMode, now: () => Date.now(), snapshot: cachedSnapshot };
 
 export const sha = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
-const seen = new Map<string, number>();
+const firstUse = createNonces("letters", LETTER_MAX_SKEW_MS * 2);
 
 /** Parses, then checks time, signature and single use. Shared with the review route. */
 export async function readSigned<T extends { estate: string; wallet: string; ts: number; sig: string }>(
@@ -70,9 +71,7 @@ export async function readSigned<T extends { estate: string; wallet: string; ts:
   if (Math.abs(now - b.ts) > LETTER_MAX_SKEW_MS) throw new HttpError(401, "This request is too old. Please try again.", "stale");
   const { action, text } = body(b);
   if (!verifyEd25519(b.wallet, letterMessage(action, b.estate, b.wallet, b.ts, sha(text)), b.sig)) throw new HttpError(401, "The signature does not match this wallet.", "unauthorized");
-  for (const [k, t] of seen) if (now - t > LETTER_MAX_SKEW_MS * 2) seen.delete(k);
-  if (seen.has(b.sig)) throw new HttpError(401, "This request was already used. Please try again.", "replay");
-  seen.set(b.sig, now);
+  if (!(await firstUse(b.sig, now))) throw new HttpError(401, "This request was already used. Please try again.", "replay");
   return b;
 }
 

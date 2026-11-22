@@ -18,6 +18,7 @@ import type { Viewer } from "./auth";
 import * as el from "./elevenlabs";
 import { heirloomVoice, standinVoice } from "./standin";
 import * as store from "./store";
+import { takeShared } from "@/lib/server/shared-store";
 
 const isUnlocked = (v: Viewer) => (v.snap ? v.snap.estate.status === "Unlocked" : v.demo);
 
@@ -181,13 +182,19 @@ async function speakContext(v: Viewer) {
 }
 
 const daily = new Map<string, { day: string; n: number }>();
-/** Per-estate cap on rendered speech (cost + abuse). Per instance; Supabase cache makes repeats free. */
+/**
+ * Per-estate cap on rendered speech (cost + abuse): on this instance, and across instances when the shared store is
+ * there. Supabase cache makes repeats free. Always await it.
+ */
 export const SPEAK_DAILY_LIMIT = 200;
-function countSpeak(estate: string) {
+export async function countSpeak(estate: string): Promise<void> {
+  const tooMuch = () => new HttpError(429, "The legacy voice has spoken a lot today. Please try again tomorrow.", "rate_limited");
   const day = new Date().toISOString().slice(0, 10);
   const d = daily.get(estate);
-  if (!d || d.day !== day) { daily.set(estate, { day, n: 1 }); return; }
-  if (++d.n > SPEAK_DAILY_LIMIT) throw new HttpError(429, "The legacy voice has spoken a lot today. Please try again tomorrow.", "rate_limited");
+  if (!d || d.day !== day) daily.set(estate, { day, n: 1 });
+  else if (++d.n > SPEAK_DAILY_LIMIT) throw tooMuch();
+  const taken = await takeShared([{ key: `legacy-speak:${estate}`, max: SPEAK_DAILY_LIMIT, windowSecs: 86_400 }]);
+  if (taken && !taken.ok) throw tooMuch();
 }
 
 /** What may be spoken: a milestone the owner wrote, the fixed sample line (owner, while alive), or Heirloom's
@@ -223,7 +230,7 @@ export async function speak(v: Viewer, req: SpeakRequest): Promise<{ text: strin
   const sha = await sha256Hex(`${voiceId}\n${text}`);
   const hit = await store.cachedMessage(v.estate, sha);
   if (hit) return { text, audio: hit, voice };
-  countSpeak(v.estate);
+  await countSpeak(v.estate);
   const audio = await el.textToSpeech(voiceId, text).catch((e: unknown) => {
     // Log ElevenLabs' detail on the server; the family sees a plain message (the app then shows the words).
     console.error("[legacy] speak failed:", e instanceof Error ? e.message : e);

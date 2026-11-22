@@ -18,6 +18,7 @@ import { PERSON_ID, RELATIONSHIP_KINDS, relationshipId, TREE_MAX_SKEW_MS, treeBo
 import type { RelationshipKind } from "../types";
 import { getLinks, putLink, removeLink, setHiddenFlag } from "./store";
 import { requireMember, type MemberCheck } from "@/lib/access/server";
+import { createNonces } from "@/lib/access/nonces";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 const sig = z.string().regex(/^[0-9a-f]{128}$/);
@@ -39,7 +40,7 @@ export interface TreeRouteDeps {
 const defaults: TreeRouteDeps = { fetchRaw: fetchAccountRaw, now: () => Date.now(), chain: isChainMode };
 
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
-const seen = new Map<string, number>();
+const firstUse = createNonces("tree", TREE_MAX_SKEW_MS * 2);
 
 export function treeRoutes(deps: TreeRouteDeps = defaults) {
   const GET = handler(async (req) => {
@@ -58,9 +59,7 @@ export function treeRoutes(deps: TreeRouteDeps = defaults) {
     const signedBody = b.action === "relate" ? treeBody({ action: b.action, kind: b.kind, from: b.from, to: b.to })
       : b.action === "unrelate" ? treeBody({ action: b.action, id: b.id }) : treeBody({ action: b.action, hidden: b.hidden });
     if (!verifyEd25519(b.wallet, treeMessage(b.action, b.estate, b.wallet, b.ts, sha(signedBody)), b.sig)) throw new HttpError(401, "The signature does not match this wallet.", "unauthorized");
-    for (const [k, t] of seen) if (now - t > TREE_MAX_SKEW_MS * 2) seen.delete(k);
-    if (seen.has(b.sig)) throw new HttpError(401, "This request was already used. Please try again.", "replay");
-    seen.set(b.sig, now);
+    if (!(await firstUse(b.sig, now))) throw new HttpError(401, "This request was already used. Please try again.", "replay");
 
     const estate = await deps.fetchRaw("Estate", b.estate);
     if (!estate) throw new HttpError(404, "Estate not found on-chain.");
