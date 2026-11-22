@@ -19,6 +19,10 @@ import { disputeLapsesAt, objectionLapsesAt } from "../disputes/types";
 const DEFAULT_KEY = "11111111111111111111111111111111";
 /** Byte offsets of Seat.monitors[0] and [1] (8 discriminator + 32 estate + 1 index + 32 holder + 2×32 backups). */
 export const SEAT_MONITOR_OFFSETS = [137, 169] as const;
+/** Seat.backups[0] and [1] (8 discriminator + 32 estate + 1 index + 32 holder). */
+export const SEAT_BACKUP_OFFSETS = [73, 105] as const;
+/** Guard.fallback[0..4] (8 discriminator + 32 estate + 3×8 waits + 2 open objections). */
+export const GUARD_FALLBACK_OFFSETS = [66, 98, 130, 162] as const;
 const ZERO_HASH = "0".repeat(64);
 const NO_SEAT = 255;
 const DISPUTE_SEAT = 254;

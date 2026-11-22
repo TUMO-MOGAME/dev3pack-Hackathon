@@ -219,4 +219,10 @@ describe("estate lists", () => {
     h.scanned = [{ type: "Beneficiary", raw: { active } }];
     expect((await createChainService().listEstatesFor(h.me)).map((e) => e.role)).toEqual(roles);
   });
+
+  it.each(["Seat", "Guard"])("a wallet named only in a %s gets the estate once, as monitor", async (type) => {
+    h.me = key();
+    h.scanned = [{ type, raw: {} }];
+    expect((await createChainService().listEstatesFor(h.me)).map((e) => e.role)).toEqual(["monitor"]);
+  });
 });
