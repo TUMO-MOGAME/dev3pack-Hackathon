@@ -335,6 +335,15 @@
             "PDA (address checked in the handler; blocks while Open). Otherwise it is not read: pass",
             "any account, e.g. the system program."
           ]
+        },
+        {
+          "name": "co_signer",
+          "docs": [
+            "A living trusted person other than the buyer and the agent. None only when no seat has a holder, and",
+            "then the sale waits for the listing to end."
+          ],
+          "signer": true,
+          "optional": true
         }
       ],
       "args": []
@@ -387,6 +396,9 @@
         },
         {
           "name": "beneficiary",
+          "docs": [
+            "New, or one the owner removed and now adds again."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -577,6 +589,9 @@
         },
         {
           "name": "rule",
+          "docs": [
+            "`rule_id` = estate.rule_count for a new slot, or the id of an ended rule whose slot is reused."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -594,9 +609,8 @@
                 "path": "estate"
               },
               {
-                "kind": "account",
-                "path": "estate.rule_count",
-                "account": "Estate"
+                "kind": "arg",
+                "path": "rule_id"
               }
             ]
           }
@@ -612,9 +626,37 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "year_cap",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  97,
+                  114,
+                  99,
+                  97,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "rule"
+              }
+            ]
+          }
         }
       ],
       "args": [
+        {
+          "name": "rule_id",
+          "type": "u16"
+        },
         {
           "name": "category",
           "type": {
@@ -1171,7 +1213,9 @@
           "name": "estate",
           "relations": [
             "rule",
-            "claim"
+            "claim",
+            "beneficiary_account",
+            "payee_account"
           ]
         },
         {
@@ -1407,6 +1451,18 @@
               }
             ]
           }
+        },
+        {
+          "name": "beneficiary_account",
+          "docs": [
+            "The claimant's Beneficiary PDA; must still be active."
+          ]
+        },
+        {
+          "name": "payee_account",
+          "docs": [
+            "The Payee PDA of claim.payee; gone once removed."
+          ]
         }
       ],
       "args": []
@@ -1630,6 +1686,12 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "fallback_report",
+          "docs": [
+            "report made during the countdown holds the payment until it can be confirmed or refuted."
+          ]
         }
       ],
       "args": []
@@ -1658,7 +1720,9 @@
         {
           "name": "estate",
           "relations": [
-            "rule"
+            "rule",
+            "beneficiary_account",
+            "payee_account"
           ]
         },
         {
@@ -1820,6 +1884,18 @@
               }
             ]
           }
+        },
+        {
+          "name": "beneficiary_account",
+          "docs": [
+            "The rule's Beneficiary PDA; must still be active."
+          ]
+        },
+        {
+          "name": "payee_account",
+          "docs": [
+            "The Payee PDA of rule.fixed_payee; gone once removed."
+          ]
         }
       ],
       "args": []
@@ -2799,7 +2875,10 @@
           }
         },
         {
-          "name": "nft_mint"
+          "name": "nft_mint",
+          "docs": [
+            "A title: one of a kind, and nobody can mint another or freeze it."
+          ]
         },
         {
           "name": "owner_nft",
@@ -2933,6 +3012,200 @@
       ]
     },
     {
+      "name": "release_asset",
+      "discriminator": [
+        115,
+        27,
+        170,
+        140,
+        90,
+        206,
+        252,
+        233
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          },
+          "relations": [
+            "asset"
+          ]
+        },
+        {
+          "name": "asset",
+          "docs": [
+            "Closed to the owner, so the same title can be registered again."
+          ],
+          "writable": true
+        },
+        {
+          "name": "nft_mint",
+          "relations": [
+            "asset"
+          ]
+        },
+        {
+          "name": "nft_escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "estate"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "nft_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "owner_nft",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "remove_member",
+      "discriminator": [
+        171,
+        57,
+        231,
+        150,
+        167,
+        128,
+        18,
+        55
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "estate"
+          ]
+        },
+        {
+          "name": "estate",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          },
+          "relations": [
+            "beneficiary_account",
+            "payee_account"
+          ]
+        },
+        {
+          "name": "beneficiary_account",
+          "docs": [
+            "The Beneficiary to remove (marked inactive; add_beneficiary brings them back), or None."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "payee_account",
+          "docs": [
+            "The Payee to remove (closed to the owner; add_payee brings it back), or None."
+          ],
+          "writable": true,
+          "optional": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "report_fallback_death",
       "discriminator": [
         163,
@@ -2947,6 +3220,10 @@
       "accounts": [
         {
           "name": "reporter",
+          "docs": [
+            "A living trusted person, monitor, active beneficiary or listed recipient. Pays the report's rent."
+          ],
+          "writable": true,
           "signer": true
         },
         {
@@ -2975,6 +3252,28 @@
               }
             ]
           }
+        },
+        {
+          "name": "fallback_report",
+          "writable": true
+        },
+        {
+          "name": "signer_seat",
+          "docs": [
+            "A seat the reporter monitors; otherwise None."
+          ],
+          "optional": true
+        },
+        {
+          "name": "beneficiary_account",
+          "docs": [
+            "The reporter's Beneficiary PDA; otherwise None."
+          ],
+          "optional": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -3009,7 +3308,7 @@
         {
           "name": "reporter",
           "docs": [
-            "Anyone except the holder."
+            "A trusted person, the owner, this seat's backup or monitor, or an active beneficiary; never the holder."
           ],
           "signer": true
         },
@@ -3022,6 +3321,13 @@
         {
           "name": "seat",
           "writable": true
+        },
+        {
+          "name": "beneficiary_account",
+          "docs": [
+            "The reporter's Beneficiary PDA when a beneficiary reports; otherwise None."
+          ],
+          "optional": true
         }
       ],
       "args": [
@@ -3103,6 +3409,89 @@
       "args": [
         {
           "name": "uphold",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "resolve_fallback_death",
+      "discriminator": [
+        36,
+        15,
+        81,
+        98,
+        6,
+        91,
+        23,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "`dead`: a second participant. Otherwise the reported recipient (\"I'm alive\")."
+          ],
+          "signer": true
+        },
+        {
+          "name": "estate",
+          "relations": [
+            "guard",
+            "fallback_report"
+          ]
+        },
+        {
+          "name": "guard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fallback_report",
+          "writable": true
+        },
+        {
+          "name": "rent_to",
+          "writable": true
+        },
+        {
+          "name": "signer_seat",
+          "docs": [
+            "A seat the signer monitors; otherwise None."
+          ],
+          "optional": true
+        },
+        {
+          "name": "beneficiary_account",
+          "docs": [
+            "The signer's Beneficiary PDA; otherwise None."
+          ],
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "index",
+          "type": "u8"
+        },
+        {
+          "name": "dead",
           "type": "bool"
         }
       ]
@@ -3200,6 +3589,15 @@
               32
             ]
           }
+        },
+        {
+          "name": "cert_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -3226,12 +3624,12 @@
         {
           "name": "estate",
           "relations": [
-            "guard"
+            "guard",
+            "fallback_report"
           ]
         },
         {
           "name": "guard",
-          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -3250,6 +3648,14 @@
               }
             ]
           }
+        },
+        {
+          "name": "fallback_report",
+          "writable": true
+        },
+        {
+          "name": "rent_to",
+          "writable": true
         }
       ],
       "args": [
@@ -3263,6 +3669,15 @@
         },
         {
           "name": "report_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "cert_hash",
           "type": {
             "array": [
               "u8",
@@ -3371,6 +3786,15 @@
         },
         {
           "name": "report_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "cert_hash",
           "type": {
             "array": [
               "u8",
@@ -4669,7 +5093,8 @@
           "name": "voter",
           "docs": [
             "A seat holder other than the watched holder and the objector, or the owner while Active",
-            "(decides alone). Fallback objections: a monitor of `voter_seat` other than the objector."
+            "(decides alone). Fallback objections: a monitor other than the objector (one vote, however many seats",
+            "they watch)."
           ],
           "signer": true
         },
@@ -4729,13 +5154,6 @@
               }
             ]
           }
-        },
-        {
-          "name": "voter_seat",
-          "docs": [
-            "The seat the voter monitors (Fallback objections only)."
-          ],
-          "optional": true
         },
         {
           "name": "target_account",
@@ -5103,6 +5521,19 @@
       ]
     },
     {
+      "name": "FallbackReport",
+      "discriminator": [
+        194,
+        52,
+        69,
+        197,
+        58,
+        156,
+        20,
+        222
+      ]
+    },
+    {
       "name": "Guard",
       "discriminator": [
         54,
@@ -5284,6 +5715,19 @@
         180,
         249,
         254
+      ]
+    },
+    {
+      "name": "AssetReleased",
+      "discriminator": [
+        148,
+        64,
+        1,
+        205,
+        116,
+        83,
+        37,
+        56
       ]
     },
     {
@@ -5482,6 +5926,32 @@
       ]
     },
     {
+      "name": "FallbackDeathConfirmed",
+      "discriminator": [
+        66,
+        11,
+        232,
+        206,
+        106,
+        41,
+        109,
+        91
+      ]
+    },
+    {
+      "name": "FallbackDeathRefuted",
+      "discriminator": [
+        197,
+        9,
+        108,
+        47,
+        231,
+        207,
+        254,
+        46
+      ]
+    },
+    {
       "name": "FallbackDeathReported",
       "discriminator": [
         235,
@@ -5596,6 +6066,19 @@
         62,
         245,
         229
+      ]
+    },
+    {
+      "name": "MemberRemoved",
+      "discriminator": [
+        250,
+        66,
+        3,
+        113,
+        161,
+        10,
+        59,
+        39
       ]
     },
     {
@@ -5716,6 +6199,19 @@
       ]
     },
     {
+      "name": "RuleReused",
+      "discriminator": [
+        168,
+        114,
+        184,
+        25,
+        72,
+        57,
+        29,
+        17
+      ]
+    },
+    {
       "name": "ScheduledPaid",
       "discriminator": [
         143,
@@ -5765,6 +6261,19 @@
         227,
         105,
         23
+      ]
+    },
+    {
+      "name": "SeatDeathReportCleared",
+      "discriminator": [
+        111,
+        205,
+        98,
+        157,
+        214,
+        193,
+        127,
+        163
       ]
     },
     {
@@ -6124,6 +6633,46 @@
       "code": 6052,
       "name": "ObjectionCooldown",
       "msg": "It is too soon to object to this again"
+    },
+    {
+      "code": 6053,
+      "name": "NotParticipant",
+      "msg": "Signer is not one of the people who may report or refute this"
+    },
+    {
+      "code": 6054,
+      "name": "OwnApproval",
+      "msg": "You cannot approve or dismiss in your own favour"
+    },
+    {
+      "code": 6055,
+      "name": "CoSignerRequired",
+      "msg": "A living trusted person who is neither the buyer nor the agent must co-sign this sale"
+    },
+    {
+      "code": 6056,
+      "name": "ListingStillOpen",
+      "msg": "With no trusted people left, a sale waits for the listing to end"
+    },
+    {
+      "code": 6057,
+      "name": "InvalidWallet",
+      "msg": "A real wallet is required"
+    },
+    {
+      "code": 6058,
+      "name": "ReportChanged",
+      "msg": "The report changed since it was read"
+    },
+    {
+      "code": 6059,
+      "name": "DeathReportOpen",
+      "msg": "A reported death of this recipient is waiting to be confirmed"
+    },
+    {
+      "code": 6060,
+      "name": "ClaimFromEndedRule",
+      "msg": "The claim belongs to a rule that was ended and replaced"
     }
   ],
   "types": [
@@ -6244,7 +6793,8 @@
           {
             "name": "approved_at",
             "docs": [
-              "0 = threshold not reached yet."
+              "0 = threshold not reached yet. Until it is, `seat_index` is NO_SEAT: the approvals being collected",
+              "were all given after the unlock."
             ],
             "type": "i64"
           },
@@ -6479,6 +7029,30 @@
           {
             "name": "asking_price",
             "type": "u64"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AssetReleased",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "asset",
+            "type": "pubkey"
+          },
+          {
+            "name": "nft_mint",
+            "type": "pubkey"
           },
           {
             "name": "ts",
@@ -7158,6 +7732,10 @@
           },
           {
             "name": "death_pending_since",
+            "docs": [
+              "While Active with a death claim: when it was submitted. Afterwards: when the quorum confirmed it.",
+              "Read the state from `status` and `death_cert_hash`, never from this being non-zero."
+            ],
             "type": "i64"
           },
           {
@@ -7230,6 +7808,58 @@
         "fields": [
           {
             "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FallbackDeathConfirmed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "confirmed_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FallbackDeathRefuted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "recipient",
             "type": "pubkey"
           },
           {
@@ -7329,6 +7959,69 @@
           {
             "name": "ts",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FallbackReport",
+      "docs": [
+        "Seeds: [\"fallbackreport\", estate, &[index]]. An open report that fallback recipient `index` died. Closed,",
+        "with the rent going back to `rent_payer`, when it is rejected, refuted or confirmed."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "recipient",
+            "docs": [
+              "The recipient reported; the report is void once the list names someone else there."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "reporter",
+            "type": "pubkey"
+          },
+          {
+            "name": "rent_payer",
+            "docs": [
+              "Who created the account. A report that replaces it never takes over the rent."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "cert_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "verdict",
+            "type": {
+              "defined": {
+                "name": "Verdict"
+              }
+            }
+          },
+          {
+            "name": "reported_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }
@@ -7638,6 +8331,33 @@
           {
             "name": "beneficiary",
             "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MemberRemoved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "payee",
+            "docs": [
+              "True for a payee, false for a beneficiary."
+            ],
+            "type": "bool"
           },
           {
             "name": "ts",
@@ -8236,6 +8956,33 @@
       }
     },
     {
+      "name": "RuleReused",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "rule",
+            "type": "pubkey"
+          },
+          {
+            "name": "first_claim_id",
+            "docs": [
+              "Claims with a lower id belong to the ended rule and can never pay."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "ScheduledPaid",
       "type": {
         "kind": "struct",
@@ -8353,7 +9100,8 @@
           {
             "name": "death_pending_since",
             "docs": [
-              "Set when the death is confirmed (the succession wait runs from here); 0 = not confirmed."
+              "When the death was reported; once `death_confirmed_by` is set, when it was confirmed (the succession wait",
+              "runs from there)."
             ],
             "type": "i64"
           },
@@ -8468,6 +9216,30 @@
           {
             "name": "confirmed_by",
             "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeatDeathReportCleared",
+      "docs": [
+        "A seat's death report was cleared for a fresh one: it could not promote anyone who reported or confirmed it,",
+        "the owner removed who confirmed it, or it was stale and gave way to new backups."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "seat_index",
+            "type": "u8"
           },
           {
             "name": "ts",
