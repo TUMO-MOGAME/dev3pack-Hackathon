@@ -11,6 +11,12 @@ import type { ObjectionStatus, TargetKind } from "../guardians/types";
 import { currentPeriod, disputeLapsesAt, effectiveStatus, YEAR_SECS, type Dispute, type DisputeKind } from "../disputes/types";
 import { fail, need } from "./mock-errors";
 import { shortName } from "../names";
+import { eligibleSeats } from "../death-rules";
+import { deathSince, interestedIn } from "../guardians/decisions";
+import { clearDeath } from "./mock-rules";
+
+/** Stored with which seats voted to uphold, so the vote of a seat that emptied stops counting. */
+type MockDispute = Dispute & { votedUp?: number[] };
 
 export interface DisputeDeps {
   snap(): EstateSnapshot;
@@ -33,13 +39,36 @@ const fakeAddr = () => Array.from({ length: 44 }, () => B58[Math.floor(Math.rand
 
 export function createMockDisputes(d: DisputeDeps) {
   const est = () => d.snap().estate;
-  const list = (): Dispute[] => (d.snap().disputes ??= []);
+  const list = (): MockDispute[] => (d.snap().disputes ??= []);
   const name = (a: Base58) => d.names()[a] ?? "Someone";
   // The short form used in sentences everywhere (lib/names): "Lerato Mokoena" → "Lerato", "Adv. Thandi Ndlovu" → "Adv. Ndlovu".
   const first = (a: Base58) => shortName(name(a));
   const needCreated = () => need(d.created(), "NoEstate", "There is no estate yet. The owner signs the will first.");
   const latestOn = (target: Base58) => list().filter((x) => x.target === target).sort((a, b) => b.raisedAt - a.raisedAt)[0];
-  const isOpen = (x: Dispute | undefined) => !!x && effectiveStatus(x, d.now()) === "Open";
+  /** The owner showed life after it was raised: the death it challenged is void. */
+  const voidedByOwner = (x: Dispute) => x.kind === "Unlock" && x.raisedAt < est().lastHeartbeat;
+  const isOpen = (x: Dispute | undefined) => !!x && effectiveStatus(x, d.now()) === "Open" && !voidedByOwner(x);
+  /** Votes that count: seats someone still holds. An older saved dispute only has the totals. */
+  function votes(x: MockDispute): { up: number; down: number } {
+    const { votedUp } = x;
+    if (!votedUp) return { up: x.votesUphold, down: x.votesDismiss };
+    const counted = eligibleSeats(est().verifiers).filter((i) => x.voted.includes(i));
+    const up = counted.filter((i) => votedUp.includes(i)).length;
+    return { up, down: counted.length - up };
+  }
+  const latest = (target: Base58) => latestOn(target) ?? null;
+  /** getEstate: what the program would act on. */
+  function snapshot(): Dispute[] {
+    return list().map((stored) => {
+      const v = votes(stored);
+      const shown: MockDispute = {
+        ...stored, voted: [...stored.voted], votesUphold: v.up, votesDismiss: v.down,
+        lapsesAt: stored.status === "Open" && voidedByOwner(stored) ? Math.min(stored.lapsesAt, est().lastHeartbeat) : stored.lapsesAt,
+      };
+      delete shown.votedUp;
+      return shown;
+    });
+  }
 
   /** execute_claim / finalize_unlock: an open (not lapsed) dispute pauses the action. */
   function checkNotDisputed(target: Base58) {
@@ -70,26 +99,27 @@ export function createMockDisputes(d: DisputeDeps) {
     } else if (kind === "Unlock") {
       need(target === e.address, "BadStatus", "That is not this estate.");
       need(e.status === "DeathPending", "BadStatus", "Only a pending unlock (during the waiting period) can be disputed.");
+      need(me !== e.death.submittedBy, "OwnClaimDispute", "You reported this passing, so you cannot dispute its unlock.");
       what = `the unlock of ${first(e.owner)}'s estate`;
     } else {
       fail("BadStatus", "Only claims and the unlock can be disputed.");
     }
     // Same PDA as a monitor's objection.
     need(!d.objectionOpen(target), "ObjectionOpen", "An objection is already open on this.");
-    const roundStart = e.death.pendingSince ?? 0;
+    const roundStart = deathSince(e);
     const prevObjection = d.objections().filter((o) => o.target === target).sort((a, b) => b.raisedAt - a.raisedAt)[0];
     const prev = latestOn(target);
+    need(!isOpen(prev), "ObjectionOpen", "A dispute is already open on this.");
     const prevAt = Math.max(prev?.raisedAt ?? -1, prevObjection?.raisedAt ?? -1);
     if (prevAt >= 0) {
-      const latest = prev && prev.raisedAt === prevAt ? effectiveStatus(prev, d.now()) : prevObjection!.status;
-      need(latest !== "Open", "ObjectionOpen", "A dispute is already open on this.");
       if (kind === "Claim") fail("BadStatus", "This payment has already been challenged once.");
-      need(latest === "Upheld" || prevAt < roundStart, "BadStatus", "This waiting period has already been disputed once.");
+      const last = prev && prev.raisedAt === prevAt ? prev.status : prevObjection!.status;
+      need(last === "Upheld" || prevAt < roundStart, "BadStatus", "This waiting period has already been disputed once.");
     }
     const raisedAt = d.now();
     list().unshift({
       address: fakeAddr(), kind, target, disputer: me, disputerName: name(me), reason: reason.trim(), reasonHash,
-      raisedAt, lapsesAt: disputeLapsesAt(raisedAt, e.waitingPeriodSecs), status: "Open", votesUphold: 0, votesDismiss: 0, voted: [],
+      raisedAt, lapsesAt: disputeLapsesAt(raisedAt, e.waitingPeriodSecs), status: "Open", votesUphold: 0, votesDismiss: 0, voted: [], votedUp: [],
     });
     const t = d.tx();
     d.log("DisputeRaised", `${name(me)} disputed ${what}. It is paused until two trusted people decide`, t);
@@ -100,18 +130,20 @@ export function createMockDisputes(d: DisputeDeps) {
     needCreated();
     const x = list().find((y) => y.address === address) ?? fail("BadStatus", "That dispute does not exist.");
     need(x.status === "Open", "BadStatus", "This dispute has already been decided.");
-    need(d.now() < x.lapsesAt, "DisputeLapsed", "This dispute has lapsed: its time to resolve it is over.");
+    need(isOpen(x), "DisputeLapsed", "This dispute has lapsed: its time to resolve it is over.");
     const me = d.me();
     const i = est().verifiers.indexOf(me);
     need(i >= 0, "NotVerifier", "Only one of the three trusted people can do this.");
     need(me !== x.disputer, "NotVerifier", "The person who raised the dispute cannot decide it.");
     need(!x.voted.includes(i), "AlreadyApproved", "You have already voted on this.");
+    if (!uphold) need(me !== interestedIn(d.snap(), x.kind, x.target), "OwnApproval", "You cannot dismiss a dispute in your own favour.");
     x.voted.push(i);
-    if (uphold) x.votesUphold += 1; else x.votesDismiss += 1;
+    if (uphold) { x.votesUphold += 1; x.votedUp?.push(i); } else x.votesDismiss += 1;
     const t = d.tx();
     d.log("DisputeVoted", `${name(me)} voted to ${uphold ? "uphold" : "dismiss"} the dispute`, t);
-    if (x.votesUphold < 2 && x.votesDismiss < 2) return t;
-    const upheld = x.votesUphold >= 2;
+    const { up, down } = votes(x);
+    if (up < 2 && down < 2) return t;
+    const upheld = up >= 2;
     x.status = upheld ? "Upheld" : "Dismissed";
     if (upheld && x.kind === "Claim") {
       const c = d.snap().claims.find((y) => y.address === x.target);
@@ -121,7 +153,7 @@ export function createMockDisputes(d: DisputeDeps) {
       const e = est();
       if (e.status !== "Unlocked") {
         e.status = "Active";
-        e.death = { certHash: null, submittedBy: null, verdict: "Pending", attestations: [false, false, false], pendingSince: null };
+        clearDeath(e);
       }
     }
     d.log("DisputeResolved", upheld
@@ -159,5 +191,5 @@ export function createMockDisputes(d: DisputeDeps) {
     if (record) r.yearlyCap = { ...p, spent: p.spent + amount };
   }
 
-  return { raiseDispute, resolveDispute, checkNotDisputed, checkObjectionAllowed, setYearlyCap, checkYearly };
+  return { raiseDispute, resolveDispute, latest, snapshot, checkNotDisputed, checkObjectionAllowed, setYearlyCap, checkYearly };
 }
