@@ -32,6 +32,16 @@ export function mayAskForSale(
   return seats.length ? seats.some((i) => verifiers[i] === wallet) : beneficiaries.some((b) => b.active && b.wallet === wallet);
 }
 
+/** Who may ask for a listing: as for the sale, but a family member only for an asset the plan still holds. */
+export function mayAskToList(
+  verifiers: readonly (Base58 | null)[],
+  beneficiaries: readonly Pick<Beneficiary, "wallet" | "active">[],
+  wallet: Base58,
+  asset: Pick<Asset, "status"> | undefined,
+): boolean {
+  return mayAskForSale(verifiers, beneficiaries, wallet) && (eligibleSeats(verifiers).length > 0 || asset?.status === "Held");
+}
+
 /** accept_offer exactly as both signers must see it. */
 export function saleInstruction(ctx: ix.Ctx, s: SaleInput): TransactionInstruction {
   const pk = (a: Base58) => new PublicKey(a);

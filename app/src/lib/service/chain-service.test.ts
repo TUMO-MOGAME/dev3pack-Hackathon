@@ -197,16 +197,19 @@ describe("approveHardship (R21)", () => {
 describe("listAsset: who may ask the agent", () => {
   const none = PublicKey.default.toBase58();
   it.each([
-    ["a trusted person", [v1, v2, v3], v2, true, true],
-    ["a beneficiary while three seats are held", [v1, v2, v3], kid, true, false],
-    ["a beneficiary while one seat is held", [none, v2, none], kid, true, false],
-    ["a beneficiary when no seat is held", [none, none, none], kid, true, true],
-    ["a removed beneficiary when no seat is held", [none, none, none], kid, false, false],
-    ["a stranger when no seat is held", [none, none, none], res, true, false],
-  ])("%s", async (_, verifiers, me, active, allowed) => {
+    ["a trusted person", [v1, v2, v3], v2, true, "Held", true],
+    ["a trusted person relisting", [v1, v2, v3], v2, true, "Listed", true],
+    ["a beneficiary while three seats are held", [v1, v2, v3], kid, true, "Held", false],
+    ["a beneficiary while one seat is held", [none, v2, none], kid, true, "Held", false],
+    ["a beneficiary when no seat is held", [none, none, none], kid, true, "Held", true],
+    ["a beneficiary relisting when no seat is held", [none, none, none], kid, true, "Listed", false],
+    ["a removed beneficiary when no seat is held", [none, none, none], kid, false, "Held", false],
+    ["a stranger when no seat is held", [none, none, none], res, true, "Held", false],
+  ])("%s", async (_, verifiers, me, active, status, allowed) => {
     h.me = me;
-    h.estate = { estate: { verifiers }, beneficiaries: [{ wallet: kid, active }] };
-    const listed = createChainService().listAsset(estate, key(), 86_400);
+    const asset = key();
+    h.estate = { estate: { verifiers }, beneficiaries: [{ wallet: kid, active }], assets: [{ address: asset, status }] };
+    const listed = createChainService().listAsset(estate, asset, 86_400);
     if (allowed) await listed;
     else await expect(listed).rejects.toMatchObject({ code: "NotVerifier" });
     expect(h.posts.filter((p) => p === "/api/list-asset")).toHaveLength(allowed ? 1 : 0);

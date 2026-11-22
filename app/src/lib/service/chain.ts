@@ -23,7 +23,7 @@ import {
 import { assembleSnapshot } from "../chain/snapshot";
 import { hex, key, num, optKey, type Raw } from "../chain/decoders";
 import { ChainServiceError, must, writeFailure } from "./chain-errors";
-import { mayAskForSale } from "../agent/sale";
+import { mayAskToList } from "../agent/sale";
 import { createChainContinuity } from "./chain-continuity";
 import { deathClaimStep } from "./chain-reports";
 import { checkPeople, planSetup } from "./chain-setup";
@@ -802,8 +802,8 @@ export function createChainService(): HeirloomService {
     // ----- Car sale -----
     async listAsset(estate, asset, durationSecs) {
       const snap = await freshEstate(estate); // who holds a seat decides who may ask
-      must(mayAskForSale(snap.estate.verifiers, snap.beneficiaries, getActiveSigner().address),
-        "NotVerifier", "Only a trusted person can open the sale. Family members can when no trusted person is left.");
+      must(mayAskToList(snap.estate.verifiers, snap.beneficiaries, getActiveSigner().address, snap.assets.find((a) => a.address === asset)),
+        "NotVerifier", "Only a trusted person can open the sale. Family can list a held asset when no trusted person is left.");
       return signedPost<TxResult>("/api/list-asset", "list-asset", estate, { estate, asset, durationSecs }, actionBody.listAsset({ asset, durationSecs }))
         .finally(written);
     },

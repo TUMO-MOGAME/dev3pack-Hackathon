@@ -316,13 +316,16 @@ describe("/api/list-asset and /api/accept-offer (S1)", () => {
   });
 
   it.each([
-    ["no seat held: an active beneficiary lists", 0, "active", 200],
-    ["no seat held: a removed beneficiary doesn't", 0, "removed", 403],
-    ["no seat held: an outsider doesn't", 0, "outsider", 403],
-    ["one seat held: an active beneficiary doesn't", 1, "active", 403],
-    ["three seats held: an active beneficiary doesn't", 3, "active", 403],
-  ] as const)("%s", async (_, held, who, status) => {
-    const s = h.snapshot as { estate: { verifiers: string[] }; beneficiaries?: { wallet: string; active: boolean }[] };
+    ["no seat held: an active beneficiary lists a held asset", 0, "active", "Held", 200],
+    ["no seat held: not one that was already listed", 0, "active", "Listed", 403],
+    ["no seat held: not one that was sold", 0, "active", "Sold", 403],
+    ["no seat held: a removed beneficiary doesn't", 0, "removed", "Held", 403],
+    ["no seat held: an outsider doesn't", 0, "outsider", "Held", 403],
+    ["one seat held: an active beneficiary doesn't", 1, "active", "Held", 403],
+    ["three seats held: an active beneficiary doesn't", 3, "active", "Held", 403],
+  ] as const)("%s", async (_, held, who, assetStatus, status) => {
+    const s = h.snapshot as { estate: { verifiers: string[] }; assets: { status: string }[]; beneficiaries?: { wallet: string; active: boolean }[] };
+    s.assets[0].status = assetStatus;
     s.estate.verifiers = [0, 1, 2].map((i) => (i < held ? key() : PublicKey.default.toBase58()));
     s.beneficiaries = [{ wallet: claimant.address, active: who !== "removed" }];
     expect((await listing(who === "outsider" ? outsider : claimant)).status).toBe(status);
