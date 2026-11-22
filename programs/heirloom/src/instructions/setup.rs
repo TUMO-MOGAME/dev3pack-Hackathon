@@ -3,7 +3,9 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use super::{close_token_account_cpi, now, record_proof_of_life, transfer_checked_cpi};
+use super::{
+    account_exists, close_program_account, close_token_account_cpi, now, record_proof_of_life, transfer_checked_cpi,
+};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -156,8 +158,9 @@ pub struct AddBeneficiary<'info> {
     /// CHECK: any wallet; only its key is stored.
     pub wallet: UncheckedAccount<'info>,
 
+    /// New, or one the owner removed and now adds again.
     #[account(
-        init,
+        init_if_needed,
         payer = owner,
         space = 8 + Beneficiary::INIT_SPACE,
         seeds = [BENEFICIARY_SEED, estate.key().as_ref(), wallet.key().as_ref()],
@@ -174,6 +177,9 @@ pub fn add_beneficiary_handler(ctx: Context<AddBeneficiary>, label: String) -> R
         ctx.accounts.estate.status == EstateStatus::Active,
         HeirloomError::BadStatus
     );
+
+    let existing = &ctx.accounts.beneficiary;
+    require!(existing.estate == Pubkey::default() || !existing.active, HeirloomError::BadStatus);
 
     let estate = ctx.accounts.estate.key();
     let wallet = ctx.accounts.wallet.key();
@@ -240,6 +246,7 @@ pub fn add_payee_handler(ctx: Context<AddPayee>, kind: PayeeKind, name: String) 
 // ====================================================================== add_rule
 
 #[derive(Accounts)]
+#[instruction(rule_id: u16)]
 pub struct AddRule<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -250,31 +257,37 @@ pub struct AddRule<'info> {
         bump = estate.bump,
         has_one = owner @ HeirloomError::NotOwner
     )]
-    pub estate: Account<'info, Estate>,
+    pub estate: Box<Account<'info, Estate>>,
 
     /// The Beneficiary PDA the rule is for.
     #[account(has_one = estate @ HeirloomError::NotBeneficiary)]
-    pub beneficiary: Account<'info, Beneficiary>,
+    pub beneficiary: Box<Account<'info, Beneficiary>>,
 
+    /// `rule_id` = estate.rule_count for a new slot, or the id of an ended rule whose slot is reused.
     #[account(
-        init,
+        init_if_needed,
         payer = owner,
         space = 8 + Rule::INIT_SPACE,
-        seeds = [RULE_SEED, estate.key().as_ref(), &estate.rule_count.to_le_bytes()],
+        seeds = [RULE_SEED, estate.key().as_ref(), &rule_id.to_le_bytes()],
         bump
     )]
-    pub rule: Account<'info, Rule>,
+    pub rule: Box<Account<'info, Rule>>,
 
     /// Payee PDA for a recurring rule (scheduled payments go to its wallet). Optional: pass the
     /// program id (Anchor's "None") when `recurring_amount == 0`.
     #[account(has_one = estate)]
-    pub payee: Option<Account<'info, Payee>>,
+    pub payee: Option<Box<Account<'info, Payee>>>,
 
     pub system_program: Program<'info, System>,
+
+    /// CHECK: the ["yearcap", rule] PDA; may not exist. The ended rule's is closed to the owner on reuse.
+    #[account(mut, seeds = [YEAR_CAP_SEED, rule.key().as_ref()], bump)]
+    pub year_cap: UncheckedAccount<'info>,
 }
 
 pub fn add_rule_handler(
     ctx: Context<AddRule>,
+    rule_id: u16,
     category: Category,
     allowed_payee_kind: PayeeKind,
     max_per_claim: u64,
@@ -290,13 +303,25 @@ pub fn add_rule_handler(
         HeirloomError::BadStatus
     );
     require!(ctx.accounts.beneficiary.active, HeirloomError::NotBeneficiary);
-    require!(ctx.accounts.estate.rule_count < MAX_RULES, HeirloomError::TooManyRules);
+    let ts = now()?;
+    let slot = &ctx.accounts.rule;
+    let new_slot = slot.estate == Pubkey::default();
+    let first_claim_id = if new_slot {
+        let count = ctx.accounts.estate.rule_count;
+        require!(rule_id == count, HeirloomError::BadStatus);
+        require!(count < MAX_RULES, HeirloomError::TooManyRules);
+        0
+    } else {
+        // Only an ended rule gives up its slot: a live one's cap still matters.
+        require!(ts > slot.valid_until, HeirloomError::BadStatus);
+        slot.next_generation_start().ok_or(HeirloomError::MathOverflow)?
+    };
     require!(
         max_per_claim > 0 && lifetime_cap > 0 && max_per_claim <= lifetime_cap,
         HeirloomError::InvalidAmount
     );
 
-    require!(valid_until > now()?, HeirloomError::TimeOutOfRange);
+    require!(valid_until > ts, HeirloomError::TimeOutOfRange);
 
     let (interval_secs, next_due, fixed_payee) = if recurring_amount > 0 {
         require!(interval_secs > 0, HeirloomError::InvalidAmount);
@@ -317,13 +342,12 @@ pub fn add_rule_handler(
     };
 
     let estate_key = ctx.accounts.estate.key();
-    let id = ctx.accounts.estate.rule_count;
     let beneficiary = ctx.accounts.beneficiary.wallet;
     let bump = ctx.bumps.rule;
 
     ctx.accounts.rule.set_inner(Rule {
         estate: estate_key,
-        id,
+        id: rule_id,
         beneficiary,
         category,
         allowed_payee_kind,
@@ -331,7 +355,7 @@ pub fn add_rule_handler(
         lifetime_cap,
         spent_total: 0,
         valid_until,
-        claim_count: 0,
+        claim_count: first_claim_id,
         starts_now,
         recurring_amount,
         interval_secs,
@@ -340,7 +364,15 @@ pub fn add_rule_handler(
         bump,
     });
 
-    ctx.accounts.estate.rule_count = id.checked_add(1).ok_or(HeirloomError::MathOverflow)?;
+    if new_slot {
+        ctx.accounts.estate.rule_count = rule_id.checked_add(1).ok_or(HeirloomError::MathOverflow)?;
+    } else {
+        let year_cap = ctx.accounts.year_cap.to_account_info();
+        if account_exists(&year_cap) {
+            close_program_account(&year_cap, &ctx.accounts.owner.to_account_info())?;
+        }
+        emit!(RuleReused { estate: estate_key, rule: ctx.accounts.rule.key(), first_claim_id, ts });
+    }
     Ok(())
 }
 
@@ -662,5 +694,51 @@ pub fn release_asset_handler(ctx: Context<ReleaseAsset>) -> Result<()> {
         nft_mint: ctx.accounts.nft_mint.key(),
         ts: now()?,
     });
+    Ok(())
+}
+
+// ====================================================================== remove_member
+
+#[derive(Accounts)]
+pub struct RemoveMember<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [ESTATE_SEED, owner.key().as_ref()],
+        bump = estate.bump,
+        has_one = owner @ HeirloomError::NotOwner
+    )]
+    pub estate: Box<Account<'info, Estate>>,
+
+    /// The Beneficiary to remove (marked inactive; add_beneficiary brings them back), or None.
+    #[account(mut, has_one = estate @ HeirloomError::NotBeneficiary)]
+    pub beneficiary_account: Option<Box<Account<'info, Beneficiary>>>,
+
+    /// The Payee to remove (closed to the owner; add_payee brings it back), or None.
+    #[account(mut, has_one = estate, close = owner)]
+    pub payee_account: Option<Box<Account<'info, Payee>>>,
+}
+
+/// Owner, estate Active: removes a beneficiary, a payee or both. Every payout checks both, so their open claims
+/// and schedules stop. Like replacing a trusted person it is proof of life: it clears a death claim.
+pub fn remove_member_handler(ctx: Context<RemoveMember>) -> Result<()> {
+    let estate = &mut ctx.accounts.estate;
+    require!(estate.status == EstateStatus::Active, HeirloomError::BadStatus);
+    let (estate_key, ts) = (estate.key(), now()?);
+    require!(
+        ctx.accounts.beneficiary_account.is_some() || ctx.accounts.payee_account.is_some(),
+        HeirloomError::BadStatus
+    );
+    if let Some(beneficiary) = ctx.accounts.beneficiary_account.as_mut() {
+        require!(beneficiary.active, HeirloomError::NotBeneficiary);
+        beneficiary.active = false;
+        emit!(MemberRemoved { estate: estate_key, wallet: beneficiary.wallet, payee: false, ts });
+    }
+    if let Some(payee) = ctx.accounts.payee_account.as_ref() {
+        emit!(MemberRemoved { estate: estate_key, wallet: payee.wallet, payee: true, ts });
+    }
+    record_proof_of_life(estate_key, estate, ts);
     Ok(())
 }

@@ -57,6 +57,7 @@ pub mod heirloom {
 
     pub fn add_rule(
         ctx: Context<AddRule>,
+        rule_id: u16,
         category: Category,
         allowed_payee_kind: PayeeKind,
         max_per_claim: u64,
@@ -69,6 +70,7 @@ pub mod heirloom {
     ) -> Result<()> {
         instructions::setup::add_rule_handler(
             ctx,
+            rule_id,
             category,
             allowed_payee_kind,
             max_per_claim,
@@ -349,5 +351,9 @@ pub mod heirloom {
 
     pub fn release_asset(ctx: Context<ReleaseAsset>) -> Result<()> {
         instructions::setup::release_asset_handler(ctx)
+    }
+
+    pub fn remove_member(ctx: Context<RemoveMember>) -> Result<()> {
+        instructions::setup::remove_member_handler(ctx)
     }
 }

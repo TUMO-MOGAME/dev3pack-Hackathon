@@ -16,6 +16,14 @@ fn rule_open_for(estate: &Estate, rule: &Rule) -> bool {
         || (estate.status == EstateStatus::Active && rule.starts_now)
 }
 
+/// Every payout: the beneficiary is still in the plan and the payee is still one the rule allows (a removed
+/// payee's account is closed, so it can't be passed at all).
+fn check_parties(rule: &Rule, beneficiary: &Beneficiary, payee: &Payee) -> Result<()> {
+    require!(beneficiary.active, HeirloomError::NotBeneficiary);
+    require!(payee.kind == rule.allowed_payee_kind, HeirloomError::WrongPayeeKind);
+    Ok(())
+}
+
 // ====================================================================== submit_claim
 
 #[derive(Accounts)]
@@ -82,6 +90,7 @@ pub fn submit_claim_handler(ctx: Context<SubmitClaim>, amount: u64, evidence_has
     check_year_cap(&ctx.accounts.year_cap.to_account_info(), &rule.key(), amount, false)?;
 
     let id = rule.claim_count;
+    let next_count = rule.next_claim_count().ok_or(HeirloomError::MathOverflow)?;
     let estate = ctx.accounts.estate.key();
     let rule_key = rule.key();
     let payee = ctx.accounts.payee.wallet;
@@ -103,7 +112,7 @@ pub fn submit_claim_handler(ctx: Context<SubmitClaim>, amount: u64, evidence_has
         owner_approved: false,
         bump,
     });
-    ctx.accounts.rule.claim_count = id.checked_add(1).ok_or(HeirloomError::MathOverflow)?;
+    ctx.accounts.rule.claim_count = next_count;
 
     emit!(ClaimSubmitted {
         estate,
@@ -316,6 +325,17 @@ pub struct ExecuteClaim<'info> {
     /// CHECK: the ["yearcap", rule] PDA; may not exist (the rule has no yearly cap). Updated when it does.
     #[account(mut, seeds = [YEAR_CAP_SEED, rule.key().as_ref()], bump)]
     pub year_cap: UncheckedAccount<'info>,
+
+    /// The claimant's Beneficiary PDA; must still be active.
+    #[account(
+        has_one = estate @ HeirloomError::NotBeneficiary,
+        constraint = beneficiary_account.wallet == claim.beneficiary @ HeirloomError::NotBeneficiary
+    )]
+    pub beneficiary_account: Box<Account<'info, Beneficiary>>,
+
+    /// The Payee PDA of claim.payee; gone once removed.
+    #[account(has_one = estate, constraint = payee_account.wallet == claim.payee @ HeirloomError::BadStatus)]
+    pub payee_account: Box<Account<'info, Payee>>,
 }
 
 pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
@@ -325,6 +345,8 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
 
     require!(rule_open_for(estate, rule), HeirloomError::BadStatus);
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
+    require!(rule.is_current_claim(claim.id), HeirloomError::ClaimFromEndedRule);
+    check_parties(rule, &ctx.accounts.beneficiary_account, &ctx.accounts.payee_account)?;
     require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
     // While the owner is alive (Active) only the owner can approve; after unlock the owner's
     // earlier approval or the verifier quorum counts.
@@ -440,6 +462,7 @@ pub fn owner_approve_claim_handler(ctx: Context<OwnerApproveClaim>) -> Result<()
     let claim = &mut ctx.accounts.claim;
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
     require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
+    require!(ctx.accounts.rule.is_current_claim(claim.id), HeirloomError::ClaimFromEndedRule);
     require!(!claim.owner_approved, HeirloomError::AlreadyApproved);
     claim.owner_approved = true;
 
@@ -495,6 +518,17 @@ pub struct ExecuteScheduled<'info> {
     /// CHECK: the ["yearcap", rule] PDA; may not exist (the rule has no yearly cap). Updated when it does.
     #[account(mut, seeds = [YEAR_CAP_SEED, rule.key().as_ref()], bump)]
     pub year_cap: UncheckedAccount<'info>,
+
+    /// The rule's Beneficiary PDA; must still be active.
+    #[account(
+        has_one = estate @ HeirloomError::NotBeneficiary,
+        constraint = beneficiary_account.wallet == rule.beneficiary @ HeirloomError::NotBeneficiary
+    )]
+    pub beneficiary_account: Box<Account<'info, Beneficiary>>,
+
+    /// The Payee PDA of rule.fixed_payee; gone once removed.
+    #[account(has_one = estate, constraint = payee_account.wallet == rule.fixed_payee @ HeirloomError::BadStatus)]
+    pub payee_account: Box<Account<'info, Payee>>,
 }
 
 /// Pays one instalment of a recurring rule to its fixed payee once it is due.
@@ -504,6 +538,7 @@ pub fn execute_scheduled_handler(ctx: Context<ExecuteScheduled>) -> Result<()> {
 
     require!(rule.recurring_amount > 0, HeirloomError::BadStatus);
     require!(rule_open_for(estate, rule), HeirloomError::BadStatus);
+    check_parties(rule, &ctx.accounts.beneficiary_account, &ctx.accounts.payee_account)?;
     let ts = now()?;
     require!(ts >= rule.next_due, HeirloomError::NotDue);
     require!(ts <= rule.valid_until, HeirloomError::RuleExpired);

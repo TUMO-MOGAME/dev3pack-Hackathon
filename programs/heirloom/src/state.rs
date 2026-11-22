@@ -270,6 +270,29 @@ pub struct Rule {
     pub bump: u8,
 }
 
+impl Rule {
+    /// A reused slot starts its claim ids at the next multiple of 65,536, so the high 16 bits of an id say
+    /// which of the slot's rules the claim was made under, and no claim address repeats.
+    fn generation(id: u32) -> u32 {
+        id >> 16
+    }
+
+    /// The claim was made under this rule, not under one that held the slot before it.
+    pub fn is_current_claim(&self, claim_id: u32) -> bool {
+        Self::generation(claim_id) == Self::generation(self.claim_count)
+    }
+
+    /// The id after `claim_count`, if it is still inside this rule's range.
+    pub fn next_claim_count(&self) -> Option<u32> {
+        self.claim_count.checked_add(1).filter(|next| self.is_current_claim(*next))
+    }
+
+    /// Where the claim ids of the slot's next rule start.
+    pub fn next_generation_start(&self) -> Option<u32> {
+        (self.claim_count | 0xffff).checked_add(1)
+    }
+}
+
 /// Seeds: ["claim", rule, id.to_le_bytes() (u32)]
 #[account]
 #[derive(InitSpace)]
