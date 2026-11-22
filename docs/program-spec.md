@@ -459,7 +459,7 @@ Participants of a fallback report: living trusted people, a monitor (passes `sig
 | `create_estate` | same | same | verifiers real (InvalidWallet); agent real, not the owner or a verifier (BadAgent) |
 | `add_beneficiary` | same | same | init_if_needed: adds back a removed one; an active one gives BadStatus |
 | `add_rule` | **rule_id u16 first**, then as before | owner(w,s), estate(w), beneficiary, rule(w) `["rule", estate, rule_id]`, payee(o), system_program, **year_cap(w)** `["yearcap", rule]` | rule_id = rule_count makes a slot (max 16). An existing id needs an ended rule (else BadStatus) and is overwritten: spent 0, claim_count at the next multiple of 65,536, year cap closed to the owner, rule_count unchanged, emits RuleReused. valid_until > now (TimeOutOfRange) |
-| `register_asset` | same | same | mint and freeze authority None (InvalidNft); proceeds_to real and not the estate (InvalidWallet) |
+| `register_asset` | same | same | mint and freeze authority None (InvalidNft); proceeds_to real (InvalidWallet); the estate itself is allowed and means the vault |
 | `submit_death_claim` | same | same | replaces a stale claim (else BadStatus); stores the time |
 | `review_death` | outcome, report_hash, **cert_hash** | same | cert_hash must equal the stored one (ReportChanged) |
 | `attest_death` | same | same | quorum as above; OwnApproval |

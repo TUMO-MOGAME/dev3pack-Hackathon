@@ -4746,10 +4746,8 @@ fn r14_proceeds_need_a_real_wallet() {
     let nft_mint = create_title(&mut env.svm);
     let owner = env.owner.pubkey();
     fund_ata(&mut env.svm, &owner, &nft_mint, 1);
-    for bad in [d(), env.estate] {
-        let i = env.register_asset_ix(nft_mint, bad);
-        expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::InvalidWallet);
-    }
+    let i = env.register_asset_ix(nft_mint, d());
+    expect_err(send(&mut env.svm, i, &[&env.owner]), HeirloomError::InvalidWallet);
     let i = env.register_asset_ix(nft_mint, env.executor.pubkey());
     send(&mut env.svm, i, &[&env.owner]).unwrap();
 }
@@ -5712,4 +5710,26 @@ fn r02_watching_the_seat_does_not_save_a_replaced_confirmers_confirmation() {
     warp(&mut env.svm, SUCCESSION_WAIT);
     env.finalize_succession(0).unwrap();
     assert_eq!((env.seat(0).death_cert_hash, env.seat(0).generation), ([0u8; 32], 0));
+}
+
+#[test]
+fn r14_proceeds_can_still_go_into_the_vault() {
+    let mut s = Sale::new();
+    let mut a: Asset = fetch(&s.env.svm, &s.asset);
+    // Every client's default: register accepts it, and the sale pays the vault.
+    let mut env = Env::configured();
+    let title = create_title(&mut env.svm);
+    let owner = env.owner.pubkey();
+    fund_ata(&mut env.svm, &owner, &title, 1);
+    let i = env.register_asset_ix(title, env.estate);
+    send(&mut env.svm, i, &[&env.owner]).unwrap();
+    assert_eq!(fetch::<Asset>(&env.svm, &asset_pda(&env.estate, &title)).proceeds_to, env.estate);
+
+    a.proceeds_to = s.env.estate;
+    let asset = s.asset;
+    s.env.plant(asset, &a);
+    let before = balance(&s.env.svm, &s.env.vault());
+    s.place_offer(1, FLOOR).unwrap();
+    s.accept_offer(1).unwrap();
+    assert_eq!(balance(&s.env.svm, &s.env.vault()), before + FLOOR);
 }

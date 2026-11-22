@@ -577,10 +577,8 @@ pub fn register_asset_handler(
         hardship_floor > 0 && floor_price >= hardship_floor && asking_price >= floor_price,
         HeirloomError::InvalidAmount
     );
-    require!(
-        proceeds_to != Pubkey::default() && proceeds_to != ctx.accounts.estate.key(),
-        HeirloomError::InvalidWallet
-    );
+    // The estate itself is a real destination: the sale then pays into the vault.
+    require!(proceeds_to != Pubkey::default(), HeirloomError::InvalidWallet);
 
     transfer_checked_cpi(
         ctx.accounts.token_program.key(),
