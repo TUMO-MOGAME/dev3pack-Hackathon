@@ -14,6 +14,7 @@
 - IN PROGRESS (Tumo, 22 Nov: fix everything from critical to low, update all docs, production fully up to date): plan §18, branch fix/second-review. Do not push this branch or main before the devnet upgrade is ready.
 ### Decisions log
 - 22 Nov (Tumo): work before 27 Nov counts for this review (organisers allow it).
+- 22 Nov (Tumo): Heirloom gets its own Supabase account; the two existing projects stay untouched. Never run `supabase login` or `logout` here (one stored login): pass the Heirloom token per command as SUPABASE_ACCESS_TOKEN from a file outside the repo (~/.heirloom/supabase-token.txt).
 ### Blockers
 - Written event rules not seen (prework, AI-generated code, team eligibility). Repo still private.
 
