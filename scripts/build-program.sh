@@ -1,56 +1,146 @@
 #!/usr/bin/env bash
-# Build, test and (optionally) deploy the Heirloom Anchor program. Run inside WSL Ubuntu:
+# Build, test and (only when asked) upgrade the Heirloom Anchor program. Run inside WSL Ubuntu:
 #
-#   wsl -d Ubuntu -u tumo --cd ~ -- bash "/mnt/c/Users/tumom/Hackathons/W3Node Hacathon/scripts/build-program.sh" [test|deploy]
+#   wsl -d Ubuntu -u tumo --cd ~ -- bash "/mnt/c/Users/tumom/Hackathons/W3Node Hacathon/scripts/build-program.sh" [test|idl|deploy]
 #
-# Building on /mnt/c is slow, so the program sources are mirrored to ~/heirloom-build (Linux disk),
-# built there, and the outputs (IDL, .so, program keypair) are copied back into the repo.
-#   (no arg)  build + keys sync + copy IDL back + cargo test
-#   test      same as no arg
-#   deploy    the above, then `anchor deploy` to devnet (needs SOL on ~/.config/solana/id.json)
+#   test     (default) build, check the program id, cargo test. Changes no tracked file and needs no keypair or wallet.
+#   idl      the same, then copy the checked IDL to app/src/lib/chain/idl/heirloom.json.
+#   deploy   the same, then upgrade the devnet program by its id, after printing the size, the SOL needed and the
+#            balance. It refuses when the balance is short. It never creates a program.
+#
+# The program id is the one below and nothing here can change it: keys are never synced and sources are never copied
+# back (on a fresh clone, with no keypair, syncing keys would invent a new id and write it into the repo).
+#
+# Building on /mnt/c is slow, so the sources are mirrored to a work directory on the Linux disk.
+#   HEIRLOOM_REPO    the checkout to build (default: the one this script is in)
+#   HEIRLOOM_WORK    the work directory (default: ~/heirloom-build). Its programs/ folder is replaced on every run.
+#   HEIRLOOM_WALLET  deploy only: the upgrade authority's wallet file (default: ~/.config/solana/id.json)
 set -euo pipefail
 
 export PATH="$HOME/.local/share/solana/install/active_release/bin:$HOME/.avm/bin:$HOME/.cargo/bin:$PATH"
-REPO="${HEIRLOOM_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-WORK="$HOME/heirloom-build"
-MODE="${1:-test}"
 
-echo "== mirror sources to $WORK"
-mkdir -p "$WORK/target/deploy"
-rm -rf "$WORK/programs"
-cp -r "$REPO/programs" "$WORK/programs"
-cp "$REPO/Anchor.toml" "$REPO/Cargo.toml" "$WORK/"
-[ -f "$REPO/Cargo.lock" ] && cp "$REPO/Cargo.lock" "$WORK/" || true
-# Keep the program id stable: the repo's keypair (gitignored) is the source of truth.
-if [ -f "$REPO/target/deploy/heirloom-keypair.json" ]; then
-  cp "$REPO/target/deploy/heirloom-keypair.json" "$WORK/target/deploy/heirloom-keypair.json"
+PROGRAM_ID="b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY"
+DEVNET_GENESIS="EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"
+# The upgradeable loader's headers, and the least it lets a program grow by.
+PROGRAMDATA_HEADER=45
+BUFFER_HEADER=37
+MIN_EXTEND=10240
+IDL="target/idl/heirloom.json"
+SO="target/deploy/heirloom.so"
+APP_IDL="app/src/lib/chain/idl/heirloom.json"
+
+die() { echo "!! $*" >&2; exit 1; }
+
+MODE="${1:-test}"
+[ "$#" -le 1 ] || die "too many arguments"
+case "$MODE" in test|idl|deploy) ;; *) die "unknown mode '$MODE': use test, idl or deploy" ;; esac
+
+REPO="${HEIRLOOM_REPO:-$(dirname "${BASH_SOURCE[0]}")/..}"
+REPO="$(cd "$REPO" && pwd -P)"
+
+check_sources() { # <root>
+  local lib="$1/programs/heirloom/src/lib.rs" declared configured
+  declared="$(sed -n 's/^[[:space:]]*declare_id!("\([^"]*\)").*/\1/p' "$lib")"
+  [ "$declared" = "$PROGRAM_ID" ] || die "wrong program id in $lib: '$declared' (expected $PROGRAM_ID)"
+  configured="$(sed -n 's/^[[:space:]]*heirloom[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$1/Anchor.toml" | LC_ALL=C sort -u)"
+  [ "$configured" = "$PROGRAM_ID" ] || die "wrong program id in $1/Anchor.toml: '$configured' (expected $PROGRAM_ID)"
+}
+
+check_idl() { # <file>
+  local address
+  address="$(sed -n 's/^[[:space:]]*"address"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | sed -n 1p)"
+  [ "$address" = "$PROGRAM_ID" ] || die "wrong program id in $1: '$address' (expected $PROGRAM_ID)"
+}
+
+echo "== check the program id in the checkout"
+check_sources "$REPO"
+
+WORK="${HEIRLOOM_WORK:-$HOME/heirloom-build}"
+mkdir -p "$WORK"
+WORK="$(cd "$WORK" && pwd -P)"
+[ "$WORK" != "/" ] && [ "$WORK" != "$(cd "$HOME" && pwd -P)" ] || die "HEIRLOOM_WORK must be a directory of its own"
+case "$WORK/" in "$REPO"/*) die "HEIRLOOM_WORK must be outside the checkout" ;; esac
+case "$REPO/" in "$WORK"/*) die "HEIRLOOM_WORK must not contain the checkout" ;; esac
+if [ -n "$(ls -A "$WORK")" ] && ! grep -qs '^[[:space:]]*heirloom[[:space:]]*=' "$WORK/Anchor.toml"; then
+  die "$WORK is not empty and is not a Heirloom build directory"
 fi
 
-cd "$WORK"
-echo "== anchor keys sync (declare_id! + Anchor.toml = keypair pubkey)"
-anchor keys sync
-echo "== anchor build"
-anchor build
+echo "== mirror sources to $WORK"
+cp "$REPO/Anchor.toml" "$REPO/Cargo.toml" "$REPO/Cargo.lock" "$WORK/"
+rm -rf "$WORK/programs"
+cp -r "$REPO/programs" "$WORK/programs"
+mkdir -p "$WORK/target/deploy"
 
-echo "== copy outputs back to the repo"
-mkdir -p "$REPO/target/deploy" "$REPO/target/idl" "$REPO/app/src/lib/chain/idl"
-cp target/deploy/heirloom-keypair.json "$REPO/target/deploy/"
-cp target/deploy/heirloom.so "$REPO/target/deploy/"
-cp target/idl/heirloom.json "$REPO/target/idl/"
-cp target/idl/heirloom.json "$REPO/app/src/lib/chain/idl/heirloom.json"
-[ -f target/types/heirloom.ts ] && mkdir -p "$REPO/target/types" && cp target/types/heirloom.ts "$REPO/target/types/" || true
-cp programs/heirloom/src/lib.rs "$REPO/programs/heirloom/src/lib.rs"   # declare_id! after keys sync
-cp Anchor.toml "$REPO/Anchor.toml"
-cp Cargo.lock "$REPO/Cargo.lock"
+cd "$WORK"
+rm -f "$IDL" "$SO" # an older build's output must not pass the checks below
+echo "== anchor build --ignore-keys"
+anchor build --ignore-keys
+
+echo "== check the program id in what was built"
+check_sources "$WORK"
+[ -f "$IDL" ] || die "the build wrote no IDL"
+[ -f "$SO" ] || die "the build wrote no program"
+check_idl "$IDL"
 
 echo "== cargo test (LiteSVM)"
 cargo test -p heirloom
 
-if [ "$MODE" = "deploy" ]; then
-  echo "== anchor deploy (devnet)"
-  # The program deploy works; the follow-up on-chain IDL upload shells out to `npx`, which in WSL resolves
-  # to the Windows npx and fails ("Failed to initialize IDL"). The app ships the IDL itself, so that's harmless.
-  anchor deploy --provider.cluster devnet || echo "!! deploy reported an error: if only the IDL step failed, the program is still deployed (check: solana program show <id> --url devnet)"
+echo "== copy build outputs to the checkout's gitignored target/"
+mkdir -p "$REPO/target/deploy" "$REPO/target/idl"
+cp "$SO" "$REPO/$SO"
+cp "$IDL" "$REPO/$IDL"
+
+if [ "$MODE" = "idl" ]; then
+  echo "== copy the checked IDL to $APP_IDL"
+  cp "$IDL" "$REPO/$APP_IDL"
+elif ! cmp -s <(tr -d '\r' < "$IDL") <(tr -d '\r' < "$REPO/$APP_IDL"); then
+  echo "!! $APP_IDL differs from this build: run this script with 'idl' to update it"
 fi
 
-echo "== program id: $(solana-keygen pubkey target/deploy/heirloom-keypair.json)"
+BYTES="$(wc -c < "$SO" | tr -d ' ')"
+echo "== program id: $PROGRAM_ID"
+echo "== size: $BYTES bytes, sha256 $(sha256sum "$SO" | cut -d ' ' -f 1)"
+
+[ "$MODE" = "deploy" ] || exit 0
+
+# ------------------------------------------------------------------ deploy: an upgrade of the devnet program, by id
+WALLET="${HEIRLOOM_WALLET:-$HOME/.config/solana/id.json}"
+[ -f "$WALLET" ] || die "no wallet at $WALLET"
+
+sol() { solana "$@" --url devnet --keypair "$WALLET"; }
+number() { sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p"; }
+text() { sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"; }
+whole() { case "$2" in ''|*[!0-9]*) die "could not read $1" ;; esac; }
+rent() { sol rent "$1" --output json-compact | number rentExemptMinimumLamports; }
+in_sol() { printf '%d.%09d SOL' "$(($1 / 1000000000))" "$(($1 % 1000000000))"; }
+
+[ "$(sol genesis-hash)" = "$DEVNET_GENESIS" ] || die "this RPC is not devnet"
+SHOW="$(sol program show "$PROGRAM_ID" --output json-compact)" || die "program $PROGRAM_ID is not on devnet: this only upgrades"
+SIGNER="$(sol address)"
+AUTHORITY="$(printf '%s\n' "$SHOW" | text authority)"
+[ "$AUTHORITY" = "$SIGNER" ] || die "this wallet ($SIGNER) is not the upgrade authority ($AUTHORITY)"
+
+CURRENT="$(printf '%s\n' "$SHOW" | number dataLen)"; whole "the program's size" "$CURRENT"
+HELD="$(printf '%s\n' "$SHOW" | number lamports)"; whole "the program's rent" "$HELD"
+
+# An upgrade holds a second copy in a buffer until it lands, on top of any growth of the program's own account.
+BUFFER="$(rent "$((BYTES + BUFFER_HEADER))")"; whole "the buffer's rent" "$BUFFER"
+GROW=0
+if [ "$BYTES" -gt "$CURRENT" ]; then
+  CAPACITY=$((CURRENT + MIN_EXTEND))
+  [ "$BYTES" -le "$CAPACITY" ] || CAPACITY="$BYTES"
+  AFTER="$(rent "$((CAPACITY + PROGRAMDATA_HEADER))")"; whole "the larger program's rent" "$AFTER"
+  [ "$AFTER" -le "$HELD" ] || GROW=$((AFTER - HELD))
+fi
+FEES=$(((BYTES / 900 + 10) * 10000))
+NEED=$((BUFFER + GROW + FEES))
+BALANCE="$(sol balance --lamports | sed -n 's/^\([0-9][0-9]*\).*/\1/p')"; whole "the balance" "$BALANCE"
+
+echo "== upgrade $PROGRAM_ID on devnet"
+echo "   size:     $BYTES bytes (the program account holds $CURRENT)"
+echo "   needed:   $(in_sol "$NEED") (buffer $(in_sol "$BUFFER"), returned afterwards; growth $(in_sol "$GROW"); fees up to $(in_sol "$FEES"))"
+echo "   balance:  $(in_sol "$BALANCE")"
+[ "$BALANCE" -ge "$NEED" ] || die "short by $(in_sol "$((NEED - BALANCE))"): nothing was sent"
+
+sol program deploy "$SO" --program-id "$PROGRAM_ID" --use-rpc
+echo "== upgraded $PROGRAM_ID"
