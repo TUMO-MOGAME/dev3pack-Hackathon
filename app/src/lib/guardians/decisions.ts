@@ -3,7 +3,7 @@
  * read from a snapshot. Pure. The screens offer only what these allow, and the program still checks everything.
  */
 import type { EstateSnapshot } from "../service/types";
-import type { Base58, Claim, Estate, Hardship, Verdict } from "../types";
+import type { Asset, Base58, Claim, Estate, Hardship, Verdict } from "../types";
 import { eligibleSeats, isCurrentClaim, quorum, refuteWait, replaceableAt, reviewedHold } from "../death-rules";
 import { openToPeople } from "../verdict";
 import type { FallbackDeathReport, Seat, TargetKind } from "./types";
@@ -18,6 +18,24 @@ export const isFamily = (snap: Pick<EstateSnapshot, "beneficiaries">, w: Base58 
 /** Was in the family and the owner took them out: they still see the plan, and can do nothing in it as family. */
 export const wasRemoved = (snap: Pick<EstateSnapshot, "beneficiaries">, w: Base58 | null | undefined) =>
   !!w && !isFamily(snap, w) && snap.beneficiaries.some((b) => b.wallet === w);
+
+/**
+ * The conditions of lib/agent/sale.ts `mayAskToList`, without its Solana imports in the first load (a test holds
+ * them equal): a trusted person; or, with no seat held, family still in the plan, for an asset still Held or a
+ * listing that ended with no acceptable offer. Never over one: that would put off the lone sale.
+ */
+export function mayList(
+  snap: Pick<EstateSnapshot, "beneficiaries" | "offers"> & { estate: Pick<Estate, "verifiers"> },
+  asset: Asset, me: Base58 | null | undefined, now: number,
+): boolean {
+  if (!isHeld(me)) return false;
+  if (hasLivingSeat(snap.estate)) return snap.estate.verifiers.includes(me);
+  if (!isFamily(snap, me)) return false;
+  if (asset.status === "Held") return true;
+  if (asset.status !== "Listed" || asset.listingEnds === null || now < asset.listingEnds) return false;
+  const least = asset.hardshipBeneficiary ? asset.hardshipFloor : asset.floorPrice;
+  return !snap.offers.some((o) => o.asset === asset.address && o.amount >= least);
+}
 
 /** A death claim that "I'm still here" would cancel. */
 export const deathOpen = (e: Pick<Estate, "status" | "death">) => e.status === "DeathPending" || (e.status === "Active" && !!e.death.certHash);

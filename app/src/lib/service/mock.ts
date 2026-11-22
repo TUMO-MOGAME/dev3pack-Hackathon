@@ -77,7 +77,7 @@ import { MOCK_STORE_KEY } from "./is-mock";
 import { MAX_RULES, MIN_LISTING_SECS, listingEnded, nextDueAfter, ruleEnded, surplusOf } from "../continuity/logic";
 import { openToPeople, outcomeOf } from "../verdict";
 import { isCurrentClaim, replaceableAt, reviewedHold } from "../death-rules";
-import { claimTally, deathTally, hardshipTally, hasLivingSeat, isFamily, isHeld } from "../guardians/decisions";
+import { claimTally, deathTally, hardshipTally, hasLivingSeat, isHeld, mayList } from "../guardians/decisions";
 import { clearDeath, proofOfLife } from "./mock-rules";
 import { createMockContinuity, type MockAgentVotes } from "./mock-continuity";
 
@@ -865,9 +865,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
   function listAsset(address: Base58, durationSecs: number, withRivals: "both" | "low" | "none" = "both"): TxResult {
     needCreated();
     const a = s.snap.assets.find((x) => x.address === address) ?? fail("BadStatus", "That asset does not exist.");
-    // With every seat empty someone still in the family may ask the agent to list what the plan holds.
-    const family = !hasLivingSeat(est()) && a.status === "Held" && isFamily(s.snap, me());
-    need(family || (isHeld(me()) && est().verifiers.includes(me())) || me() === est().agent, "NotVerifier", "A trusted person or the agent opens the sale.");
+    need(me() === est().agent || mayList(s.snap, a, me(), nowSecs()), "NotVerifier",
+      "Only a trusted person can open the sale. Family can, when no trusted person is left, for an asset not yet listed or a listing that ended without an acceptable offer.");
     need(est().status === "Unlocked", "BadStatus", "The car can only be sold after the estate unlocks.");
     need(a.status === "Held" || listingEnded(a, nowSecs()), "BadStatus", "This car is already listed or sold.");
     need(durationSecs >= MIN_LISTING_SECS && durationSecs <= MAX_LISTING_SECS, "TimeOutOfRange", "A listing lasts from an hour to 90 days.");

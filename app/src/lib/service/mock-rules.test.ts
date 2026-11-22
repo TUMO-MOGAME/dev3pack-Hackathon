@@ -1169,6 +1169,27 @@ describe("the same as the chain service", () => {
     expect((await t.snap()).assets[0].status).toBe("Listed");
   });
 
+  it("family relists an ended listing with no acceptable offer, never over one and never while it runs", async () => {
+    const ended = async (stage: "listed" | "lowOffers") => {
+      await start(stage);
+      const saved = JSON.parse(window.localStorage.getItem(MOCK_STORE_KEY)!);
+      saved.snap.estate.verifiers = [NO_WALLET, NO_WALLET, NO_WALLET];
+      window.localStorage.setItem(MOCK_STORE_KEY, JSON.stringify(saved));
+      const u = await open(createMockService({ instant: true }));
+      const car = (await u.snap()).assets[0].address;
+      u.act("lerato");
+      await expect(u.svc.listAsset(u.estate, car, 7 * 86400)).rejects.toThrow(/^NotVerifier/);
+      advance(7 * 86400);
+      return { ...u, car };
+    };
+    storage();
+    const low = await ended("lowOffers");
+    await low.svc.listAsset(low.estate, low.car, 7 * 86400);
+    expect((await low.snap()).assets[0].listingEnds).toBe(now() + 7 * 86400);
+    const good = await ended("listed");
+    await expect(good.svc.listAsset(good.estate, good.car, 7 * 86400)).rejects.toThrow(/^NotVerifier/);
+  });
+
   it("monitors, backups and the fallback list see the estate in their list; a stranger is only a buyer", async () => {
     const t = await start("guardians");
     for (const w of [who("zodwa"), kagiso.wallet, DEMO_GUARDIANS.charity.wallet]) expect((await t.svc.listEstatesFor(w))[0].role).toBe("monitor");

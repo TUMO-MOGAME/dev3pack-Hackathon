@@ -1,12 +1,13 @@
 /** What the screens offer under the second review's rules (plan §18.4): one test for each check, allowed and not. */
 import { describe, expect, it } from "vitest";
 import type { EstateSnapshot } from "../service/types";
-import type { Claim, Hardship } from "../types";
+import type { Asset, Claim, Hardship } from "../types";
+import { mayAskToList } from "../agent/sale";
 import type { FallbackRecipient, GuardiansSnapshot, Seat } from "./types";
 import {
   agentVoteFor, agentVotesNeeded, canConfirmRecipient, canConfirmSeat, canReportRecipient, canReportSeat, canSign, canSubmitDeath,
   claimBlock, claimPayable, claimTally, claimVote, deathOpen, deathReplace, deathSince, deathTally, deathVote, hardshipStands,
-  hardshipTally, hardshipVote, interestedIn, NO_WALLET, ownerMayApprove, payoutHeldUntil, reportsAbout, seatReplace, successionOutcome, sweepHeldUntil, wasRemoved,
+  hardshipTally, hardshipVote, interestedIn, mayList, NO_WALLET, ownerMayApprove, payoutHeldUntil, reportsAbout, seatReplace, successionOutcome, sweepHeldUntil, wasRemoved,
 } from "./decisions";
 
 const [A, B, C, KID, SIB, MON, BK1, BK2, AGENT, OWNER] = ["A", "B", "C", "KID", "SIB", "MON", "BK1", "BK2", "AGENT", "OWNER"];
@@ -283,5 +284,24 @@ describe("someone the owner removed", () => {
     expect(wasRemoved(s, KID)).toBe(true);
     expect(wasRemoved(s, SIB)).toBe(false);
     expect(wasRemoved(s, MON)).toBe(false);
+  });
+});
+
+describe("mayList is lib/agent/sale.ts's mayAskToList", () => {
+  const car = { address: "AS", floorPrice: 900n, hardshipFloor: 700n } as Asset;
+  const cases = [[A, B, C], [NO_WALLET, NO_WALLET, C], [NO_WALLET, NO_WALLET, NO_WALLET]].flatMap((verifiers) =>
+    [["Held", null], ["Listed", 999], ["Listed", 1000], ["Listed", 1001], ["Sold", 1]].flatMap(([status, listingEnds]) =>
+      [null, KID].flatMap((hardshipBeneficiary) => [[], [699n], [700n], [899n], [900n]].map((amounts) =>
+        ({ verifiers, status, listingEnds, hardshipBeneficiary, amounts })))));
+
+  it.each([A, C, KID, SIB, "GONE", MON, NO_WALLET])("the same answer for %s in every case", (me) => {
+    for (const c of cases) {
+      const asset = { ...car, status: c.status, listingEnds: c.listingEnds, hardshipBeneficiary: c.hardshipBeneficiary } as Asset;
+      const offers = c.amounts.map((amount, i) => ({ address: `O${i}`, asset: "AS", buyer: "BUYER", amount, createdAt: 1 }));
+      const beneficiaries = [...snap().beneficiaries, { address: "b3", wallet: "GONE", label: "Gone", active: false }];
+      const s = snap({ estate: { verifiers: c.verifiers as EstateSnapshot["estate"]["verifiers"] }, beneficiaries, offers });
+      expect(mayList(s, asset, me, 1000), JSON.stringify(c, (_k, v) => (typeof v === "bigint" ? String(v) : v)))
+        .toBe(mayAskToList(s.estate.verifiers, s.beneficiaries, me, asset, offers, 1000));
+    }
   });
 });

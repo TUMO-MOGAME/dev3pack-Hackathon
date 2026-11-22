@@ -145,6 +145,8 @@ export const safeguards = {
     settle: "Settle for {amount}",
     expires: "Your signature holds for about a minute. If it runs out, or a better offer arrives first, you sign again.",
     listFamily: "No trusted person is left, so someone in the family may ask the agent to open the sale for 7 days. The owner's price limit still applies.",
+    relistFamily: "No trusted person is left and the listing ended without an offer at or above the price limit, so someone in the family may ask the agent to open it again for 7 days.",
+    relist: "List it for sale again",
     back: "Don't sign",
     changed: "The offer changed while you were reading. Nothing was sold. These are the new details.",
     noOffer: "There is no offer that can be accepted.",

@@ -30,7 +30,7 @@ import { listingLink } from "@/lib/hooks/pick-estate";
 import { fullName } from "@/lib/names";
 import { ReferredNote, RelistNote } from "@/components/continuity/continuity";
 import { listingEnded } from "@/lib/continuity/logic";
-import { hardshipTally, hasLivingSeat, isFamily, isHeld } from "@/lib/guardians/decisions";
+import { hardshipTally, hasLivingSeat, isFamily, isHeld, mayList } from "@/lib/guardians/decisions";
 import { VoteTally } from "@/components/guardians/decision";
 import { CoSign } from "@/components/continuity/cosign";
 import { ReleaseAsset } from "@/components/continuity/membership";
@@ -106,8 +106,8 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
   const family = isFamily(snap, session.address);
   const isVerifier = isHeld(session.address) && e.verifiers.includes(session.address);
   const staffed = hasLivingSeat(e);
-  // With every seat empty an active family member may ask the agent to list a held asset.
-  const mayList = isVerifier || (family && !staffed && car.status === "Held");
+  const relist = car.status === "Listed";
+  const canList = e.status === "Unlocked" && now !== null && mayList(snap, car, session.address, now) && (!relist || listingEnded(car, now));
   const [editing, setEditing] = useState<"photos" | "spec" | null>(null);
   const kind = kindOf(media);
   const title = media?.title || car.title;
@@ -219,13 +219,13 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
 
       <div className="grid gap-5 *:min-w-0">
         {/* What this person can do */}
-        {(car.status === "Held" || (!!now && isVerifier && listingEnded(car, now))) && (
-          mayList && e.status === "Unlocked" ? (
+        {(car.status === "Held" || canList) && (
+          canList ? (
             <Card>
               <h2 className="flex items-center gap-2 text-h3"><Store className="size-5 text-amber" aria-hidden="true" />{copy.list.title}</h2>
-              <p className="mt-1 text-ink-2">{isVerifier ? copy.list.body : guardians.rules.sale.listFamily}</p>
-              {car.status === "Listed" && <RelistNote />}
-              <Button className="mt-3" loading={busy === "list"} onClick={() => run("list", (s, est) => s.listAsset(est, car.address, 7 * 86400), copy.list.done)}>{copy.list.cta}</Button>
+              <p className="mt-1 text-ink-2">{isVerifier ? copy.list.body : relist ? guardians.rules.sale.relistFamily : guardians.rules.sale.listFamily}</p>
+              {relist && isVerifier && <RelistNote />}
+              <Button className="mt-3" loading={busy === "list"} onClick={() => run("list", (s, est) => s.listAsset(est, car.address, 7 * 86400), copy.list.done)}>{relist ? guardians.rules.sale.relist : copy.list.cta}</Button>
             </Card>
           ) : (
             <Notice icon={<Lock className="size-5" aria-hidden="true" />}><p className="text-body">{e.status === "Unlocked" ? copy.offers.emptyHeld : copy.list.wait}</p></Notice>
