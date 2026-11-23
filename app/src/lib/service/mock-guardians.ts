@@ -16,7 +16,7 @@ import { fail, need } from "./mock-errors";
 import { shortName } from "../names";
 import { cleanSpec, foreignSpecKeys, isPhotoLabel, type AssetSpec } from "../assets/spec";
 import { objectionLapsesAt } from "../disputes/types";
-import { eligibleSeats, fallbackGrace, refuteWait, replaceableAt, reviewedHold, seatReviewedHold } from "../death-rules";
+import { eligibleSeats, fallbackGrace, refuteWait, replaceableAt, seatReviewedHold } from "../death-rules";
 import { openToPeople } from "../verdict";
 import { confirmRoute, deathSince, interestedIn, NO_WALLET, successionOutcome } from "../guardians/decisions";
 import { clearDeath, COLLECTING, proofOfLife, votesCount, type MockStamp } from "./mock-rules";
