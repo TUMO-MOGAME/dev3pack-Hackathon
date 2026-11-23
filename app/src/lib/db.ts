@@ -107,14 +107,16 @@ export async function saveWillDraft(ownerWallet: string | null, draft: WillDraft
   warn("saveWillDraft", error);
 }
 
-export async function saveReport(r: ReportRow): Promise<void> {
+/** False when the store refused it (the caller then records nothing on-chain). */
+export async function saveReport(r: ReportRow): Promise<boolean> {
   const sb = getSupabase();
-  if (!sb) { mem.reports.set(r.reportHash, r); return; }
+  if (!sb) { mem.reports.set(r.reportHash, r); return true; }
   const { error } = await sb.from("agent_reports").upsert({
     report_hash: r.reportHash, purpose: r.purpose, estate: r.estate, subject: r.subject, evidence_path: r.evidencePath,
     evidence_sha256: r.evidenceSha256, report: r.report, tx_signature: r.txSignature,
   });
   warn("saveReport", error);
+  return !error;
 }
 
 /** With `estate`, only reports made for that estate: hashes are public on-chain, the reports are not. */

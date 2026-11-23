@@ -15,6 +15,10 @@ const h = vi.hoisted(() => ({
   stored: 0,
   reviews: [] as { facts?: string; untrusted?: string }[],
   verdict: "needs_human" as "approve" | "reject" | "needs_human",
+  confidence: 0,
+  redFlags: [] as string[],
+  order: [] as string[],
+  saveFails: false,
   accounts: {} as Record<string, unknown>,
   refuse: null as string | null,
   snapshot: null as unknown,
@@ -38,6 +42,7 @@ vi.mock("@/lib/agent/agent-wallet", () => ({
   hasAgentWallet: () => true,
   agentAddress: async () => h.agent,
   agentSignAndSend: async (ixs: { data: Uint8Array }[]) => {
+    h.order.push("send");
     if (h.refuse) throw new Error(h.refuse);
     h.signed.push(...ixs);
     return { signature: "sig", explorerUrl: "url" };
@@ -56,7 +61,7 @@ vi.mock("@/lib/server/agent-ledger", async (original: () => Promise<object>) => 
 vi.mock("@/lib/agent/review", () => ({
   reviewDocument: async (input: { facts?: string; untrusted?: string }) => {
     h.reviews.push(input);
-    return { verdict: h.verdict, reportHash: "11".repeat(32), documentType: "x", extracted: {}, redFlags: [], confidence: 0, summary: "" };
+    return { verdict: h.verdict, reportHash: "11".repeat(32), documentType: "x", extracted: {}, redFlags: h.redFlags, confidence: h.confidence, summary: "" };
   },
 }));
 vi.mock("@/lib/storage", async (original: () => Promise<object>) => {
@@ -71,7 +76,7 @@ vi.mock("@/lib/storage", async (original: () => Promise<object>) => {
 });
 vi.mock("@/lib/db", () => ({
   recordEvidence: async () => undefined,
-  saveReport: async () => undefined,
+  saveReport: async (r: { txSignature: string | null }) => { h.order.push(r.txSignature ? "save signed" : "save"); return !h.saveFails; },
   getEstateMeta: async () => ({ ownerName: "Thabo Mokoena", verifierNames: ["A", "B", "C"], assetTitles: {}, buyerNames: {} }),
   getReports: async () => { h.reports++; return { x: { summary: "private" } }; },
 }));
@@ -120,6 +125,7 @@ beforeEach(async () => {
   sha = await sha256Hex(pdf);
   const bytes = Array.from(Buffer.from(sha, "hex"));
   h.signed = []; h.reviews = []; h.refuse = null; h.stored = 0; h.reports = 0; h.verdict = "needs_human";
+  Object.assign(h, { confidence: 0, redFlags: [], order: [], saveFails: false });
   h.accounts = {
     [`Estate:${estate}`]: {
       owner: owner.address, agent: h.agent, usdt_mint: h.mint, verifiers: [trusted.address, key(), key()],
@@ -213,6 +219,60 @@ describe("/api/review (S1, S2, S3, S7)", () => {
   it("a preview stores and signs nothing", async () => {
     expect((await reviewAs(null, { purpose: "claim", preview: true })).status).toBe(200);
     expect([h.stored, h.signed.length]).toEqual([0, 0]);
+  });
+});
+
+describe("the report is saved before anything is sent (M2)", () => {
+  it("saved, then sent, then saved with its signature", async () => {
+    h.verdict = "approve";
+    expect((await reviewAs(claimant, { purpose: "claim", subject: claim })).status).toBe(200);
+    expect(h.order).toEqual(["save", "send", "save signed"]);
+  });
+
+  it("a send that fails leaves the report saved", async () => {
+    h.refuse = "Rejected by the Heirloom program: ReportChanged: Another report replaced this one";
+    await reviewAs(claimant, { purpose: "death" });
+    expect(h.order).toEqual(["save", "send"]);
+  });
+
+  it("a report that can't be saved is never sent", async () => {
+    h.saveFails = true;
+    expect((await reviewAs(claimant, { purpose: "claim", subject: claim })).status).toBe(503);
+    expect(h.signed).toHaveLength(0);
+  });
+});
+
+describe("an unnamed fallback recipient's death (H12)", () => {
+  it("the reviewer is told to judge the document itself, not to answer needs_human", async () => {
+    fallbackReported();
+    await reviewAs(claimant, { purpose: "fallback-death", index: 0 });
+    expect(h.reviews[0].facts).toMatch(/judge the document itself/);
+    expect(h.reviews[0].facts).not.toMatch(/use needs_human/);
+  });
+
+  it("unsure only because the name can't be checked: nothing signed, so it is not rejected", async () => {
+    fallbackReported();
+    Object.assign(h, { confidence: 0.9, redFlags: [] });
+    const res = await reviewAs(claimant, { purpose: "fallback-death", index: 0 });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { tx: unknown }).tx).toBeNull();
+    expect(h.signed).toHaveLength(0);
+  });
+
+  it("unsure with something wrong in the document: rejected, as before", async () => {
+    fallbackReported();
+    Object.assign(h, { confidence: 0.9, redFlags: ["The stamp is missing"] });
+    await reviewAs(claimant, { purpose: "fallback-death", index: 0 });
+    expect(signedReview()).toBe("false");
+  });
+
+  it("an unnamed seat holder's: the same", async () => {
+    h.accounts[`Seat:${seatPda(programId, estate, 1).toBase58()}`] = {
+      holder: key(), generation: 1, death_cert_hash: Array.from(Buffer.from(sha, "hex")), death_reported_by: claimant.address, death_verdict: { pending: {} },
+    };
+    Object.assign(h, { confidence: 0.9, redFlags: [] });
+    await reviewAs(claimant, { purpose: "seat-death", index: 1 });
+    expect(h.signed).toHaveLength(0);
   });
 });
 
