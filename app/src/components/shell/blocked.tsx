@@ -4,7 +4,7 @@ import { ShieldX } from "@/components/ui/icons";
 import { useCopy } from "./copy";
 
 /** Not the contract's refusals: these never say that a rule did its job. */
-const NOT_A_RULE = new Set(["generic", "cancelled", "NotConfirmed", "sale_changed", "stale_sale", "agent_limit", "bad_sale_tx", "rate_limited", "RulesIncomplete", "ReviewPending", "NotConfirmed", "FileType", "FileSize", "FileEmpty", "DeclineUnknown"]);
+const NOT_A_RULE = new Set(["generic", "cancelled", "NotConfirmed", "sale_changed", "stale_sale", "agent_limit", "bad_sale_tx", "rate_limited", "RulesIncomplete", "ReviewPending", "StaleApp", "ProgramMismatch", "program_mismatch", "has_usdt_account", "unneeded_signer", "members_only", "storage_full", "daily_limit", "unconfirmed", "NotConfirmed", "FileType", "FileSize", "FileEmpty", "DeclineUnknown"]);
 
 /** Shown when the estate's on-chain rules refuse an action, or it didn't complete. */
 export function Blocked({ code, message, children }: { code: string; message: string; children?: ReactNode }) {

@@ -230,7 +230,7 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       const person = await nameOf(estate, holder);
       const r = await d.review(certificate, "seat-death", estate,
         `Trusted person whose death is reported: ${person} (seat ${index + 1}, wallet ${holder}). This is not the estate owner.`, index);
-      return { tx: (tx ?? r.tx)!, report: r.report };
+      return { tx: tx ?? r.tx ?? null, report: r.report };
     },
     async ownerReplaceSeat(estate, index, newHolder) {
       const owner = d.requireOwnerOf(estate);
@@ -320,7 +320,7 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       const person = await nameOf(estate, wallet);
       const r = await d.review(certificate, "fallback-death", estate,
         `Fallback recipient whose death is reported: ${person} (wallet ${wallet}). This is not the estate owner.`, slot);
-      return { tx: (tx ?? r.tx)!, report: r.report };
+      return { tx: tx ?? r.tx ?? null, report: r.report };
     },
 
     async resolveFallbackDeath(estate, recipientIndex, dead) {
