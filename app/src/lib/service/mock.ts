@@ -825,9 +825,10 @@ export function createMockService(opts: MockOptions = {}): MockService {
     return t;
   }
 
-  function executeScheduled(address: Base58, force = false): TxResult {
+  function executeScheduled(address: Base58, force = false, shown?: { amount: bigint; payee: Base58 }): TxResult {
     needCreated();
     const r = s.snap.rules.find((x) => x.address === address) ?? fail("BadStatus", "That rule does not exist.");
+    need(!shown || (r.fixedPayee === shown.payee && r.recurringAmount === shown.amount), "ScheduleChanged", "This schedule changed since you looked. Nothing was paid.");
     need(r.recurringAmount > 0n && !!r.fixedPayee, "BadStatus", "This rule has no schedule.");
     const st = est().status;
     need(st === "Unlocked" || (r.startsNow && st === "Active"), "BadStatus", r.startsNow ? "Scheduled payments pause while a passing is being confirmed." : "This schedule starts after the estate is unlocked.");
@@ -1575,7 +1576,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     addPayee: (_e, input) => mutate(700, () => addPayee(input)),
     addRule: (_e, input) => mutate(700, () => addRule(input)),
     ownerApproveClaim: (_e, claim) => mutate(900, () => ownerApproveClaim(claim)),
-    executeScheduled: (_e, rule) => mutate(1000, () => executeScheduled(rule)),
+    executeScheduled: (_e, rule, shown) => mutate(1000, () => executeScheduled(rule, false, shown)),
     vetoDeath: () => mutate(800, vetoDeath),
     askForMoney: (e, input) => A.askForMoney(e, input),
     getTree: async (e) => (await Tr()).getTree(e),

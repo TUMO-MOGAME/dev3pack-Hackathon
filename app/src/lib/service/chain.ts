@@ -711,13 +711,21 @@ export function createChainService(): HeirloomService {
       return send([ix.ownerApproveClaim(chainCtx(), o, pk(claim), pk(key(raw, "rule")))]);
     },
 
-    async executeScheduled(estate, rule) {
+    async executeScheduled(estate, rule, shown) {
+      // What is paid must be what was shown: read before signing, and again after the wallet signed.
+      const check = async () => {
+        if (!shown) return;
+        const now = await mustFetch("Rule", rule);
+        must(key(now, "fixed_payee") === shown.payee && BigInt(String(now.recurring_amount ?? "0")) === shown.amount, "ScheduleChanged",
+          "This schedule changed since you looked (its place may hold a new rule). Nothing was paid.");
+      };
+      await check();
       const raw = await mustFetch("Rule", rule);
       const fixed = key(raw, "fixed_payee");
       return send([ix.executeScheduled(chainCtx(), {
         estate: pk(estate), payer: pk(getActiveSigner().address), rule: pk(rule), beneficiary: pk(key(raw, "beneficiary")), payeeWallet: pk(fixed),
       })],
-        { kind: "scheduled", to: fixed, toLabel: "Scheduled payee", amount: String(raw.recurring_amount ?? "0") });
+        { kind: "scheduled", to: fixed, toLabel: "Scheduled payee", amount: String(raw.recurring_amount ?? "0") }, { check: () => { invalidateProgramAccounts(); return check(); } });
     },
 
     // ----- Family -----

@@ -13,7 +13,7 @@ import { safeguardsAf, safeguardsSt, safeguardsZu } from "./i18n/safeguards";
 const SERVICE = [
   "AccountNotInitialized", "NotConfirmed", "InvalidAddress", "NoEstate", "residual", "recurring_payee", "agent_account", "bad_sale_tx",
   "sale_changed", "stale_sale", "co_sign_required", "own_offer", "agent_limit", "forbidden", "rate_limited", "not_served", "hash_mismatch",
-  "already_reviewed", "Declined", "DeclineUnknown", "ReviewPending", "StaleApp", "ProgramMismatch", "program_mismatch", "has_usdt_account", "unneeded_signer", "members_only", "full", "storage_full", "decided", "daily_limit", "unconfirmed", "FileEmpty", "FileSize", "FileType",
+  "already_reviewed", "Declined", "DeclineUnknown", "ReviewPending", "ScheduleChanged", "StaleApp", "ProgramMismatch", "program_mismatch", "has_usdt_account", "unneeded_signer", "members_only", "full", "storage_full", "decided", "daily_limit", "unconfirmed", "FileEmpty", "FileSize", "FileType",
 ];
 const english = { ...guardians.errors, ...disputes.errors, ...common.errors, ...safeguards.errors } as Record<string, string>;
 

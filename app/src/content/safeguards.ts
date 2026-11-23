@@ -39,6 +39,7 @@ export const safeguards = {
     already_reviewed: "The agent has already reviewed this.",
     recurring_payee: "A scheduled payment has no approved payee, so nothing was signed. Sign the plan without that schedule, add the payee under People, then add the scheduled rule with \"Add a bill\" under Plan.",
     residual: "This person receives what is left. Choose someone else for that first.",
+    ScheduleChanged: "This schedule changed since you looked (its place may now hold a new rule). Nothing was paid. Check it again.",
     StaleApp: "Heirloom was updated while this page was open. Reload the page, then try again. Nothing was signed.",
     ProgramMismatch: "The program on the network isn't the one this app was built for, so nothing was signed. Reload the page; if it stays, try later.",
     program_mismatch: "The program on the network isn't the one this app was built for, so nothing was sent. Reload the page; if it stays, try later.",

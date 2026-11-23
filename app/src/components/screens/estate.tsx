@@ -350,7 +350,7 @@ function Scheduled({ copy, snap, rate }: { copy: Copy; snap: EstateSnapshot; rat
               {live && !capped && !ended && !stopped && (
                 <Button
                   small variant={due ? "primary" : "secondary"} disabled={!due || !!busy}
-                  onClick={() => void pay({ kind: "scheduled", source: "vault", to: r.fixedPayee ?? "", toLabel: payee, amount: r.recurringAmount, execute: (svc, est) => svc.executeScheduled(est, r.address), successText: fmt(c.paid, { payee }) })}
+                  onClick={() => void pay({ kind: "scheduled", source: "vault", to: r.fixedPayee ?? "", toLabel: payee, amount: r.recurringAmount, execute: (svc, est) => svc.executeScheduled(est, r.address, { amount: r.recurringAmount, payee: r.fixedPayee ?? "" }), successText: fmt(c.paid, { payee }) })}
                 >
                   {c.payNow}
                 </Button>

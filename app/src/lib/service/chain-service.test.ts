@@ -149,6 +149,13 @@ describe("payouts pass the accounts they re-check (R16)", () => {
     expect([passes(beneficiaryPda(programId, estate, kid)), passes(payeePda(programId, estate, res))]).toEqual([true, true]);
   });
 
+  it("executeScheduled: a rule that now pays something else than was shown signs nothing", async () => {
+    const rule = rulePda(programId, estate, 0).toBase58();
+    h.accounts.set(rule, { beneficiary: kid, fixed_payee: res, recurring_amount: 5 });
+    await expect(createChainService().executeScheduled(estate, rule, { amount: 6n, payee: res })).rejects.toMatchObject({ code: "ScheduleChanged" });
+    expect(h.signed).toEqual([]);
+  });
+
   it("executeScheduled: the rule's", async () => {
     const rule = rulePda(programId, estate, 0).toBase58();
     h.accounts.set(rule, { beneficiary: kid, fixed_payee: res, recurring_amount: 5 });

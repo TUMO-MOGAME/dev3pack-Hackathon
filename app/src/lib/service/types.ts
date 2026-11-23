@@ -93,7 +93,11 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   /** Living plan: owner approves a claim on a startsNow rule while alive (counts as full approval). */
   ownerApproveClaim(estate: Base58, claim: Base58): Promise<TxResult>;
   /** Scheduled payment: anyone (UI button, agent, cron) triggers a due recurring payout. */
-  executeScheduled(estate: Base58, rule: Base58): Promise<TxResult>;
+  /**
+   * `shown`: the amount and payee on screen. A rule whose slot was reused since pays someone or something else, so it
+   * is refused (code "ScheduleChanged") instead of paying what wasn't shown.
+   */
+  executeScheduled(estate: Base58, rule: Base58, shown?: { amount: bigint; payee: Base58 }): Promise<TxResult>;
   vetoDeath(estate: Base58): Promise<TxResult>;
 
   // Family

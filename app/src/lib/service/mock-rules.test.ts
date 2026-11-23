@@ -1301,3 +1301,13 @@ describe("M4: the plan's asset terms reach the asset", () => {
     expect((await svc.getEstate(estate)).plannedAssets?.[0].title).toBe(draft!.assets[0].title);
   });
 });
+
+describe("Low: a schedule pays what was shown or nothing", () => {
+  it("refuses when the rule now pays another amount or payee", async () => {
+    const t = await start("funded");
+    const r = (await t.snap()).rules.find((x) => x.recurringAmount > 0n && x.startsNow)!;
+    t.svc.makeDue();
+    await expect(t.svc.executeScheduled(t.estate, r.address, { amount: r.recurringAmount + 1n, payee: r.fixedPayee! })).rejects.toMatchObject({ code: "ScheduleChanged" });
+    await t.svc.executeScheduled(t.estate, r.address, { amount: r.recurringAmount, payee: r.fixedPayee! });
+  });
+});
