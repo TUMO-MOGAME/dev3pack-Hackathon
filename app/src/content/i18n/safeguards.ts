@@ -74,6 +74,9 @@ export const safeguardsAf: SafeguardsCopy = {
     stands: "'n Ander noodversoek is eerste goedgekeur. Hierdie een kan nie goedgekeur word tensy daardie een omgekeer word nie.",
     pay: "Genoeg mense het goedgekeur. Enigiemand kan die betaling doen.",
     declined: "Die eienaar het nee gesê vir hierdie versoek terwyl hy of sy gelewe het, so dit kan nie goedgekeur of betaal word nie.",
+    aloneDeath: "Jy is die enigste vertroude persoon wat oor is en jy het dit aangemeld, so jy mag dit alleen bevestig. Die ontsluiting wag dan twee keer so lank.",
+    aloneClaim: "Jy is die enigste vertroude persoon wat oor is en dit is jou eie eis, so jy mag dit alleen goedkeur. Waarnemers kry dan twee keer so lank om beswaar te maak.",
+    aloneClaimDone: "Alleen goedgekeur deur die enigste vertroude persoon wat oor is, wie se eie eis dit is, so waarnemers kry twee keer so lank om beswaar te maak.",
   },
 
   blocked: {
@@ -91,7 +94,7 @@ export const safeguardsAf: SafeguardsCopy = {
     in: "{who} kan dit oor {time} vervang.",
     now: "{who} kan dit nou vervang.",
     who: {
-      death: "'n Ander gesinslid wat in die plan genoem is",
+      death: "Iemand anders wat dit mag aanmeld (familie, 'n vertroude persoon of iemand op die terugvallys)",
       seat: "Iemand anders wat dit mag aanmeld (vertroude mense, die eienaar, die gesin, of hierdie persoon se rugsteun en waarnemers)",
       recipient: "Iemand anders in die plan",
       reporter: "Wie die verslag gemaak het",
@@ -115,6 +118,8 @@ export const safeguardsAf: SafeguardsCopy = {
     pending: "Aangemeld deur {name}. Die agent het die sertifikaat nog nie nagegaan nie.",
     referred: "Aangemeld deur {name}. Die agent was onseker oor die sertifikaat, so mense besluit.",
     byFallback: "Deur die terugvalplan vasgestel: geen vertroude persoon was oor om te bevestig nie.",
+    alone: "Die enigste vertroude persoon wat oor is, het hierdie afsterwe aangemeld en dit alleen bevestig, so die wagtyd is twee keer so lank.",
+    whoMay: "Net familie in die plan, 'n vertroude persoon of iemand op die terugvallys kan 'n afsterwe aanmeld.",
   },
 
   here: {
@@ -138,6 +143,7 @@ export const safeguardsAf: SafeguardsCopy = {
     clearCta: "Vee die verslag uit",
     cleared: "Die verslag is uitgevee. Iemand anders kan dit weer aanmeld",
     monitorClears: "'n Gesinslid het hierdie persoon se afsterwe bevestig omdat niemand hulle dopgehou het nie. As jy 'n waarnemer stoor, word daardie verslag uitgevee en moet dit weer gemaak word.",
+    stands: "Sodra die agent 'n verslag nagegaan het, staan dit vir ses wagtydperke ({time}) voordat iemand dit kan vervang, so daar is tyd om dit te bevestig.",
   },
 
   recipient: {
@@ -180,6 +186,12 @@ export const safeguardsAf: SafeguardsCopy = {
     noOffer: "Daar is geen aanbod wat aanvaar kan word nie.",
     ownOffer: "Jy is die koper, so 'n ander vertroude persoon moet saam teken.",
     noSeats: "Geen vertroude persoon is oor om saam te teken nie. Die verkoping kan eers voltooi word nadat die lys eindig, teen of bo die prysgrens.",
+    readyFrom: "Kan aanvaar word vanaf {time}",
+    left: "{time} oor",
+    whyOffer: "Waarnemers kan tot dan nog beswaar maak teen hierdie aanbod.",
+    whyHardship: "Waarnemers kan tot dan nog beswaar maak teen die goedkeuring van die swaarkry-versoek.",
+    notYet: "Geen aanbod kan nog aanvaar word nie. Die beste een kan aanvaar word vanaf {time} ({left} oor).",
+    tooOldBadge: "Kan nie aanvaar word nie",
   },
 
   release: {
@@ -206,7 +218,7 @@ export const safeguardsAf: SafeguardsCopy = {
     ],
     replace: "Vervang die agent",
     ownerBody: "Vervang dit as sy sleutel weg is of jy dit nie vertrou nie. Dit geld dadelik, en kanselleer enige aangemelde afsterwe.",
-    votersBody: "As die agent se sleutel weg is, kan die vertroude mense dit vervang. Terwyl die eienaar leef, verg dit almal, ten minste twee. Daarna verg dit twee, of die enigste een wat oor is.",
+    votersBody: "As die agent se sleutel weg is, kan die vertroude mense dit vervang. Totdat die boedel ontsluit, verg dit almal, ten minste twee. Daarna verg dit twee, of die enigste een wat oor is.",
     warn: "Wie die nuwe wallet hou, kry elke mag wat hier gelys is. 'n Verkeerde adres kan elke hersiening ophou totdat dit weer vervang word.",
     wallet: "Die nuwe agent se walletadres",
     invalid: "Dit lyk nie soos 'n Solana-walletadres nie.",
@@ -225,7 +237,9 @@ export const safeguardsAf: SafeguardsCopy = {
     vote: "Stem vir hierdie een",
     finish: "Teken weer om te voltooi",
     waiting: "Jy het gestem. Wag vir die ander.",
-    alone: "Een vertroude persoon kan nie alleen die agent vervang terwyl die eienaar leef nie.",
+    alone: "Een vertroude persoon kan nie alleen die agent vervang voordat die boedel ontsluit nie.",
+    needNow: "Stemme nou nodig: {need}.",
+    needRecovery: "'n Afsterwe is aangemeld en die eienaar het lank nie ingeteken nie, so twee stemme is nou genoeg, of die enigste een wat oor is.",
   },
 
   remove: {
@@ -371,6 +385,9 @@ export const safeguardsSt: SafeguardsCopy = {
     stands: "Kopo e nngwe ya bothata e dumelletswe pele. Ena e ke ke ya dumellwa ntle le ha eo e qhalwa.",
     pay: "Batho ba lekaneng ba dumetse. Mang kapa mang a ka etsa tefo.",
     declined: "Mong'a lefa o ile a hana kopo ena a sa phela, kahoo e ke ke ya dumellwa kapa ya lefuwa.",
+    aloneDeath: "O motho a le mong ya tshepahalang ya setseng mme ke wena o tlalehileng sena, kahoo o ka se netefatsa o le mong. Ho bulwa ho tla ema nako e habedi.",
+    aloneClaim: "O motho a le mong ya tshepahalang ya setseng mme ena ke kopo ya hao, kahoo o ka e dumella o le mong. Bahlokomedi ba tla fumana nako e habedi ho hanyetsa.",
+    aloneClaimDone: "E dumelletswe ke motho a le mong ya tshepahalang ya setseng, eo e leng kopo ya hae, kahoo bahlokomedi ba fumana nako e habedi ho hanyetsa.",
   },
 
   blocked: {
@@ -388,7 +405,7 @@ export const safeguardsSt: SafeguardsCopy = {
     in: "{who} a ka e nkela sebaka kamora {time}.",
     now: "{who} a ka e nkela sebaka jwale.",
     who: {
-      death: "Setho se seng sa lelapa se moralong",
+      death: "Motho e mong ya ka e tlalehang (lelapa, motho ya tshepahalang kapa motho ya lenaneng la ho qetela)",
       seat: "Motho e mong ya dumelletsweng ho tlaleha (batho ba tshepahalang, mong, lelapa, kapa bathusi le bahlokomedi ba motho enwa)",
       recipient: "Motho e mong ya moralong",
       reporter: "Ya entseng tlaleho",
@@ -412,6 +429,8 @@ export const safeguardsSt: SafeguardsCopy = {
     pending: "Le tlalehilwe ke {name}. Agent ha e so hlahlobe setifikeiti.",
     referred: "Le tlalehilwe ke {name}. Agent e ne e sa kgodisehe ka setifikeiti, kahoo batho ba etsa qeto.",
     byFallback: "Le tiisitswe ka moralo wa ho qetela: ho ne ho se motho ya tshepahalang ya setseng ho netefatsa.",
+    alone: "Motho a le mong ya tshepahalang ya setseng o tlalehile lefu lena mme a le netefatsa a le mong, kahoo nako ya ho ema e habedi.",
+    whoMay: "Ke lelapa le moralong, motho ya tshepahalang kapa motho ya lenaneng la ho qetela feela ba ka tlalehang lefu.",
   },
 
   here: {
@@ -435,6 +454,7 @@ export const safeguardsSt: SafeguardsCopy = {
     clearCta: "Hlakola tlaleho",
     cleared: "Tlaleho e hlakotswe. Motho e mong a ka tlaleha hape",
     monitorClears: "Setho sa lelapa se netefaditse lefu la motho enwa hobane ho ne ho se ya mo hlokometseng. Ho boloka mohlokomedi ho hlakola tlaleho eo, kahoo e tlameha ho etswa hape.",
+    stands: "Hang ha agent e hlahlobile tlaleho, e ema dinako tse tsheletseng tsa ho ema ({time}) pele motho a ka e nkela sebaka, kahoo ho na le nako ya ho e netefatsa.",
   },
 
   recipient: {
@@ -477,6 +497,12 @@ export const safeguardsSt: SafeguardsCopy = {
     noOffer: "Ha ho tlhahiso e ka amohelwang.",
     ownOffer: "Ke wena moreki, kahoo motho e mong ya tshepahalang o tlameha ho saena.",
     noSeats: "Ha ho motho ya tshepahalang ya setseng ho saena. Thekiso e ka phethwa feela ha nako ya yona e fedile, ka moedi wa theko kapa ho feta.",
+    readyFrom: "E ka amohelwa ho tloha ka {time}",
+    left: "Ho setse {time}",
+    whyOffer: "Bahlokomedi ba sa ntse ba ka hanyetsa tlhahiso ena ho fihlela ka nako eo.",
+    whyHardship: "Bahlokomedi ba sa ntse ba ka hanyetsa tumello ya mathata ho fihlela ka nako eo.",
+    notYet: "Ha ho tlhahiso e ka amohelwang hajwale. E molemo ka ho fetisisa e ka amohelwa ho tloha ka {time} (ho setse {left}).",
+    tooOldBadge: "E ke ke ya amohelwa",
   },
 
   release: {
@@ -503,7 +529,7 @@ export const safeguardsSt: SafeguardsCopy = {
     ],
     replace: "Nkela agent sebaka",
     ownerBody: "E nkele sebaka ha senotlolo sa yona se lahlehile kapa o sa e tshepe. Ho sebetsa hanghang, mme ho hlakola lefu lefe kapa lefe le tlalehilweng.",
-    votersBody: "Ha senotlolo sa agent se lahlehile, batho ba tshepahalang ba ka e nkela sebaka. Ha mong a sa phela, ho hloka bohle, bonyane ba babedi. Kamora moo ho hloka ba babedi, kapa ya setseng a le mong.",
+    votersBody: "Ha senotlolo sa agent se lahlehile, batho ba tshepahalang ba ka e nkela sebaka. Ho fihlela lefa le bulwa ho hloka bohle, bonyane ba babedi. Kamora moo ho hloka ba babedi, kapa ya setseng a le mong.",
     warn: "Ya tshwereng wallet e ntjha o fumana matla ohle a ngotsweng mona. Aterese e fosahetseng e ka emisa ditlhahlobo tsohle ho fihlela e nkelwa sebaka hape.",
     wallet: "Aterese ya wallet ya agent e ntjha",
     invalid: "Seo ha se bonahale e le aterese ya wallet ya Solana.",
@@ -522,7 +548,9 @@ export const safeguardsSt: SafeguardsCopy = {
     vote: "Voutela ena",
     finish: "Saena hape ho phethela",
     waiting: "O voutile. Ho emetswe ba bang.",
-    alone: "Motho a le mong ya tshepahalang a ke ke a nkela agent sebaka a le mong ha mong a sa phela.",
+    alone: "Motho a le mong ya tshepahalang a ke ke a nkela agent sebaka a le mong pele lefa le bulwa.",
+    needNow: "Divoutu tse hlokahalang hona jwale: {need}.",
+    needRecovery: "Lefu le tlalehilwe mme mong'a lefa ha a so bontshe hore o teng nako e telele, kahoo divoutu tse pedi di lekane hona jwale, kapa ya setseng a le mong.",
   },
 
   remove: {
@@ -668,6 +696,9 @@ export const safeguardsZu: SafeguardsCopy = {
     stands: "Esinye isicelo sobunzima savunywa kuqala. Lesi ngeke savunywa ngaphandle uma leso sichithwa.",
     pay: "Abantu abanele bavumile. Noma ubani angenza inkokhelo.",
     declined: "Umnikazi wala lesi sicelo esaphila, ngakho asikwazi ukuvunywa noma ukukhokhwa.",
+    aloneDeath: "Nguwe wedwa umuntu othembekile osele futhi nguwe owakubika lokhu, ngakho ungakuqinisekisa wedwa. Ukuvulwa kuzolinda isikhathi esiphindwe kabili.",
+    aloneClaim: "Nguwe wedwa umuntu othembekile osele futhi lesi yisicelo sakho, ngakho ungasivuma wedwa. Abaqaphi bazothola isikhathi esiphindwe kabili sokuphikisa.",
+    aloneClaimDone: "Sivunywe ngumuntu othembekile oyedwa osele, okuyisicelo sakhe, ngakho abaqaphi bathola isikhathi esiphindwe kabili sokuphikisa.",
   },
 
   blocked: {
@@ -685,7 +716,7 @@ export const safeguardsZu: SafeguardsCopy = {
     in: "{who} angawushintsha ngemva kuka-{time}.",
     now: "{who} angawushintsha manje.",
     who: {
-      death: "Elinye ilungu lomndeni elisohlelweni",
+      death: "Omunye umuntu ongakubika (umndeni, umuntu othembekile noma umuntu osohlwini lokugcina)",
       seat: "Omunye ovunyelwe ukubika (abantu abathembekile, umnikazi, umndeni, noma abasekeli nababheki balo muntu)",
       recipient: "Omunye umuntu osohlelweni",
       reporter: "Owenze umbiko",
@@ -709,6 +740,8 @@ export const safeguardsZu: SafeguardsCopy = {
     pending: "Kubikwe ngu-{name}. I-agent ayikasihloli isitifiketi.",
     referred: "Kubikwe ngu-{name}. I-agent ibingaqiniseki ngesitifiketi, ngakho abantu bayanquma.",
     byFallback: "Kuqinisekiswe ngohlelo lokugcina: bekungasekho muntu othembekile ongaqinisekisa.",
+    alone: "Umuntu othembekile oyedwa osele wabika lokhu kudlula emhlabeni futhi wakuqinisekisa yedwa, ngakho ukulinda kuphindwe kabili.",
+    whoMay: "Umndeni osohlelweni, umuntu othembekile noma umuntu osohlwini lokugcina kuphela abangabika ukudlula emhlabeni.",
   },
 
   here: {
@@ -732,6 +765,7 @@ export const safeguardsZu: SafeguardsCopy = {
     clearCta: "Sula umbiko",
     cleared: "Umbiko usuliwe. Omunye angabika futhi",
     monitorClears: "Ilungu lomndeni laqinisekisa ukushona kwalo muntu ngoba kwakungekho ombhekayo. Ukulondoloza umbheki kusula lowo mbiko, ngakho kufanele wenziwe futhi.",
+    stands: "Uma i-agent isiwuhlolile umbiko, uhlala izikhathi zokulinda eziyisithupha ({time}) ngaphambi kokuba omunye awushintshe, ngakho kunesikhathi sokuwuqinisekisa.",
   },
 
   recipient: {
@@ -774,6 +808,12 @@ export const safeguardsZu: SafeguardsCopy = {
     noOffer: "Asikho isicelo esingamukelwa.",
     ownOffer: "Nguwe umthengi, ngakho omunye othembekile kufanele asayine.",
     noSeats: "Akekho umuntu othembekile osele ukuze asayine. Ukuthengisa kungaqedelwa kuphela uma isikhathi sakho siphelile, ngomngcele wentengo noma ngaphezulu.",
+    readyFrom: "Singamukelwa kusukela ngo-{time}",
+    left: "Kusele {time}",
+    whyOffer: "Abaqaphi basengasiphikisa lesi sicelo kuze kube yileso sikhathi.",
+    whyHardship: "Abaqaphi basengakuphikisa ukuvunywa kobunzima kuze kube yileso sikhathi.",
+    notYet: "Asikho isicelo esingamukelwa okwamanje. Esingcono kakhulu singamukelwa kusukela ngo-{time} (kusele {left}).",
+    tooOldBadge: "Ngeke samukelwe",
   },
 
   release: {
@@ -800,7 +840,7 @@ export const safeguardsZu: SafeguardsCopy = {
     ],
     replace: "Shintsha i-agent",
     ownerBody: "Yishintshe uma ukhiye wayo ulahlekile noma ungayethembi. Kusebenza ngokushesha, futhi kukhansela noma yikuphi ukushona okubikiwe.",
-    votersBody: "Uma ukhiye we-agent ulahlekile, abantu abathembekile bangayishintsha. Umnikazi esaphila kudinga bonke, okungenani ababili. Ngemva kwalokho kudinga ababili, noma oyedwa osele.",
+    votersBody: "Uma ukhiye we-agent ulahlekile, abantu abathembekile bangayishintsha. Kuze kuvulwe ifa kudinga bonke, okungenani ababili. Ngemva kwalokho kudinga ababili, noma oyedwa osele.",
     warn: "Ophethe i-wallet entsha uthola wonke amandla abhalwe lapha. Ikheli elingalungile lingabamba konke ukuhlola kuze kushintshwe futhi.",
     wallet: "Ikheli le-wallet le-agent entsha",
     invalid: "Lokho akubukeki njengekheli le-wallet ye-Solana.",
@@ -819,7 +859,9 @@ export const safeguardsZu: SafeguardsCopy = {
     vote: "Votela le",
     finish: "Sayina futhi ukuze kuphele",
     waiting: "Uvotile. Kulindwe abanye.",
-    alone: "Umuntu oyedwa othembekile akakwazi ukushintsha i-agent eyedwa umnikazi esaphila.",
+    alone: "Umuntu oyedwa othembekile akakwazi ukushintsha i-agent eyedwa ngaphambi kokuvulwa kwefa.",
+    needNow: "Amavoti adingekayo manje: {need}.",
+    needRecovery: "Ukudlula emhlabeni kubikiwe futhi umnikazi akakaze abonise ukuthi usaphila isikhathi eside, ngakho amavoti amabili anele manje, noma oyedwa osele.",
   },
 
   remove: {
