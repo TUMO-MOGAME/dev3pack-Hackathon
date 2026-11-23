@@ -84,6 +84,41 @@ export async function rateLimitShared(req: Request, bucket: string, limit: numbe
   if (taken && !taken.ok) throw tooMany(taken.retryAfterSecs);
 }
 
+/**
+ * What anyone may spend a day on paid models and voices without signing in (plan §18.9): enough for a room of judges,
+ * with one network address held to a share of it. Each is counted on this instance and, when there is one, in the
+ * shared store; past either, 429 daily_limit until the day turns (UTC).
+ */
+export const DAILY_CAPS = {
+  /** Gemini text calls: will chat, text chat, invoice reading, document previews, offer explanations. */
+  model: { all: 3_000, perIp: 600 },
+  /** The voice agent's own model calls (its webhook comes from ElevenLabs' addresses, so only the total). */
+  "model-voice": { all: 5_000, perIp: 5_000 },
+  /** Car valuations, which search the web. */
+  search: { all: 300, perIp: 60 },
+  /** Voice calls with the agent (ElevenLabs conversations). */
+  voice: { all: 300, perIp: 40 },
+  /** Demo voice lines rendered by ElevenLabs (repeats are cached). */
+  tts: { all: 300, perIp: 100 },
+} as const;
+export type DailyCap = keyof typeof DAILY_CAPS;
+
+const daily = { day: "", counts: new Map<string, number>() };
+
+/** Takes one from today's cap for `cap`, in all and for this address. Throws 429 daily_limit. Always await it. */
+export async function dailyCap(req: Request, cap: DailyCap, now = Date.now()): Promise<void> {
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (daily.day !== day) { daily.day = day; daily.counts.clear(); }
+  const limit = DAILY_CAPS[cap];
+  const keys = [{ key: `daily:${cap}`, max: limit.all }, { key: `daily:${cap}:${clientIp(req)}`, max: limit.perIp }];
+  const nextUtc = Math.ceil((Date.parse(`${day}T00:00:00Z`) + 86_400_000 - now) / 1000);
+  const full = () => new HttpError(429, "Today's free use of the AI here is used up. Please try again tomorrow.", "daily_limit", Math.max(1, nextUtc));
+  if (keys.some((k) => (daily.counts.get(k.key) ?? 0) >= k.max)) throw full();
+  for (const k of keys) daily.counts.set(k.key, (daily.counts.get(k.key) ?? 0) + 1);
+  const taken = await takeShared(keys.map((k) => ({ key: k.key, max: k.max, windowSecs: 86_400 })));
+  if (taken && !taken.ok) throw full();
+}
+
 /** Wraps a handler with uniform error handling. */
 export function handler(fn: (req: Request) => Promise<Response>): (req: Request) => Promise<Response> {
   return async (req) => {

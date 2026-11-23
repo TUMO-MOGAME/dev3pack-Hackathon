@@ -1,4 +1,4 @@
-import { handler, HttpError, json, rateLimitShared } from "@/lib/api/http";
+import { dailyCap, handler, HttpError, json, rateLimitShared } from "@/lib/api/http";
 import { MAX_UPLOAD_BYTES, validateUpload } from "@/lib/storage";
 import { sha256Hex } from "@/lib/agent/hash";
 import { readInvoice } from "@/lib/agent/invoice";
@@ -21,6 +21,7 @@ export const POST = handler(async (req) => {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const mime = validateUpload(bytes, file.type);
   const sha256 = await sha256Hex(bytes);
+  await dailyCap(req, "model");
   const { reading, engine } = await readInvoice({ bytes, mime, sha256 });
   return json({ reading, sha256, engine });
 });

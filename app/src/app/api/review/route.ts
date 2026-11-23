@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { handler, HttpError, isChainMode, json, rateLimitShared } from "@/lib/api/http";
+import { dailyCap, handler, HttpError, isChainMode, json, rateLimitShared } from "@/lib/api/http";
 import { reviewFields } from "@/lib/agent/schemas";
 import { reviewDocument } from "@/lib/agent/review";
 import { loadReviewTarget } from "@/lib/agent/review-target";
@@ -54,6 +54,7 @@ export const POST = handler(async (req) => {
   const chain = isChainMode();
   const preview = form.get("preview") === "1";
   if (preview || !chain) {
+    await dailyCap(req, "model"); // anyone may ask for a preview: it is held to the day's free use
     const report = await reviewDocument({ ...read, deadline: started + MODEL_MS });
     return json({ report, evidence: { sha256, storage: "none" }, tx: null, onChain: preview ? "skipped (preview)" : "skipped (mock mode)" });
   }
