@@ -1683,6 +1683,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     voteAgent: (_e, candidate) => mutate(900, () => C.voteAgent(candidate)),
     releaseAsset: (_e, asset) => mutate(900, () => C.releaseAsset(asset)),
     removeMember: (_e, input) => mutate(1100, () => C.removeMember(input)),
+    restoreMember: (_e, wallet) => mutate(900, () => C.restoreMember(wallet)),
     requestStarter: async () => fail("BadStatus", "The demo family already has simulated money."),
     listAsset: (_e, asset, durationSecs) => mutate(900, () => listAsset(asset, durationSecs)),
     placeOffer: (_e, asset, amountUsdt, buyerName) => mutate(1000, () => placeOffer(asset, amountUsdt, buyerName)),

@@ -17,6 +17,7 @@ import { nextFallback } from "../chain/guardians";
 import { pack } from "../chain/pack";
 import type { RawSnapshot } from "../chain/reads";
 import { getActiveSigner } from "../wallet/signer";
+import { isRoleOnly, publicBeneficiaryLabel } from "../chain/public-names";
 import { ChainServiceError, must } from "./chain-errors";
 
 export interface ChainContinuityDeps {
@@ -156,6 +157,17 @@ export function createChainContinuity(d: ChainContinuityDeps): ChainContinuity {
         ...(create ? [createAssociatedTokenAccountIdempotentInstruction(owner, ownerNft, owner, mint)] : []),
         ix.releaseAsset(chainCtx(), owner, new PublicKey(asset), mint),
       ], { selfPay: create }); // the sponsor only creates USD₮ accounts
+    },
+
+    async restoreMember(estate, wallet) {
+      const owner = d.requireOwnerOf(estate);
+      const snap = await d.fetchEstate(estate);
+      must(snap.estate.status === "Active", "BadStatus", "Only while the plan is active.");
+      const at = snap.beneficiaries.findIndex((b) => b.wallet === wallet);
+      must(at >= 0 && !snap.beneficiaries[at].active, "BadStatus", "They aren't someone who was removed from this plan.");
+      // The label stays a role, never a name (POPIA, chain/public-names.ts).
+      const label = isRoleOnly(snap.beneficiaries[at].label) ? snap.beneficiaries[at].label : publicBeneficiaryLabel(at);
+      return d.send([ix.addBeneficiary(chainCtx(), owner, walletKey(wallet), label)]);
     },
 
     /**

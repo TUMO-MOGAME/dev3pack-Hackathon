@@ -1328,3 +1328,16 @@ describe("Low: the demo signs a plan as the chain does", () => {
     expect(living.nextDue).toBe(now() + 60);
   });
 });
+
+describe("A removed family member can be added back", () => {
+  it("in the plan again; the rules that ended stay ended", async () => {
+    const t = await start("funded");
+    const rulesBefore = (await t.snap()).rules.filter((r) => r.beneficiary === who("sipho"));
+    await t.svc.removeMember(t.estate, { beneficiary: who("sipho") });
+    await t.svc.restoreMember(t.estate, who("sipho"));
+    const s = await t.snap();
+    expect(s.beneficiaries.find((b) => b.wallet === who("sipho"))?.active).toBe(true);
+    for (const r of rulesBefore) expect(s.rules.find((x) => x.address === r.address)!.validUntil).toBeLessThan(now());
+    await expect(t.svc.restoreMember(t.estate, who("sipho"))).rejects.toThrow(/^BadStatus/);
+  });
+});
