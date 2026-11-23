@@ -975,6 +975,12 @@ export const st: Bundle = {
         canWin: "E fihlella theko e tlase",
         blocked: "E thibetswe: ka tlase ho theko e tlase",
         blockedHard: "E thibetswe: ka tlase ho theko e tlase ya mathata",
+        why: {
+          best: "Tlhahiso e phahameng ka ho fetisisa e fihlellang theko e tlase ya {min}.",
+          outbid: "E fihlella theko e tlase ya {min}, empa ho na le tlhahiso e phahameng ho feta.",
+          below: "Ka tlase ho theko e tlase ya {min}. E thibetswe ntle le ha kopo ya mathata e amohelwa.",
+          belowHard: "Ka tlase ho theko e tlase ya mathata ya {min}. Konteraka ha e e amohele le ka mohla.",
+        },
         ranking: "Pono ya agent",
         rankingLoading: "Agent e hlophisa ditlhahiso",
       },

@@ -979,6 +979,12 @@ export const zu: Bundle = {
         canWin: "Sifinyelela intengo ephansi",
         blocked: "Kuvinjiwe: ngaphansi kwentengo ephansi",
         blockedHard: "Kuvinjiwe: ngaphansi kwentengo ephansi yobunzima",
+        why: {
+          best: "Isinikezo esiphezulu esifinyelela intengo ephansi ka-{min}.",
+          outbid: "Sifinyelela intengo ephansi ka-{min}, kodwa kukhona isinikezo esiphezulu.",
+          below: "Ngaphansi kwentengo ephansi ka-{min}. Kuvinjiwe ngaphandle uma isicelo sobunzima samukelwa.",
+          belowHard: "Ngaphansi kwentengo ephansi yobunzima ka-{min}. Inkontileka ayisoze yasamukela.",
+        },
         ranking: "Umbono we-agent",
         rankingLoading: "I-agent ilandelanisa izinikezo",
       },

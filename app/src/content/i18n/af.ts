@@ -967,6 +967,12 @@ export const af: Bundle = {
         canWin: "Haal die minimum",
         blocked: "Geblokkeer: onder die minimum",
         blockedHard: "Geblokkeer: onder die swaarkryminimum",
+        why: {
+          best: "Die hoogste aanbod op of bo die minimum van {min}.",
+          outbid: "Haal die minimum van {min}, maar daar is 'n hoër aanbod.",
+          below: "Onder die minimumprys van {min}. Geblokkeer tensy 'n swaarkryversoek goedgekeur word.",
+          belowHard: "Onder die swaarkryminimum van {min}. Die kontrak aanvaar dit nooit nie.",
+        },
         ranking: "Die agent se siening",
         rankingLoading: "Die agent rangskik die aanbiedinge",
       },
