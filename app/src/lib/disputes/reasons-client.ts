@@ -12,7 +12,6 @@
 import type { Base58 } from "../types";
 import { sha256Hex } from "../agent/hash";
 import { actionHeaders, readHeaders } from "../access/client";
-import type { AgentAction } from "../access/messages";
 
 interface Signer { address: Base58; signMessage(message: string): Promise<string> }
 type Fetch = typeof fetch;
@@ -23,7 +22,7 @@ export const reasonBody = (target: Base58, hash: string) => `${target}|${hash}`;
 /** Saves the words of one's own dispute or objection. Throws when the server refuses; the caller keeps its own copy. */
 export async function saveReason(signer: Signer, estate: Base58, target: Base58, reason: string, f: Fetch = fetch): Promise<void> {
   const hash = await sha256Hex(reason);
-  const headers = await actionHeaders(signer, "reason" as AgentAction, estate, reasonBody(target, hash));
+  const headers = await actionHeaders(signer, "reason", estate, reasonBody(target, hash));
   const res = await f("/api/reasons", { method: "POST", cache: "no-store", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ estate, target, reason }) });
   if (!res.ok) throw new Error(`The reason was not saved (${res.status}).`);
 }

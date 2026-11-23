@@ -7,20 +7,18 @@
  */
 import { requestNotePdf } from "./ask/note-pdf";
 
-export const EVIDENCE_TYPES = ["application/pdf", "image/jpeg", "image/png"] as const;
+import { ALLOWED_MIME, MAX_UPLOAD_BYTES, sniff } from "./evidence-file";
+
+/** The server's own rule (evidence-file.ts), so the two can't drift. */
+export const EVIDENCE_TYPES = ALLOWED_MIME;
 export type EvidenceType = (typeof EVIDENCE_TYPES)[number];
-export const EVIDENCE_MAX_BYTES = 4 * 1024 * 1024;
+export const EVIDENCE_MAX_BYTES = MAX_UPLOAD_BYTES;
 /** What the file pickers offer: no WebP or HEIC (iPhones convert HEIC photos to JPEG when only JPEG is accepted). */
 export const EVIDENCE_ACCEPT = EVIDENCE_TYPES.join(",");
 
 export type EvidenceProblem = "FileEmpty" | "FileSize" | "FileType";
 
-export function sniffEvidence(b: Uint8Array): EvidenceType | null {
-  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return "application/pdf"; // %PDF
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
-  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
-  return null;
-}
+export const sniffEvidence = (b: Uint8Array): EvidenceType | null => sniff(b);
 
 /**
  * The file as the server will see it, or why it would be refused. A file whose browser gave it no type (some phones

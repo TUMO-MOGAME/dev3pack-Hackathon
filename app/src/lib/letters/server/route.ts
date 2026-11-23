@@ -22,7 +22,7 @@ import { loadSnapshot } from "@/lib/server/estate";
 import type { EstateSnapshot } from "@/lib/service/types";
 import { defaultPeople } from "@/lib/tree/links";
 import { canonicalLetter, cleanInput, deleteBody, LETTER_MAX_SKEW_MS, LIST_BODY, letterMessage, type LetterAction } from "../canonical";
-import { canWrite, checkLetter, letterState, liveLetters } from "../rules";
+import { canWrite, checkLetter, letterState, linkBaseline, liveLetters, readBaseline } from "../rules";
 import { lettersBodySchema } from "../schema";
 import { LETTER_MAX_BODY, LETTER_MAX_CHARS, type Letter } from "../types";
 import { checkCtx, lettersFor, readCtx, tomb, viewOf } from "../view";
@@ -143,8 +143,12 @@ export function lettersRoutes(deps: LettersRouteDeps = defaults) {
     let baseline: string | undefined;
     if (input.opens.kind === "payment") {
       const rule = input.opens.rule;
-      const keep = existing && !existing.deleted && existing.opens.kind === "payment" && existing.opens.rule === rule ? existing.baseline : undefined;
-      baseline = keep ?? (snap.rules.find((r) => r.address === rule)?.spentTotal ?? BigInt(0)).toString();
+      const now = snap.rules.find((r) => r.address === rule);
+      // Kept only while the slot still holds the same rule: a reused slot starts its own count (letters/rules.ts).
+      const keep = existing && !existing.deleted && existing.opens.kind === "payment" && existing.opens.rule === rule
+        && existing.baseline && readBaseline(existing.baseline).generation === readBaseline(linkBaseline(now)).generation
+        ? existing.baseline : undefined;
+      baseline = keep ?? linkBaseline(now);
     }
     const letter: Letter = {
       ...input, estate: b.estate, from: b.wallet, version: b.version, hash: sha(canonicalLetter(b.estate, b.wallet, input, b.version)),
