@@ -21,7 +21,7 @@ import { agentAddress } from "./agent-wallet";
 
 const DAY_MS = 86_400_000;
 
-export const AGENT_DAILY: Record<Exclude<AgentAction, "starter">, { wallet: number; estate: number }> = {
+export const AGENT_DAILY: Record<Exclude<AgentAction, "starter" | "reason">, { wallet: number; estate: number }> = {
   review: { wallet: 20, estate: 40 },
   "list-asset": { wallet: 6, estate: 10 },
   "accept-offer": { wallet: 6, estate: 10 },
