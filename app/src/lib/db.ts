@@ -9,6 +9,12 @@ import type { AgentReport, WillDraft } from "./types";
 import type { SpecialistName } from "./voice/types";
 import { chainConfig } from "./chain/config";
 import { DEVNET_DEMO_META, DEVNET_FIRST_META, DEVNET_PREV_META } from "./chain/demo-estate";
+import { roomFor } from "./server/memory-limits";
+
+/** Without Supabase: estates whose names are kept, and agent reports kept for one estate and in all (plan §18.9 M6). */
+const MAX_MEM_ESTATES = 10_000;
+export const MAX_MEM_REPORTS_PER_ESTATE = 500;
+const MAX_MEM_REPORTS = 20_000;
 
 export interface EstateMeta {
   estate: string;
@@ -42,12 +48,10 @@ export interface TranscriptRow {
   text: string;
 }
 
+// Will drafts, the evidence index and transcripts are only ever read from Supabase, so without it they are not kept.
 const mem = {
   estates: new Map<string, EstateMeta>(),
   reports: new Map<string, ReportRow>(),
-  drafts: [] as { ownerWallet: string | null; draft: WillDraft; willHash: string }[],
-  transcripts: [] as TranscriptRow[],
-  evidence: new Map<string, { sha256: string; purpose: string; mime: string; size: number }>(),
 };
 // Devnet without Supabase: keep the seeded demo family's names across restarts (fictional people; see demo-estate.ts).
 if (chainConfig.cluster === "devnet") for (const m of [DEVNET_DEMO_META, DEVNET_PREV_META, DEVNET_FIRST_META]) mem.estates.set(m.estate, m);
@@ -68,6 +72,7 @@ export async function saveEstateMeta(m: EstateMeta, prev: EstateMeta | null): Pr
   if (!sb) {
     const held = mem.estates.get(m.estate) ?? null;
     if (!held !== !prev || (held?.updatedAt ?? 0) !== (prev?.updatedAt ?? 0)) return false;
+    roomFor(mem.estates, m.estate, MAX_MEM_ESTATES, "names");
     mem.estates.set(m.estate, m);
     return true;
   }
@@ -102,7 +107,7 @@ export async function getEstateMeta(estate: string, opts: { strict?: boolean } =
 
 export async function saveWillDraft(ownerWallet: string | null, draft: WillDraft, willHash: string): Promise<void> {
   const sb = getSupabase();
-  if (!sb) { mem.drafts.push({ ownerWallet, draft, willHash }); return; }
+  if (!sb) { void ownerWallet; void draft; void willHash; return; }
   const { error } = await sb.from("will_drafts").insert({ owner_wallet: ownerWallet, draft, will_hash: willHash });
   warn("saveWillDraft", error);
 }
@@ -110,7 +115,16 @@ export async function saveWillDraft(ownerWallet: string | null, draft: WillDraft
 /** False when the store refused it (the caller then records nothing on-chain). */
 export async function saveReport(r: ReportRow): Promise<boolean> {
   const sb = getSupabase();
-  if (!sb) { mem.reports.set(r.reportHash, r); return true; }
+  if (!sb) {
+    if (!mem.reports.has(r.reportHash)) {
+      const own = [...mem.reports.values()].filter((x) => x.estate === r.estate);
+      // A family at its limit lets go of its own oldest report; a full store refuses a new one (nothing is sent then).
+      if (own.length >= MAX_MEM_REPORTS_PER_ESTATE) mem.reports.delete(own[0].reportHash);
+      else if (mem.reports.size >= MAX_MEM_REPORTS) return false;
+    }
+    mem.reports.set(r.reportHash, r);
+    return true;
+  }
   const { error } = await sb.from("agent_reports").upsert({
     report_hash: r.reportHash, purpose: r.purpose, estate: r.estate, subject: r.subject, evidence_path: r.evidencePath,
     evidence_sha256: r.evidenceSha256, report: r.report, tx_signature: r.txSignature,
@@ -138,7 +152,7 @@ export async function getReports(hashes: string[], estate?: string): Promise<Rec
 
 export async function recordEvidence(path: string, sha256: string, purpose: string, mime: string, size: number): Promise<void> {
   const sb = getSupabase();
-  if (!sb) { mem.evidence.set(path, { sha256, purpose, mime, size }); return; }
+  if (!sb) return;
   const { error } = await sb.from("evidence").upsert({ path, sha256, purpose, mime, size });
   warn("recordEvidence", error);
 }
@@ -146,7 +160,7 @@ export async function recordEvidence(path: string, sha256: string, purpose: stri
 export async function saveTranscript(rows: TranscriptRow[]): Promise<void> {
   if (rows.length === 0) return;
   const sb = getSupabase();
-  if (!sb) { mem.transcripts.push(...rows); if (mem.transcripts.length > 2000) mem.transcripts.splice(0, 1000); return; }
+  if (!sb) return;
   const { error } = await sb.from("transcripts").insert(rows.map((r) => ({
     session_id: r.sessionId, channel: r.channel, persona: r.persona, estate: r.estate, role: r.role, specialist: r.specialist, text: r.text,
   })));

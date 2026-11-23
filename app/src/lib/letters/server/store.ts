@@ -11,10 +11,11 @@ import "server-only";
 import { getSupabase } from "@/lib/supabase";
 import type { Base58 } from "@/lib/types";
 import type { Letter, LetterOpens, LetterTo } from "../types";
+import { StoreFull } from "@/lib/server/memory-limits";
 
 /** Per instance without Supabase: letters per estate (live + tombstones) and estates kept. */
-const MAX_PER_ESTATE = 120;
-const MAX_ESTATES = 200;
+export const MAX_PER_ESTATE = 120;
+export const MAX_ESTATES = 2_000;
 const mem = new Map<Base58, Map<string, Letter>>();
 
 interface Row {
@@ -73,12 +74,18 @@ export async function getLetters(estate: Base58): Promise<Letter[]> {
 export async function putLetter(l: Letter, prev = l.version - 1): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) {
+    // Room is made only inside this family, and only by letting go of its oldest tombstone (a deleted letter);
+    // nobody's letters are pushed out for another family's (plan §18.9 M6).
+    if (!mem.has(l.estate) && mem.size >= MAX_ESTATES) throw new StoreFull("letters");
     const m = mem.get(l.estate) ?? new Map<string, Letter>();
     if ((m.get(l.id)?.version ?? 0) !== prev) return false;
+    if (!m.has(l.id) && m.size >= MAX_PER_ESTATE) {
+      const tomb = [...m.values()].filter((x) => x.deleted).sort((a, b) => a.updatedAt - b.updatedAt)[0];
+      if (!tomb) throw new StoreFull("letters");
+      m.delete(tomb.id);
+    }
     m.set(l.id, structuredClone(l));
-    if (m.size > MAX_PER_ESTATE) m.delete(m.keys().next().value!);
     mem.set(l.estate, m);
-    if (mem.size > MAX_ESTATES) mem.delete(mem.keys().next().value!);
     return true;
   }
   const row = toRow(l);

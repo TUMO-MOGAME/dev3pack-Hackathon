@@ -11,6 +11,7 @@ import type { LegacyBook } from "../schema";
 import { demoLegacyBook } from "../demo-book";
 import { chainConfig } from "@/lib/chain/config";
 import { DEVNET_DEMO_CHILDREN, DEVNET_DEMO_LEGACY_VOICE, DEVNET_DEMO_META } from "@/lib/chain/demo-estate";
+import { MAX_MEMORY_FILE_BYTES, roomForBytes } from "@/lib/server/memory-limits";
 
 export const LEGACY_BUCKET = "legacy-audio";
 
@@ -59,7 +60,11 @@ export async function estateKey(estate: string) { return (await sha256Hex(`legac
 
 export async function putAudio(path: string, bytes: Uint8Array, mime: string): Promise<void> {
   const sb = getSupabase();
-  if (!sb) { mem.audio.set(path, { bytes, mime }); return; }
+  if (!sb) {
+    roomForBytes(mem.audio, path, bytes.byteLength, MAX_MEMORY_FILE_BYTES, "recordings");
+    mem.audio.set(path, { bytes, mime });
+    return;
+  }
   const { error } = await sb.storage.from(LEGACY_BUCKET).upload(path, bytes, { contentType: mime, upsert: true });
   if (error) throw new Error(`Could not store the recording: ${error.message}`);
 }

@@ -12,6 +12,7 @@ import { sha256Hex } from "@/lib/agent/hash";
 import type { AssetKind, AssetPhoto } from "@/lib/guardians/types";
 import type { AssetMediaView } from "../api";
 import { mediaRootHex, type AssetSpec, type PhotoLabel } from "@/lib/assets/spec";
+import { MAX_MEMORY_FILE_BYTES, roomForBytes } from "@/lib/server/memory-limits";
 
 export const PHOTO_BUCKET = "asset-photos";
 export const SIGNED_URL_SECS = 3600;
@@ -36,7 +37,11 @@ function warn(what: string, err: { message: string } | null) { if (err) console.
 
 export async function putPhoto(path: string, bytes: Uint8Array): Promise<void> {
   const sb = getSupabase();
-  if (!sb) { mem.files.set(path, bytes); return; }
+  if (!sb) {
+    roomForBytes(mem.files, path, bytes.byteLength, MAX_MEMORY_FILE_BYTES, "photos");
+    mem.files.set(path, bytes);
+    return;
+  }
   const { error } = await sb.storage.from(PHOTO_BUCKET).upload(path, bytes, { contentType: "image/webp", upsert: true });
   if (error) throw new Error(`Could not store the photo: ${error.message}`);
 }
