@@ -8,6 +8,8 @@ import "server-only";
  *    non-idempotently, so two racing grants to one wallet can't both land;
  *  - an hourly and a daily pace, counted from grant marks only the agent can make (server/agent-ledger.ts). An
  *    hour's burst takes a quarter of the day, never all of it;
+ *  - a pace per network address (plan §18.9 H2), so one address can't take a whole hour's or day's grants. It is kept
+ *    on this instance and in the shared store, never on the chain (the memo holds nothing made from an address);
  *  - a reserve: the agent always keeps enough SOL for reviews and sponsored fees.
  * The shared store, when there is one, makes the pace atomic across instances as well.
  *
@@ -36,8 +38,11 @@ export const STARTER = {
   /** What a grant costs the agent besides that: the wallet's USD₮ account, and the fee. */
   accountLamports: 1_500_000,
   usdt: 500_000_000n, // 500 test USD₮
-  perHour: 6,
-  perDay: 24,
+  perHour: 12,
+  perDay: 48,
+  /** One network address (a person on mobile data, a room on one Wi-Fi). */
+  perIpHour: 4,
+  perIpDay: 8,
   reserveLamports: 300_000_000,
   /** From here the wallet has its setup SOL: it gets only the test USD₮. */
   hasSolLamports: 20_000_000,
@@ -52,19 +57,19 @@ const MEMO_PROGRAM = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
 export const starterAvailable = () =>
   chainConfig.dataMode === "chain" && chainConfig.cluster === "devnet" && hasAgentWallet() && Boolean(chainConfig.usdtMint);
 
-export type StarterRefusal = "already_funded" | "hourly_cap" | "daily_cap" | "empty";
+export type StarterRefusal = "already_funded" | "has_usdt_account" | "hourly_cap" | "daily_cap" | "rate_limited" | "empty";
 export interface Refused { code: StarterRefusal; retryAfterSecs?: number }
 
 export const starterLamports = (walletLamports: number): number => (walletLamports >= STARTER.hasSolLamports ? 0 : STARTER.lamports);
 
 /** Pure: whether the pace allows another grant now; if not, when it will. */
-export function starterPace(grantTimes: number[], now: number): Refused | null {
+export function starterPace(grantTimes: number[], now: number, max = { hour: STARTER.perHour, day: STARTER.perDay }): Refused | null {
   const waitFor = (windowSecs: number, max: number) => {
     const recent = grantTimes.filter((t) => t > now - windowSecs).sort((a, b) => a - b);
     return recent.length < max ? 0 : Math.max(1, recent[recent.length - max] + windowSecs - now);
   };
-  const day = waitFor(DAY_SECS, STARTER.perDay);
-  const hour = waitFor(HOUR_SECS, STARTER.perHour);
+  const day = waitFor(DAY_SECS, max.day);
+  const hour = waitFor(HOUR_SECS, max.hour);
   if (day) return { code: "daily_cap", retryAfterSecs: Math.max(day, hour) };
   return hour ? { code: "hourly_cap", retryAfterSecs: hour } : null;
 }
@@ -74,7 +79,9 @@ export function starterRefusal(s: {
   walletLamports: number; walletHasUsdtAccount: boolean; grantedBefore: boolean; grantTimes: number[]; now: number;
   agentLamports: number; agentUsdt: bigint;
 }): Refused | null {
-  if (s.walletHasUsdtAccount || s.grantedBefore) return { code: "already_funded" };
+  if (s.grantedBefore) return { code: "already_funded" };
+  // Granting into an account that exists would lose the guard against two grants racing (the grant creates it).
+  if (s.walletHasUsdtAccount) return { code: "has_usdt_account" };
   const paced = starterPace(s.grantTimes, s.now);
   if (paced) return paced;
   const cost = starterLamports(s.walletLamports) + STARTER.accountLamports;
@@ -87,11 +94,13 @@ function refuse({ code, retryAfterSecs }: Refused): HttpError {
   const inMinutes = `Try again in ${Math.ceil((retryAfterSecs ?? 0) / 60)} minutes.`;
   const message: Record<StarterRefusal, string> = {
     already_funded: `This wallet already had its test money. ${FAUCET}`,
+    has_usdt_account: `This wallet already has a USD₮ account, so starter funds can't be sent to it. Use a new wallet. ${FAUCET}`,
+    rate_limited: `This network has had its starter funds for now. ${inMinutes} ${FAUCET}`,
     hourly_cap: `This hour's starter funds are used up. ${inMinutes} ${FAUCET}`,
     daily_cap: `Today's starter funds are used up. ${inMinutes} ${FAUCET}`,
     empty: `The starter wallet is empty until it is restocked. ${FAUCET}`,
   };
-  return new HttpError(code === "already_funded" ? 409 : 429, message[code], code, retryAfterSecs);
+  return new HttpError(code === "already_funded" || code === "has_usdt_account" ? 409 : 429, message[code], code, retryAfterSecs);
 }
 
 const busy = (retryAfterSecs: number) =>
@@ -99,6 +108,8 @@ const busy = (retryAfterSecs: number) =>
 
 /** Grants this instance sent that the chain may not list yet. */
 let sent: Grant[] = [];
+/** Grant times (unix seconds) by network address, on this instance. */
+const byIp = new Map<string, number[]>();
 let line: Promise<unknown> = Promise.resolve();
 let waiting = 0;
 
@@ -121,7 +132,8 @@ async function inLine<T>(job: () => Promise<T>): Promise<T> {
 
 export interface Granted { signature: string; explorerUrl: string; sol: number; usdt: number }
 
-export async function grantStarter(wallet: string, conn: Connection = getConnection()): Promise<Granted> {
+/** `ip`: the caller's network address (api/http clientIp), paced by perIpHour and perIpDay. */
+export async function grantStarter(wallet: string, conn: Connection = getConnection(), ip?: string): Promise<Granted> {
   if (!starterAvailable()) throw new HttpError(503, `Starter funds are only on the test network. ${FAUCET}`, "unavailable");
   const to = new PublicKey(wallet);
   if (!PublicKey.isOnCurve(to.toBytes())) throw new HttpError(400, "Starter funds go only to a person's wallet.", "bad_wallet");
@@ -131,7 +143,7 @@ export async function grantStarter(wallet: string, conn: Connection = getConnect
   await assertProgram();
   return inLine(async () => {
     try {
-      return await grant(conn, from, to);
+      return await grant(conn, from, to, ip);
     } catch (e) {
       if (e instanceof HttpError) throw e;
       console.warn(`[starter] ${e instanceof Error ? e.name : "error"} while granting`);
@@ -140,7 +152,7 @@ export async function grantStarter(wallet: string, conn: Connection = getConnect
   });
 }
 
-async function grant(conn: Connection, from: PublicKey, to: PublicKey): Promise<Granted> {
+async function grant(conn: Connection, from: PublicKey, to: PublicKey, ip?: string): Promise<Granted> {
   const wallet = to.toBase58();
   const mint = new PublicKey(chainConfig.usdtMint);
   const [toAta, fromAta] = [ata(mint, to), ata(mint, from)];
@@ -161,7 +173,8 @@ async function grant(conn: Connection, from: PublicKey, to: PublicKey): Promise<
   const inWallet = grantsIn(theirs.map((t) => ({ memo: t.memo, failed: !!t.err })));
   const refused = starterRefusal({
     walletLamports,
-    walletHasUsdtAccount: account !== null,
+    // Only the token program can give the account data: lamports sent to its address make no account.
+    walletHasUsdtAccount: (account?.data.length ?? 0) > 0,
     grantedBefore: [...grants.values(), ...inWallet].some((g) => g.wallet === tag),
     grantTimes: [...grants.values()].map((g) => g.at),
     now,
@@ -172,10 +185,20 @@ async function grant(conn: Connection, from: PublicKey, to: PublicKey): Promise<
   // A flooded history can't be counted: wait for the next read to page further back, never guess low.
   if (history.from > now - DAY_SECS) throw busy(60);
 
+  const fromIp = ip === undefined ? null : (byIp.get(ip) ?? []).filter((t) => t > now - DAY_SECS);
+  if (fromIp) {
+    const paced = starterPace(fromIp, now, { hour: STARTER.perIpHour, day: STARTER.perIpDay });
+    if (paced) throw refuse({ code: "rate_limited", retryAfterSecs: paced.retryAfterSecs });
+  }
+
   if ((await claimSharedOnce(`starter:${wallet}`, 120)) === false) throw busy(120);
   const taken = await takeShared([
     { key: "starter:all", max: STARTER.perHour, windowSecs: HOUR_SECS },
     { key: "starter:all", max: STARTER.perDay, windowSecs: DAY_SECS },
+    ...(ip === undefined ? [] : [
+      { key: `starter:ip:${ip}`, max: STARTER.perIpHour, windowSecs: HOUR_SECS },
+      { key: `starter:ip:${ip}`, max: STARTER.perIpDay, windowSecs: DAY_SECS },
+    ]),
   ]);
   if (taken && !taken.ok) {
     throw refuse({ code: taken.retryAfterSecs > HOUR_SECS ? "daily_cap" : "hourly_cap", retryAfterSecs: taken.retryAfterSecs });
@@ -195,10 +218,17 @@ async function grant(conn: Connection, from: PublicKey, to: PublicKey): Promise<
 
   // Counted from before it is sent: if the answer is lost, it may still land.
   sent.push(mark);
+  if (fromIp && ip !== undefined) {
+    byIp.set(ip, [...fromIp, now]);
+    if (byIp.size > 10_000) for (const [k, ts] of byIp) if (!ts.some((t) => t > now - DAY_SECS)) byIp.delete(k);
+  }
   try {
     await conn.sendRawTransaction(base64ToBytes(wireBase64), { maxRetries: 3 });
   } catch (e) {
-    if (e instanceof SendTransactionError) sent = sent.filter((g) => g !== mark); // refused in preflight: never sent
+    if (e instanceof SendTransactionError) { // refused in preflight: never sent
+      sent = sent.filter((g) => g !== mark);
+      if (fromIp && ip !== undefined) byIp.set(ip, fromIp);
+    }
     throw e;
   }
   await withDeadline(confirmOrThrow(signature), STARTER.confirmMs, "Confirming the grant").catch(() => { throw busy(60); });

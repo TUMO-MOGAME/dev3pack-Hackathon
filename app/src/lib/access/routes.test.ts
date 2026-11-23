@@ -505,7 +505,8 @@ describe("the agent's SOL (S6)", () => {
     const now = 2_000_000;
     const ok = { walletLamports: 0, walletHasUsdtAccount: false, grantedBefore: false, grantTimes: [], now, agentLamports: 2e9, agentUsdt: 10_000_000_000n };
     expect(starterRefusal(ok)).toBeNull();
-    expect(starterRefusal({ ...ok, walletHasUsdtAccount: true })?.code).toBe("already_funded");
+    expect(starterRefusal({ ...ok, walletHasUsdtAccount: true })?.code).toBe("has_usdt_account");
+    expect(starterRefusal({ ...ok, walletHasUsdtAccount: true, grantedBefore: true })?.code).toBe("already_funded");
     expect(starterRefusal({ ...ok, grantedBefore: true })?.code).toBe("already_funded");
     expect(starterRefusal({ ...ok, grantTimes: Array.from({ length: STARTER.perDay }, (_, i) => now - 7_200 - i) })?.code).toBe("daily_cap");
     expect(starterRefusal({ ...ok, agentLamports: STARTER.reserveLamports })?.code).toBe("empty");
