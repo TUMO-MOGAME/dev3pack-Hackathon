@@ -3061,9 +3061,15 @@ impl Env {
         send(&mut self.svm, i, &[signer])
     }
 
+    /// As a client does: the voter's Beneficiary PDA as the first remaining account.
     fn vote_agent(&mut self, voter: &Keypair, candidate: Pubkey) -> Result<(), String> {
+        let b = beneficiary_pda(&self.estate, &voter.pubkey());
+        self.vote_agent_with(voter, candidate, &[b])
+    }
+
+    fn vote_agent_with(&mut self, voter: &Keypair, candidate: Pubkey, extra: &[Pubkey]) -> Result<(), String> {
         self.svm.expire_blockhash();
-        let i = ix(
+        let mut i = ix(
             heirloom::accounts::VoteAgent {
                 verifier: voter.pubkey(),
                 estate: self.estate,
@@ -3079,6 +3085,9 @@ impl Env {
             },
             heirloom::instruction::VoteAgent { candidate },
         );
+        for k in extra {
+            i.accounts.push(AccountMeta::new_readonly(*k, false));
+        }
         send(&mut self.svm, i, &[voter])
     }
 }
@@ -8200,4 +8209,137 @@ fn held_h4_a_second_attestation_does_not_shorten_the_doubled_wait() {
     expect_err(env.attest_death_by(&spouse), HeirloomError::AlreadyApproved);
     warp(&mut env.svm, WAITING);
     env.finalize_unlock().unwrap();
+}
+
+// ------------------------------------------------------------------- N2 a lone voter who gains
+
+/// Before the unlock the only trusted person left, who gains, can't install an agent by their own vote at RT; only
+/// after the claim stood unreviewed for 2 x RT with no sign of life.
+#[test]
+fn n2_before_the_unlock_the_lone_heir_waits_two_recovery_timeouts() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let own = funded(&mut env.svm);
+    warp(&mut env.svm, RT);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    warp(&mut env.svm, RT);
+    expect_err(env.vote_agent(&spouse, own.pubkey()), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, RT - 1);
+    expect_err(env.vote_agent(&spouse, own.pubkey()), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, 1);
+    env.vote_agent(&spouse, own.pubkey()).unwrap();
+    assert_eq!(env.estate_state().agent, own.pubkey());
+}
+
+/// A lone trusted person who gains nothing keeps the RT route; without their Beneficiary account the voter counts
+/// as one who gains (fails closed).
+#[test]
+fn n2_a_lone_voter_who_gains_nothing_keeps_rt_and_a_missing_account_fails_closed() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let kid2 = env.kid2.insecure_clone();
+    env.add_beneficiary(kid2.pubkey(), "Kid");
+    env.remove_beneficiary(spouse.pubkey()).unwrap();
+    let own = funded(&mut env.svm);
+    warp(&mut env.svm, RT);
+    env.death_claim_by(&kid2, [7; 32]).unwrap();
+    warp(&mut env.svm, RT);
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[]), HeirloomError::WaitingPeriodNotOver);
+    let wrong = beneficiary_pda(&env.estate, &kid2.pubkey());
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[wrong]), HeirloomError::WaitingPeriodNotOver);
+    env.vote_agent(&spouse, own.pubkey()).unwrap();
+    assert_eq!(env.estate_state().agent, own.pubkey());
+}
+
+/// Control: a check-in before 2 x RT stops it.
+#[test]
+fn n2_control_a_check_in_stops_the_lone_heir() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let own = funded(&mut env.svm);
+    warp(&mut env.svm, RT);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    warp(&mut env.svm, 2 * RT - 1);
+    env.check_in().unwrap();
+    warp(&mut env.svm, 1);
+    let _ = env.vote_agent(&spouse, own.pubkey());
+    assert_ne!(env.estate_state().agent, own.pubkey());
+    warp(&mut env.svm, 2 * RT);
+    let _ = env.vote_agent(&spouse, own.pubkey());
+    assert_ne!(env.estate_state().agent, own.pubkey(), "the claim was disproved; no recovery");
+}
+
+/// After the unlock a lone heir whose claim the agent referred can't install their own agent at once nor at RT;
+/// only once that claim has stood unapproved for 2 x RT. Without such a claim, never alone.
+#[test]
+fn n2_after_the_unlock_the_lone_heir_replaces_a_referring_agent_only_after_two_recovery_timeouts() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let (uni, until) = (env.university.pubkey(), now(&env.svm) + YEAR);
+    let rule = env.add_rule(0, spouse.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    env.review_death(true).unwrap();
+    env.attest_death_by(&spouse).unwrap();
+    warp(&mut env.svm, 2 * WAITING);
+    env.finalize_unlock().unwrap();
+    let own = funded(&mut env.svm);
+    let b = beneficiary_pda(&env.estate, &spouse.pubkey());
+    expect_err(env.vote_agent(&spouse, own.pubkey()), HeirloomError::WaitingPeriodNotOver);
+    let claim = env.submit_claim_by(&spouse, rule, uni, 100 * USDT).unwrap();
+    env.refer_claim(claim).unwrap();
+    expect_err(env.approve_claim_by(&spouse, claim), HeirloomError::OwnApproval);
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, RT);
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, RT - 1);
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]), HeirloomError::WaitingPeriodNotOver);
+    expect_err(env.vote_agent(&spouse, own.pubkey()), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, 1);
+    env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]).unwrap();
+    assert_eq!(env.estate_state().agent, own.pubkey());
+}
+
+/// An approved claim is no clock: the agent is working.
+#[test]
+fn n2_an_approved_claim_does_not_start_the_clock() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let (uni, until) = (env.university.pubkey(), now(&env.svm) + YEAR);
+    let rule = env.add_rule(0, spouse.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    env.review_death(true).unwrap();
+    env.attest_death_by(&spouse).unwrap();
+    warp(&mut env.svm, 2 * WAITING);
+    env.finalize_unlock().unwrap();
+    let claim = env.submit_claim_by(&spouse, rule, uni, 100 * USDT).unwrap();
+    env.review_claim(claim, true).unwrap();
+    warp(&mut env.svm, 2 * RT);
+    let own = funded(&mut env.svm);
+    let b = beneficiary_pda(&env.estate, &spouse.pubkey());
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]), HeirloomError::WaitingPeriodNotOver);
+}
+
+/// Attack on N2 itself: a lone heir whose agent is truly lost is never locked out, before or after the unlock.
+#[test]
+fn n2_attack_the_lone_heir_with_a_lost_agent_still_recovers() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let (uni, until) = (env.university.pubkey(), now(&env.svm) + YEAR);
+    let rule = env.add_rule(0, spouse.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    // Before the unlock: the agent never reviews the death claim.
+    warp(&mut env.svm, RT);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    warp(&mut env.svm, 2 * RT);
+    let second = funded(&mut env.svm);
+    env.vote_agent(&spouse, second.pubkey()).unwrap();
+    env.agent = second.insecure_clone();
+    env.review_death(true).unwrap();
+    env.attest_death_by(&spouse).unwrap();
+    warp(&mut env.svm, 2 * WAITING);
+    env.finalize_unlock().unwrap();
+    // After the unlock the new agent is lost too: the claim stands unreviewed.
+    let claim = env.submit_claim_by(&spouse, rule, uni, 100 * USDT).unwrap();
+    warp(&mut env.svm, 2 * RT);
+    let third = funded(&mut env.svm);
+    let b = beneficiary_pda(&env.estate, &spouse.pubkey());
+    env.vote_agent_with(&spouse, third.pubkey(), &[b, claim]).unwrap();
+    env.agent = third.insecure_clone();
+    env.review_claim(claim, true).unwrap();
+    env.approve_claim_by(&spouse, claim).unwrap();
+    warp(&mut env.svm, 2 * WINDOW);
+    env.execute_claim(rule, claim).unwrap();
 }
