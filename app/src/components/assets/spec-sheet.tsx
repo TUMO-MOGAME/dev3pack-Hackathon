@@ -48,7 +48,7 @@ export function SpecSheet({ spec: raw, kind, copy, headingLevel = 2 }: { spec?: 
           <dl className="mt-3 grid grid-cols-2 gap-2 min-[480px]:grid-cols-3">
             {facts.map((k) => (
               <div key={k} className="min-w-0 rounded-md border border-line-strong bg-surface-2 px-3 py-2">
-                <dt className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-ink-2">{copy.fields[k]}</dt>
+                <dt className="hyphens-auto break-words text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-ink-2">{copy.fields[k]}</dt>
                 <dd className="mt-0.5 break-words font-semibold tabular-nums">{specValue(k, spec[k], copy)}</dd>
               </div>
             ))}

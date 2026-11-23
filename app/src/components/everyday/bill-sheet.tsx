@@ -16,8 +16,11 @@ import { useEstate } from "@/lib/hooks/estate";
 import { Button, Field, Notice, inputClass } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/client";
 import { fmt, useCopy } from "@/components/shell/copy";
+import { screens } from "@/content/screens";
+import { useLocalized } from "@/lib/i18n/client";
 import { NamesNotice } from "@/components/continuity/names-notice";
-import { BILL_TEMPLATES, checkBill, templateForm, toAddRule, toDraftRule, type BillForm, type Every, type TemplateKey } from "@/lib/everyday/templates";
+import { BILL_TEMPLATES, checkBill, intervalOf, templateForm, toAddRule, toDraftRule, type BillForm, type Every, type TemplateKey } from "@/lib/everyday/templates";
+import { clockOf, clockText } from "@/lib/schedule-clock";
 import type { WillDraft } from "@/lib/types";
 import { MAX_RULES, slotToReuse } from "@/lib/continuity/logic";
 
@@ -43,6 +46,8 @@ export default function BillSheet({ copy, template, target, onClose }: { copy: C
 function BillFormView({ copy, template, target, onDone }: { copy: Copy; template: TemplateKey; target: BillTarget; onDone: () => void }) {
   const f = copy.form;
   const { common, guardians } = useCopy();
+  // The schedule's clock words (H10): a test site repeats it every few seconds, and the form says so before adding.
+  const will = useLocalized(screens.will, (t) => t.screens.will);
   const { fx, run, busy, isMock, snap } = useEstate();
   const id = useId();
   const signed = target.mode === "signed";
@@ -139,6 +144,7 @@ function BillFormView({ copy, template, target, onDone }: { copy: Copy; template
             <select id={`${id}-every`} value={form.every} onChange={(e) => set("every", e.target.value as Every)} className={inputClass}>
               {(Object.keys(f.everyOptions) as Every[]).map((k) => <option key={k} value={k}>{f.everyOptions[k]}</option>)}
             </select>
+            {clockText(clockOf(intervalOf(form.every, isMock), form.every), will.preview) && <p className="mt-1 text-small font-semibold">{clockText(clockOf(intervalOf(form.every, isMock), form.every), will.preview)}</p>}
           </Field>
         )}
         <Field label={f.cap} htmlFor={`${id}-cap`} hint={form.scheduled && room > 0 ? fmt(f.capHint, { count: room }) : zar(form.capUsdt)} error={show("cap")}>

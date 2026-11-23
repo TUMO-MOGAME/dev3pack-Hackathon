@@ -349,7 +349,7 @@ function Protect({ copy, car, offers, owner, rate, hardshipName }: {
           </div>
           {[{ v: h, label: p.hardshipFloor }, { v: f, label: p.floor }, { v: a, label: p.asking }].map((m, i) => (
             <span key={m.label} className="absolute -bottom-1.5 -top-1.5 w-0.5 bg-ink" style={{ left: pos(m.v) }}>
-              <span className={clsx("absolute top-full mt-1 whitespace-nowrap text-[0.7rem] font-semibold leading-tight", i === 0 ? "left-0 -translate-x-1/4" : i === 2 ? "right-0 translate-x-1/4 text-right" : "left-1/2 -translate-x-1/2 text-center")}>
+              <span className={clsx("absolute top-full mt-1 w-max max-w-[5.5rem] hyphens-auto break-words text-[0.7rem] font-semibold leading-tight", i === 0 ? "left-0 -translate-x-1/4" : i === 2 ? "right-0 translate-x-1/4 text-right" : "left-1/2 -translate-x-1/2 text-center")}>
                 {m.label}<br /><span className="font-normal tabular-nums text-ink-2">{m.v.toLocaleString("en-ZA")}</span>
               </span>
             </span>
