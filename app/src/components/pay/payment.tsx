@@ -34,6 +34,9 @@ export interface PayRequest {
    */
   execute?: (svc: HeirloomService, estate: string, again: boolean) => Promise<unknown>;
   successText?: string;
+  /** A claim approved in the same go (its quote counts the approval's transaction and any stamp rent: M3). */
+  approve?: "owner" | "verifier";
+  claim?: string;
 }
 export interface PayResult { ok: boolean; code?: string; message?: string; signature?: string }
 type Phase = "review" | "signing" | "pending" | "confirmed" | "failed";
@@ -93,6 +96,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   const pendingKind = useRef<string | undefined>(undefined);
   const attempts = useRef(0);
   const [stepNote, setStepNote] = useState<string | null>(null);
+  // The fee of a payment the contract makes, quoted from the network before it is approved (M3).
+  const [quoting, setQuoting] = useState<"no" | "loading" | "failed">("no");
+  const shownUser = useRef(0);
+  const selfPay = useRef(false);
   const rate = fx?.usdtZar ?? null;
   // On a real network Heirloom's fee wallet pays the network fee of every program action it can sponsor
   // (chain.ts send); the review says so instead of "paid by you".
@@ -179,8 +186,33 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     pendingKind.current = undefined;
     attempts.current = 0;
     reqRef.current = r;
+    selfPay.current = false;
     setReview(built); setReq(r); setPhase("review"); setError(null); setSignature(undefined); setStepNote(null);
-  }), [snap, session, walletUsdt, isMock, sponsor]);
+    if (r.execute && !r.review) void quote(r, built.id);
+  }), [snap, session, walletUsdt, isMock, sponsor]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** What it costs now, and whether this wallet holds the SOL for its part. False when it couldn't be read. */
+  const quote = async (r: PayRequest, id: string): Promise<{ changed: boolean } | null> => {
+    if (!service || !snap) return null;
+    setQuoting("loading");
+    try {
+      const q = await service.quoteFee(snap.estate.address, { kind: r.kind, to: r.to, amount: r.amount, approve: r.approve, claim: r.claim, selfPay: selfPay.current });
+      if (activeId.current !== id) return null;
+      const short = q.userLamports > Math.round(q.solBalance * 1e9);
+      let changed = false;
+      setReview((prev) => {
+        if (!prev) return prev;
+        changed = prev.fee.sponsored !== q.fee.sponsored || q.userLamports > shownUser.current;
+        return { ...prev, fee: q.fee, balances: { ...prev.balances, sol: q.solBalance }, warnings: [...prev.warnings.filter((w) => w !== copy.review.noSol), ...(short ? [copy.review.noSol] : [])] };
+      });
+      shownUser.current = q.userLamports;
+      setQuoting("no");
+      return { changed };
+    } catch {
+      if (activeId.current === id) setQuoting("failed");
+      return null;
+    }
+  };
 
   const finish = (result: PayResult) => { resolver.current?.(result); resolver.current = null; };
   const close = () => {
@@ -204,12 +236,22 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     if (!req || !review || !service || phase !== "review") return; // guards against double-submit
     setPhase("signing"); setStepNote(null);
     if (req.execute) {
+      // Read the cost again: what the user pays must be what they saw (M3).
+      if (!req.review) {
+        const before = shownUser.current;
+        const fresh = await quote(req, review.id);
+        if (!fresh) { setPhase("review"); return; }
+        if (fresh.changed && shownUser.current > before) { setStepNote(copy.review.costChanged); setPhase("review"); return; }
+      }
       const again = attempts.current++ > 0;
       let thrown: unknown = null;
-      const res = await run(`pay:${review.id}`, (s, est) => req.execute!(s, est, again).catch((e: unknown) => { thrown = e; throw e; }), undefined, true);
+      const fee = review.fee;
+      const res = await run(`pay:${review.id}`, (s, est) => s.withShownFee(fee, () => req.execute!(s, est, again)).catch((e: unknown) => { thrown = e; throw e; }), undefined, true);
       if (!res.ok) {
         const pending = pendingOf(thrown);
         if (pending) { checking(pending); return; }
+        // Heirloom can't pay the fee it said it would: show what the user would pay, and let them decide.
+        if (res.code === "FeeChanged") { selfPay.current = true; setStepNote(copy.review.feeChanged); setPhase("review"); await quote(req, review.id); return; }
         setError({ code: res.code, message: res.message }); setPhase("failed"); return;
       }
       setSignature(signatureOf(res.value));
@@ -221,6 +263,13 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       const receipt = await service.confirmSend(review);
       setSignature(receipt.signature);
       if (receipt.status === "confirmed") { setPhase("confirmed"); void refresh(); return; }
+      if (receipt.status === "failed" && receipt.code === "FeeChanged") {
+        const fresh = await service.reviewSend({ to: review.to, toLabel: review.toLabel, amountUsdt: fromBase(review.amount), selfPay: true, ...(review.bill ? { bill: review.bill } : {}) });
+        activeId.current = fresh.id;
+        setReview({ ...fresh, warnings: [...new Set([...review.warnings, ...fresh.warnings])] });
+        setStepNote(copy.review.feeChanged); setPhase("review");
+        return;
+      }
       if (receipt.status === "failed" || receipt.status === "cancelled") { setError({ code: "generic", message: receipt.error ?? copy.failed.body }); setPhase("failed"); return; }
       track(review.id, true);
       setPhase("pending");
@@ -301,7 +350,8 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
                     ...(review.bill?.invoiceCheck ? [{ k: c.invoice, v: <span className={clsx("font-semibold", review.bill.invoiceCheck === "mismatch" && "rounded-[3px] bg-ink px-1.5 text-bg")}>{review.bill.invoiceCheck === "match" ? c.invoiceMatch : review.bill.invoiceCheck === "mismatch" ? c.invoiceMismatch : c.invoiceUnread}</span> }] : []),
                     { k: c.network, v: review.network.name },
                     { k: c.token, v: <span className={clsx("inline-flex items-center gap-1 font-semibold", review.token.verified ? "text-ink" : "rounded-[3px] bg-ink px-1.5 text-bg")}>{review.token.verified ? <BadgeCheck className="size-4" aria-hidden="true" /> : <ShieldAlert className="size-4" aria-hidden="true" />}{review.token.verified ? c.verified : c.unverified}</span> },
-                    { k: c.fee, v: fmt(review.fee.sponsored ? c.feeSponsored : review.fee.payer === session?.address ? c.feeYou : c.feeBy, { sol: review.fee.sol.toFixed(6), payer: shortAddress(review.fee.payer) }) },
+                    { k: c.fee, v: quoting === "loading" ? c.quoting : fmt(review.fee.sponsored ? c.feeSponsored : review.fee.payer === session?.address ? c.feeYou : c.feeBy, { sol: ((review.fee.networkLamports ?? review.fee.lamports) / 1e9).toFixed(6), payer: shortAddress(review.fee.payer) }) },
+                    ...(review.fee.rentLamports ? [{ k: c.rent, v: fmt(review.fee.rentPayer === session?.address ? c.feeYou : review.fee.sponsored ? c.feeSponsored : c.feeBy, { sol: (review.fee.rentLamports / 1e9).toFixed(6), payer: shortAddress(review.fee.rentPayer ?? review.fee.payer) }) }] : []),
                     { k: fromVault ? c.balanceVault : c.balance, v: <>{formatUsdt(review.balances.usdt)}{review.balances.sufficient && <span className="block text-ink-2">{fmt(c.after, { amount: formatUsdt(review.balances.usdt - review.amount) })}</span>}</> },
                   ].map((row) => (
                     <div key={row.k} className="flex items-start justify-between gap-4 border-b border-line py-2.5 last:border-0">
@@ -322,10 +372,16 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
                   </Notice>
                 )}
                 {!online && <Notice tone="warn" icon={<WifiOff className="size-5" aria-hidden="true" />}><p role="status">{c.offline}</p></Notice>}
-                {stepNote && <Notice tone="ok" icon={<Check className="size-5" aria-hidden="true" />}><p role="status">{stepNote}</p></Notice>}
+                {stepNote && <Notice tone={stepNote === copy.pending.stepDone ? "ok" : "warn"} icon={<Check className="size-5" aria-hidden="true" />}><p role="status">{stepNote}</p></Notice>}
+                {quoting === "failed" && (
+                  <Notice tone="warn" icon={<CircleAlert className="size-5" aria-hidden="true" />}>
+                    <p role="alert">{c.quoteFailed}</p>
+                    <Button small variant="secondary" className="mt-2" onClick={() => req && void quote(req, review.id)}>{copy.failed.recheck}</Button>
+                  </Notice>
+                )}
                 <div className="flex gap-3">
                   <Button variant="secondary" className="flex-1" onClick={close}>{review.balances.sufficient ? c.cancel : c.changeAmount}</Button>
-                  <Button className="flex-[2] min-h-13!" onClick={approve} disabled={!review.balances.sufficient || !review.token.verified || !online}>{c.approve}</Button>
+                  <Button className="flex-[2] min-h-13!" onClick={approve} disabled={!review.balances.sufficient || !review.token.verified || !online || quoting !== "no" || review.warnings.includes(c.noSol)}>{c.approve}</Button>
                 </div>
               </>
             )}

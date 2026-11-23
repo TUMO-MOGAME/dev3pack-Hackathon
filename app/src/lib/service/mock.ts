@@ -1331,6 +1331,21 @@ export function createMockService(opts: MockOptions = {}): MockService {
       };
       return review;
     },
+    async quoteFee(_e, q) {
+      await wait(150);
+      // As on a network with Heirloom's sponsor on: it pays the fee, accounts a payment creates cost rent.
+      const rent = (bytes: number) => (bytes + 128) * 6960;
+      let userRent = 0;
+      if ((q.kind === "claim-payout" || q.kind === "scheduled") && !(q.to in s.balances)) userRent += rent(165);
+      if (q.kind === "offer" && !s.snap.offers.some((o) => o.asset === q.to && o.buyer === me())) userRent += rent(89) + rent(165);
+      const network = q.selfPay ? 5_000 : 10_000 * (1 + (q.approve ? 1 : 0));
+      const lamports = network + (q.selfPay ? userRent : 0);
+      return {
+        fee: { lamports, sol: lamports / 1e9, payer: q.selfPay ? me() : AGENT, sponsored: !q.selfPay, networkLamports: network, rentLamports: userRent, ...(userRent ? { rentPayer: me() } : {}) },
+        userLamports: (q.selfPay ? network : 0) + userRent, solBalance: 0.5,
+      };
+    },
+    withShownFee: (_fee, work) => work(),
     confirmSend(review) {
       // Two confirms of one id share the first (M8): the balance moves once.
       const running = confirming.get(review.id);

@@ -8,7 +8,7 @@
 import type {
   ActivityItem, AgentReport, Asset, Base58, CarValuation, Category, Claim, Estate, FxRate,
   Hardship, Offer, OfferRanking, PayeeKind, Payee, Rule, Beneficiary, WillChatMessage, WillDraft,
-  PaymentReview, PaymentReceipt, SavedRecipient, Recurrence,
+  PaymentReview, PaymentReceipt, SavedRecipient, Recurrence, FeeQuote, FeeQuoteInput,
 } from "../types";
 import type { Locale } from "../i18n/locales";
 import type { LegacyBook, LegacySpeech, LegacyStatus, LegacyVoiceInfo } from "../legacy/schema";
@@ -118,7 +118,14 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
 
   // Tether track payment flow (review → approve → WDK sign → pending → confirmed)
   /** Validates address/network/token, reads balances, quotes the fee. Nothing is signed. */
-  reviewSend(input: { to: Base58; toLabel: string; amountUsdt: number; bill?: BillDetails }): Promise<PaymentReview>;
+  /** `selfPay`: review what it costs when the user pays the fee (after the sponsor refused: code "FeeChanged"). */
+  reviewSend(input: { to: Base58; toLabel: string; amountUsdt: number; bill?: BillDetails; selfPay?: boolean }): Promise<PaymentReview>;
+  /**
+   * The cost of a payment the contract makes (claims, schedules, offers, deposits), before it is approved (M3). The
+   * payment then runs inside `withShownFee`, which never lets the user pay a fee the review said Heirloom pays.
+   */
+  quoteFee(estate: Base58, input: FeeQuoteInput): Promise<FeeQuote>;
+  withShownFee<T>(fee: Pick<PaymentReview["fee"], "sponsored">, work: () => Promise<T>): Promise<T>;
   /** Signs + submits with WDK after the user approved `review`. Idempotent on review.id. */
   confirmSend(review: PaymentReview): Promise<PaymentReceipt>;
   /** Re-checks a payment by id (after reconnect / reload). Never re-sends if a signature exists. */

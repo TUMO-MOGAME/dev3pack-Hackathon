@@ -528,6 +528,12 @@ export const af: Bundle = {
       changeAmount: "Verander die bedrag",
       approve: "Keur goed",
       cancel: "Kanselleer",
+      rent: "Nuwe rekening (huur)",
+      quoting: "Die netwerkfooi word nagegaan…",
+      quoteFailed: "Die fooi kon nie nagegaan word nie. Gaan weer na voordat jy goedkeur.",
+      noSol: "Hierdie wallet hou nie genoeg SOL vir sy deel van die koste nie.",
+      feeChanged: "Heirloom kan nie nou hierdie fooi betaal nie. Dit is wat dit uit jou wallet kos; niks is gestuur nie.",
+      costChanged: "Die koste het verander sedert jy gekyk het. Gaan dit weer na; niks is gestuur nie.",
       offline: "Jy is vanlyn. Koppel weer om hierdie betaling goed te keur.",
       simulated: "Nagebootste netwerk",
       kinds: {

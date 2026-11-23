@@ -443,7 +443,7 @@ function OwnerApproval({ claim, snap, copy }: { claim: Claim; snap: EstateSnapsh
           // Tracked here too, because "Try again" in the payment sheet re-runs this same function before the snapshot refreshes.
           let approved = claim.ownerApproved;
           void pay({
-            kind: "claim-payout", source: "vault", to: claim.payee, toLabel: payee, amount: claim.amount,
+            kind: "claim-payout", source: "vault", to: claim.payee, toLabel: payee, amount: claim.amount, ...(claim.ownerApproved ? {} : { approve: "owner" as const, claim: claim.address }),
             execute: async (svc, est, again) => {
               // A first try that was still being checked may have approved it: read it again rather than approve twice.
               if (!approved && again) approved = !!(await svc.getEstate(est)).claims.find((x) => x.address === claim.address)?.ownerApproved;

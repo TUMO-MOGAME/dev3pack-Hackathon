@@ -125,7 +125,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
           // "Try again" in the payment sheet re-runs execute: don't approve a second time (the program rejects that).
           let approved = !canSign(vote);
           await pay({
-            kind: "claim-payout", source: "vault", to: c.payee, toLabel: payee, amount: c.amount,
+            kind: "claim-payout", source: "vault", to: c.payee, toLabel: payee, amount: c.amount, ...(approved ? {} : { approve: "verifier" as const, claim: c.address }),
             execute: async (s, est, again) => {
               if (!approved && again) {
                 const fresh = await s.getEstate(est);

@@ -14,7 +14,7 @@ import type {
 import { chainCtx } from "../chain/client";
 import { chainConfig } from "../chain/config";
 import * as ix from "../chain/instructions";
-import { ata, claimPda, estatePda, offerPda, hardshipPda } from "../chain/pda";
+import { ata, claimPda, estatePda, offerPda, hardshipPda, stampPda } from "../chain/pda";
 import { demoEstateFirst } from "../chain/demo-estate";
 import { base64ToBytes, bytesToBase64, ChainTxError, getConnection } from "../chain/tx";
 import {
@@ -151,8 +151,17 @@ async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to"
   }, meta);
 }
 
-function signFor(signer: ReturnType<typeof getActiveSigner>, ixs: Ixs, selfPay: boolean) {
+/**
+ * The fee the review on screen showed (M3), while a payment it covers runs: Heirloom's ("sponsored") is never
+ * swapped for the user's without showing it again, and a user-paid one never asks the sponsor. Payments run one at a
+ * time from the review sheet, so one value is enough.
+ */
+let shownFee: { sponsored: boolean } | null = null;
+
+function signFor(signer: ReturnType<typeof getActiveSigner>, ixs: Ixs, selfPayAsked: boolean) {
+  const selfPay = selfPayAsked || shownFee?.sponsored === false;
   return signSponsoredOrSelf({
+    requireSponsor: !selfPay && shownFee?.sponsored === true,
     user: signer.address,
     async build(feePayer) {
       const conn = getConnection();
@@ -168,6 +177,18 @@ function signFor(signer: ReturnType<typeof getActiveSigner>, ixs: Ixs, selfPay: 
     onFallback: (reason) => console.warn(`Fee sponsor unavailable, paying the fee from the wallet: ${reason}`),
   });
 }
+
+/** Runs `work` under the fee the review showed (see `shownFee`). */
+async function withFee<T>(fee: { sponsored: boolean }, work: () => Promise<T>): Promise<T> {
+  const before = shownFee;
+  shownFee = { sponsored: fee.sponsored };
+  try { return await work(); } finally { shownFee = before; }
+}
+
+/** Account sizes whose rent a payment may pay: a token account, an Offer (8 + 32 + 32 + 8 + 8 + 1), an ApprovalStamp. */
+const TOKEN_ACCOUNT_SIZE = 165;
+const OFFER_SIZE = 89;
+const STAMP_SIZE = 82;
 
 /** An identical payment still being checked (H8): a second one is never signed while the first may land. */
 async function refuseIfStillChecking(meta: Pick<StoredPayment, "kind" | "to" | "amount" | "from">) {
@@ -763,11 +784,12 @@ export function createChainService(): HeirloomService {
         await ensureReadPass(getActiveSigner());
         must(!(await asks.loadAsks(estate, { strict: true }))[claim]?.declinedAt, "Declined", "The owner said no to this request while alive.");
       }
-      // The fee payer (Heirloom's sponsor when available) also pays the approval stamp's rent.
+      // The fee payer (Heirloom's sponsor when it pays rent) also pays the approval stamp's rent.
+      const paysRent = Boolean((await sponsorClient.status().catch(() => null))?.paysRent);
       return send((feePayer) => {
         const t = ix.approveClaim(pk(estate), verifier, pk(claim), pk(key(raw, "rule")));
         const at = t.keys.findIndex((k, i) => i > 0 && k.pubkey.equals(verifier) && k.isWritable);
-        if (at > 0 && !feePayer.equals(verifier)) t.keys[at] = { ...t.keys[at], pubkey: feePayer };
+        if (at > 0 && paysRent && !feePayer.equals(verifier)) t.keys[at] = { ...t.keys[at], pubkey: feePayer };
         return [t];
       });
     },
@@ -796,7 +818,7 @@ export function createChainService(): HeirloomService {
     },
 
     // ----- P2P USD₮ (Tether track flow: review → approve → WDK sign → pending → confirmed) -----
-    async reviewSend({ to, toLabel, amountUsdt, bill: billInput }): Promise<PaymentReview> {
+    async reviewSend({ to, toLabel, amountUsdt, bill: billInput, selfPay = false }): Promise<PaymentReview> {
       const from = getActiveSigner().address;
       const bill = billInput ? (await billSchemas()).billDetailsSchema.parse(billInput) : undefined;
       let toKey: PublicKey;
@@ -823,9 +845,12 @@ export function createChainService(): HeirloomService {
         ro.quoteTransfer({ token: mint.toBase58(), recipient: to, amount }).catch(() => null),
         conn.getAccountInfo(ata(mint, toKey), "confirmed"),
       ]);
-      const rent = recipientAta ? 0 : 2_039_280; // rent for a new token account
+      // Rent for a new token account, as the network asks for it now (M3).
+      const rent = recipientAta ? 0 : await conn.getMinimumBalanceForRentExemption(TOKEN_ACCOUNT_SIZE, "confirmed");
       const networkFee = Number(quote?.fee ?? 5000n);
-      const sponsor = await sponsorClient.status().catch(() => null);
+      // A sponsored review only when the sponsor can co-sign for this wallet; asked to, the user pays.
+      const status = selfPay || !getActiveSigner().signPartial ? null : await sponsorClient.status().catch(() => null);
+      const sponsor = status?.feePayer === from ? null : status;
       // Sponsored: two signatures (sponsor + sender) instead of one.
       const { fee, userLamports } = feeForReview({ user: from, networkFeeLamports: sponsor?.available ? 10_000 : networkFee, rentLamports: rent, sponsor });
       if (!recipientAta) {
@@ -843,7 +868,7 @@ export function createChainService(): HeirloomService {
         id: newPaymentId(), kind: bill ? "bill" : "p2p", from, to, toLabel: toLabel || bill?.payee || "", amount,
         token: { symbol: "USD₮", mint: mint.toBase58(), verified },
         network: { name: `Solana ${chainConfig.cluster}`, cluster: chainConfig.cluster === "mainnet-beta" ? "mainnet-beta" : chainConfig.cluster === "localnet" ? "localnet" : "devnet" },
-        fee,
+        fee: { ...fee, networkLamports: fee.sponsored ? (sponsor?.available ? 10_000 : networkFee) : networkFee, rentLamports: rent, ...(rent ? { rentPayer: fee.sponsored && sponsor?.paysRent ? fee.payer : from } : {}) },
         balances: { usdt, sol, sufficient },
         warnings,
         ...(bill ? { bill } : {}),
@@ -859,17 +884,50 @@ export function createChainService(): HeirloomService {
       const mint = chainCtx().usdtMint;
       const from = pk(review.from), to = pk(review.to);
       const needsAta = !(await getConnection().getAccountInfo(ata(mint, to), "confirmed"));
-      const sponsorPaysRent = Boolean((await sponsorClient.status().catch(() => null))?.paysRent);
+      // An account to create that the review didn't show: the cost changed, so it is shown again first.
+      if (needsAta && review.fee.rentLamports === 0) throw new ChainServiceError("FeeChanged", "The recipient's USD₮ account was closed since you looked, so it costs rent again. Nothing was signed.");
+      const sponsorPaysRent = review.fee.sponsored && Boolean((await sponsorClient.status().catch(() => null))?.paysRent);
       // The rent payer for a new recipient account is the sponsor when it is the fee payer and covers rent.
       const ixs = (feePayer: PublicKey) => [
         ...(needsAta ? [createAssociatedTokenAccountIdempotentInstruction(!feePayer.equals(from) && sponsorPaysRent ? feePayer : from, ata(mint, to), to, mint)] : []),
         createTransferCheckedInstruction(ata(mint, from), mint, ata(mint, to), from, review.amount, 6),
       ];
       const bill = review.bill ? (await billSchemas()).billDetailsSchema.parse(review.bill) : undefined;
-      return pay(review.id, ixs, { kind: bill ? "bill" : "p2p", from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount.toString(), ...(bill ? { bill } : {}) });
+      return withFee(review.fee, () => pay(review.id, ixs, { kind: bill ? "bill" : "p2p", from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount.toString(), ...(bill ? { bill } : {}) }, !review.fee.sponsored));
     },
 
     getReceipt: (id): Promise<PaymentReceipt | null> => recheck(receipts, chainOps(), id),
+
+    withShownFee: (fee, work) => withFee(fee, work),
+
+    async quoteFee(estate, q) {
+      const me = getActiveSigner().address;
+      const conn = getConnection();
+      const ctx = chainCtx();
+      const status = q.selfPay || !getActiveSigner().signPartial ? null : await sponsorClient.status().catch(() => null);
+      const sponsored = !!status?.available && !!status.feePayer && status.feePayer !== me;
+      const txs = 1 + (q.approve ? 1 : 0);
+      const exists = async (k: PublicKey) => !!(await conn.getAccountInfo(k, "confirmed"));
+      const rentOf = (bytes: number) => conn.getMinimumBalanceForRentExemption(bytes, "confirmed");
+      let userRent = 0;
+      let sponsorRent = 0;
+      // Accounts this payment creates, and who pays their rent (the program's payer, or the sponsor where it may).
+      if ((q.kind === "claim-payout" || q.kind === "scheduled") && !(await exists(ata(ctx.usdtMint, pk(q.to))))) userRent += await rentOf(TOKEN_ACCOUNT_SIZE);
+      if (q.kind === "offer" && !(await exists(offerPda(ctx.programId, q.to, me)))) userRent += (await rentOf(OFFER_SIZE)) + (await rentOf(TOKEN_ACCOUNT_SIZE));
+      if (q.approve === "verifier" && q.claim && !(await exists(stampPda(ctx.programId, q.claim)))) {
+        const stamp = await rentOf(STAMP_SIZE);
+        if (sponsored && status?.paysRent) sponsorRent += stamp; else userRent += stamp;
+      }
+      const network = sponsored ? 10_000 * txs : 5_000 * txs;
+      const payer = sponsored ? status!.feePayer! : me;
+      const lamports = network + (sponsored ? sponsorRent : userRent);
+      const rent = userRent + sponsorRent;
+      return {
+        fee: { lamports, sol: lamports / 1e9, payer, sponsored, networkLamports: network, rentLamports: rent, ...(rent ? { rentPayer: userRent ? me : payer } : {}) },
+        userLamports: (sponsored ? 0 : network) + userRent,
+        solBalance: (await conn.getBalance(pk(me), "confirmed")) / 1e9,
+      };
+    },
 
     async listPendingReceipts() {
       const out: PaymentReceipt[] = [];

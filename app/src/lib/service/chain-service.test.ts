@@ -49,6 +49,7 @@ vi.mock("../chain/tx", async (original: () => Promise<object>) => ({
     getLatestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 1 }),
     getAccountInfo: async (address: { toBase58(): string }) => (h.existing.has(address.toBase58()) ? { owner: null, data: new Uint8Array(0) } : null),
     getBalance: async () => 0,
+    getMinimumBalanceForRentExemption: async (bytes: number) => (bytes + 128) * 6960,
   }),
 }));
 vi.mock("../chain/reads", async (original: () => Promise<object>) => ({
@@ -278,6 +279,20 @@ describe("H6: an interrupted signing is finished, and nothing is lost", () => {
     await after.createEstateFromWill(plan, { practice: true });
     expect(await createChainService().unfinishedSigning()).toBeNull();
     Object.defineProperty(h, "status", { configurable: true, writable: true, value: "confirmed" });
+  });
+});
+
+describe("M3: the cost is read before approval", () => {
+  it("a payout to a new account, a trusted person's approval and a first offer count their rent, read from the network", async () => {
+    h.me = v1;
+    const svc = createChainService();
+    const payout = await svc.quoteFee(estate, { kind: "claim-payout", to: res, amount: 5n, approve: "verifier", claim: key() });
+    // No sponsor in this test: the user pays two network fees, the payee's token account and the approval stamp.
+    expect(payout.fee.sponsored).toBe(false);
+    expect(payout.userLamports).toBe(2 * 5_000 + (165 + 128) * 6960 + (82 + 128) * 6960);
+    const offer = await svc.quoteFee(estate, { kind: "offer", to: key(), amount: 5n });
+    expect(offer.fee.rentLamports).toBe((89 + 128) * 6960 + (165 + 128) * 6960);
+    expect((await svc.quoteFee(estate, { kind: "vault-deposit", to: estate, amount: 5n })).fee.rentLamports).toBe(0);
   });
 });
 

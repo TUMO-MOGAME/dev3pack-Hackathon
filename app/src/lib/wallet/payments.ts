@@ -271,6 +271,11 @@ export interface SponsoredSignDeps {
   signOnly(base64: string): Promise<{ signature: string; wireBase64: string }>;
   sponsor?: SponsorClient | null;
   onFallback?: (reason: string) => void;
+  /**
+   * The review said Heirloom pays the fee (M3): if the sponsor can't now, nothing is signed for the user to pay
+   * silently. It fails with code "FeeChanged", and the screen shows the cost again before the user pays it.
+   */
+  requireSponsor?: boolean;
 }
 
 /**
@@ -288,12 +293,16 @@ export async function signSponsoredOrSelf(d: SponsoredSignDeps): Promise<SignedT
       return { signature: full.signature, wireBase64: full.wireBase64, lastValidBlockHeight, feePayer: st.feePayer, sponsored: true };
     } catch (e) {
       if (e instanceof SponsorError && e.fatal) throw e;
+      if (d.requireSponsor) throw feeChanged(e instanceof Error ? e.message : String(e));
       d.onFallback?.(e instanceof Error ? e.message : String(e));
     }
   }
+  if (d.requireSponsor) throw feeChanged("the fee sponsor is not available");
   const { base64, lastValidBlockHeight } = await d.build(d.user);
   return { ...(await d.signOnly(base64)), lastValidBlockHeight, feePayer: d.user, sponsored: false };
 }
+
+const feeChanged = (why: string) => Object.assign(new SponsorError("FeeChanged", `FeeChanged: Heirloom can't pay this fee now (${why}). Nothing was signed.`), { code: "FeeChanged" });
 
 /** Fee shown on the review screen: sponsored → the sponsor pays fee (and rent when it covers rent). */
 export function feeForReview(opts: { user: string; networkFeeLamports: number; rentLamports: number; sponsor: SponsorStatus | null }) {

@@ -528,6 +528,12 @@ export const st: Bundle = {
       changeAmount: "Fetola palo",
       approve: "Dumella",
       cancel: "Hlakola",
+      rent: "Akhaonto e ntjha (rente)",
+      quoting: "Tefo ya netweke e a hlahlojwa…",
+      quoteFailed: "Tefo ha e a ka ya hlahlojwa. Hlahloba hape pele o dumella.",
+      noSol: "Wallet ena ha e na SOL e lekaneng bakeng sa karolo ya yona ya ditjeo.",
+      feeChanged: "Heirloom e ke ke ya lefa tefo ena hona jwale. Sena ke seo e se jang ho tswa wallet ya hao; ha ho letho le rometsweng.",
+      costChanged: "Ditjeo di fetohile ho tloha ha o sheba. Di hlahlobe hape; ha ho letho le rometsweng.",
       offline: "Ha o a hokelwa. Hokela hape ho dumella tefo ena.",
       simulated: "Netweke e etsisitsweng",
       kinds: {

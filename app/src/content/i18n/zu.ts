@@ -528,6 +528,12 @@ export const zu: Bundle = {
       changeAmount: "Shintsha imali",
       approve: "Vuma",
       cancel: "Khansela",
+      rent: "I-akhawunti entsha (irenti)",
+      quoting: "Kuhlolwa imali yenethiwekhi…",
+      quoteFailed: "Imali ayikwazanga ukuhlolwa. Hlola futhi ngaphambi kokuvuma.",
+      noSol: "Le wallet ayinayo i-SOL eyanele ngengxenye yayo yezindleko.",
+      feeChanged: "I-Heirloom ayikwazi ukukhokha le mali manje. Yilokhu ekubiza kona ku-wallet yakho; akukho okuthunyelwe.",
+      costChanged: "Izindleko zishintshile kusukela ubheka. Ziphinde uzihlole; akukho okuthunyelwe.",
       offline: "Awuxhunyiwe ku-inthanethi. Xhuma futhi ukuze uvume le nkokhelo.",
       simulated: "Inethiwekhi elingisiwe",
       kinds: {

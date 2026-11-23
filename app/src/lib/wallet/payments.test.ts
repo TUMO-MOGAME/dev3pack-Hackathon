@@ -254,3 +254,18 @@ describe("H8: the same payment still being checked", () => {
     expect(sameOpen(store, { kind: "vault-deposit", to: "VAULT", amount: "5", from: "ME" })).toEqual([]);
   });
 });
+
+describe("M3: a fee the review said Heirloom pays is never paid by the user unseen", () => {
+  it("the sponsor refusing stops the signing with FeeChanged; the user's wallet signs nothing", async () => {
+    const { signSponsoredOrSelf, SponsorError } = await import("./payments");
+    const signOnly = vi.fn(async () => ({ signature: "U", wireBase64: "x" }));
+    const d = {
+      user: "USER", build: async () => ({ base64: "tx", lastValidBlockHeight: 1 }), signPartial: async () => ({ wireBase64: "p" }), signOnly,
+      sponsor: { status: async () => ({ available: true, feePayer: "SPONSOR", maxFeeLamports: 20_000, paysRent: false }), cosign: async () => { throw new SponsorError("daily_budget", "spent"); } },
+      requireSponsor: true,
+    };
+    await expect(signSponsoredOrSelf(d)).rejects.toMatchObject({ code: "FeeChanged" });
+    await expect(signSponsoredOrSelf({ ...d, sponsor: { ...d.sponsor, status: async () => null } })).rejects.toMatchObject({ code: "FeeChanged" });
+    expect(signOnly).not.toHaveBeenCalled();
+  });
+});
