@@ -311,6 +311,22 @@ export function sweepHeldUntil(snap: EstateSnapshot, now: number | null): number
   return now < until ? until : null;
 }
 
+/* ----- who has an inbox ----- */
+
+/**
+ * The inbox is for everyone with something to decide or watch in this estate (M10), whatever role their wallet is
+ * signed in as: the trusted people, and the monitors, backups and fallback recipients, who may be family too.
+ * `todo`: what the screens already count for this person (approvals, votes, confirmations).
+ */
+export function hasInbox(snap: EstateSnapshot | null | undefined, me: Base58 | null | undefined, role: string | null | undefined, todo = 0): boolean {
+  if (role === "verifier" || role === "monitor") return true;
+  if (!snap || !isHeld(me)) return false;
+  if (todo > 0 || snap.estate.verifiers.includes(me)) return true;
+  const g = snap.guardians;
+  return !!g?.seats.some((s) => s.monitors.some((m) => m.wallet === me) || s.backups.some((b) => b.wallet === me))
+    || !!g?.fallback.recipients.some((r) => r.wallet === me && !r.dead);
+}
+
 /* ----- replacing the agent ----- */
 
 /** While Active every trusted person, at least two. Afterwards two, or the only one left. */

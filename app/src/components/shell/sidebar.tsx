@@ -62,8 +62,10 @@ const rowActive = "bg-surface-2 font-semibold text-ink [&>:first-child]:text-amb
 const groupLabel = "px-3 pb-1 pt-4 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-2";
 
 export function Sidebar({
-  rail = false, badges, onNavigate, onPersona, onClose,
+  rail = false, badges, inbox = false, onNavigate, onPersona, onClose,
 }: {
+  /** This person has something to decide or watch here, whatever their role (M10). */
+  inbox?: boolean;
   /** Icon-only rail (desktop, collapsed). */
   rail?: boolean;
   badges: { inbox: number; claims: number };
@@ -157,7 +159,7 @@ export function Sidebar({
             </li>
           </ul>
           {GROUPS.map((g) => {
-            const items = g.items.filter((it) => (!it.roles || (role && it.roles.includes(role))) && !(role && it.hide?.includes(role)));
+            const items = g.items.filter((it) => (it.key === "inbox" && inbox) || ((!it.roles || (role && it.roles.includes(role))) && !(role && it.hide?.includes(role))));
             if (!items.length) return null;
             return (
               <section key={g.key} aria-label={s.groups[g.key]}>

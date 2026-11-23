@@ -18,15 +18,22 @@ import { guardiansOf, guardianTodo, isMonitor } from "@/components/guardians/der
 import { PausedNotice } from "@/components/guardians/parts";
 import { GuardiansInbox } from "@/components/guardians/section";
 import { ClaimWindow } from "@/components/guardians/claim-window";
-import { DisputeList, DisputePanel } from "@/components/disputes/disputes";
+import { DisputeList, DisputePanel, disputesToDecide } from "@/components/disputes/disputes";
+import { pendingFor } from "@/components/shell/app-shell";
 import { disputesVotedBy, effectiveStatus, openDisputeOn } from "@/lib/disputes/types";
 import { useNow } from "@/lib/hooks/use-now";
 import { openToPeople } from "@/lib/verdict";
-import { canSign, claimPayable, claimTally, claimVote, declinedByOwner, deathTally, deathVote, hardshipStands, hardshipTally, hardshipVote, type Tally, type Vote } from "@/lib/guardians/decisions";
+import { canSign, claimPayable, claimTally, claimVote, declinedByOwner, hasInbox, deathTally, deathVote, hardshipStands, hardshipTally, hardshipVote, type Tally, type Vote } from "@/lib/guardians/decisions";
 import { ClaimState, useWho, VoteNote, VoteTally } from "@/components/guardians/decision";
 import { ReferredNote } from "@/components/continuity/continuity";
 
 type Copy = ScreensCopy["inbox"];
+
+/** What this person can act on in the inbox: approvals, guardians' votes and confirmations, disputes. */
+export function inboxTodo(snap: EstateSnapshot, address: string): number {
+  const now = Math.floor(Date.now() / 1000);
+  return pendingFor(snap, address) + guardianTodo(guardiansOf(snap), snap, address, now) + disputesToDecide(snap, address, now);
+}
 
 interface Item {
   key: string;
@@ -59,7 +66,7 @@ export function InboxScreen(props: Parameters<typeof InboxScreenBody>[0]) {
 
 function InboxScreenBody({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.inbox);
-  return <Gate roles={["verifier", "monitor"]} frame={<HeaderFrame width="max-w-2xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, session }) => <Inbox copy={copy} snap={snap!} session={session} />}</Gate>;
+  return <Gate roles={["verifier", "monitor"]} allow={(snap, session) => hasInbox(snap, session.address, session.role, snap ? inboxTodo(snap, session.address) : 0)} frame={<HeaderFrame width="max-w-2xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, session }) => <Inbox copy={copy} snap={snap!} session={session} />}</Gate>;
 }
 
 function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; session: WalletSession }) {
