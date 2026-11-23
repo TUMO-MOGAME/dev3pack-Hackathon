@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { cancelPayment, memoryReceiptStore, openReceipts, recheck, runPayment, type ChainOps, type SignedTx } from "./payments";
+import { cancelPayment, memoryReceiptStore, openReceipts, recheck, runPayment, sameOpen, type ChainOps, type SignedTx } from "./payments";
 
 type St = Awaited<ReturnType<ChainOps["status"]>>;
 
@@ -168,5 +168,89 @@ describe("fee sponsorship (signSponsoredOrSelf / feeForReview)", () => {
     expect(feeForReview({ user: "U", networkFeeLamports: 10_000, rentLamports: 2_039_280, sponsor: s })).toEqual({ fee: { lamports: 2_049_280, sol: 0.00204928, payer: "SPONSOR", sponsored: true }, userLamports: 0 });
     expect(feeForReview({ user: "U", networkFeeLamports: 10_000, rentLamports: 2_039_280, sponsor: { ...s, paysRent: false } }).userLamports).toBe(2_039_280);
     expect(feeForReview({ user: "U", networkFeeLamports: 5_000, rentLamports: 0, sponsor: null }).fee).toEqual({ lamports: 5_000, sol: 0.000005, payer: "U", sponsored: false });
+  });
+});
+
+describe("H8: once a signature is stored, a payment is never reported unpaid on a guess", () => {
+  it("an RPC error after broadcast reads as still checking, never throws", async () => {
+    const store = memoryReceiptStore();
+    const { ops } = fakeChain();
+    ops.status = async () => { throw new Error("429 Too Many Requests"); };
+    const r = await runPayment(store, ops, "h1", async () => signed);
+    expect(r.status).toBe("submitted");
+    expect(r.signature).toBe("SIG1");
+    await expect(recheck(store, ops, "h1")).resolves.toMatchObject({ status: "submitted" });
+  });
+
+  it("reads the height before the status, so a transaction that lands at the last moment is not called expired", async () => {
+    const store = memoryReceiptStore();
+    const { ops, state } = fakeChain({ broadcastError: new Error("offline") });
+    await runPayment(store, ops, "h2", async () => signed);
+    const order: string[] = [];
+    ops.blockHeight = async () => { order.push("height"); return 151; };
+    ops.status = async () => { order.push("status"); return { err: null, confirmationStatus: "confirmed" }; };
+    expect((await recheck(store, ops, "h2"))?.status).toBe("confirmed");
+    expect(order).toEqual(["height", "status"]);
+    void state;
+  });
+
+  it("a height that can't be read never expires a payment", async () => {
+    const store = memoryReceiptStore();
+    const { ops } = fakeChain({ broadcastError: new Error("offline") });
+    await runPayment(store, ops, "h3", async () => signed);
+    ops.blockHeight = async () => { throw new Error("rpc down"); };
+    expect((await recheck(store, ops, "h3"))?.status).toBe("pending");
+  });
+
+  it("'already processed' from the network is not a rejection", async () => {
+    const store = memoryReceiptStore();
+    const { ops } = fakeChain({ broadcastError: new Error("Transaction simulation failed: This transaction has already been processed") });
+    expect((await runPayment(store, ops, "h4", async () => signed)).status).not.toBe("failed");
+  });
+
+  it("a failure seen only at 'processed' waits for the network's last word", async () => {
+    const store = memoryReceiptStore();
+    const { ops } = fakeChain({ status: { err: { InstructionError: [0, "x"] }, confirmationStatus: "processed" } });
+    expect((await runPayment(store, ops, "h5", async () => signed)).status).toBe("pending");
+  });
+});
+
+describe("M8: two confirms of one payment sign once", () => {
+  it("the second waits for the first", async () => {
+    const store = memoryReceiptStore();
+    const { ops } = fakeChain();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const sign = vi.fn(async () => { await gate; return signed; });
+    const a = runPayment(store, ops, "m8", sign);
+    const b = runPayment(store, ops, "m8", sign);
+    // While the wallet is signing, a re-check from elsewhere in the tab doesn't call it interrupted.
+    expect((await recheck(store, ops, "m8"))?.status).toBe("signing");
+    release();
+    await Promise.all([a, b]);
+    expect(sign).toHaveBeenCalledTimes(1);
+  });
+
+  it("a receipt store that can't write keeps the signature in memory", async () => {
+    const { localReceiptStore } = await import("./payments");
+    const data = new Map<string, string>();
+    vi.stubGlobal("localStorage", { getItem: (k: string) => data.get(k) ?? null, setItem: () => { throw new Error("QuotaExceededError"); } });
+    const store = localReceiptStore();
+    await runPayment(store, fakeChain().ops, "q1", async () => signed);
+    expect(store.get("q1")?.signature).toBe("SIG1");
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("H8: the same payment still being checked", () => {
+  it("is found by kind, payee and amount until it settles", async () => {
+    const store = memoryReceiptStore();
+    const { ops, state } = fakeChain();
+    await runPayment(store, ops, "s1", async () => signed, { kind: "vault-deposit", to: "VAULT", amount: "5", from: "ME" });
+    expect(sameOpen(store, { kind: "vault-deposit", to: "VAULT", amount: "5", from: "ME" }).map((p) => p.id)).toEqual(["s1"]);
+    expect(sameOpen(store, { kind: "vault-deposit", to: "VAULT", amount: "6", from: "ME" })).toEqual([]);
+    state.status = { err: null, confirmationStatus: "confirmed" };
+    await recheck(store, ops, "s1");
+    expect(sameOpen(store, { kind: "vault-deposit", to: "VAULT", amount: "5", from: "ME" })).toEqual([]);
   });
 });

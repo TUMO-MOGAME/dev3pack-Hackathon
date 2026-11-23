@@ -549,14 +549,15 @@ export const zu: Bundle = {
     },
     signing: { title: "Kusayinwa nge-wallet yakho ye-Tether (WDK)", body: "Ukhiye wakho awulokothi uphume kule divayisi. Gcina lesi sikrini sivuliwe." },
     pending: {
-      title: "Kusalindwe",
+      title: "Kuthunyelwe, kuyahlolwa",
+      stepDone: "Isinyathelo sokuqala siqinisekisiwe. Vuma futhi ukuze uqedele inkokhelo.",
       body: "Kuthunyelwe kunethiwekhi. Kulindwe ukuqinisekiswa. Ungakuvala lokhu; sizoqhubeka nokuhlola futhi ngeke sikuthumele kabili.",
       badge: "Kusalindwe kuze kuqinisekiswe",
     },
     confirmed: { title: "Kuqinisekisiwe", body: "Inkokhelo isiphelele.", badge: "Kuqinisekisiwe", done: "Kwenziwe", receipt: "Irisidi", receiptSr: "Ivula i-Solana Explorer kuthebhu entsha" },
     failed: {
       title: "Le nkokhelo ayiphumelelanga",
-      body: "Akukho okuphume ku-wallet yakho.",
+      body: "Ayikho i-USD₮ ephume ku-wallet yakho.",
       retry: "Zama futhi",
       close: "Vala",
       recheck: "Hlola futhi",

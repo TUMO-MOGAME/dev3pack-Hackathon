@@ -284,6 +284,8 @@ export interface PaymentReceipt {
   explorerUrl?: string;
   confirmations?: number;
   error?: string; // human-readable, with a recovery hint
+  /** Why it was not signed, when the app knows: "FeeChanged" (the fee shown can't be kept, so it is shown again). */
+  code?: string;
   updatedAt: number;
 }
 

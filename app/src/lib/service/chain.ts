@@ -22,7 +22,7 @@ import {
 } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
 import { hex, key, num, optKey, type Raw } from "../chain/decoders";
-import { ChainServiceError, must, writeFailure } from "./chain-errors";
+import { ChainServiceError, must, PaymentPending, writeFailure } from "./chain-errors";
 import { mayAskToList } from "../agent/sale";
 import { createChainContinuity } from "./chain-continuity";
 import { deathClaimStep } from "./chain-reports";
@@ -30,7 +30,7 @@ import { checkPeople, planSetup } from "./chain-setup";
 import { acceptBestOffer, reviveRanking, type WireRanking } from "./chain-sale";
 import { getActiveSigner, peekActiveSigner } from "../wallet/signer";
 import {
-  defaultReceiptStore, feeForReview, newPaymentId, openReceipts, recheck, resumeOnReconnect, runPayment, signSponsoredOrSelf, SponsorError, waitForFinal,
+  defaultReceiptStore, feeForReview, newPaymentId, openReceipts, recheck, resumeOnReconnect, runPayment, sameOpen, signSponsoredOrSelf, SponsorError, waitForFinal,
   type ChainOps, type SponsorClient, type SponsorStatus, type StoredPayment,
 } from "../wallet/payments";
 import { readOnly } from "../wallet/wdk";
@@ -139,9 +139,19 @@ type Ixs = TransactionInstruction[] | ((feePayer: PublicKey) => TransactionInstr
  * Builds the tx (fee payer = Heirloom's sponsor when available, else the user), WDK signs it (sign-only; partial
  * when sponsored, then the server co-signs), the signature is persisted, then broadcast; returns the receipt.
  */
-async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill">, selfPay = false) {
+async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill">, selfPay = false, check?: () => Promise<void>) {
   const signer = getActiveSigner();
-  return runPayment(receipts, chainOps(), id, () => signSponsoredOrSelf({
+  return runPayment(receipts, chainOps(), id, async () => {
+    const signed = await signFor(signer, ixs, selfPay);
+    // Read again after the wallet signed (a PIN or a phone wallet can take a while): what was shown must still hold.
+    // A refusal here throws before the signature is stored, so these bytes are never sent.
+    if (check) await check();
+    return signed;
+  }, meta);
+}
+
+function signFor(signer: ReturnType<typeof getActiveSigner>, ixs: Ixs, selfPay: boolean) {
+  return signSponsoredOrSelf({
     user: signer.address,
     async build(feePayer) {
       const conn = getConnection();
@@ -155,18 +165,34 @@ async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to"
     // A self-paid tx (a title mint: the sponsor never pays for mints) doesn't ask the sponsor at all.
     sponsor: selfPay ? undefined : sponsorClient,
     onFallback: (reason) => console.warn(`Fee sponsor unavailable, paying the fee from the wallet: ${reason}`),
-  }), meta);
+  });
+}
+
+/** An identical payment still being checked (H8): a second one is never signed while the first may land. */
+async function refuseIfStillChecking(meta: Pick<StoredPayment, "kind" | "to" | "amount" | "from">) {
+  if (!meta.to || !meta.amount) return;
+  for (const p of sameOpen(receipts, meta)) {
+    const r = await recheck(receipts, chainOps(), p.id);
+    if (r && ["signing", "submitted", "pending"].includes(r.status) && r.signature) {
+      throw new PaymentPending(p.id, r.signature, p.kind, "StillChecking: the same payment was sent a moment ago and is still being checked. Wait for it before you send it again.");
+    }
+  }
 }
 
 /**
  * Every user-initiated program tx goes through the same pay-once pipeline and waits for confirmation. `ixs` may depend
  * on the fee payer (e.g. approve_claim lets the sponsor pay the approval stamp's rent when it is the fee payer).
  */
-async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount"> = { kind: "program" }, opts: { selfPay?: boolean } = {}): Promise<TxResult> {
+async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount"> = { kind: "program" }, opts: { selfPay?: boolean; check?: () => Promise<void> } = {}): Promise<TxResult> {
+  const from = getActiveSigner().address;
+  await refuseIfStillChecking({ ...meta, from });
   const id = newPaymentId();
-  const first = await pay(id, ixs, meta, opts.selfPay);
+  const first = await pay(id, ixs, { ...meta, from }, opts.selfPay, opts.check);
   const r = first.status === "failed" ? first : await waitForFinal(receipts, chainOps(), id, 60_000, 800);
   written(); // also when it failed or is unconfirmed: the next read must see the chain as it is
+  // Signed and sent, not settled: "submitted, checking" on this id, never a failure that invites a second payment.
+  if (r?.signature && r.status !== "failed" && r.status !== "confirmed") throw new PaymentPending(id, r.signature, meta.kind);
+  if (r?.status === "failed" && r.code) throw new ChainServiceError(r.code, r.error ?? r.code);
   const failure = writeFailure(r);
   if (failure) throw new ChainTxError(r?.signature ?? "", failure);
   return { signature: r!.signature!, explorerUrl: explorerTx(r!.signature!) };
@@ -562,7 +588,7 @@ export function createChainService(): HeirloomService {
     },
 
     async deposit(estate, amountUsdt) { const o = requireOwnerOf(estate); return send([ix.deposit(chainCtx(), o, toBase(amountUsdt))], { kind: "vault-deposit", to: estate, toLabel: "Estate vault", amount: toBase(amountUsdt).toString() }); },
-    async withdraw(estate, amountUsdt) { const o = requireOwnerOf(estate); return send([ix.withdraw(chainCtx(), o, toBase(amountUsdt))]); },
+    async withdraw(estate, amountUsdt) { const o = requireOwnerOf(estate); return send([ix.withdraw(chainCtx(), o, toBase(amountUsdt))], { kind: "program", to: o.toBase58(), toLabel: "Withdrawal", amount: toBase(amountUsdt).toString() }); },
     async heartbeat(estate) { const o = requireOwnerOf(estate); return send([ix.heartbeat(chainCtx(), o)]); },
     async vetoDeath(estate) { const o = requireOwnerOf(estate); return send([ix.vetoDeath(chainCtx(), o)]); },
 
@@ -708,6 +734,7 @@ export function createChainService(): HeirloomService {
       if (to === from) throw new Error("You cannot send to your own wallet.");
       if (!(amountUsdt > 0)) throw new Error("Enter an amount above zero.");
       const amount = toBase(amountUsdt);
+      await refuseIfStillChecking({ kind: bill ? "bill" : "p2p", to, amount: amount.toString(), from });
       const conn = getConnection();
       const mint = chainCtx().usdtMint;
       const warnings: string[] = [];

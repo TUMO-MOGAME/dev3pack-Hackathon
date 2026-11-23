@@ -109,6 +109,11 @@ describe("U1: I'm still here", () => {
     h.status = status;
     await expect(createChainService().heartbeat(estate)).rejects.toThrow(/^NotConfirmed: /);
   });
+
+  it("H8: signed and sent is 'still checking' on its payment id, never a failure", async () => {
+    h.status = "submitted";
+    await expect(createChainService().heartbeat(estate)).rejects.toMatchObject({ code: "NotConfirmed", signature: "sig", paymentId: expect.stringMatching(/^pay_/) });
+  });
 });
 
 describe("createEstateFromWill", () => {

@@ -1250,6 +1250,24 @@ export function createMockService(opts: MockOptions = {}): MockService {
   });
   const { resetLegacy, ...legacyMethods } = legacy;
 
+  /** confirmSend's one run per payment id (see M8 above). */
+  const confirming = new Map<string, Promise<PaymentReceipt>>();
+  async function confirmOnce(review: PaymentReview): Promise<PaymentReceipt> {
+      const existing = s.sends[review.id];
+      if (existing) return { ...existing.receipt }; // idempotent: a retry never pays twice
+      await wait(1200); // signing with the WDK wallet
+      // Checked before the balance moves, so nothing waits between paying and recording the payment.
+      const bill = review.bill ? (await billSchemas()).billDetailsSchema.parse(review.bill) : undefined;
+      need(me() === review.from, "NotOwner", "This payment was prepared by a different wallet.");
+      need((s.balances[review.from] ?? 0n) >= review.amount, "InsufficientFunds", "Your wallet does not hold that much USD₮.");
+      s.balances[review.from] -= review.amount;
+      const t = tx();
+      const receipt: PaymentReceipt = { id: review.id, status: "pending", signature: t.signature, explorerUrl: t.explorerUrl, confirmations: 0, updatedAt: nowSecs() };
+      s.sends[review.id] = { receipt, from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount, confirmAt: Date.now() + 2000 + Math.floor(Math.random() * 2000), ts: nowSecs(), ...(bill ? { bill } : {}) };
+      save();
+      return { ...receipt };
+  }
+
   return {
     mode: "mock",
     ...legacyMethods,
@@ -1291,20 +1309,13 @@ export function createMockService(opts: MockOptions = {}): MockService {
       };
       return review;
     },
-    async confirmSend(review) {
-      const existing = s.sends[review.id];
-      if (existing) return { ...existing.receipt }; // idempotent: a retry never pays twice
-      await wait(1200); // signing with the WDK wallet
-      // Checked before the balance moves, so nothing waits between paying and recording the payment.
-      const bill = review.bill ? (await billSchemas()).billDetailsSchema.parse(review.bill) : undefined;
-      need(me() === review.from, "NotOwner", "This payment was prepared by a different wallet.");
-      need((s.balances[review.from] ?? 0n) >= review.amount, "InsufficientFunds", "Your wallet does not hold that much USD₮.");
-      s.balances[review.from] -= review.amount;
-      const t = tx();
-      const receipt: PaymentReceipt = { id: review.id, status: "pending", signature: t.signature, explorerUrl: t.explorerUrl, confirmations: 0, updatedAt: nowSecs() };
-      s.sends[review.id] = { receipt, from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount, confirmAt: Date.now() + 2000 + Math.floor(Math.random() * 2000), ts: nowSecs(), ...(bill ? { bill } : {}) };
-      save();
-      return { ...receipt };
+    confirmSend(review) {
+      // Two confirms of one id share the first (M8): the balance moves once.
+      const running = confirming.get(review.id);
+      if (running) return running;
+      const run = confirmOnce(review).finally(() => confirming.delete(review.id));
+      confirming.set(review.id, run);
+      return run;
     },
     async getReceipt(id) {
       await wait(350);

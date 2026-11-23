@@ -118,7 +118,12 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
           let approved = !canSign(vote);
           await pay({
             kind: "claim-payout", source: "vault", to: c.payee, toLabel: payee, amount: c.amount,
-            execute: async (s, est) => {
+            execute: async (s, est, again) => {
+              if (!approved && again) {
+                const fresh = await s.getEstate(est);
+                const now = fresh.claims.find((x) => x.address === c.address);
+                approved = !now || !canSign(claimVote(fresh, now, session.address, Math.floor(Date.now() / 1000)));
+              }
               if (!approved) { await s.approveClaim(est, c.address); approved = true; }
               return s.executeClaim(est, c.address);
             },

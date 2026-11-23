@@ -11,7 +11,7 @@ import { BadgeCheck, Check, CircleAlert, Loader2, RefreshCw, ShieldAlert, WifiOf
 import type { HeirloomService } from "@/lib/service";
 import type { PaymentReview } from "@/lib/types";
 import type { SponsorStatus } from "@/lib/wallet/payments";
-import { formatUsdt, formatZar, shortAddress } from "@/lib/format";
+import { formatUsdt, formatUsdtExact, formatZar, fromBase, shortAddress } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { Sheet } from "@/components/ui/client";
 import { Badge, Button, ExplorerLink, Notice, TickDisc } from "@/components/ui/primitives";
@@ -28,8 +28,11 @@ export interface PayRequest {
   /** A review prepared by the service (plain sends). Otherwise one is built from what the app already knows. */
   review?: PaymentReview;
   warnings?: string[];
-  /** The on-chain action for non-P2P payments. Must resolve to something carrying the transaction signature. */
-  execute?: (svc: HeirloomService, estate: string) => Promise<unknown>;
+  /**
+   * The on-chain action for non-P2P payments. Must resolve to something carrying the transaction signature.
+   * `again`: an earlier attempt of this same payment ran, so a step it may have finished (an approval) is read afresh.
+   */
+  execute?: (svc: HeirloomService, estate: string, again: boolean) => Promise<unknown>;
   successText?: string;
 }
 export interface PayResult { ok: boolean; code?: string; message?: string; signature?: string }
@@ -46,6 +49,14 @@ export function usePay(): PayApi {
 const STORE = "heirloom.pendingPayments";
 const readPending = (): string[] => { try { return JSON.parse(window.localStorage.getItem(STORE) ?? "[]") as string[]; } catch { return []; } };
 const writePending = (ids: string[]) => { try { window.localStorage.setItem(STORE, JSON.stringify(ids)); } catch { /* ignore */ } };
+
+/** A transaction that was signed and sent but is not settled (lib/service/chain-errors.ts PaymentPending). */
+function pendingOf(e: unknown): { paymentId: string; signature: string; kind?: string } | null {
+  const p = e as { paymentId?: unknown; signature?: unknown; kind?: unknown } | null;
+  return p && typeof p.paymentId === "string" && typeof p.signature === "string" ? { paymentId: p.paymentId, signature: p.signature, kind: typeof p.kind === "string" ? p.kind : undefined } : null;
+}
+
+const OPEN_STATUS = ["signing", "submitted", "pending"];
 
 function signatureOf(v: unknown): string | undefined {
   if (!v || typeof v !== "object") return undefined;
@@ -77,6 +88,11 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   const [pendingIds, setPendingIds] = useState<string[]>([]);
   const resolver = useRef<((r: PayResult) => void) | null>(null);
   const activeId = useRef<string | null>(null);
+  const reqRef = useRef<PayRequest | null>(null);
+  // The kind of the transaction being checked: an earlier step (an approval) or the payment itself.
+  const pendingKind = useRef<string | undefined>(undefined);
+  const attempts = useRef(0);
+  const [stepNote, setStepNote] = useState<string | null>(null);
   const rate = fx?.usdtZar ?? null;
   // On a real network Heirloom's fee wallet pays the network fee of every program action it can sponsor
   // (chain.ts send); the review says so instead of "paid by you".
@@ -127,7 +143,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
           if (!r || r.status === "confirmed" || r.status === "failed" || r.status === "cancelled") {
             track(id, false);
             if (id === activeId.current) {
-              if (r?.status === "confirmed") setPhase("confirmed");
+              // An earlier step settled (an approval): back to the review to finish the payment itself.
+              const step = r?.status === "confirmed" && reqRef.current?.execute && pendingKind.current && pendingKind.current !== reqRef.current.kind;
+              if (step) { setStepNote(copy.pending.stepDone); setPhase("review"); }
+              else if (r?.status === "confirmed") setPhase("confirmed");
               else if (r) { setError({ code: "generic", message: r.error ?? copy.failed.body }); setPhase("failed"); }
             } else if (r?.status === "confirmed") notify("ok", copy.recheck.confirmedPlain);
             else if (r) notify("error", copy.recheck.failed);
@@ -157,7 +176,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     };
     resolver.current = resolve;
     activeId.current = built.id;
-    setReview(built); setReq(r); setPhase("review"); setError(null); setSignature(undefined);
+    pendingKind.current = undefined;
+    attempts.current = 0;
+    reqRef.current = r;
+    setReview(built); setReq(r); setPhase("review"); setError(null); setSignature(undefined); setStepNote(null);
   }), [snap, session, walletUsdt, isMock, sponsor]);
 
   const finish = (result: PayResult) => { resolver.current?.(result); resolver.current = null; };
@@ -169,12 +191,27 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     setReq(null); setReview(null);
   };
 
+  // Submitted, not settled: "checking" on that payment id, never a failure that invites paying again (H8).
+  const checking = (p: { paymentId: string; signature: string; kind?: string }) => {
+    activeId.current = p.paymentId;
+    pendingKind.current = p.kind;
+    setSignature(p.signature);
+    track(p.paymentId, true);
+    setPhase("pending");
+  };
+
   const approve = async () => {
     if (!req || !review || !service || phase !== "review") return; // guards against double-submit
-    setPhase("signing");
+    setPhase("signing"); setStepNote(null);
     if (req.execute) {
-      const res = await run(`pay:${review.id}`, req.execute, undefined, true);
-      if (!res.ok) { setError({ code: res.code, message: res.message }); setPhase("failed"); return; }
+      const again = attempts.current++ > 0;
+      let thrown: unknown = null;
+      const res = await run(`pay:${review.id}`, (s, est) => req.execute!(s, est, again).catch((e: unknown) => { thrown = e; throw e; }), undefined, true);
+      if (!res.ok) {
+        const pending = pendingOf(thrown);
+        if (pending) { checking(pending); return; }
+        setError({ code: res.code, message: res.message }); setPhase("failed"); return;
+      }
       setSignature(signatureOf(res.value));
       setPhase("pending");
       window.setTimeout(() => { if (activeId.current === review.id) { setPhase("confirmed"); if (req.successText) notify("ok", req.successText); } }, 1600);
@@ -189,11 +226,33 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       setPhase("pending");
       void refresh();
     } catch (e) {
+      // Signed already: it is being checked, whatever went wrong after (H8).
+      const stored = await service.getReceipt(review.id).catch(() => null);
+      if (stored?.signature && OPEN_STATUS.includes(stored.status)) { checking({ paymentId: review.id, signature: stored.signature, kind: review.kind }); return; }
       // A dropped connection mid-send is ambiguous: keep the id so it is re-checked instead of sent again.
       if (!navigator.onLine) { track(review.id, true); setError({ code: "generic", message: copy.failed.unknown }); setPhase("failed"); return; }
       setError(explain(e));
       setPhase("failed");
     }
+  };
+
+  // Trying again after a definite failure is a new payment with its own id: the failed one can never land now.
+  const retry = async () => {
+    if (!review || !req || !service) return;
+    setError(null);
+    if (req.review) {
+      try {
+        const fresh = await service.reviewSend({ to: review.to, toLabel: review.toLabel, amountUsdt: fromBase(review.amount), ...(review.bill ? { bill: review.bill } : {}) });
+        activeId.current = fresh.id;
+        setReview({ ...fresh, warnings: [...new Set([...review.warnings, ...fresh.warnings])] });
+      } catch (e) { setError(explain(e)); setPhase("failed"); return; }
+    } else {
+      const id = `local_${Math.random().toString(36).slice(2)}`;
+      activeId.current = id;
+      setReview({ ...review, id });
+    }
+    pendingKind.current = undefined;
+    setPhase("review");
   };
 
   const steps: Phase[] = ["review", "signing", "pending", "confirmed"];
@@ -225,7 +284,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
                 {phase === "pending" && <Badge tone="warn"><Loader2 className="size-3.5 animate-spin" aria-hidden="true" />{copy.pending.badge}</Badge>}
                 {phase === "confirmed" && <Badge tone="gold"><TickDisc />{copy.confirmed.badge}</Badge>}
               </div>
-              <p className="mt-2 font-display text-h1 tabular-nums">{formatUsdt(review.amount)}</p>
+              <p className="mt-2 break-words font-display text-h1 tabular-nums">{formatUsdtExact(review.amount)}</p>
               <p className="min-h-6 text-ink-2 tabular-nums">{rate ? `≈ ${formatZar(review.amount, rate)}` : ""}</p>
               <p className="mt-1 font-semibold">{c.to} {review.toLabel}</p>
               <p className="font-mono text-small text-ink-2">{shortAddress(review.to, 6)}</p>
@@ -263,6 +322,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
                   </Notice>
                 )}
                 {!online && <Notice tone="warn" icon={<WifiOff className="size-5" aria-hidden="true" />}><p role="status">{c.offline}</p></Notice>}
+                {stepNote && <Notice tone="ok" icon={<Check className="size-5" aria-hidden="true" />}><p role="status">{stepNote}</p></Notice>}
                 <div className="flex gap-3">
                   <Button variant="secondary" className="flex-1" onClick={close}>{review.balances.sufficient ? c.cancel : c.changeAmount}</Button>
                   <Button className="flex-[2] min-h-13!" onClick={approve} disabled={!review.balances.sufficient || !review.token.verified || !online}>{c.approve}</Button>
@@ -299,10 +359,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
               <div className="flex flex-col gap-3">
                 {contractBlock
                   ? <Blocked code={error.code} message={error.message} />
-                  : <Notice tone="danger" icon={<CircleAlert className="size-5" aria-hidden="true" />} title={error.message}><p role="alert">{pendingIds.includes(review.id) ? "" : copy.failed.body}</p></Notice>}
+                  : <Notice tone="danger" icon={<CircleAlert className="size-5" aria-hidden="true" />} title={error.message}><p role="alert">{pendingIds.includes(activeId.current ?? review.id) ? "" : copy.failed.body}</p></Notice>}
                 <div className="flex gap-3">
                   <Button variant="secondary" className="flex-1" onClick={close}>{copy.failed.close}</Button>
-                  {!contractBlock && !pendingIds.includes(review.id) && <Button className="flex-1" onClick={() => { setError(null); setPhase("review"); }}>{copy.failed.retry}</Button>}
+                  {!contractBlock && !pendingIds.includes(activeId.current ?? review.id) && <Button className="flex-1" onClick={() => void retry()}>{copy.failed.retry}</Button>}
                 </div>
               </div>
             )}
