@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatUsdt, fromBase, shortAddress, toBase, explorerTx } from "./format";
 import { getUsdtZar, parseValrSummary, _resetFxCache, FALLBACK_USDT_ZAR } from "./fx";
 import { sniff, validateUpload, UploadError } from "./storage";
+import { MAX_UPLOAD_BYTES, checkUploadFile } from "./evidence-file";
 import { SimulatedZarPayout } from "./offramp";
 import { summarize } from "./agent/valuation";
 import { clientIp, rateLimit, HttpError } from "./api/http";
@@ -57,7 +58,22 @@ describe("upload validation", () => {
     expect(() => validateUpload(pdf, "image/png")).toThrow(UploadError);
     expect(() => validateUpload(pdf, "text/html")).toThrow(/PDF, JPG or PNG/);
     expect(() => validateUpload(new Uint8Array(), "application/pdf")).toThrow(/empty/);
-    expect(() => validateUpload(new Uint8Array(10 * 1024 * 1024 + 1), "application/pdf")).toThrow(/10 MB/);
+    expect(() => validateUpload(new Uint8Array(4 * 1024 * 1024 + 1), "application/pdf")).toThrow(/4 MB/);
+  });
+});
+
+describe("the upload limit fits what Vercel accepts", () => {
+  it("a full upload and its form stay under the 4.5 MB request limit", () => {
+    expect(MAX_UPLOAD_BYTES).toBe(4 * 1024 * 1024);
+    expect(MAX_UPLOAD_BYTES + 64_000).toBeLessThan(4_500_000);
+  });
+  it("the browser says why before anything is signed", async () => {
+    const blob = (bytes: Uint8Array, type: string) => Object.assign(new Blob([bytes as BlobPart], { type }), { type });
+    expect(await checkUploadFile(blob(new Uint8Array([0x25, 0x50, 0x44, 0x46, 1]), "application/pdf"))).toBeNull();
+    expect(await checkUploadFile(blob(new Uint8Array(MAX_UPLOAD_BYTES + 1), "application/pdf"))).toBe("size");
+    expect(await checkUploadFile(blob(new Uint8Array([0x4d, 0x5a, 0, 0]), "application/pdf"))).toBe("content");
+    expect(await checkUploadFile(blob(new Uint8Array([1]), "text/html"))).toBe("type");
+    expect(await checkUploadFile(blob(new Uint8Array(), "application/pdf"))).toBe("empty");
   });
 });
 

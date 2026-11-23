@@ -6,7 +6,7 @@ import "server-only";
  */
 import { z } from "zod";
 import { AgentError } from "../agent/gemini";
-import { UploadError } from "../storage";
+import { UploadError } from "../evidence-file";
 import { takeShared } from "../server/shared-store";
 
 export function json(data: unknown, init: ResponseInit = {}): Response {

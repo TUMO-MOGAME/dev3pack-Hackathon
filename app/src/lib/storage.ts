@@ -8,33 +8,11 @@ import { getSupabase } from "./supabase";
 import { sha256Hex } from "./agent/hash";
 
 export const BUCKET = "evidence";
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-export const ALLOWED_MIME = ["application/pdf", "image/jpeg", "image/png"] as const;
-export type AllowedMime = (typeof ALLOWED_MIME)[number];
+export { ALLOWED_MIME, MAX_UPLOAD_BYTES, UploadError, sniff, validateUpload, type AllowedMime } from "./evidence-file";
+import { validateUpload, type AllowedMime } from "./evidence-file";
 
 /** "none": no Supabase here, so the file is not kept at all (only its hash is, on-chain). */
 export interface StoredEvidence { path: string; sha256: string; mime: AllowedMime; size: number; backend: "supabase" | "none" }
-
-/** Checks size, declared type and magic bytes (so a renamed .exe is rejected). */
-export function validateUpload(bytes: Uint8Array, mime: string): AllowedMime {
-  if (bytes.byteLength === 0) throw new UploadError("The file is empty.");
-  if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new UploadError("The file is larger than 10 MB.");
-  if (!(ALLOWED_MIME as readonly string[]).includes(mime)) throw new UploadError("Only PDF, JPG or PNG files are accepted.");
-  const sniffed = sniff(bytes);
-  if (sniffed !== mime) throw new UploadError("The file's contents do not match its type.");
-  return mime as AllowedMime;
-}
-
-export function sniff(b: Uint8Array): AllowedMime | null {
-  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return "application/pdf"; // %PDF
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
-  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
-  return null;
-}
-
-export class UploadError extends Error {
-  constructor(message: string) { super(message); this.name = "UploadError"; }
-}
 
 const EXT: Record<AllowedMime, string> = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png" };
 

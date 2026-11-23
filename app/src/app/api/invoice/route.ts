@@ -14,7 +14,7 @@ export const maxDuration = 120;
  */
 export const POST = handler(async (req) => {
   await rateLimitShared(req, "invoice", 8);
-  if (Number(req.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES + 64_000) throw new HttpError(413, "The file is larger than 10 MB.");
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES + 64_000) throw new HttpError(413, "The file is larger than 4 MB.", "too_large");
   const form = await req.formData().catch(() => { throw new HttpError(400, "Expected a form upload with the invoice as `file`."); });
   const file = form.get("file");
   if (!(file instanceof File)) throw new HttpError(400, "Attach the invoice as `file`.");
