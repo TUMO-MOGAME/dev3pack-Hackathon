@@ -44,9 +44,19 @@ export async function parseJson<T>(req: Request, schema: z.ZodType<T>, maxBytes 
   return schema.parse(raw);
 }
 
+/**
+ * The caller's network address, for limits. An IPv6 caller is counted by its /64 (the network one phone or one home is
+ * given), or one device could pick a new address for every request.
+ */
 export function clientIp(req: Request): string {
   const fwd = req.headers.get("x-forwarded-for");
-  return (fwd?.split(",")[0] ?? req.headers.get("x-real-ip") ?? "local").trim();
+  const ip = (fwd?.split(",")[0] ?? req.headers.get("x-real-ip") ?? "local").trim().toLowerCase();
+  if (!ip.includes(":") || /^::ffff:\d/.test(ip)) return ip;
+  const [head, tail = ""] = ip.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups = [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right];
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 
 const windows = new Map<string, { start: number; count: number }>();

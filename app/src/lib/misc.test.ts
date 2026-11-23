@@ -4,7 +4,7 @@ import { getUsdtZar, parseValrSummary, _resetFxCache, FALLBACK_USDT_ZAR } from "
 import { sniff, validateUpload, UploadError } from "./storage";
 import { SimulatedZarPayout } from "./offramp";
 import { summarize } from "./agent/valuation";
-import { rateLimit, HttpError } from "./api/http";
+import { clientIp, rateLimit, HttpError } from "./api/http";
 import { bits } from "./chain/decoders";
 import { humanizeProgramError } from "./chain/tx";
 
@@ -92,6 +92,16 @@ describe("rate limit", () => {
     expect(() => rateLimit(req, "t", 3, 60_000, 70_000)).not.toThrow();
     const other = new Request("http://x", { headers: { "x-forwarded-for": "5.6.7.8" } });
     expect(() => rateLimit(other, "t", 3, 60_000, 1000)).not.toThrow();
+  });
+});
+
+describe("clientIp", () => {
+  const ip = (v: string) => clientIp(new Request("http://x", { headers: { "x-forwarded-for": v } }));
+  it("counts an IPv6 caller by its /64, so a phone can't take a new address per request", () => {
+    expect(ip("2001:db8:1:2:aaaa::1")).toBe("2001:db8:1:2::/64");
+    expect(ip("2001:db8:1:2:bbbb:cccc:dddd:eeee")).toBe("2001:db8:1:2::/64");
+    expect(ip("2001:db8::7")).toBe("2001:db8:0:0::/64");
+    expect(ip("203.0.113.9, 10.0.0.1")).toBe("203.0.113.9");
   });
 });
 
