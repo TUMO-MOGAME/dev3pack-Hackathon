@@ -151,8 +151,8 @@ function world(opts: { chainMode?: boolean; serverDown?: boolean; owner?: Return
   const owner = opts.owner ?? wallet();
   let acting = owner;
   const deps = { fetchRaw: async (_t: "Estate", a: string) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => opts.chainMode ?? true };
-  const routes = treeRoutes({ ...deps, member: async () => "member" });
-  const photos = photoRoutes({ ...deps, member: async () => "member" });
+  const routes = treeRoutes({ ...deps, member: async () => "member", memberOf: async () => true });
+  const photos = photoRoutes({ ...deps, member: async () => "member", memberOf: async () => true });
   const calls: { method: string; status: number }[] = [];
   const fakeFetch = (async (url: string, init?: RequestInit) => {
     if (opts.serverDown) throw new TypeError("fetch failed");
@@ -237,7 +237,7 @@ describe("relationships and hidden flags (Supabase off: server memory + this dev
     w.actAs(stranger);
     await expect(w.svc.setRelationship(E, { kind: "siblingOf", from: OWNER, to: bongani })).rejects.toThrow(/owner's wallet/);
     // Straight to the route with the stranger's own valid signature: 403.
-    const routes = treeRoutes({ fetchRaw: async () => ({ owner: pk(w.owner.address) } as Raw), now: () => Date.now(), chain: () => true });
+    const routes = treeRoutes({ fetchRaw: async () => ({ owner: pk(w.owner.address) } as Raw), now: () => Date.now(), chain: () => true, memberOf: async () => true });
     const { treeBody, treeMessage } = await import("../tree/links");
     const { createHash } = await import("node:crypto");
     const ts = Date.now();
@@ -287,7 +287,7 @@ describe("photos (plan.md §15.11): /api/tree/photo, Supabase off (server memory
     return { action: "photo", estate: E, wallet: over.wallet ?? w.address, ts, sig, person, photo };
   }
   const post = (routes: ReturnType<typeof photoRoutes>, body: unknown) => routes.POST(new Request("http://local/api/tree/photo", { method: "POST", body: JSON.stringify(body) }));
-  const routesFor = (owner: W, chain = true) => photoRoutes({ fetchRaw: async (_t, a) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => chain, member: async () => "member" });
+  const routesFor = (owner: W, chain = true) => photoRoutes({ fetchRaw: async (_t, a) => (a === E ? ({ owner: pk(owner.address) } as Raw) : null), now: () => Date.now(), chain: () => chain, member: async () => "member", memberOf: async () => true });
   const code = async (res: Response) => ((await res.json()) as { code?: string }).code;
 
   it("the seeded devnet demo family starts with the demo site's faces (Kagiso has none)", async () => {
