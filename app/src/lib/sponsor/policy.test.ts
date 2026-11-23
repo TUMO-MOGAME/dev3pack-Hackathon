@@ -169,7 +169,7 @@ describe("sponsor policy: rejected", () => {
 
 describe("sponsor limiter", () => {
   it("limits per wallet per minute and per day, rent creations, and the daily budget", () => {
-    const l = new SponsorLimiter({ perMinute: 2, perDay: 3, rentPerDay: 1, dailyBudgetLamports: 3_000_000 });
+    const l = new SponsorLimiter({ perMinute: 2, perDay: 3, rentPerDay: 1, dailyBudgetLamports: 3_000_000, ipFeesPerDay: 10, ipRentPerDay: 10 });
     const t = 1_000_000;
     expect(l.check("a", 10_000, false, t)).toBeNull();
     l.record("a", 10_000, false, t);

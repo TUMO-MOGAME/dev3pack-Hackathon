@@ -3,10 +3,12 @@ import "server-only";
  * Keeps the agent's SOL from being drained through requests that are each valid (plan §18.3 S3):
  *  1. a daily allowance per wallet and per estate, on this instance;
  *  2. the same allowance across instances, when the shared store is there;
- *  3. without it, a backstop read from the chain: what the agent's balance fell by in the last hour and day. If the
- *     chain can't be read (a 429) the last good reading stands for ten minutes; after that a handful of requests
- *     still go through, so a busy RPC doesn't switch the test site off, and then it waits.
- * The balance reserve (agent-wallet.ts) is the last line under all three.
+ *  3. without it, a backstop read from the chain: what the agent lost in the last hour and day (server/agent-ledger.ts).
+ *     If the chain can't be read (a 429) the last good reading stands for ten minutes; after that a handful of
+ *     requests still go through, so a busy RPC doesn't switch the test site off, and then it waits.
+ * The fee sponsor is held to all it spends with the agent's (chainBackstop); the agent's own reviews, listings and
+ * sales only to its own spend (agentBackstop), so no amount of sponsored fees can switch them off (plan §18.9 H3).
+ * The balance reserve (agent-wallet.ts) is the last line under all of them.
  */
 import { PublicKey } from "@solana/web3.js";
 import { HttpError } from "../api/http";
@@ -14,6 +16,7 @@ import type { AgentAction } from "../access/messages";
 import { agentLedger } from "../server/agent-ledger";
 import { takeShared } from "../server/shared-store";
 import { getConnection } from "../chain/tx";
+import { getIdl } from "../chain/idl";
 import { agentAddress } from "./agent-wallet";
 
 const DAY_MS = 86_400_000;
@@ -39,37 +42,69 @@ export const AGENT_SPEND = {
   blind: 10,
 } as const;
 
+/** The agent's own work, apart from what it pays as the fee sponsor (its share of AGENT_SPEND's margins). */
+export const AGENT_OWN_SPEND = { hour: 50_000_000, day: 100_000_000 } as const;
+
 const hits = new Map<string, number[]>();
-let reading: { at: number; hour: number; day: number; complete: boolean } | null = null;
-let blind: number[] = [];
+type Reading = Awaited<ReturnType<ReturnType<typeof agentLedger>["spend"]>> & { at: number };
+let reading: Reading | null = null;
+/** Requests let through without a usable reading, the sponsor's and the agent's apart. */
+const blind = { sponsor: [] as number[], agent: [] as number[] };
 
-const limitReached = (retryAfterSecs: number) =>
-  new HttpError(429, "The agent reached today's limit for this. Please try again tomorrow.", "agent_limit", retryAfterSecs);
+const acceptOfferDisc = () => getIdl().instructions.find((i) => i.name === "accept_offer")?.discriminator;
 
-/** Also the fee sponsor's: the same wallet pays. Throws when the agent spent too much lately. Always await it. */
-export async function chainBackstop(now: number): Promise<void> {
+/** The ledger's reading, at most `freshMs` old; null when there is none usable. */
+async function usableReading(now: number): Promise<Reading | null> {
   if (!reading || now - reading.at > AGENT_SPEND.freshMs) {
     try {
       const agent = await agentAddress();
       if (!agent) throw new Error("no agent wallet");
-      reading = { at: now, ...(await agentLedger(new PublicKey(agent), getConnection()).spend()) };
+      reading = { at: now, ...(await agentLedger(new PublicKey(agent), getConnection(), acceptOfferDisc()).spend()) };
     } catch (e) {
       console.warn(`[agent-budget] could not read the chain backstop (${e instanceof Error ? e.name : "error"})`);
     }
   }
-  const usable = reading && now - reading.at <= AGENT_SPEND.staleMs ? reading : null;
-  if (usable && usable.day >= AGENT_SPEND.day) {
+  return reading && now - reading.at <= AGENT_SPEND.staleMs ? reading : null;
+}
+
+function checkSpend(spent: { hour: number; day: number } | null, max: { hour: number; day: number }): void {
+  if (spent && spent.day >= max.day) {
     throw new HttpError(429, "The agent reached its spending limit for today. Please try again in a few hours.", "agent_limit", 3 * 3_600);
   }
-  if (usable && usable.hour >= AGENT_SPEND.hour) {
+  if (spent && spent.hour >= max.hour) {
     throw new HttpError(429, "The agent reached its spending limit for this hour. Please try again in an hour.", "agent_limit", 3_600);
   }
+}
+
+function passBlind(who: keyof typeof blind, now: number): void {
+  blind[who] = blind[who].filter((t) => now - t < AGENT_SPEND.staleMs);
+  if (blind[who].length >= AGENT_SPEND.blind) throw new HttpError(503, "The network is busy. Please try again in a minute.", "busy", 60);
+  blind[who].push(now);
+}
+
+const limitReached = (retryAfterSecs: number) =>
+  new HttpError(429, "The agent reached today's limit for this. Please try again tomorrow.", "agent_limit", retryAfterSecs);
+
+/**
+ * The fee sponsor's backstop: everything the agent's wallet lost lately, sponsored fees and its own work together.
+ * A reading counts only once every transaction in it is read (a top-up can't hide spend). Always await it.
+ */
+export async function chainBackstop(now: number): Promise<void> {
+  const usable = await usableReading(now);
+  checkSpend(usable, AGENT_SPEND);
+  if (usable?.complete && usable.read) return;
+  passBlind("sponsor", now);
+}
+
+/**
+ * The agent's own backstop, for reviews, listings and sales: only what its own work lost. However much the sponsor
+ * spent, or however many sponsored transactions are still to be read, this one isn't moved by it. Always await it.
+ */
+export async function agentBackstop(now: number): Promise<void> {
+  const usable = await usableReading(now);
+  checkSpend(usable?.own ?? null, AGENT_OWN_SPEND);
   if (usable?.complete) return;
-  blind = blind.filter((t) => now - t < AGENT_SPEND.staleMs);
-  if (blind.length >= AGENT_SPEND.blind) {
-    throw new HttpError(503, "The network is busy. Please try again in a minute.", "busy", 60);
-  }
-  blind.push(now);
+  passBlind("agent", now);
 }
 
 /** Throws when the agent should not sign this. Always await it. */
@@ -84,12 +119,13 @@ export async function spendAgentAllowance(action: keyof typeof AGENT_DAILY, wall
     const free = Math.max(...full.map((c) => c.recent[c.recent.length - c.max] + DAY_MS));
     throw limitReached(Math.max(1, Math.ceil((free - now) / 1000)));
   }
-  if (hits.size > 50_000) hits.clear();
+  // Expired entries go; nobody else's allowance is ever reset to make room.
+  if (hits.size > 50_000) for (const [k, ts] of hits) if (!ts.some((t) => now - t < DAY_MS)) hits.delete(k);
   // Counted before any await, so requests arriving together can't all pass; given back on a refusal.
   for (const c of checks) hits.set(c.key, [...c.recent, now]);
   try {
     const taken = await takeShared(checks.map((c) => ({ key: `agent:${c.key}`, max: c.max, windowSecs: DAY_MS / 1000 })));
-    if (!taken) await chainBackstop(now);
+    if (!taken) await agentBackstop(now);
     else if (!taken.ok) throw limitReached(taken.retryAfterSecs);
   } catch (e) {
     for (const c of checks) {

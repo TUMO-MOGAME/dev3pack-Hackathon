@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { handler, HttpError, isChainMode, json, parseJson, rateLimit, rateLimitShared } from "@/lib/api/http";
+import { clientIp, handler, HttpError, isChainMode, json, parseJson, rateLimit, rateLimitShared } from "@/lib/api/http";
 import { SPONSOR_PER_IP_MINUTE } from "@/lib/sponsor/limits";
 import { SponsorRejection } from "@/lib/sponsor/policy";
 import { SimulationFailed, SponsorLimited, SponsorUnavailable, sponsorInfo, sponsorTransaction } from "@/lib/sponsor/server";
@@ -31,7 +31,7 @@ export const POST = handler(async (req) => {
   if (!isChainMode()) throw new HttpError(503, "Fee sponsorship needs chain mode.", "unavailable");
   const { tx, submit } = await parseJson(req, body, 8_000);
   try {
-    return json(await sponsorTransaction(tx, { submit }));
+    return json(await sponsorTransaction(tx, { submit, ip: clientIp(req) }));
   } catch (e) {
     if (e instanceof SponsorRejection) throw new HttpError(422, e.message, `rejected:${e.code}`);
     if (e instanceof SponsorLimited) throw new HttpError(429, e.message, "rate_limited");

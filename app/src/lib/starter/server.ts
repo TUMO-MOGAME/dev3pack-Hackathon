@@ -63,7 +63,7 @@ export interface Refused { code: StarterRefusal; retryAfterSecs?: number }
 export const starterLamports = (walletLamports: number): number => (walletLamports >= STARTER.hasSolLamports ? 0 : STARTER.lamports);
 
 /** Pure: whether the pace allows another grant now; if not, when it will. */
-export function starterPace(grantTimes: number[], now: number, max = { hour: STARTER.perHour, day: STARTER.perDay }): Refused | null {
+export function starterPace(grantTimes: number[], now: number, max: { hour: number; day: number } = { hour: STARTER.perHour, day: STARTER.perDay }): Refused | null {
   const waitFor = (windowSecs: number, max: number) => {
     const recent = grantTimes.filter((t) => t > now - windowSecs).sort((a, b) => a - b);
     return recent.length < max ? 0 : Math.max(1, recent[recent.length - max] + windowSecs - now);

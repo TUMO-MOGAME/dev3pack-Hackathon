@@ -6,11 +6,17 @@ import "server-only";
  *  - a starter grant counts only with a memo carrying an HMAC under a key derived from the agent's seed, and once
  *    per HMAC, so a copied memo adds nothing. The memo holds a time, a cost and a short hash of the recipient's
  *    wallet (which the transfer itself shows), never an IP address or anything made from one;
- *  - spend is measured as the fall in the agent's SOL balance, which nobody else's transaction can cause.
+ *  - spend is what the agent's own balance lost in each of its transactions (read once each, from the transaction's
+ *    balances), so a top-up never hides it (plan §18.9 M1): a deposit is a gain, and gains are not netted against
+ *    spend. Nobody else's transaction can make the agent lose SOL.
+ *  - its own spend is told apart from the fee sponsor's: a sponsored transaction always has a second signer, the agent's
+ *    own signatures (reviews, listings, scheduled payments) have none, except a co-signed sale (accept_offer). So the
+ *    sponsor's spending can never stop the agent's own work (plan §18.9 H3).
  * A flood of mentions can only make the history longer: it is paged, kept, and continued on the next read.
  */
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import type { Connection, PublicKey } from "@solana/web3.js";
+import bs58 from "bs58";
+import type { Connection, ParsedTransactionWithMeta, PublicKey } from "@solana/web3.js";
 import { withDeadline } from "./deadline";
 
 export const HOUR_SECS = 3_600;
@@ -73,11 +79,39 @@ export function grantsIn(txs: Pick<LedgerTx, "memo" | "failed">[]): Grant[] {
 
 const unixNow = () => Math.floor(Date.now() / 1000);
 
-export function createLedger(address: PublicKey, conn: Connection, clock: () => number = unixNow) {
+/** What one transaction did to the agent: lamports lost (0 for a gain), and whether it was the agent's own work. */
+export interface TxCost { lost: number; own: boolean }
+
+/**
+ * Pure. The agent's own work is any transaction it signed alone, or a co-signed sale; a sponsored one (a user signed
+ * too) is the sponsor's. `acceptOffer`: the 8-byte discriminator of accept_offer, when the IDL has it.
+ */
+export function costOf(tx: ParsedTransactionWithMeta, agent: PublicKey, acceptOffer?: readonly number[]): TxCost | null {
+  const keys = tx.transaction.message.accountKeys;
+  const at = keys.findIndex((k) => k.pubkey.equals(agent));
+  const pre = at >= 0 ? tx.meta?.preBalances[at] : undefined;
+  const post = at >= 0 ? tx.meta?.postBalances[at] : undefined;
+  if (pre === undefined || post === undefined) return null;
+  const signers = keys.filter((k) => k.signer).length;
+  const sale = !!acceptOffer && tx.transaction.message.instructions.some((ix) => {
+    const data = "data" in ix ? bs58.decode(ix.data) : null;
+    return !!data && acceptOffer.every((b, i) => data[i] === b);
+  });
+  return { lost: Math.max(0, pre - post), own: signers <= 1 || sale };
+}
+
+/** Transactions read per spend() call (the rest are read on the next ones), and two at a time. */
+const READS_PER_CALL = 60;
+const READ_PAIR = 2;
+/** How long a spend() waits for transactions it hasn't read yet; they keep loading in the background. */
+const DETAIL_MS = 4_000;
+
+export function createLedger(address: PublicKey, conn: Connection, clock: () => number = unixNow, acceptOffer?: readonly number[]) {
   let held: History | null = null;
   let reading: Promise<History> | null = null;
-  /** The agent's balance just before a transaction never changes, so it is read once. */
-  const before = new Map<string, number>();
+  /** What each transaction cost the agent never changes, so it is read once. */
+  const costs = new Map<string, TxCost>();
+  let filling: Promise<void> | null = null;
 
   async function page(opts: { before?: string; until?: string }): Promise<LedgerTx[]> {
     const rows = await withDeadline(
@@ -138,38 +172,45 @@ export function createLedger(address: PublicKey, conn: Connection, clock: () => 
     return withDeadline(reading, HISTORY_MS, "Reading the agent's history");
   }
 
-  async function balanceBefore(signature: string): Promise<number> {
-    const known = before.get(signature);
-    if (known !== undefined) return known;
-    const tx = await withDeadline(
-      conn.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" }),
-      READ_MS, "Reading the agent's earlier balance",
-    );
-    const at = tx?.transaction.message.accountKeys.findIndex((k) => k.pubkey.equals(address)) ?? -1;
-    const lamports = at >= 0 ? tx?.meta?.preBalances[at] : undefined;
-    if (lamports === undefined) throw new Error("The agent's earlier balance could not be read.");
-    if (before.size > 1_000) before.clear();
-    before.set(signature, lamports);
-    return lamports;
+  /** Reads, newest first, what the not yet read transactions cost; one run at a time, it carries on in the background. */
+  function fill(txs: LedgerTx[]): Promise<void> {
+    if (filling) return filling;
+    const todo = txs.filter((t) => !costs.has(t.signature)).slice(0, READS_PER_CALL);
+    filling = (async () => {
+      for (let i = 0; i < todo.length; i += READ_PAIR) {
+        await Promise.all(todo.slice(i, i + READ_PAIR).map(async (t) => {
+          const tx = await withDeadline(
+            conn.getParsedTransaction(t.signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" }), READ_MS, "Reading an agent transaction",
+          ).catch(() => null);
+          const cost = tx ? costOf(tx, address, acceptOffer) : null;
+          if (cost) costs.set(t.signature, cost);
+        }));
+      }
+    })().finally(() => { filling = null; });
+    return filling;
   }
 
   /**
-   * SOL the agent spent in the last hour and day, apart from starter grants (those have their own pacing).
-   * `complete` is false when the history didn't reach back a day: then each number is a lower bound.
+   * SOL the agent lost in the last hour and day, apart from starter grants (those have their own pacing): in all, and
+   * in its own work alone (`own`, without the fee sponsor's). `complete` is false when the history didn't reach back a
+   * day, `read` false while some of its transactions are not read yet: then the numbers are lower bounds.
    */
-  async function spend(): Promise<{ hour: number; day: number; complete: boolean }> {
+  async function spend(): Promise<{ hour: number; day: number; own: { hour: number; day: number }; complete: boolean; read: boolean }> {
     const h = await history();
-    const balance = await withDeadline(conn.getBalance(address, "confirmed"), READ_MS, "Reading the agent's balance");
-    const grants = grantsIn(h.txs);
-    const spentSince = async (since: number) => {
-      const oldest = h.txs.findLast((t) => t.at >= since);
-      if (!oldest) return 0;
-      const granted = grants.filter((g) => g.at >= since).reduce((sum, g) => sum + g.lamports, 0);
-      return (await balanceBefore(oldest.signature)) - balance - granted;
+    const inDay = h.txs.filter((t) => t.at >= h.readAt - DAY_SECS); // failed ones cost their fee too
+    await withDeadline(fill(inDay), DETAIL_MS, "Reading the agent's transactions").catch(() => undefined);
+    if (costs.size > 5_000) { const keep = new Set(h.txs.map((t) => t.signature)); for (const k of costs.keys()) if (!keep.has(k)) costs.delete(k); }
+    // A grant is paced by the starter itself: what its transaction lost, up to the grant, is not counted here.
+    const granted = (t: LedgerTx) => grantsIn([t]).reduce((n, g) => n + g.lamports, 0);
+    const sum = (since: number, own: boolean) => inDay.filter((t) => t.at >= since).reduce((n, t) => {
+      const c = costs.get(t.signature);
+      return n + (c && (!own || c.own) ? Math.max(0, c.lost - granted(t)) : 0);
+    }, 0);
+    const [hourAgo, dayAgo] = [h.readAt - HOUR_SECS, h.readAt - DAY_SECS];
+    return {
+      hour: sum(hourAgo, false), day: sum(dayAgo, false), own: { hour: sum(hourAgo, true), day: sum(dayAgo, true) },
+      complete: h.from <= dayAgo, read: inDay.every((t) => costs.has(t.signature)),
     };
-    const hour = await spentSince(h.readAt - HOUR_SECS);
-    const day = await spentSince(h.readAt - DAY_SECS);
-    return { hour, day, complete: h.from <= h.readAt - DAY_SECS };
   }
 
   return { history, spend };
@@ -180,7 +221,7 @@ export type AgentLedger = ReturnType<typeof createLedger>;
 let instance: { address: string; ledger: AgentLedger } | null = null;
 
 /** The one ledger of this server instance. */
-export function agentLedger(address: PublicKey, conn: Connection): AgentLedger {
-  if (instance?.address !== address.toBase58()) instance = { address: address.toBase58(), ledger: createLedger(address, conn) };
+export function agentLedger(address: PublicKey, conn: Connection, acceptOffer?: readonly number[]): AgentLedger {
+  if (instance?.address !== address.toBase58()) instance = { address: address.toBase58(), ledger: createLedger(address, conn, unixNow, acceptOffer) };
   return instance.ledger;
 }
