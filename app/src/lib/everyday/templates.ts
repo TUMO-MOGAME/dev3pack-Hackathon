@@ -8,6 +8,7 @@
  * caps either way; `checkBill` only catches the same mistakes early, in plain words.
  */
 import type { Category, PayeeKind, WillDraft } from "../types";
+import { scheduleSecs } from "../schedule-clock";
 
 export const TEMPLATE_KEYS = ["funeral", "parent", "medical", "school", "books", "legal"] as const;
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
@@ -130,10 +131,7 @@ export function toDraftRule(f: BillForm, notes: string): WillDraft["rules"][numb
 
 /** Seconds between payments. The demo clock (mock mode) repeats every schedule every minute, as the demo does. */
 export function intervalOf(every: Every, demo: boolean): number {
-  if (demo) return 60;
-  const env = Number(process.env.NEXT_PUBLIC_DEMO_INTERVAL_SECS ?? "");
-  if (Number.isFinite(env) && env > 0) return env;
-  return { month: 30 * 86_400, term: 91 * 86_400, year: 365 * 86_400 }[every];
+  return scheduleSecs(every, demo ? "mock" : "chain");
 }
 
 /** The form as `addRule` input (a signed plan, estate Active). `now` in ms; the first payment is one interval away. */
@@ -149,6 +147,6 @@ export function toAddRule(f: BillForm, opts: { now: number; demo: boolean }) {
     // End of that day in South Africa (UTC+2).
     validUntil: Math.floor(Date.parse(`${f.until}T23:59:59+02:00`) / 1000),
     startsNow: f.startsNow,
-    ...(f.scheduled ? { recurring: { amountUsdt: f.amountUsdt, intervalSecs: every, firstDue: secs + every, payee: f.payee } } : {}),
+    ...(f.scheduled ? { recurring: { amountUsdt: f.amountUsdt, intervalSecs: every, firstDue: secs + every, payee: f.payee, every: f.every } } : {}),
   };
 }

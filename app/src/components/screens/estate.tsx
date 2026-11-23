@@ -29,6 +29,7 @@ import { useWho } from "@/components/guardians/decision";
 import { isFamily, isHeld, wasRemoved } from "@/lib/guardians/decisions";
 import { ResidualCard } from "@/components/continuity/continuity";
 import { eligibleSeats } from "@/lib/death-rules";
+import { ruleClock } from "@/lib/schedule-clock";
 import { clock, guardiansOf, monitorPending, shortName, watchedSeats } from "@/components/guardians/derive";
 
 type Copy = ScreensCopy["estate"];
@@ -343,7 +344,7 @@ function Scheduled({ copy, snap, rate }: { copy: Copy; snap: EstateSnapshot; rat
               </span>
               <div className="min-w-0 flex-1 basis-40">
                 <p className="font-semibold">{fmt(c.line, { amount: formatUsdt(r.recurringAmount, { decimals: 0 }), payee })}</p>
-                <p className="text-small text-ink-2">{fmt(c.forWho, { name: who, every: everyLabel(r.intervalSecs, c.intervals) })}{rate ? ` · ≈ ${formatZar(r.recurringAmount, rate)}` : ""}</p>
+                <p className="text-small text-ink-2">{fmt(c.forWho, { name: who, every: everyLabel(r.intervalSecs, c.intervals) })}{r.every && ruleClock(r).fast ? ` (${fmt(c.intervals.realUse, { real: r.every === "minute" ? "" : c.intervals[r.every] })})` : ""}{rate ? ` · ≈ ${formatZar(r.recurringAmount, rate)}` : ""}</p>
                 <p className={clsx("mt-0.5 min-h-5 text-small font-semibold tabular-nums", due ? "text-ink" : "text-ink-2")} role="timer" aria-live="off">{state}</p>
               </div>
               {live && !capped && !ended && !stopped && (

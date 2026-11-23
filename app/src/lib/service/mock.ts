@@ -496,6 +496,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
       claimCount: slot ? (Math.floor((slot.claimCount ?? 0) / SLOT_CLAIMS) + 1) * SLOT_CLAIMS : 0,
       recurringAmount: every ? toBase(every.amountUsdt) : 0n,
       intervalSecs: every?.intervalSecs ?? 0,
+      ...(every?.every ? { every: every.every } : {}),
       // A living schedule is first due when the owner said (firstDue), not straight away.
       nextDue: every && input.startsNow ? every.firstDue : null,
       fixedPayee: every?.payee ?? null,

@@ -8,7 +8,7 @@
 import type {
   ActivityItem, AgentReport, Asset, Base58, CarValuation, Category, Claim, Estate, FxRate,
   Hardship, Offer, OfferRanking, PayeeKind, Payee, Rule, Beneficiary, WillChatMessage, WillDraft,
-  PaymentReview, PaymentReceipt, SavedRecipient,
+  PaymentReview, PaymentReceipt, SavedRecipient, Recurrence,
 } from "../types";
 import type { Locale } from "../i18n/locales";
 import type { LegacyBook, LegacySpeech, LegacyStatus, LegacyVoiceInfo } from "../legacy/schema";
@@ -81,7 +81,7 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   heartbeat(estate: Base58): Promise<TxResult>;
   registerAsset(estate: Base58, input: { nftMint: Base58; title: string; floorUsdt: number; hardshipFloorUsdt: number; askingUsdt: number; proceedsTo: Base58; docFile?: File }): Promise<TxResult>;
   addPayee(estate: Base58, input: { wallet: Base58; kind: PayeeKind; name: string }): Promise<TxResult>;
-  addRule(estate: Base58, input: { beneficiary: Base58; category: Category; allowedPayeeKind: PayeeKind; maxPerClaimUsdt: number; lifetimeCapUsdt: number; validUntil: number; startsNow: boolean; recurring?: { amountUsdt: number; intervalSecs: number; firstDue: number; payee: Base58 }; /** An ended rule whose slot to reuse. */ reuse?: Base58 }): Promise<TxResult>;
+  addRule(estate: Base58, input: { beneficiary: Base58; category: Category; allowedPayeeKind: PayeeKind; maxPerClaimUsdt: number; lifetimeCapUsdt: number; validUntil: number; startsNow: boolean; recurring?: { amountUsdt: number; intervalSecs: number; firstDue: number; payee: Base58; /** What the owner chose ("month"), kept to say it beside a fast clock. */ every?: Recurrence }; /** An ended rule whose slot to reuse. */ reuse?: Base58 }): Promise<TxResult>;
   /** Living plan: owner approves a claim on a startsNow rule while alive (counts as full approval). */
   ownerApproveClaim(estate: Base58, claim: Base58): Promise<TxResult>;
   /** Scheduled payment: anyone (UI button, agent, cron) triggers a due recurring payout. */
