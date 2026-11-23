@@ -163,10 +163,11 @@ describe("confirmSeatDeath (R18)", () => {
 
 describe("finalizeSuccession", () => {
   it.each([["a confirmed report", () => confirmer], ["no confirmation", () => NOBODY]])(
-    "%s: always the confirmed-by Beneficiary PDA last", async (_, by) => {
+    "%s: exactly the IDL's accounts, no remaining account (the program reads none)", async (_, by) => {
       setSeat(2, { death_confirmed_by: by() });
       await svc().finalizeSuccession(estate, 2);
-      expect(sent[0].keys.at(-1)).toMatchObject({ pubkey: beneficiaryPda(programId, estate, by()), isSigner: false, isWritable: false });
+      expect(sent[0].keys).toHaveLength(findInstruction("finalize_succession").accounts.length);
+      expect(sent[0].keys.some((k) => k.pubkey.equals(beneficiaryPda(programId, estate, by())))).toBe(false);
     },
   );
 });

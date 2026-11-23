@@ -312,7 +312,8 @@ describe("no trusted person left", () => {
     asset.listingEnds = 1_000;
     expect((await send(undefined, child)).status).toBe(200);
     const t = h.alone[0] as TransactionInstruction;
-    expect(t.keys.at(-1)).toMatchObject({ pubkey: programId, isSigner: false }); // co_signer None
+    const coSignerAt = findInstruction("accept_offer").accounts.findIndex((a) => a.name === "co_signer");
+    expect(t.keys[coSignerAt]).toMatchObject({ pubkey: programId, isSigner: false }); // co_signer None
     expect(h.coSigned).toHaveLength(0);
   });
   it("not an outsider, nor a removed family member", async () => {

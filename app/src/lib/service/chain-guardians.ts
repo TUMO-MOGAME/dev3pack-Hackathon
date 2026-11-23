@@ -257,7 +257,7 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
     async finalizeSuccession(estate, index) {
       const seat = await seatRaw(estate, index);
       must(seat, "NoSuccessionPending", "This trusted person's seat is not set up.");
-      return d.send([ix.finalizeSuccession(chainCtx(), pk(estate), index, me(), pk(key(seat, "death_confirmed_by")))]);
+      return d.send([ix.finalizeSuccession(chainCtx(), pk(estate), index, me())]);
     },
 
     async raiseObjection(estate, input) {

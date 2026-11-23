@@ -137,7 +137,7 @@ describe("createEstateFromWill", () => {
 
   it("practice mode makes the payee and writes the schedule", async () => {
     await createChainService().createEstateFromWill(draft, { practice: true });
-    expect(names()).toEqual(["create_estate", "set_will", "add_beneficiary", "add_payee", "add_rule", "set_residual"]);
+    expect(names()).toEqual(["create_estate", "set_will", "add_beneficiary", "add_payee", "add_rule_v2", "set_residual"]);
     const rule = getCoder().instruction.decode(Buffer.from(ixs()[4].data))!.data as { recurring_amount: unknown; rule_id: number };
     expect([rule.rule_id, String(rule.recurring_amount)]).toEqual([0, "300000000"]);
   });
