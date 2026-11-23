@@ -3,9 +3,33 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-22 (judge-review fixes P1-P9, S1-S7, A1-A3 shipped: devnet program upgraded, both sites deployed, newcomer flow proven live)
+**Last updated:** 2026-11-23 (RELEASED: plan §18 live on devnet and both sites; newcomer proof run passed)
 **Phase:** preparing for Dev3pack Global (27-29 Nov 2026; prework allowed and disclosed). Submitted to W3Node 13 Nov. Both sites deploy from `main`. The repo goes public on 27 Nov (Tumo).
 
+
+## RELEASE (23 Nov 2026): plan §18 is live
+### Done
+- Devnet program upgraded to the reviewed build: slot 525556644, sha256 c5294fe4... (899,296 bytes), the live copy
+  matches the independent rebuild; all 148 devnet accounts decode. Deployed with Solana CLI 4.3.2 (3.1.10 can't read
+  sBPF v3), writes sent straight to validators (no --use-rpc: the public RPC rate-limits the IP). A stuck first attempt's
+  buffer was closed and its SOL returned; no buffers left. Deployer 10.43 SOL.
+- release.json pinned (c0dfc94); Supabase URL and secret key set on heirloom-devnet production (sensitive, never printed).
+- Gate: vitest 2224/2224, tsc app and scripts, eslint, audit 0, mock and chain builds. main fast-forwarded to b50b4ca
+  and pushed (the GitHub repo is now TUMO-MOGAME/dev3pack-Hackathon; the old URL redirects).
+- Both sites live on b50b4ca: /api/health ok on heirloom-devnet, heirloom.tumoolo.tech and the demo; devnet shows
+  programCurrent, supabase, gemini, elevenlabs and sponsor all true. 360 px and 1280 px walk of both sites: no
+  sideways scroll, no console errors (403s on family-only records for a public visitor are by design).
+- Newcomer proof run on devnet (scripts/rehearse-second-review.ts --send, deployer as payer): 92 steps ok, 20 attacks
+  refused, all 14 scenarios. The script was updated to the re-review's rules (N4: an unreviewed death claim never gives
+  way; N5: a succession waits at least 60 s; H6: each fallback step waits at least 60 s, twice when referred).
+- isiZulu car screen: the reason under each offer is now said in the reader's language (all four).
+- README, architecture, Dev3pack submission and spec: 57 instructions, 336 + 2,224 tests, the version gate, the
+  documented trade-offs.
+### Next up
+- Tumo decides on plan §20 (ElevenLabs side track); build on "build".
+- Toggle Wars (Flagsmith) is PARKED (Tumo, 23 Nov): Dev3pack only.
+### Blockers
+- Legal details (both sites still show [Legal name], [Phone number], [Email address]); "mint it" for the starter wallet.
 
 ## SECOND REVIEW, DRY RUN (22 Nov 2026): review only, nothing fixed
 ### Done
