@@ -198,6 +198,23 @@ describe("C2: a file the review would refuse signs nothing", () => {
   });
 });
 
+describe("H9: the owner's no stands after the death", () => {
+  it("approveClaim signs nothing for a declined request, and nothing when the notes can't be read", async () => {
+    const claim = key();
+    h.accounts.set(claim, { rule: rulePda(programId, estate, 0), beneficiary: kid, payee: res, amount: 5, owner_approved: false });
+    h.me = v1;
+    const stub = (body: unknown, status = 200) => vi.stubGlobal("fetch", async () => new Response(JSON.stringify(body), { status }));
+    stub([{ claim, purpose: "trip", currency: "USDT", typed: 5, createdAt: 1, attachment: false, declinedAt: 9 }]);
+    await expect(createChainService().approveClaim(estate, claim)).rejects.toMatchObject({ code: "Declined" });
+    stub({ error: "down" }, 503);
+    await expect(createChainService().approveClaim(estate, claim)).rejects.toMatchObject({ code: "DeclineUnknown" });
+    expect(h.signed).toEqual([]);
+    stub([]);
+    await createChainService().approveClaim(estate, claim);
+    expect(names()).toEqual(["approve_claim"]);
+  });
+});
+
 describe("approveHardship (R21)", () => {
   it("not while someone else's approved hardship stands", async () => {
     const [hardship, asset] = [key(), key()];

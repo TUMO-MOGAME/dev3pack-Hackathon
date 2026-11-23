@@ -21,6 +21,8 @@ export const safeguardsAf: SafeguardsCopy = {
     PayeeRequired: "'n Geskeduleerde betaling het 'n goedgekeurde begunstigde nodig.",
     AccountNotInitialized: "Iets wat hiervoor nodig is, is verwyder of is nie meer daar nie, soos 'n begunstigde wat uit die plan gehaal is.",
     NotConfirmed: "Die netwerk het dit nog nie bevestig nie, so moenie daarop staatmaak nie. Herlaai en kyk voordat jy weer probeer.",
+    Declined: "Die eienaar het nee gesê vir hierdie versoek terwyl hy of sy gelewe het, so dit kan nie goedgekeur of betaal word nie.",
+    DeclineUnknown: "Heirloom kon nie nagaan of die eienaar nee gesê het vir hierdie versoek nie. Niks is geteken nie. Probeer oor 'n oomblik weer.",
     sale_changed: "Die verkoping of die aanbiedinge het verander, so niks is verkoop nie. Lees weer die aanbod voordat jy teken.",
     stale_sale: "Die getekende verkoping het te lank gewag, so niks is verkoop nie. Lees weer die aanbod en teken weer.",
     agent_limit: "Die agent het sy perk vir nou bereik. Probeer later weer.",
@@ -56,6 +58,7 @@ export const safeguardsAf: SafeguardsCopy = {
     stale: "Goedkeurings van voor die afsterwe tel nie. Hulle moet weer gegee word.",
     stands: "'n Ander noodversoek is eerste goedgekeur. Hierdie een kan nie goedgekeur word tensy daardie een omgekeer word nie.",
     pay: "Genoeg mense het goedgekeur. Enigiemand kan die betaling doen.",
+    declined: "Die eienaar het nee gesê vir hierdie versoek terwyl hy of sy gelewe het, so dit kan nie goedgekeur of betaal word nie.",
   },
 
   blocked: {
@@ -284,6 +287,8 @@ export const safeguardsSt: SafeguardsCopy = {
     PayeeRequired: "Tefo e hlophisitsweng e hloka ya dumelletsweng ho lefuwa.",
     AccountNotInitialized: "Ntho e hlokwang ke sena e tlositswe kapa ha e sa le teng, jwaloka ya lefuwang ya tlositsweng moralong.",
     NotConfirmed: "Marangrang ha a e-so netefatse sena, kahoo o se ke wa itshetleha ka sona. Bula hape mme o sheba pele o leka hape.",
+    Declined: "Mong'a lefa o ile a hana kopo ena a sa phela, kahoo e ke ke ya dumellwa kapa ya lefuwa.",
+    DeclineUnknown: "Heirloom e ne e sitwa ho hlahloba hore na mong'a lefa o hanne kopo ena. Ha ho letho le saennweng. Leka hape kapele.",
     sale_changed: "Thekiso kapa ditlhahiso di fetohile, kahoo ha ho letho le rekisitsweng. Bala tlhahiso hape pele o saena.",
     stale_sale: "Thekiso e saennweng e emme nako e telele haholo, kahoo ha ho letho le rekisitsweng. Bala tlhahiso hape o be o saene hape.",
     agent_limit: "Agent e fihlile moeding wa yona hajwale. Leka hape hamorao.",
@@ -319,6 +324,7 @@ export const safeguardsSt: SafeguardsCopy = {
     stale: "Ditumello tsa pele ho lefu ha di balwe. Di tlameha ho fanwa hape.",
     stands: "Kopo e nngwe ya bothata e dumelletswe pele. Ena e ke ke ya dumellwa ntle le ha eo e qhalwa.",
     pay: "Batho ba lekaneng ba dumetse. Mang kapa mang a ka etsa tefo.",
+    declined: "Mong'a lefa o ile a hana kopo ena a sa phela, kahoo e ke ke ya dumellwa kapa ya lefuwa.",
   },
 
   blocked: {
@@ -547,6 +553,8 @@ export const safeguardsZu: SafeguardsCopy = {
     PayeeRequired: "Inkokhelo ehleliwe idinga ogunyaziwe ukukhokhelwa.",
     AccountNotInitialized: "Okuthile okudingwa yilokhu kususiwe noma akusekho, njengokhokhelwayo osuswe ohlelweni.",
     NotConfirmed: "Inethiwekhi ayikakuqinisekisi lokhu, ngakho ungathembeli kukho. Layisha kabusha ubheke ngaphambi kokuzama futhi.",
+    Declined: "Umnikazi wala lesi sicelo esaphila, ngakho asikwazi ukuvunywa noma ukukhokhwa.",
+    DeclineUnknown: "I-Heirloom ayikwazanga ukuhlola ukuthi umnikazi walenqaba yini lesi sicelo. Akukho okusayiniwe. Zama futhi maduze.",
     sale_changed: "Ukuthengisa noma izicelo zabathengi kushintshile, ngakho akukho okuthengisiwe. Funda isicelo futhi ngaphambi kokusayina.",
     stale_sale: "Ukuthengisa okusayiniwe kulinde isikhathi eside kakhulu, ngakho akukho okuthengisiwe. Funda isicelo futhi usayine kabusha.",
     agent_limit: "I-agent ifike emkhawulweni wayo okwamanje. Zama futhi kamuva.",
@@ -582,6 +590,7 @@ export const safeguardsZu: SafeguardsCopy = {
     stale: "Izimvume zangaphambi kokushona azibalwa. Kufanele zinikwe futhi.",
     stands: "Esinye isicelo sobunzima savunywa kuqala. Lesi ngeke savunywa ngaphandle uma leso sichithwa.",
     pay: "Abantu abanele bavumile. Noma ubani angenza inkokhelo.",
+    declined: "Umnikazi wala lesi sicelo esaphila, ngakho asikwazi ukuvunywa noma ukukhokhwa.",
   },
 
   blocked: {

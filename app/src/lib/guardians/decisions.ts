@@ -105,9 +105,17 @@ export function claimBlock(snap: EstateSnapshot, c: Claim, now?: number | null):
 /** With guardians a payment needs the window that started when the quorum was reached. */
 const windowStarted = (snap: EstateSnapshot, c: Claim) => !snap.guardians?.enabled || snap.guardians.claimPayableAt?.[c.address] !== undefined;
 
+/**
+ * The owner said no to this request while alive (an off-chain note, lib/ask): nobody approves or pays it after the
+ * death either (H9). The program doesn't know about the "no", so the screens and both services hold it back.
+ */
+export const declinedByOwner = (snap: Pick<EstateSnapshot, "asks">, c: Pick<Claim, "address" | "ownerApproved">) =>
+  !c.ownerApproved && !!snap.asks?.[c.address]?.declinedAt;
+
 export function claimVote(snap: EstateSnapshot, c: Claim, me: Base58 | null | undefined, now?: number | null): Vote | null {
   const e = snap.estate;
   if (!isHeld(me) || e.status !== "Unlocked" || c.status !== "Open" || c.ownerApproved || !openToPeople(c.agentVerdict) || claimBlock(snap, c, now)) return null;
+  if (declinedByOwner(snap, c)) return null;
   const i = e.verifiers.indexOf(me);
   if (i < 0) return null;
   if (me === c.beneficiary) return "own";
@@ -118,7 +126,7 @@ export function claimVote(snap: EstateSnapshot, c: Claim, me: Base58 | null | un
 
 /** Approved by enough people: anyone may pay it, once any window has passed. */
 export function claimPayable(snap: EstateSnapshot, c: Claim, now?: number | null): boolean {
-  if (c.status !== "Open" || !openToPeople(c.agentVerdict) || claimBlock(snap, c, now)) return false;
+  if (c.status !== "Open" || !openToPeople(c.agentVerdict) || claimBlock(snap, c, now) || declinedByOwner(snap, c)) return false;
   const e = snap.estate;
   if (c.ownerApproved) return e.status === "Unlocked" || (e.status === "Active" && !!snap.rules.find((r) => r.address === c.rule)?.startsNow);
   return e.status === "Unlocked" && claimTally(e, c).met && windowStarted(snap, c);

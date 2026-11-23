@@ -22,6 +22,7 @@ import { sha256Hex } from "../agent/hash";
 import { formatUsdt, toBase } from "../format";
 import { readHeaders } from "../access/client";
 import { requireEvidence } from "../evidence";
+import { ChainServiceError } from "./chain-errors";
 
 export interface ChainAskDeps {
   send(ixs: TransactionInstruction[]): Promise<TxResult>;
@@ -80,7 +81,7 @@ export function askReviewContext(input: { purpose: string; amountUsdt: number; p
   ].join("\n");
 }
 
-export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate: Base58): Promise<Record<Base58, AskNote>> } {
+export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate: Base58, opts?: { strict?: boolean }): Promise<Record<Base58, AskNote>> } {
   const f = d.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
   const storage = d.storage === undefined ? browserStorage() : d.storage;
   const now = d.now ?? (() => Date.now());
@@ -99,10 +100,15 @@ export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate:
   }
 
   return {
-    async loadAsks(estate) {
+    async loadAsks(estate, opts = {}) {
+      // `strict`: a decision rests on it (H9), so "couldn't read" is never taken for "nobody said no".
       const server = await f(`/api/asks?estate=${estate}`, { cache: "no-store", headers: readHeaders() })
-        .then((r) => (r.ok ? (r.json() as Promise<AskNote[]>) : []))
-        .catch(() => [] as AskNote[]);
+        .then((r) => {
+          if (r.ok) return r.json() as Promise<AskNote[]>;
+          if (opts.strict) throw new ChainServiceError("DeclineUnknown", `The request notes could not be read (${r.status}).`);
+          return [];
+        })
+        .catch((e: unknown) => { if (opts.strict) throw e instanceof ChainServiceError ? e : new ChainServiceError("DeclineUnknown", "The request notes could not be read."); return [] as AskNote[]; });
       return mergeAsks(Array.isArray(server) ? server : [], readLocalAsks(storage, estate));
     },
 

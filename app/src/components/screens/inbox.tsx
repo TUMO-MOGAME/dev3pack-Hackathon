@@ -22,7 +22,7 @@ import { DisputeList, DisputePanel } from "@/components/disputes/disputes";
 import { disputesVotedBy, effectiveStatus, openDisputeOn } from "@/lib/disputes/types";
 import { useNow } from "@/lib/hooks/use-now";
 import { openToPeople } from "@/lib/verdict";
-import { canSign, claimPayable, claimTally, claimVote, deathTally, deathVote, hardshipStands, hardshipTally, hardshipVote, type Tally, type Vote } from "@/lib/guardians/decisions";
+import { canSign, claimPayable, claimTally, claimVote, declinedByOwner, deathTally, deathVote, hardshipStands, hardshipTally, hardshipVote, type Tally, type Vote } from "@/lib/guardians/decisions";
 import { ClaimState, useWho, VoteNote, VoteTally } from "@/components/guardians/decision";
 import { ReferredNote } from "@/components/continuity/continuity";
 
@@ -109,6 +109,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       amountZar: rate ? formatZar(c.amount, rate) : undefined,
       report: c.agentReport, claim: c, tally: claimTally(e, c), verdict: c.agentVerdict, vote,
       approveLabel: finishes(c) && !g?.enabled ? copy.claim.approve : copy.claim.approveOnly,
+      note: declinedByOwner(snap, c) ? gc.rules.vote.declined : undefined,
       payable: claimPayable(snap, c, now) ? { payee: c.payee, payeeName: payee, amount: c.amount, successText: fmt(copy.claim.done, { payee }) } : undefined,
       act: async () => {
         // Approve, and if that completes the quorum, release the payment in the same breath. With watchers (a Guard),

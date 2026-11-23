@@ -696,6 +696,11 @@ export function createChainService(): HeirloomService {
     async approveClaim(estate, claim) {
       const raw = await mustFetch("Claim", claim);
       const verifier = pk(getActiveSigner().address);
+      // The owner's "no" while alive is off-chain (lib/ask); a trusted person never approves past it (H9).
+      if (raw.owner_approved !== true) {
+        await ensureReadPass(getActiveSigner());
+        must(!(await asks.loadAsks(estate, { strict: true }))[claim]?.declinedAt, "Declined", "The owner said no to this request while alive.");
+      }
       // The fee payer (Heirloom's sponsor when available) also pays the approval stamp's rent.
       return send((feePayer) => {
         const t = ix.approveClaim(pk(estate), verifier, pk(claim), pk(key(raw, "rule")));
@@ -719,6 +724,9 @@ export function createChainService(): HeirloomService {
 
     async executeClaim(estate, claim) {
       const raw = await mustFetch("Claim", claim);
+      if (raw.owner_approved !== true) {
+        must(!(await asks.loadAsks(estate))[claim]?.declinedAt, "Declined", "The owner said no to this request while alive.");
+      }
       return send([ix.executeClaim(chainCtx(), {
         estate: pk(estate), payer: pk(getActiveSigner().address), rule: pk(key(raw, "rule")), claim: pk(claim),
         beneficiary: pk(key(raw, "beneficiary")), payeeWallet: pk(key(raw, "payee")),

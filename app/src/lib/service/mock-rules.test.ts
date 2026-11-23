@@ -1211,3 +1211,18 @@ describe("C2: a document the review would refuse is refused before anything chan
     expect((await svc.getEstate(estate)).claims).toHaveLength(snap.claims.length);
   });
 });
+
+describe("H9: a request the owner declined is never approved after the death", () => {
+  it("refuses the trusted person's approval", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("funded");
+    const [{ estate }] = await svc.listEstatesFor(who("thabo"));
+    svc.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const ask = (await svc.getEstate(estate)).claims.find((c) => c.status === "Open")!;
+    await svc.declineAsk(estate, ask.address);
+    svc.simulatePassing();
+    svc.skipWait();
+    svc.setActor({ address: who("nomsa"), role: "verifier", label: P("nomsa").label });
+    await expect(svc.approveClaim(estate, ask.address)).rejects.toMatchObject({ code: "Declined" });
+  });
+});

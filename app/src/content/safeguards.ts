@@ -20,6 +20,8 @@ export const safeguards = {
     PayeeRequired: "A scheduled payment needs an approved payee.",
     AccountNotInitialized: "Something this needs was removed or isn't there any more, for example a payee that was taken off the plan.",
     NotConfirmed: "The network hasn't confirmed this yet, so don't count on it. Reload and look before you try again.",
+    Declined: "The owner said no to this request while they were alive, so it can't be approved or paid.",
+    DeclineUnknown: "Heirloom couldn't check whether the owner said no to this request. Nothing was signed. Try again in a moment.",
     sale_changed: "The sale or its offers changed, so nothing was sold. Read the offer again before you sign.",
     stale_sale: "The signed sale waited too long, so nothing was sold. Read the offer again and sign again.",
     agent_limit: "The agent has reached its limit for now. Try again later.",
@@ -55,6 +57,7 @@ export const safeguards = {
     stale: "Approvals from before the passing don't count. They need to be given again.",
     stands: "Another hardship request was approved first. This one can't be approved unless that one is overturned.",
     pay: "Enough people approved. Anyone can make the payment.",
+    declined: "The owner said no to this request while they were alive, so it can't be approved or paid.",
   },
 
   blocked: {

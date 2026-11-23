@@ -778,6 +778,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(c.status === "Open", "BadStatus", "This claim is already closed.");
     need(openToPeople(c.agentVerdict), "AgentNotApproved", "The agent has not cleared this claim.");
     notInterested(c.beneficiary);
+    need(!s.asks?.[c.address]?.declinedAt, "Declined", "The owner said no to this request while alive.");
     // Approvals from before this death neither pay nor stand in the way of a fresh quorum.
     const counts = G.countsFor(c);
     const given = counts ? c.approvals : [false, false, false];
@@ -843,6 +844,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(isCurrent(c, rule), "ClaimFromEndedRule", "This claim belongs to a rule that was ended and replaced.");
     checkParties(rule, c.beneficiary, c.payee);
     need(openToPeople(c.agentVerdict), "AgentNotApproved", "The agent has not cleared this claim.");
+    need(c.ownerApproved || !s.asks?.[c.address]?.declinedAt, "Declined", "The owner said no to this request while alive.");
     // As on-chain: while the owner is alive only his approval counts; after unlock his approval, or a quorum given after the death.
     const approvedToPay = c.ownerApproved || (est().status === "Unlocked" && G.countsFor(c) && claimTally(est(), { ...c, approvalsCount: true }).met);
     need(approvedToPay, "InsufficientApprovals", est().status === "Active" ? "The owner still needs to approve this." : "A trusted person still needs to approve this.");

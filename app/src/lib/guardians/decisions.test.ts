@@ -305,3 +305,14 @@ describe("mayList is lib/agent/sale.ts's mayAskToList", () => {
     }
   });
 });
+
+describe("H9: the owner's no stands after the death", () => {
+  const note = { claim: "CL", purpose: "trip", currency: "USDT" as const, typed: 5, createdAt: 1, attachment: false, declinedAt: 10 };
+  it("no approval is offered and it can't be paid", () => {
+    const c = claim();
+    const s = snap({ claims: [c], asks: { CL: note } });
+    expect(claimVote(s, c, A)).toBeNull();
+    expect(claimPayable(s, { ...c, approvals: [true, false, false] }, 50)).toBe(false);
+    expect(claimVote(snap({ claims: [c] }), c, A)).toBe("approve");
+  });
+});

@@ -117,6 +117,8 @@ export function askStatus(claim: Claim, estate: Pick<Estate, "status" | "claimTh
   if (claim.status === "Paid") return "paid";
   if (claim.status === "Rejected") return "refused";
   if (claim.agentVerdict === "Pending") return "checking";
+  // The owner's "no" stands after the death too (H9).
+  if (note?.declinedAt && !claim.ownerApproved) return "declined";
   // Only votes given after the death, by seats still held, not by the claimant (R3, R8, R11).
   const quorum = estate.status === "Unlocked" && quorumOf({
     verifiers: estate.verifiers ?? ["seat 1", "seat 2", "seat 3"], votes: claim.approvalsCount === false ? [] : claim.approvals,
