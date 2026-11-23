@@ -151,7 +151,7 @@ describe("payouts pass the accounts they re-check (R16)", () => {
 });
 
 describe("submitDeathClaim", () => {
-  const cert = () => new File(["certificate"], "c.pdf", { type: "application/pdf" });
+  const cert = () => new File(["%PDF-1.4 certificate"], "c.pdf", { type: "application/pdf" });
   const standing = (by: string, hash: number[], since: number) => h.accounts.set(estate, {
     status: { Active: {} }, waiting_period_secs: 120, verifiers: [v1, v2, v3], death_cert_hash: hash,
     death_verdict: { Pending: {} }, death_submitted_by: by, death_pending_since: since,
@@ -177,6 +177,19 @@ describe("submitDeathClaim", () => {
     standing(kid, [...Buffer.from(await sha256Hex(new Uint8Array(await cert().arrayBuffer())), "hex")], nowSecs());
     expect((await createChainService().submitDeathClaim(estate, cert())).tx.signature).toBe("review");
     expect(h.signed).toEqual([]);
+  });
+});
+
+describe("C2: a file the review would refuse signs nothing", () => {
+  it.each(["submitClaim", "submitHardship", "submitDeathClaim"] as const)("%s", async (method) => {
+    h.me = kid;
+    const fake = new File(["Heirloom demo document: x.pdf"], "x.pdf", { type: "application/pdf" });
+    const svc = createChainService();
+    const work = method === "submitDeathClaim" ? svc.submitDeathClaim(estate, fake)
+      : method === "submitClaim" ? svc.submitClaim(estate, { rule: key(), payee: res, amountUsdt: 5, evidence: fake })
+        : svc.submitHardship(estate, { asset: key(), evidence: fake });
+    await expect(work).rejects.toMatchObject({ code: "FileType" });
+    expect([h.signed.length, h.posts.includes("/api/review")]).toEqual([0, false]);
   });
 });
 

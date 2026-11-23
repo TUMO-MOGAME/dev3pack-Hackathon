@@ -431,7 +431,17 @@ export const st: Bundle = {
     consent: { before: "Ke dumela hore Heirloom e sebetse tlhahisoleseding ena kamoo ho hlalositsweng kateng ho", link: "leano la lekunutu", after: "." },
     consentRequired: "Ka kopo tshwaya lebokose ho tswela pele.",
     amountUnclear: "Palo eo e ka balwa ka mekgwa e mmedi. E ngole jwalo ka 1 234,50 kapa 1234.50.",
-    file: { choose: "Kgetha foto kapa PDF", change: "Tobetsa ho kgetha faele e nngwe", samplesLabel: "Ha o na dipampiri haufi? Sebedisa mohlala:", chosen: "Faele e kgethilweng:" },
+    file: {
+      choose: "Kgetha foto kapa PDF", change: "Tobetsa ho kgetha faele e nngwe", samplesLabel: "Ha o na dipampiri haufi? Sebedisa mohlala:", chosen: "Faele e kgethilweng:",
+      rules: "PDF, JPG kapa PNG, ho fihlela ho 4 MB.",
+      loading: "Mohlala o a laodwa…",
+      failed: "Mohlala ha o a ka wa laodwa. Leka hape, kapa o kgethe faele ya hao.",
+      problems: {
+        FileEmpty: "Faele eo ha e na letho. Kgetha e nngwe.",
+        FileSize: "Faele eo e kgolo ho feta 4 MB. Kgetha foto kapa PDF e nyane.",
+        FileType: "Kgetha PDF, JPG kapa PNG. Faele ena hase e nngwe ya tsona, kapa se ka hare ho yona ha se tsamaisane le lebitso la yona.",
+      },
+    },
     pin: {
       unlockTitle: "Kenya PIN ya hao",
       unlockBody: "PIN ya hao e bula wallet ya {label} sesebedisweng sena hore e kgone ho saena.",
@@ -453,6 +463,9 @@ export const st: Bundle = {
     time: { justNow: "hona jwale", minutes: "metsotso e {n} e fetileng", hours: "dihora tse {n} tse fetileng", days: "matsatsi a {n} a fetileng", never: "le ka mohla" },
     errors: {
       generic: "Ho na le se sa tsamayang hantle. Sheba se fetohileng pele o leka hape.",
+      FileEmpty: "Faele eo ha e na letho. Ha ho letho le rometsweng.",
+      FileSize: "Faele eo e kgolo ho feta 4 MB. Ha ho letho le rometsweng.",
+      FileType: "Ho amohelwa PDF, JPG kapa PNG feela. Ha ho letho le rometsweng.",
       NoWallet: "Kgetha pele hore o sebetsa o le mang.",
       NoEstate: "Ha ho moralo hajwale. Mong wa lefa o o saena pele.",
       NotOwner: "Ke mong wa lefa feela ya ka etsang sena.",
@@ -1309,7 +1322,7 @@ export const st: Bundle = {
         none: "Ha e a fumanwa",
         hash: "Monwana o bolokilweng: {hash}",
         fileType: "Sebedisa PDF, JPG kapa PNG.",
-        fileTooBig: "Faele e kgolo ho feta 10 MB.",
+        fileTooBig: "Faele e kgolo ho feta 4 MB.",
         error: "Ha re a kgona ho bala invoice. O ntse o ka lefa ntle le yona.",
         match: { title: "E dumellana le seo o se ngotseng", body: "Molefuwa, palo le tshupiso di a dumellana. Hlahloba kakaretso, ebe o dumela." },
         mismatch: { title: "Hlahloba pele o lefa", body: "Invoice le seo o se ngotseng ha di dumellane. Ke wena ya etsang qeto." },
@@ -1831,8 +1844,8 @@ export const st: Bundle = {
         attach: "Hlahloba tokomane",
         sendMoney: "Romela chelete",
         removeFile: "Tlosa {name}",
-        fileTooBig: "Faele eo e kgolo ho feta 8 MB. Kgetha setshwantsho se senyenyane kapa PDF.",
-        fileType: "Kgetha PDF kapa setshwantsho.",
+        fileTooBig: "Faele eo e kgolo ho feta 4 MB. Kgetha setshwantsho se senyenyane kapa PDF.",
+        fileType: "Kgetha PDF, JPG kapa PNG.",
         purposeLabel: "Tokomane ena ke ya eng?",
         purposes: {
           general: "E hlalose feela",

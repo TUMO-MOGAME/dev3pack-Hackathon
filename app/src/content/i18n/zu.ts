@@ -431,7 +431,17 @@ export const zu: Bundle = {
     consent: { before: "Ngiyavuma ukuthi i-Heirloom isebenzise lolu lwazi njengoba kuchaziwe", link: "kunqubomgomo yobumfihlo", after: "." },
     consentRequired: "Sicela umake ibhokisi ukuze uqhubeke.",
     amountUnclear: "Leli nani lingafundwa ngezindlela ezimbili. Libhale kanje: 1 234,50 noma 1234.50.",
-    file: { choose: "Khetha isithombe noma i-PDF", change: "Thinta ukuze ukhethe elinye ifayela", samplesLabel: "Awunawo amaphepha? Sebenzisa isibonelo:", chosen: "Ifayela elikhethiwe:" },
+    file: {
+      choose: "Khetha isithombe noma i-PDF", change: "Thinta ukuze ukhethe elinye ifayela", samplesLabel: "Awunawo amaphepha? Sebenzisa isibonelo:", chosen: "Ifayela elikhethiwe:",
+      rules: "I-PDF, i-JPG noma i-PNG, kuze kufike ku-4 MB.",
+      loading: "Kulandwa isibonelo…",
+      failed: "Isibonelo asikwazanga ukulandwa. Zama futhi, noma ukhethe elakho ifayela.",
+      problems: {
+        FileEmpty: "Lelo fayela alinalutho. Khetha elinye.",
+        FileSize: "Lelo fayela likhulu kuno-4 MB. Khetha isithombe noma i-PDF encane.",
+        FileType: "Khetha i-PDF, i-JPG noma i-PNG. Leli fayela akusilo, noma okuqukethwe kwalo akuhambisani negama lalo.",
+      },
+    },
     pin: {
       unlockTitle: "Faka i-PIN yakho",
       unlockBody: "I-PIN yakho ivula i-wallet ka-{label} kule divayisi ukuze ikwazi ukusayina.",
@@ -453,6 +463,9 @@ export const zu: Bundle = {
     time: { justNow: "manje nje", minutes: "imizuzu engu-{n} edlule", hours: "amahora angu-{n} edlule", days: "izinsuku ezingu-{n} ezedlule", never: "akukaze" },
     errors: {
       generic: "Kukhona okungahambanga kahle. Bheka okushintshile ngaphambi kokuzama futhi.",
+      FileEmpty: "Lelo fayela alinalutho. Akukho okuthunyelwe.",
+      FileSize: "Lelo fayela likhulu kuno-4 MB. Akukho okuthunyelwe.",
+      FileType: "Kwamukelwa i-PDF, i-JPG noma i-PNG kuphela. Akukho okuthunyelwe.",
       NoWallet: "Khetha kuqala ukuthi usebenza njengobani.",
       NoEstate: "Alukabikhona uhlelo. Umnikazi uyalusayina kuqala.",
       NotOwner: "Umnikazi wefa kuphela ongakwenza lokhu.",
@@ -1268,7 +1281,7 @@ export const zu: Bundle = {
         none: "Akutholakalanga",
         hash: "Izigxivizo ezigciniwe: {hash}",
         fileType: "Sebenzisa i-PDF, i-JPG noma i-PNG.",
-        fileTooBig: "Ifayela likhulu kuno-10 MB.",
+        fileTooBig: "Ifayela likhulu kuno-4 MB.",
         error: "Asikwazanga ukufunda i-invoyisi. Usengakhokha ngaphandle kwayo.",
         match: { title: "Iyafana nalokho okuthayiphile", body: "Okhokhelwayo, imali nenkomba kuyavumelana. Hlola isifinyezo, bese uyavuma." },
         mismatch: { title: "Hlola ngaphambi kokukhokha", body: "I-invoyisi nalokho okuthayiphile akuvumelani. Nguwe onquma okulungile." },
@@ -1773,8 +1786,8 @@ export const zu: Bundle = {
         attach: "Hlola idokhumenti",
         sendMoney: "Thumela imali",
         removeFile: "Susa i-{name}",
-        fileTooBig: "Lelo fayela likhulu kuno-8 MB. Khetha isithombe esincane noma i-PDF.",
-        fileType: "Khetha i-PDF noma isithombe.",
+        fileTooBig: "Lelo fayela likhulu kuno-4 MB. Khetha isithombe esincane noma i-PDF.",
+        fileType: "Khetha i-PDF, i-JPG noma i-PNG.",
         purposeLabel: "Le dokhumenti ingeyani?",
         purposes: {
           general: "Vele uyichaze",

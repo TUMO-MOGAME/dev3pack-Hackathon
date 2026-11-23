@@ -62,6 +62,7 @@ import { actionHeaders, ensureReadPass, readHeaders, readerKey } from "../access
 import { actionBody, type AgentAction } from "../access/messages";
 import { clampWaiting } from "../continuity/logic";
 import { pack } from "../chain/pack";
+import { requireEvidence } from "../evidence";
 import { publicBeneficiaryLabel, publicPayeeName, withPrivateNames } from "../chain/public-names";
 
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
@@ -463,7 +464,8 @@ export function createChainService(): HeirloomService {
 
     willChat: (history: WillChatMessage[], locale?: Locale) => post<{ reply: string; draft: WillDraft | null }>("/api/will-chat", { history, locale }),
 
-    async reviewDocument({ file, purpose, context }) {
+    async reviewDocument({ file: chosen, purpose, context }) {
+      const file = await requireEvidence(chosen);
       const signer = getActiveSigner();
       const estate = estatePda(chainCtx().programId, signer.address).toBase58();
       return (await review(file, purpose, estate, context, undefined, true)).report;
@@ -567,6 +569,8 @@ export function createChainService(): HeirloomService {
     async registerAsset(estate, input) {
       const o = requireOwnerOf(estate);
       // Any new asset without a title token gets a fresh one (its own tx: the sponsor does not pay for mints).
+      // The registration papers are checked before the title mint is paid for.
+      const docFile = input.docFile ? await requireEvidence(input.docFile) : undefined;
       let nftMint = input.nftMint;
       if (!nftMint) {
         const fresh = await newTitleMint(o);
@@ -574,7 +578,7 @@ export function createChainService(): HeirloomService {
         await send(fresh.ixs, { kind: "program" }, { selfPay: true });
         nftMint = fresh.mint.toBase58();
       }
-      const docHash = input.docFile ? await fileHash(input.docFile) : await sha256Hex(`heirloom:asset:${nftMint}:${input.title}`);
+      const docHash = docFile ? await fileHash(docFile) : await sha256Hex(`heirloom:asset:${nftMint}:${input.title}`);
       const tx = await send([ix.registerAsset(chainCtx(), o, {
         nftMint: pk(nftMint), floorPrice: toBase(input.floorUsdt), hardshipFloor: toBase(input.hardshipFloorUsdt),
         askingPrice: toBase(input.askingUsdt), proceedsTo: pk(input.proceedsTo), docHashHex: docHash,
@@ -622,7 +626,8 @@ export function createChainService(): HeirloomService {
     },
 
     // ----- Family -----
-    async submitDeathClaim(estate, certificate) {
+    async submitDeathClaim(estate, chosen) {
+      const certificate = await requireEvidence(chosen);
       const me = pk(getActiveSigner().address);
       const h = await fileHash(certificate);
       const step = deathClaimStep(await mustFetch("Estate", estate), me.toBase58(), h, Math.floor(Date.now() / 1000));
@@ -632,7 +637,8 @@ export function createChainService(): HeirloomService {
       return { tx: (tx ?? r.tx)!, report: r.report };
     },
 
-    async submitClaim(estate, input) {
+    async submitClaim(estate, chosen) {
+      const input = { ...chosen, evidence: await requireEvidence(chosen.evidence) };
       const ctx = chainCtx();
       const me = pk(getActiveSigner().address);
       const rule = await mustFetch("Rule", input.rule);
@@ -647,7 +653,8 @@ export function createChainService(): HeirloomService {
       return { tx, claim, report: r.report };
     },
 
-    async submitHardship(estate, input) {
+    async submitHardship(estate, chosen) {
+      const input = { ...chosen, evidence: await requireEvidence(chosen.evidence) };
       const ctx = chainCtx();
       const me = pk(getActiveSigner().address);
       const h = await fileHash(input.evidence);
@@ -786,7 +793,8 @@ export function createChainService(): HeirloomService {
     // ----- Pay a bill once: same WDK transfer as a send, with the bill's details on the receipt -----
     async billPayees() { return (await billBook()).list(getActiveSigner().address); },
     async saveBillPayee(input) { return (await billBook()).save(getActiveSigner().address, input); },
-    async readInvoice(file): Promise<InvoiceRead> {
+    async readInvoice(chosen): Promise<InvoiceRead> {
+      const file = await requireEvidence(chosen);
       const form = new FormData();
       form.set("file", file);
       const { invoiceReadSchema } = await import("../bills/invoice");

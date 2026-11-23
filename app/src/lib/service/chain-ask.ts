@@ -21,6 +21,7 @@ import { getActiveSigner } from "../wallet/signer";
 import { sha256Hex } from "../agent/hash";
 import { formatUsdt, toBase } from "../format";
 import { readHeaders } from "../access/client";
+import { requireEvidence } from "../evidence";
 
 export interface ChainAskDeps {
   send(ixs: TransactionInstruction[]): Promise<TxResult>;
@@ -110,6 +111,7 @@ export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate:
       const me = getActiveSigner().address;
       const purpose = cleanPurpose(input.purpose);
       if (!purpose) throw Object.assign(new Error("Say what the money is for."), { code: "InvalidAmount" });
+      const evidence = input.evidence ? await requireEvidence(input.evidence) : null;
       const rule = await d.fetchRaw("Rule", input.rule);
       if (!rule) throw new Error("That rule was not found on-chain.");
       const ruleId = num(rule, "id");
@@ -122,7 +124,7 @@ export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate:
       const who = benRaw ? str(benRaw, "label") : me;
       const amount = toBase(input.amountUsdt);
 
-      const file = input.evidence ?? (() => {
+      const file = evidence ?? (() => {
         const n = askNote;
         const bytes = requestNotePdf(n.title, [
           `${n.from}: ${who}`, `${n.for}: ${purpose}`,

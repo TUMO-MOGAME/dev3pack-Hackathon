@@ -6,6 +6,7 @@ import { Check, FileCheck2, FileUp, X } from "@/components/ui/icons";
 import { useEstate } from "@/lib/hooks/estate";
 import { useBackClose } from "@/lib/hooks/use-back-close";
 import { useChangedSinceMount, useReducedMotion } from "@/lib/hooks/use-reduced-motion";
+import { checkEvidence, demoSample, EVIDENCE_ACCEPT, sampleFile, type EvidenceProblem } from "@/lib/evidence";
 
 // The toasts animate out with motion, so their code (and the library) loads only once a first toast exists.
 const ToastStack = dynamic(() => import("./toast-stack").then((m) => m.ToastStack), { ssr: false });
@@ -137,13 +138,45 @@ export function Typewriter({ text, active, onDone, onTick }: { text: string; act
 
 export interface SampleDoc { label: string; fileName: string }
 
+type FileCopy = { choose: string; change: string; samplesLabel: string; chosen: string; rules: string; loading: string; failed: string; problems: Record<EvidenceProblem, string> };
+
+/**
+ * A document for the agent. Every file, chosen or a sample, is checked here first (type, its bytes, at most 4 MB:
+ * lib/evidence.ts), so nothing is signed for a file the review would refuse. On a real network only Heirloom's own
+ * demo documents are offered as samples, and only where they fit this family; the demo makes small stand-in PDFs.
+ */
 export function FilePicker({
-  id, label, hint, file, onFile, samples, copy, accept = "application/pdf,image/*",
+  id, label, hint, file, onFile, samples, copy, accept = EVIDENCE_ACCEPT,
 }: {
   id: string; label: string; hint?: string; file: File | null; onFile: (f: File | null) => void; samples?: readonly SampleDoc[];
-  copy: { choose: string; change: string; samplesLabel: string; chosen: string };
+  copy: FileCopy;
   accept?: string;
 }) {
+  const { isMock, snap, session } = useEstate();
+  const [problem, setProblem] = useState<string | null>(null);
+  const [loading, setLoading] = useState<string | null>(null);
+  const ticket = useRef(0);
+  const who = { owner: snap?.estate.ownerName, me: session?.label };
+  const offered = (samples ?? []).map((s) => ({ ...s, url: sampleFile(s.fileName, who) })).filter((s) => isMock || s.url);
+  const take = async (pick: () => Promise<File>, key: string | null) => {
+    const mine = ++ticket.current;
+    setProblem(null); setLoading(key);
+    try {
+      const r = await checkEvidence(await pick());
+      if (mine !== ticket.current) return;
+      if ("problem" in r) { setProblem(copy.problems[r.problem]); onFile(null); } else onFile(r.file);
+    } catch {
+      if (mine === ticket.current) { setProblem(copy.failed); onFile(null); }
+    } finally {
+      if (mine === ticket.current) setLoading(null);
+    }
+  };
+  const sample = (s: (typeof offered)[number]) => take(async () => {
+    if (!s.url) return demoSample(s.fileName, s.label);
+    const res = await fetch(s.url);
+    if (!res.ok) throw new Error(String(res.status));
+    return new File([await res.blob()], s.url.split("/").pop()!, { type: "application/pdf" });
+  }, s.fileName);
   return (
     <div className="flex flex-col gap-2">
       <span id={`${id}-label`} className="text-small font-semibold">{label}</span>
@@ -159,7 +192,7 @@ export function FilePicker({
         </span>
         <span className="min-w-0 flex-1 text-small">
           <span className="block truncate text-body font-semibold">{file ? file.name : copy.choose}</span>
-          <span className="text-ink-2">{file ? copy.change : hint}</span>
+          <span className="text-ink-2">{file ? copy.change : hint ? `${hint}. ${copy.rules}` : copy.rules}</span>
         </span>
         <input
           id={id}
@@ -167,19 +200,23 @@ export function FilePicker({
           accept={accept}
           aria-labelledby={`${id}-label`}
           className="sr-only"
-          onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+          aria-describedby={problem ? `${id}-problem` : undefined}
+          onChange={(e) => { const f = e.target.files?.[0] ?? null; e.target.value = ""; if (f) void take(async () => f, null); else onFile(null); }}
         />
       </label>
-      <p className="sr-only" role="status">{file ? `${copy.chosen} ${file.name}` : ""}</p>
-      {samples && samples.length > 0 && (
+      <p className="sr-only" role="status">{loading ? copy.loading : file ? `${copy.chosen} ${file.name}` : ""}</p>
+      {problem && <p id={`${id}-problem`} role="alert" className="border-l-4 border-ink pl-2 text-small font-semibold text-ink">{problem}</p>}
+      {offered.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-small text-ink-2">{copy.samplesLabel}</span>
-          {samples.map((s) => (
+          {offered.map((s) => (
             <button
               key={s.fileName}
               type="button"
-              onClick={() => onFile(new File([`Heirloom demo document: ${s.fileName}`], s.fileName, { type: "application/pdf" }))}
-              className={clsx("min-h-11 rounded-full border px-3.5 text-small font-medium", file?.name === s.fileName ? "border-ink bg-ink text-bg" : "border-line-strong bg-surface hover:bg-surface-2")}
+              disabled={loading !== null}
+              aria-busy={loading === s.fileName || undefined}
+              onClick={() => void sample(s)}
+              className={clsx("min-h-11 rounded-full border px-3.5 text-small font-medium disabled:opacity-60", file?.name === s.fileName || (s.url && file?.name === s.url.split("/").pop()) ? "border-ink bg-ink text-bg" : "border-line-strong bg-surface hover:bg-surface-2")}
             >
               {s.label}
             </button>

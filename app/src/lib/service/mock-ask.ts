@@ -6,6 +6,7 @@ import type { AgentReport, Base58, Claim } from "../types";
 import type { EstateSnapshot, TxResult } from "./types";
 import { cleanPurpose, type AskNote, type AskService } from "../ask/types";
 import { fail } from "./mock-errors";
+import { requireEvidence } from "../evidence";
 
 export interface MockAskDeps {
   snap(): EstateSnapshot;
@@ -80,7 +81,7 @@ export function createMockAsk(d: MockAskDeps): AskService & { seedAsk(input: { r
 
   return {
     async askForMoney(_estate, input) {
-      const file = input.evidence ?? null;
+      const file = input.evidence ? await requireEvidence(input.evidence) : null;
       const hash = file ? await d.hashFile(file) : d.fakeHash();
       await d.wait(file ? 1900 : 900);
       const out = ask(input, file, hash);

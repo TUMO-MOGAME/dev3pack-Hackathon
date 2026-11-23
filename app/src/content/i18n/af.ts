@@ -431,7 +431,17 @@ export const af: Bundle = {
     consent: { before: "Ek stem in dat Heirloom hierdie inligting verwerk soos beskryf in die", link: "privaatheidsbeleid", after: "." },
     consentRequired: "Merk asseblief die blokkie om voort te gaan.",
     amountUnclear: "Daardie bedrag kan op twee maniere gelees word. Skryf dit soos 1 234,50 of 1234.50.",
-    file: { choose: "Kies 'n foto of PDF", change: "Tik om 'n ander lêer te kies", samplesLabel: "Geen papiere byderhand nie? Gebruik 'n voorbeeld:", chosen: "Gekose lêer:" },
+    file: {
+      choose: "Kies 'n foto of PDF", change: "Tik om 'n ander lêer te kies", samplesLabel: "Geen papiere byderhand nie? Gebruik 'n voorbeeld:", chosen: "Gekose lêer:",
+      rules: "'n PDF, JPG of PNG, tot 4 MB.",
+      loading: "Die voorbeeld word gelaai…",
+      failed: "Die voorbeeld kon nie gelaai word nie. Probeer weer, of kies jou eie lêer.",
+      problems: {
+        FileEmpty: "Daardie lêer is leeg. Kies 'n ander een.",
+        FileSize: "Daardie lêer is groter as 4 MB. Kies 'n kleiner foto of PDF.",
+        FileType: "Kies 'n PDF, JPG of PNG. Hierdie lêer is nie een nie, of sy inhoud pas nie by sy naam nie.",
+      },
+    },
     pin: {
       unlockTitle: "Tik jou PIN in",
       unlockBody: "Jou PIN ontsluit die wallet vir {label} op hierdie toestel sodat dit kan teken.",
@@ -453,6 +463,9 @@ export const af: Bundle = {
     time: { justNow: "nou net", minutes: "{n} min gelede", hours: "{n} uur gelede", days: "{n} dae gelede", never: "nooit" },
     errors: {
       generic: "Iets het skeefgeloop. Kyk wat verander het voordat jy weer probeer.",
+      FileEmpty: "Daardie lêer is leeg. Niks is gestuur nie.",
+      FileSize: "Daardie lêer is groter as 4 MB. Niks is gestuur nie.",
+      FileType: "Net 'n PDF, JPG of PNG word aanvaar. Niks is gestuur nie.",
       NoWallet: "Kies eers as wie jy optree.",
       NoEstate: "Daar is nog geen plan nie. Die eienaar teken dit eerste.",
       NotOwner: "Net die boedeleienaar kan dit doen.",
@@ -1284,7 +1297,7 @@ export const af: Bundle = {
         none: "Nie gevind nie",
         hash: "Vingerafdruk gehou: {hash}",
         fileType: "Gebruik 'n PDF, JPG of PNG.",
-        fileTooBig: "Die lêer is groter as 10 MB.",
+        fileTooBig: "Die lêer is groter as 4 MB.",
         error: "Ons kon nie die faktuur lees nie. Jy kan steeds sonder dit betaal.",
         match: { title: "Stem ooreen met wat jy getik het", body: "Die begunstigde, die bedrag en die verwysing stem ooreen. Gaan die opsomming na en keur dan goed." },
         mismatch: { title: "Kyk voordat jy betaal", body: "Die faktuur en wat jy getik het, stem nie ooreen nie. Jy besluit wat reg is." },
@@ -1806,8 +1819,8 @@ export const af: Bundle = {
         attach: "Gaan 'n dokument na",
         sendMoney: "Stuur geld",
         removeFile: "Verwyder {name}",
-        fileTooBig: "Daardie lêer is groter as 8 MB. Kies 'n kleiner foto of PDF.",
-        fileType: "Kies 'n PDF of 'n foto.",
+        fileTooBig: "Daardie lêer is groter as 4 MB. Kies 'n kleiner foto of PDF.",
+        fileType: "Kies 'n PDF, JPG of PNG.",
         purposeLabel: "Waarvoor is hierdie dokument?",
         purposes: {
           general: "Verduidelik dit net",

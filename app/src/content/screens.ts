@@ -715,7 +715,7 @@ export const screens = {
       none: "Not found",
       hash: "Fingerprint kept: {hash}",
       fileType: "Use a PDF, JPG or PNG.",
-      fileTooBig: "The file is larger than 10 MB.",
+      fileTooBig: "The file is larger than 4 MB.",
       error: "We couldn't read the invoice. You can still pay without it.",
       match: { title: "Matches what you typed", body: "The payee, the amount and the reference agree. Check the review, then approve." },
       mismatch: { title: "Check before you pay", body: "The invoice and what you typed don't agree. You decide which is right." },

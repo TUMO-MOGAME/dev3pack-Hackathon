@@ -27,6 +27,7 @@ import { sha256Hex } from "../agent/hash";
 import { cleanSpec, foreignSpecKeys, mediaRootHex } from "../assets/spec";
 import { MAX_PHOTOS } from "../media/webp";
 import { photosApi } from "../media/client";
+import { requireEvidence } from "../evidence";
 
 export const DISABLED_GUARDIANS: GuardiansSnapshot = disabledGuardians();
 
@@ -209,7 +210,8 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       return d.send([ix.setFallback(chainCtx(), owner, recipients.map((r) => pk(r.wallet)))]);
     },
 
-    async reportSeatDeath(estate, index, certificate) {
+    async reportSeatDeath(estate, index, chosen) {
+      const certificate = await requireEvidence(chosen);
       const seat = await seatRaw(estate, index);
       if (!seat) throw new Error("This trusted person's seat is not set up.");
       const holder = key(seat, "holder");
@@ -291,7 +293,8 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       return d.send([ix.voteObjection(chainCtx(), { voter, estate: pk(estate), kind, target: pk(target), uphold, hardshipAsset })]);
     },
 
-    async reportFallbackDeath(estate, recipientIndex, certificate) {
+    async reportFallbackDeath(estate, recipientIndex, chosen) {
+      const certificate = await requireEvidence(chosen);
       const g = await guardRaw(estate);
       if (!g) throw new Error("This estate has no fallback plan.");
       // The screens' position is not the slot when the list has a gap.

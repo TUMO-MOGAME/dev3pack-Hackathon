@@ -8,6 +8,7 @@
  */
 import { explorerTx, fromBase, toBase } from "../format";
 import { amountsInText } from "../amount";
+import { requireEvidence } from "../evidence";
 import type {
   AgentReport, Asset, Base58, Claim, Hardship, OfferRanking, PayeeKind, PaymentReceipt, PaymentRef, PaymentReview, Role, Rule, SavedRecipient, WillChatMessage, WillDraft,
 } from "../types";
@@ -1340,7 +1341,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
       save();
       return { ...payee };
     },
-    async readInvoice(file) {
+    async readInvoice(chosen) {
+      const file = await requireEvidence(chosen);
       await wait(1400); // "the AI is reading it"
       // Scripted by file name (lib/bills/demo.ts) and labelled as a demo on screen. Only the hash is kept, never the file.
       return { reading: demoInvoiceReading(file.name), sha256: await hashFile(file), engine: "demo" as const };
@@ -1485,7 +1487,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
           : `Understood. The Corolla can sell only at or above ${draft.assets[0]?.floorPriceUsdt.toLocaleString("en-ZA")} USD₮: the agent ranks the offers and a trusted person co-signs the one that's accepted. Below that, only if one of your children proves hardship with a sworn affidavit and two trusted people agree, and never below ${draft.assets[0]?.hardshipFloorUsdt.toLocaleString("en-ZA")} USD₮. The money goes into the family vault.\n\nYour rules are ready. Please read them in plain language before you sign.`;
       return { reply, draft };
     },
-    async reviewDocument({ file, purpose, context }) {
+    async reviewDocument({ file: chosen, purpose, context }) {
+      const file = await requireEvidence(chosen);
       await wait(1600);
       return report(purpose, file, { payee: context });
     },
@@ -1507,7 +1510,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     withdraw: (_e, amountUsdt) => mutate(900, () => withdraw(amountUsdt)),
     heartbeat: () => mutate(600, heartbeat),
     async registerAsset(_e, input) {
-      const docHash = input.docFile ? await hashFile(input.docFile) : fakeHash();
+      const docHash = input.docFile ? await hashFile(await requireEvidence(input.docFile)) : fakeHash();
       return mutate(1000, () => registerAsset(input, docHash));
     },
     addPayee: (_e, input) => mutate(700, () => addPayee(input)),
@@ -1530,7 +1533,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
     suggestLetter: async (e, input, locale) => (await Lt()).suggestLetter(e, input, locale),
     letterCounts: async (e) => (await Lt()).letterCounts(e),
 
-    async submitDeathClaim(_e, certificate) {
+    async submitDeathClaim(_e, chosen) {
+      const certificate = await requireEvidence(chosen);
       checkDeathSubmission();
       const hash = await hashFile(certificate);
       await wait(1900);
@@ -1539,7 +1543,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
       save();
       return { tx: t, report: r };
     },
-    async submitClaim(_e, input) {
+    async submitClaim(_e, chosen) {
+      const input = { ...chosen, evidence: await requireEvidence(chosen.evidence) };
       const hash = await hashFile(input.evidence);
       await wait(1900);
       const payee = s.snap.payees.find((p) => p.wallet === input.payee);
@@ -1548,7 +1553,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
       save();
       return { tx: t, claim: claim.address, report: r };
     },
-    async submitHardship(_e, input) {
+    async submitHardship(_e, chosen) {
+      const input = { ...chosen, evidence: await requireEvidence(chosen.evidence) };
       const hash = await hashFile(input.evidence);
       await wait(1900);
       const r = report("hardship", input.evidence, {});
@@ -1597,7 +1603,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
     setFallback: (_e, recipients) => mutate(800, () => G.setFallback(recipients)),
     ownerReplaceSeat: (_e, index, newHolder) => mutate(900, () => G.replaceSeat(index, newHolder)),
 
-    async reportSeatDeath(_e, index, certificate) {
+    async reportSeatDeath(_e, index, chosen) {
+      const certificate = await requireEvidence(chosen);
       needCreated();
       const holder = G.seat(index).holder ?? fail("SeatVacant", "This seat is already empty.");
       const hash = await hashFile(certificate);
@@ -1626,7 +1633,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
     setYearlyCap: (_e, rule, input) => mutate(700, () => D.setYearlyCap(rule, toBase(input.capUsdt), input.periodStart)),
     voteObjection: (_e, objection, uphold) => mutate(900, () => G.voteObjection(objection, uphold)),
 
-    async reportFallbackDeath(_e, i, certificate) {
+    async reportFallbackDeath(_e, i, chosen) {
+      const certificate = await requireEvidence(chosen);
       needCreated();
       const person = s.guard?.fallback[i]?.name ?? fail("NoFallbackRecipient", "That fallback recipient does not exist.");
       const hash = await hashFile(certificate);

@@ -32,7 +32,7 @@ const ben = (w: string) => beneficiaryPda(programId, estate, w).toBase58();
 const seatAt = (i: number) => seatPda(programId, estate, i).toBase58();
 const reportAt = (i: number) => fallbackReportPda(programId, estate, i).toBase58();
 const zero = Array<number>(32).fill(0);
-const file = () => new File(["certificate"], "c.pdf", { type: "application/pdf" });
+const file = () => new File(["%PDF-1.4 certificate"], "c.pdf", { type: "application/pdf" });
 
 let sent: TransactionInstruction[];
 let reviewed: number[];

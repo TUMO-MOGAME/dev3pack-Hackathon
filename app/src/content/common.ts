@@ -199,7 +199,17 @@ export const common = {
   consentRequired: "Please tick the box to continue.",
   /** An amount the strict reader can't take as one clear number (lib/amount.ts). */
   amountUnclear: "That amount could be read two ways. Write it like 1 234,50 or 1234.50.",
-  file: { choose: "Choose a photo or PDF", change: "Tap to choose a different file", samplesLabel: "No papers to hand? Use a sample:", chosen: "Selected file:" },
+  file: {
+    choose: "Choose a photo or PDF", change: "Tap to choose a different file", samplesLabel: "No papers to hand? Use a sample:", chosen: "Selected file:",
+    rules: "A PDF, JPG or PNG, up to 4 MB.",
+    loading: "Getting the sample…",
+    failed: "The sample couldn't be loaded. Try again, or choose your own file.",
+    problems: {
+      FileEmpty: "That file is empty. Choose another.",
+      FileSize: "That file is larger than 4 MB. Choose a smaller photo or PDF.",
+      FileType: "Choose a PDF, JPG or PNG. This file isn't one, or its contents don't match its name.",
+    },
+  },
   pin: {
     unlockTitle: "Enter your PIN",
     unlockBody: "Your PIN unlocks the wallet for {label} on this device so it can sign.",
@@ -221,6 +231,9 @@ export const common = {
   time: { justNow: "just now", minutes: "{n} min ago", hours: "{n} h ago", days: "{n} d ago", never: "never" },
   errors: {
     generic: "Something went wrong. Check what changed before you try again.",
+    FileEmpty: "That file is empty. Nothing was sent.",
+    FileSize: "That file is larger than 4 MB. Nothing was sent.",
+    FileType: "Only a PDF, JPG or PNG is accepted. Nothing was sent.",
     NoWallet: "Choose who you are acting as first.",
     NoEstate: "There is no plan yet. The owner signs it first.",
     NotOwner: "Only the estate owner can do this.",

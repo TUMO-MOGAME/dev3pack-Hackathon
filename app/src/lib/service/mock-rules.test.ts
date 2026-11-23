@@ -1196,3 +1196,18 @@ describe("the same as the chain service", () => {
     expect((await t.svc.listEstatesFor(NEW.wallet))[0].role).toBe("buyer");
   });
 });
+
+describe("C2: a document the review would refuse is refused before anything changes", () => {
+  it("the old text stand-in is refused and no claim is made", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("unlocked");
+    svc.setActor({ address: who("lerato"), role: "beneficiary", label: P("lerato").label });
+    const [{ estate }] = await svc.listEstatesFor(who("lerato"));
+    const snap = await svc.getEstate(estate);
+    const rule = snap.rules.find((r) => r.category === "Tuition" && r.beneficiary === who("lerato"))!;
+    const payee = snap.payees.find((p) => p.kind === rule.allowedPayeeKind)!;
+    const fake = new File(["Heirloom demo document: fee-statement-2027.pdf"], "fee-statement-2027.pdf", { type: "application/pdf" });
+    await expect(svc.submitClaim(estate, { rule: rule.address, payee: payee.wallet, amountUsdt: 10, evidence: fake })).rejects.toMatchObject({ code: "FileType" });
+    expect((await svc.getEstate(estate)).claims).toHaveLength(snap.claims.length);
+  });
+});
