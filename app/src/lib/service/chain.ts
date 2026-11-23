@@ -14,14 +14,14 @@ import type {
 import { chainCtx } from "../chain/client";
 import { chainConfig } from "../chain/config";
 import * as ix from "../chain/instructions";
-import { ata, claimPda, estatePda, offerPda, hardshipPda, stampPda } from "../chain/pda";
+import { ata, beneficiaryPda, claimPda, estatePda, guardPda, offerPda, hardshipPda, stampPda } from "../chain/pda";
 import { demoEstateFirst } from "../chain/demo-estate";
 import { base64ToBytes, bytesToBase64, ChainTxError, getConnection } from "../chain/tx";
 import {
   activityFrom, deathReviewHash, fetchAccountRaw, fetchEstateRaw, fetchEvents, fetchHistory, findEstateOf, invalidateProgramAccounts,
 } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
-import { enumOf, hex, key, num, optKey, type Raw } from "../chain/decoders";
+import { bool, enumOf, hex, key, keyArray, num, optKey, type Raw } from "../chain/decoders";
 import { ChainServiceError, must, PaymentPending, reviewPending, writeFailure } from "./chain-errors";
 import { mayAskToList } from "../agent/sale";
 import { createChainContinuity } from "./chain-continuity";
@@ -237,6 +237,24 @@ async function sendStampPaid(verifier: PublicKey, build: () => TransactionInstru
     if (at > 0 && paysRent && !feePayer.equals(verifier)) t.keys[at] = { ...t.keys[at], pubkey: feePayer };
     return [t];
   });
+}
+
+/**
+ * Who reports the owner's death, as submit_death_claim checks it: an active beneficiary (their PDA goes along), a living
+ * trusted person (nothing more), or a living listed fallback recipient (the Guard goes along); never the agent. Only an
+ * account the signer holds is passed: an optional account that is passed has to exist.
+ */
+async function deathReporter(estate: Base58, raw: Raw, me: Base58): Promise<ix.DeathReporter> {
+  const programId = chainCtx().programId;
+  must(me !== key(raw, "agent"), "NotParticipant", "The agent never reports the owner's passing.");
+  const ben = await fetchAccountRaw("Beneficiary", beneficiaryPda(programId, estate, me).toBase58());
+  if (ben && bool(ben, "active")) return { beneficiary: true };
+  if (keyArray(raw, "verifiers").includes(me)) return {};
+  const guard = await fetchAccountRaw("Guard", guardPda(programId, estate).toBase58());
+  const dead = guard ? num(guard, "fallback_dead") : 0;
+  must(guard && keyArray(guard, "fallback").some((w, i) => w === me && w !== estate && (dead & (1 << i)) === 0), "NotParticipant",
+    "Only the family in this plan, a trusted person or someone on the fallback list can report the owner's passing.");
+  return { listed: true };
 }
 
 /** Something was written: the next read sees it. */
@@ -756,8 +774,9 @@ export function createChainService(): HeirloomService {
       const certificate = await requireEvidence(chosen);
       const me = pk(getActiveSigner().address);
       const h = await fileHash(certificate);
-      const step = deathClaimStep(await mustFetch("Estate", estate), me.toBase58(), h, Math.floor(Date.now() / 1000));
-      const tx = step === "send" ? await send([ix.submitDeathClaim(chainCtx(), pk(estate), me, h)]) : null;
+      const raw = await mustFetch("Estate", estate);
+      const step = deathClaimStep(raw, me.toBase58(), h, Math.floor(Date.now() / 1000));
+      const tx = step === "send" ? await send([ix.submitDeathClaim(chainCtx(), pk(estate), me, h, await deathReporter(estate, raw, me.toBase58()))]) : null;
       const meta = await getMeta(estate);
       const r = await review(certificate, "death", estate, `Estate owner's name: ${meta?.ownerName ?? "unknown"}.`);
       return { tx: (tx ?? r.tx)!, report: r.report };

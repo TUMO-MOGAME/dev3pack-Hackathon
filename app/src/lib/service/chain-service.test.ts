@@ -65,7 +65,7 @@ vi.mock("../chain/reads", async (original: () => Promise<object>) => ({
 }));
 
 const { getCoder, getIdl } = await import("../chain/idl");
-const { beneficiaryPda, estatePda, offerPda, payeePda, rulePda } = await import("../chain/pda");
+const { beneficiaryPda, estatePda, guardPda, objectionPda, offerPda, payeePda, rulePda } = await import("../chain/pda");
 const { sha256Hex } = await import("../agent/hash");
 const { createChainService } = await import("./chain");
 
@@ -73,6 +73,7 @@ const programId = new PublicKey(getIdl().address);
 const key = () => Keypair.generate().publicKey.toBase58();
 const [owner, agent, kid, res, v1, v2, v3] = Array.from({ length: 7 }, key);
 const estate = estatePda(programId, owner).toBase58();
+const NOBODY = PublicKey.default.toBase58();
 const ixs = (): TransactionInstruction[] => h.signed.flatMap((b) => Transaction.from(Buffer.from(b as string, "base64")).instructions);
 const names = () => ixs().map((t) => getCoder().instruction.decode(Buffer.from(t.data))!.name);
 const passes = (address: PublicKey) => ixs()[0].keys.some((m) => m.pubkey.equals(address));
@@ -169,12 +170,42 @@ describe("payouts pass the accounts they re-check (R16)", () => {
 describe("submitDeathClaim", () => {
   const cert = () => new File(["%PDF-1.4 certificate"], "c.pdf", { type: "application/pdf" });
   const standing = (by: string, hash: number[], since: number) => h.accounts.set(estate, {
-    status: { Active: {} }, waiting_period_secs: 120, verifiers: [v1, v2, v3], death_cert_hash: hash,
+    status: { Active: {} }, agent, waiting_period_secs: 120, verifiers: [v1, v2, v3], death_cert_hash: hash,
     death_verdict: { Pending: {} }, death_submitted_by: by, death_pending_since: since,
   });
   const nowSecs = () => Math.floor(Date.now() / 1000);
 
-  beforeEach(() => { h.me = kid; });
+  beforeEach(() => {
+    h.me = kid;
+    h.accounts.set(beneficiaryPda(programId, estate, kid).toBase58(), { wallet: kid, active: true });
+  });
+  const account = (name: string) => {
+    const at = getIdl().instructions.find((i) => i.name === "submit_death_claim")!.accounts.findIndex((a) => a.name === name);
+    return ixs()[0].keys[at].pubkey.toBase58();
+  };
+
+  it.each([
+    ["an active beneficiary passes their account", () => kid, () => beneficiaryPda(programId, estate, kid).toBase58(), () => programId.toBase58()],
+    ["a trusted person passes neither", () => v2, () => programId.toBase58(), () => programId.toBase58()],
+    ["a living listed fallback recipient passes the Guard", () => res, () => programId.toBase58(), () => guardPda(programId, estate).toBase58()],
+  ])("%s, and the claim's objection goes along", async (_, who, benAccount, guardAccount) => {
+    h.me = who();
+    h.accounts.set(guardPda(programId, estate).toBase58(), { fallback: [res, NOBODY, NOBODY, NOBODY], fallback_dead: 0 });
+    standing(v1, Array<number>(32).fill(7), 1);
+    await createChainService().submitDeathClaim(estate, cert());
+    expect([account("beneficiary_account"), account("guard"), account("objection")])
+      .toEqual([benAccount(), guardAccount(), objectionPda(programId, estate).toBase58()]);
+  });
+
+  it.each([
+    ["the agent", () => agent], ["a stranger", () => key()], ["a fallback recipient proven dead", () => res],
+  ])("%s can't: nothing is signed", async (_, who) => {
+    h.me = who();
+    h.accounts.set(guardPda(programId, estate).toBase58(), { fallback: [res, NOBODY, NOBODY, NOBODY], fallback_dead: 1 });
+    standing(v1, Array<number>(32).fill(7), 1);
+    await expect(createChainService().submitDeathClaim(estate, cert())).rejects.toMatchObject({ code: "NotParticipant" });
+    expect([h.signed.length, h.posts.includes("/api/review")]).toEqual([0, false]);
+  });
 
   it("replaces a stale claim, then asks for its review", async () => {
     standing(v1, Array<number>(32).fill(7), 1);
