@@ -7,10 +7,11 @@ import {
   createCloseAccountInstruction, createTransferCheckedInstruction, createTransferInstruction, getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { findInstruction, getIdl } from "../chain/idl";
-import { APPROVAL_STAMP_RENT, DEFAULT_LIMITS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, TOKEN_ACCOUNT_RENT, validateSponsoredTx, type RejectCode, type SponsorPolicy } from "./policy";
+import { APPROVAL_STAMP_RENT, DEFAULT_LIMITS, SPONSOR_RENT_PAYER_ACCOUNTS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, TOKEN_ACCOUNT_RENT, validateSponsoredTx, type RejectCode, type SponsorPolicy } from "./policy";
 import { SponsorLimiter } from "./limits";
 import { AGENT_ALLOWED } from "../agent/agent-wallet";
 import * as ix from "../chain/instructions";
+import { txBytes } from "../chain/pack";
 import { estatePda } from "../chain/pda";
 
 const sponsor = Keypair.generate();
@@ -245,7 +246,7 @@ describe("permissionless instructions with a signing caller (finalize_succession
   const ctx: ix.Ctx = { programId, usdtMint: mint };
   const estate = estatePda(programId, Keypair.generate().publicKey);
   const build = (caller: PublicKey) => [
-    ix.finalizeSuccession(ctx, estate, 2, caller, Keypair.generate().publicKey), ix.startFallback(ctx, estate, caller),
+    ix.finalizeSuccession(ctx, estate, 2, caller), ix.startFallback(ctx, estate, caller),
     ix.finalizeUnlock(estate, caller), ix.lapseObjection(ctx, estate, caller),
   ];
 
@@ -279,17 +280,27 @@ describe("second security review (22 Nov 2026)", () => {
   const estate = estatePda(programId, u);
   const H = "ab".repeat(32);
   const payerSlot = findInstruction("approve_claim").accounts.findIndex((a) => a.name === "payer");
-  const withSlot = policy({ heirloomRentPayerSlots: { approve_claim: payerSlot } });
+  const hardshipPayerSlot = findInstruction("approve_hardship").accounts.findIndex((a) => a.name === "payer");
+  /** As the server reads them: SPONSOR_RENT_PAYER_ACCOUNTS against the IDL. */
+  const rentSlots = Object.fromEntries(Object.entries(SPONSOR_RENT_PAYER_ACCOUNTS).map(([n, a]) => [n, findInstruction(n).accounts.findIndex((x) => x.name === a)]));
+  const withSlot = policy({ heirloomRentPayerSlots: rentSlots });
+  const rentSlot: Record<string, number> = { approve_claim: payerSlot, approve_hardship: hardshipPayerSlot };
   /** The new and changed instructions, as the app builds them. */
   const built: Record<string, () => TransactionInstruction> = {
     report_fallback_death: () => ix.reportFallbackDeath(ctx, u, estate, 1, H, { monitorSeat: 0, beneficiary: true }),
     resolve_fallback_death: () => ix.resolveFallbackDeath(ctx, { signer: u, estate, index: 1, dead: false, rentTo: k(), as: { monitorSeat: 0, beneficiary: true } }),
     release_asset: () => ix.releaseAsset(ctx, u, asset, nft),
     remove_member: () => ix.removeMember(ctx, u, { beneficiary: k(), payee: k() }),
-    add_rule: () => ix.addRule(ctx, u, { ruleId: 1, beneficiaryWallet: k(), category: "Books", allowedPayeeKind: "School", maxPerClaim: 1n, lifetimeCap: 2n, validUntil: 2e9 }),
+    add_rule_v2: () => ix.addRule(ctx, u, { ruleId: 1, beneficiaryWallet: k(), category: "Books", allowedPayeeKind: "School", maxPerClaim: 1n, lifetimeCap: 2n, validUntil: 2e9 }),
+    submit_death_claim: () => ix.submitDeathClaim(ctx, estate, u, H, { listed: true }),
+    set_seat_monitors: () => ix.setSeatMonitors(ctx, u, 1, [k()]),
+    set_fallback: () => ix.setFallback(ctx, u, [k(), k()]),
+    owner_replace_seat: () => ix.ownerReplaceSeat(ctx, u, 1, k()),
+    raise_dispute: () => ix.raiseDispute(ctx, { disputer: u, estate, kind: "Unlock", target: estate, reasonHashHex: H, beneficiary: true }),
+    approve_hardship: () => ix.approveHardship(estate, u, asset, k()),
     report_seat_death: () => ix.reportSeatDeath(ctx, u, estate, 1, H, { beneficiary: true }),
     confirm_seat_death: () => ix.confirmSeatDeath(ctx, u, estate, 1, { beneficiary: true }),
-    finalize_succession: () => ix.finalizeSuccession(ctx, estate, 1, u, k()),
+    finalize_succession: () => ix.finalizeSuccession(ctx, estate, 1, u),
     vote_objection: () => ix.voteObjection(ctx, { voter: u, estate, kind: "Fallback", target: k(), uphold: true }),
     execute_claim: () => ix.executeClaim(ctx, { estate, payer: u, rule: k(), claim: k(), beneficiary: k(), payeeWallet: k() }),
     execute_scheduled: () => ix.executeScheduled(ctx, { estate, payer: u, rule: k(), beneficiary: k(), payeeWallet: k() }),
@@ -301,6 +312,11 @@ describe("second security review (22 Nov 2026)", () => {
     approve_claim: () => ix.approveClaim(estate, u, k(), k()),
   };
 
+  it.each(Object.keys(built))("%s: fits one sponsored transaction with its compute budget", (name) => {
+    const budget = [ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 })];
+    expect(txBytes([...budget, built[name]()], sponsor.publicKey)).toBeLessThanOrEqual(1232);
+  });
+
   it.each(Object.keys(built))("%s: sponsored, with no rent from the sponsor", (name) => {
     expect(SPONSORED_HEIRLOOM_IXS).toContain(name);
     expect(validateSponsoredTx(wire([built[name]()]), withSlot)).toMatchObject({ rentLamports: 0, summary: [`heirloom ${name}`] });
@@ -310,7 +326,7 @@ describe("second security review (22 Nov 2026)", () => {
   it.each(Object.keys(built))("%s: the sponsor can be none of its accounts", (name) => {
     const original = built[name]();
     original.keys.forEach((meta, i) => {
-      if (name === "approve_claim" && i === payerSlot) return;
+      if (rentSlot[name] === i) return;
       const t = new TransactionInstruction({
         programId, data: original.data,
         keys: original.keys.map((m, j) => (j === i ? { ...m, pubkey: sponsor.publicKey } : m)),
@@ -340,6 +356,21 @@ describe("second security review (22 Nov 2026)", () => {
     const stamp = built.approve_claim();
     stamp.keys[payerSlot] = { ...stamp.keys[payerSlot], pubkey: sponsor.publicKey };
     rejects(wire([stamp, createAta(), transfer()]), "rent_not_allowed", withSlot);
+  });
+
+  it("approve_hardship: the sponsor may pay its stamp's rent as for approve_claim, one rent per transaction", () => {
+    expect(rentSlots).toEqual({ approve_claim: payerSlot, approve_hardship: hardshipPayerSlot });
+    const sponsored = (t: TransactionInstruction, at: number) => {
+      t.keys[at] = { ...t.keys[at], pubkey: sponsor.publicKey };
+      return t;
+    };
+    const hardship = () => sponsored(built.approve_hardship(), hardshipPayerSlot);
+    expect(validateSponsoredTx(wire([hardship()]), withSlot)).toMatchObject({ rentLamports: APPROVAL_STAMP_RENT, summary: ["heirloom approve_hardship (stamp rent sponsored)"] });
+    rejects(wire([hardship()]), "rent_not_allowed", policy({ heirloomRentPayerSlots: rentSlots, sponsorPaysRent: false }));
+    rejects(wire([hardship(), sponsored(built.approve_claim(), payerSlot)]), "rent_not_allowed", withSlot);
+    rejects(wire([hardship(), createAta(), transfer()]), "rent_not_allowed", withSlot);
+    // Its verifier stays in their own slot: the sponsor there is refused.
+    rejects(wire([sponsored(built.approve_hardship(), 0), heirloomIx("heartbeat")]), "sponsor_in_instruction", withSlot);
   });
 });
 

@@ -21,7 +21,7 @@ export const PROGRAM_ERRORS = [
   "OwnClaimDispute", "TimeOutOfRange", "TooManyRules", "BadAgent", "RulesIncomplete", "NoResidualRecipient",
   "NothingToSweep", "ObjectionCooldown",
   "NotParticipant", "OwnApproval", "CoSignerRequired", "ListingStillOpen", "InvalidWallet", "ReportChanged",
-  "DeathReportOpen", "ClaimFromEndedRule", "OfferChanged",
+  "DeathReportOpen", "ClaimFromEndedRule", "OfferChanged", "DeathDisproved", "OfferTooOld",
 ] as const;
 
 /** Where the program's own message would not tell a family what to do. */
@@ -35,6 +35,8 @@ export const PLAIN: Record<string, string> = {
   DeathReportOpen: "The next person to be paid was reported to have died. The payment waits until that is confirmed, refuted or too old",
   ClaimFromEndedRule: "This request was made under a rule that has ended and was replaced, so it can't be approved or paid. Make a new request",
   OfferChanged: "The offer changed after it was agreed. Look at the offers again before anyone signs",
+  DeathDisproved: "The owner showed they are alive after this passing was reported, so the report no longer counts. If it is true, report it again",
+  OfferTooOld: "This offer was made before an objection to the sale was upheld, so it can't be accepted. The buyer has to make a new offer",
 };
 
 /** Anchor 3012 says only that an account is missing: what that means here, by the account's name. */

@@ -4,6 +4,7 @@ import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { getCoder, getIdl } from "../chain/idl";
 import { assetPda, estatePda, offerPda } from "../chain/pda";
 import type { RawSnapshot } from "../chain/reads";
+import type { SaleTiming } from "../agent/offers";
 
 const h = vi.hoisted(() => ({ signer: null as unknown }));
 const programId = new PublicKey(getIdl().address);
@@ -30,10 +31,12 @@ let offers: ReturnType<typeof offer>[];
 let posted: { asset: string; tx?: string }[];
 let signedBody: string;
 let answer: { status: number; body: unknown };
+let timing: SaleTiming;
 
 beforeEach(() => {
   verifiers = [mine, key(), key()];
   offers = [offer(lowBuyer, 10n), offer(buyer, 12n)];
+  timing = { now: 1_000, objectionWindowSecs: null, saleObjectionUpheldAt: null, hardshipQuorumAt: null };
   posted = [];
   answer = { status: 200, body: { tx: { signature: "s", explorerUrl: "u" }, ranking: { bestOffer: "o", eligible: [{ offer: "o", amount: "12", reason: "" }], ineligible: [] } } };
   h.signer = {
@@ -49,6 +52,7 @@ beforeEach(() => {
 const settle = (seen?: { offer: string; amount: bigint; recipient: string } | null) => acceptBestOffer({
   fetchEstate: async () => ({ estate: { agent, verifiers }, assets: [asset], offers }) as unknown as RawSnapshot,
   latestBlockhash: async () => "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi",
+  saleTiming: async () => timing,
   headers: async (_estate, body) => { signedBody = body; return {}; },
   fetch: (async (_url: string, init: RequestInit) => {
     posted.push(JSON.parse(String(init.body)));
@@ -88,6 +92,29 @@ describe("acceptBestOffer", () => {
     const tx = checkSaleTx(Buffer.from(posted[0].tx!, "base64"), { programId, usdtMint }, { estate, agent, asset, offer: offers[1], coSigner: mine });
     expect(String((getCoder().instruction.decode(Buffer.from(tx.instructions[0].data))!.data as { expected_amount: unknown }).expected_amount)).toBe("12");
     expect(signedBody).toBe(actionBody.acceptOffer({ asset: address, tx: posted[0].tx }));
+  });
+
+  it("never signs an offer the program would refuse now: made before an upheld sale objection, or still in its window", async () => {
+    offers = [{ ...offer(lowBuyer, 10n), createdAt: 600 }, { ...offer(buyer, 12n), createdAt: 500 }];
+    timing = { ...timing, saleObjectionUpheldAt: 500 };
+    let out = await settle();
+    let tx = checkSaleTx(Buffer.from(posted[0].tx!, "base64"), { programId, usdtMint }, { estate, agent, asset, offer: offers[0], coSigner: mine });
+    expect(tx.instructions).toHaveLength(1);
+    expect(out.ranking).toBeDefined();
+    posted = [];
+    offers = [offer(lowBuyer, 10n), { ...offer(buyer, 12n), createdAt: 990 }];
+    timing = { ...timing, saleObjectionUpheldAt: null, objectionWindowSecs: 60 };
+    out = await settle();
+    tx = checkSaleTx(Buffer.from(posted[0].tx!, "base64"), { programId, usdtMint }, { estate, agent, asset, offer: offers[0], coSigner: mine });
+    expect(tx.instructions).toHaveLength(1);
+    // A hardship approved within the window: nothing can be signed yet.
+    posted = [];
+    timing = { ...timing, hardshipQuorumAt: 990 };
+    await expect(acceptBestOffer({
+      fetchEstate: async () => ({ estate: { agent, verifiers }, assets: [{ ...asset, hardshipBeneficiary: lowBuyer }], offers }) as unknown as RawSnapshot,
+      latestBlockhash: async () => "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", saleTiming: async () => timing, headers: async () => ({}),
+    }, estate, address)).rejects.toMatchObject({ code: "ObjectionWindowOpen", retryAt: 1_050 });
+    expect(posted).toEqual([]);
   });
 
   it("only a trusted person", async () => {

@@ -7,6 +7,7 @@ import { refusedByProgram } from "@/lib/agent/refusal";
 import { eligibleSeats } from "@/lib/death-rules";
 import { chainCtx } from "@/lib/chain/client";
 import { invalidateProgramAccounts } from "@/lib/chain/reads";
+import { loadSaleTiming } from "@/lib/chain/sale-timing";
 import { base64ToBytes, getConnection } from "@/lib/chain/tx";
 import { agentAddress, agentCoSignSale, agentSignAndSend, hasAgentWallet } from "@/lib/agent/agent-wallet";
 import { loadPublicSnapshot } from "@/lib/server/estate";
@@ -46,9 +47,18 @@ export const POST = handler(async (req) => {
   const asset = snap.assets.find((a) => a.address === b.asset);
   if (!asset) throw new HttpError(404, "Asset not found in this estate.");
   const offers = snap.offers.filter((o) => o.asset === asset.address);
-  const ranking = rankOffers(asset, offers, { agent: snap.estate.agent, verifiers });
+  // Never an offer the program would refuse now: made before an upheld sale objection, or still in an objection window.
+  const ranking = rankOffers(asset, offers, { agent: snap.estate.agent, verifiers }, await loadSaleTiming(b.estate, asset));
   const best = offers.find((o) => o.address === ranking.bestOffer);
-  if (!best) return json({ tx: null, ranking, error: "No offer meets the floor price (or the hardship floor)." }, { status: 409 });
+  if (!best) {
+    const waiting = ranking.ineligible.some((r) => r.readyAt);
+    return json({
+      tx: null, ranking,
+      ...(waiting
+        ? { error: "ObjectionWindowOpen: monitors can still object, so no offer can be accepted yet.", code: "ObjectionWindowOpen" }
+        : { error: "No offer meets the floor price (or the hardship floor)." }),
+    }, { status: 409 });
+  }
 
   if (best.buyer === wallet) throw new HttpError(403, "You cannot settle a sale to yourself. Ask another trusted person.", "own_offer");
   const agentKey = await agentAddress();

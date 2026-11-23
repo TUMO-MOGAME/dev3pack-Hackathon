@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { eligibleSeats, isCurrentClaim, quorum, refuteWait, replaceableAt, reviewedHold } from "./death-rules";
+import {
+  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, quorum, refuteWait, replaceableAt, reviewedHold, seatReviewedHold,
+  unlockWaitSecs,
+} from "./death-rules";
 
 const [A, B, C] = ["A", "B", "C"];
 
@@ -11,6 +14,21 @@ describe("quorum", () => {
   it("nobody votes in their own favour", () => expect(quorum({ ...base, threshold: 1, interested: A }).met).toBe(false));
   it("zero eligible never passes", () => expect(quorum({ ...base, verifiers: [A, null, null], interested: A }).met).toBe(false));
   it("the all-zero key is an empty seat", () => expect(eligibleSeats(["11111111111111111111111111111111", B])).toEqual([1]));
+  it("the only one left who gains decides alone, when the agent approved", () => {
+    const lone = { ...base, verifiers: [A, null, null], interested: A, threshold: 1 };
+    expect(quorum({ ...lone, alone: true }).met).toBe(true);
+    expect(quorum({ ...lone, alone: true, verdict: "Referred" }).met).toBe(false);
+    expect(quorum(lone).met).toBe(false); // a hardship has no lone route
+    expect(deciders([A, B, null], A, "Approved")).toEqual([1]);
+    expect(decidesAlone([A, null, null], A, "Approved")).toBe(true);
+    expect(decidesAlone([A, B, null], A, "Approved")).toBe(false);
+    expect(decidesAlone([A, null, null], A, "Referred")).toBe(false);
+    expect(decidesAlone([null, null, null], A, "Approved")).toBe(false);
+  });
+  it("decided alone: the unlock waits twice the waiting period (read as at least a minute)", () => {
+    expect(unlockWaitSecs({ waitingPeriodSecs: 120, death: { decidedAlone: true } })).toBe(240);
+    expect(unlockWaitSecs({ waitingPeriodSecs: 0, death: {} })).toBe(60);
+  });
 });
 
 describe("replaceable reports", () => {
@@ -23,6 +41,13 @@ describe("replaceable reports", () => {
     expect(replaceableAt({ ...base, waitingSecs: 9_999_999 })).toBe(87_400);
   });
   it("refuting always has a minute", () => expect(refuteWait(0)).toBe(60));
+  it("a reviewed seat report stands for the recovery timeout and two waits", () => expect(seatReviewedHold(120)).toBe(720));
+  it("an unreviewed fallback death report keeps its place for at most half the refute wait", () => {
+    expect(fallbackGrace(3_600, 600)).toBe(300);
+    expect(fallbackGrace(120, 86_400)).toBe(120);
+    expect(replaceableAt({ ...base, grace: fallbackGrace(120, 100) })).toBe(1_050);
+    expect(replaceableAt({ ...base, who: A, grace: fallbackGrace(120, 100) })).toBe(1_100);
+  });
 });
 
 describe("reused rule slots", () => {

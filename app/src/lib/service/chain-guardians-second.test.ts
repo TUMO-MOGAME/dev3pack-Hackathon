@@ -141,32 +141,51 @@ describe("confirmSeatDeath (R18)", () => {
     expect(account("beneficiary_account")).toBe(ben(kid));
   });
 
+  const recent = () => ({ death_pending_since: Math.floor(Date.now() / 1000) });
+
   it.each([
     ["a monitor exists", { monitors: [monitor, NOBODY] }], ["a second backup exists", { backups: [key(), key()] }],
-  ])("not when %s", async (_, over) => {
+  ])("not when %s, until the report has waited the recovery timeout", async (_, over) => {
     lastHolder();
-    setSeat(2, over);
+    setSeat(2, { ...over, ...recent() });
     h.me = kid;
     await svc().confirmSeatDeath(estate, 2);
     expect(account("beneficiary_account")).toBe(none);
+    setSeat(2, { ...over, death_pending_since: Math.floor(Date.now() / 1000) - 4 * 120 });
+    await svc().confirmSeatDeath(estate, 2);
+    expect(account("beneficiary_account", sent[1])).toBe(ben(kid));
   });
 
-  it("not while another seat is held, nor for a removed beneficiary", async () => {
+  it("a monitor who is also the first backup doesn't watch the seat", async () => {
+    lastHolder();
+    const first = key();
+    setSeat(2, { monitors: [first, NOBODY], backups: [first, NOBODY], ...recent() });
+    h.me = kid;
+    await svc().confirmSeatDeath(estate, 2);
+    expect(account("beneficiary_account")).toBe(ben(kid));
+  });
+
+  it("not while another seat is held (before the timeout), nor for a removed beneficiary, nor for a holder", async () => {
+    setSeat(2, recent());
     h.me = kid;
     await svc().confirmSeatDeath(estate, 2);
     lastHolder();
     h.me = stranger;
     await svc().confirmSeatDeath(estate, 2);
-    expect(sent.map((t) => account("beneficiary_account", t))).toEqual([none, none]);
+    setSeat(2, { death_pending_since: 0 });
+    h.me = v2;
+    await svc().confirmSeatDeath(estate, 2);
+    expect(sent.map((t) => account("beneficiary_account", t))).toEqual([none, none, none]);
   });
 });
 
 describe("finalizeSuccession", () => {
   it.each([["a confirmed report", () => confirmer], ["no confirmation", () => NOBODY]])(
-    "%s: always the confirmed-by Beneficiary PDA last", async (_, by) => {
+    "%s: exactly the IDL's accounts, no remaining account (the program reads none)", async (_, by) => {
       setSeat(2, { death_confirmed_by: by() });
       await svc().finalizeSuccession(estate, 2);
-      expect(sent[0].keys.at(-1)).toMatchObject({ pubkey: beneficiaryPda(programId, estate, by()), isSigner: false, isWritable: false });
+      expect(sent[0].keys).toHaveLength(findInstruction("finalize_succession").accounts.length);
+      expect(sent[0].keys.some((k) => k.pubkey.equals(beneficiaryPda(programId, estate, by())))).toBe(false);
     },
   );
 });

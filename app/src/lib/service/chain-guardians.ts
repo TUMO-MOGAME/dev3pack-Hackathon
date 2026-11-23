@@ -18,8 +18,8 @@ import * as ix from "../chain/instructions";
 import { beneficiaryPda, fallbackReportPda, guardPda, seatPda } from "../chain/pda";
 import { decodeScanned, fetchAccountRaw, scanAccounts, type ChainEvent } from "../chain/reads";
 import { assembleGuardians, decodeMedia, disabledGuardians, fallbackSlot, fetchGuardiansRaw, nextFallback, type GuardianExtras } from "../chain/guardians";
-import { bool, enumOf, key, keyArray, num, str, type Raw } from "../chain/decoders";
-import { eligibleSeats } from "../death-rules";
+import { bool, enumOf, key, keyArray, num, str, waitingOf, type Raw } from "../chain/decoders";
+import { eligibleSeats, recoveryTimeout } from "../death-rules";
 import { ChainServiceError, must } from "./chain-errors";
 import { confirmableFrom, fallbackReportStep, seatReportStep } from "./chain-reports";
 import { getActiveSigner } from "../wallet/signer";
@@ -247,17 +247,23 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       const seat = await seatRaw(estate, index);
       must(seat, "NoSuccessionPending", "This trusted person's seat is not set up.");
       const holder = key(seat, "holder");
-      // R18: only when nobody else could confirm does an active beneficiary pass their account.
-      const lastAndUnwatched = !eligibleSeats(keyArray(await estateRaw(estate), "verifiers"), holder).length
-        && keyArray(seat, "monitors").every((m) => m === DEFAULT_KEY) && keyArray(seat, "backups")[1] === DEFAULT_KEY;
-      const beneficiary = lastAndUnwatched && (await activeBeneficiary(estate, confirmer));
+      const e = await estateRaw(estate);
+      const verifiers = keyArray(e, "verifiers");
+      // An active beneficiary who holds no seat passes their account when the program lets them confirm: nobody else
+      // holds a seat and nobody watches this one (a monitor other than the first backup, or a second backup), or the
+      // approved report has waited the recovery timeout.
+      const backups = keyArray(seat, "backups");
+      const watched = keyArray(seat, "monitors").some((m) => m !== DEFAULT_KEY && m !== backups[0]) || backups[1] !== DEFAULT_KEY;
+      const timedOut = now() >= num(seat, "death_pending_since") + recoveryTimeout(waitingOf(e));
+      const mayConfirm = (!eligibleSeats(verifiers, holder).length && !watched) || timedOut;
+      const beneficiary = !verifiers.includes(confirmer.toBase58()) && mayConfirm && (await activeBeneficiary(estate, confirmer));
       return d.send([ix.confirmSeatDeath(chainCtx(), confirmer, pk(estate), index, { beneficiary })]);
     },
     vetoSeatDeath: (estate, index) => d.send([ix.vetoSeatDeath(chainCtx(), me(), pk(estate), index)]),
     async finalizeSuccession(estate, index) {
       const seat = await seatRaw(estate, index);
       must(seat, "NoSuccessionPending", "This trusted person's seat is not set up.");
-      return d.send([ix.finalizeSuccession(chainCtx(), pk(estate), index, me(), pk(key(seat, "death_confirmed_by")))]);
+      return d.send([ix.finalizeSuccession(chainCtx(), pk(estate), index, me())]);
     },
 
     async raiseObjection(estate, input) {

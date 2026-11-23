@@ -4,7 +4,10 @@
  */
 import type { EstateSnapshot } from "../service/types";
 import type { Asset, Base58, Claim, Estate, Hardship, Verdict } from "../types";
-import { eligibleSeats, isCurrentClaim, quorum, refuteWait, replaceableAt, reviewedHold } from "../death-rules";
+import {
+  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, quorum, recoveryTimeout, refuteWait, replaceableAt, reportGrace,
+  reviewedHold, seatReviewedHold,
+} from "../death-rules";
 import { openToPeople } from "../verdict";
 import type { FallbackDeathReport, Seat, TargetKind } from "./types";
 
@@ -58,18 +61,20 @@ export interface Tally {
   votes: boolean[];
 }
 
-function tallyOf(verifiers: readonly Base58[], given: readonly boolean[], threshold: number, verdict: Verdict, interested: Base58 | null): Tally {
-  const eligible = eligibleSeats(verifiers, interested);
+/** `alone`: the lone route of a death claim and a claim (death-rules.ts `deciders`). */
+function tallyOf(verifiers: readonly Base58[], given: readonly boolean[], threshold: number, verdict: Verdict, interested: Base58 | null, alone = false): Tally {
+  const eligible = alone ? deciders(verifiers, interested, verdict) : eligibleSeats(verifiers, interested);
   const votes = verifiers.map((_, i) => eligible.includes(i) && !!given[i]);
-  return { ...quorum({ verifiers, votes, threshold, verdict, interested }), eligible: eligible.length, votes };
+  return { ...quorum({ verifiers, votes, threshold, verdict, interested, alone }), eligible: eligible.length, votes };
 }
 
 export const deathTally = (e: Pick<Estate, "verifiers" | "deathThreshold" | "death">): Tally =>
-  tallyOf(e.verifiers, e.death.attestations, e.deathThreshold, e.death.verdict, e.death.submittedBy);
+  tallyOf(e.verifiers, e.death.attestations, e.deathThreshold, e.death.verdict, e.death.submittedBy, true);
 
 /** Approvals from before this death don't count: they can be given again. */
 export const claimTally = (e: Pick<Estate, "verifiers" | "claimThreshold">, c: Claim): Tally =>
-  tallyOf(e.verifiers, c.approvalsCount === false ? [] : c.approvals, e.claimThreshold, c.agentVerdict, c.beneficiary);
+  tallyOf(e.verifiers, c.approvalsCount === false ? [] : c.approvals, e.claimThreshold, c.agentVerdict, c.beneficiary, true);
+
 
 export const hardshipTally = (e: Pick<Estate, "verifiers" | "hardshipThreshold">, h: Hardship): Tally =>
   tallyOf(e.verifiers, h.approvals, e.hardshipThreshold, h.agentVerdict, h.beneficiary);
@@ -85,7 +90,7 @@ export function deathVote(e: Estate, me: Base58 | null | undefined): Vote | null
   if (!isHeld(me) || e.status !== "Active" || !e.death.certHash || !openToPeople(e.death.verdict)) return null;
   const i = e.verifiers.indexOf(me);
   if (i < 0) return null;
-  if (me === e.death.submittedBy) return "own";
+  if (me === e.death.submittedBy && !decidesAlone(e.verifiers, me, e.death.verdict)) return "own";
   if (!e.death.attestations[i]) return "approve";
   return deathTally(e).met ? "complete" : "waiting";
 }
@@ -118,7 +123,7 @@ export function claimVote(snap: EstateSnapshot, c: Claim, me: Base58 | null | un
   if (declinedByOwner(snap, c)) return null;
   const i = e.verifiers.indexOf(me);
   if (i < 0) return null;
-  if (me === c.beneficiary) return "own";
+  if (me === c.beneficiary && !decidesAlone(e.verifiers, me, c.agentVerdict)) return "own";
   if (!c.approvals[i]) return "approve";
   if (c.approvalsCount === false) return "again";
   return claimTally(e, c).met && !windowStarted(snap, c) ? "complete" : "waiting";
@@ -175,8 +180,8 @@ export interface ReplaceTimes {
   reporter: number;
 }
 
-function replaceTimes(verdict: Verdict, reportedAt: number, waitingSecs: number, hold: number): ReplaceTimes {
-  const at = (who: Base58) => replaceableAt({ verdict, reportedAt, reporter: "reporter", who, waitingSecs, hold });
+function replaceTimes(verdict: Verdict, reportedAt: number, waitingSecs: number, hold: number, grace?: number): ReplaceTimes {
+  const at = (who: Base58) => replaceableAt({ verdict, reportedAt, reporter: "reporter", who, waitingSecs, hold, grace });
   return { others: at("someone else"), reporter: at("reporter") };
 }
 
@@ -190,19 +195,26 @@ export function deathReplace(e: Estate): ReplaceTimes | null {
 export function seatReplace(e: Estate, seat: Pick<Seat, "succession">): ReplaceTimes | null {
   const s = seat.succession;
   if (!s || s.confirmedBy) return null;
-  return replaceTimes(s.verdict, s.reportedAt ?? 0, e.waitingPeriodSecs, reviewedHold(e.waitingPeriodSecs));
+  return replaceTimes(s.verdict, s.reportedAt ?? 0, e.waitingPeriodSecs, seatReviewedHold(e.waitingPeriodSecs));
 }
 
 export function fallbackReplace(e: Estate, fallbackWaitSecs: number, r: FallbackDeathReport): ReplaceTimes {
-  return replaceTimes(r.verdict, r.reportedAt, e.waitingPeriodSecs, 2 * refuteWait(fallbackWaitSecs));
+  return replaceTimes(r.verdict, r.reportedAt, e.waitingPeriodSecs, 2 * refuteWait(fallbackWaitSecs), fallbackGrace(e.waitingPeriodSecs, fallbackWaitSecs));
 }
 
 /** When `who` may replace it. */
 export const replaceFor = (t: ReplaceTimes, reporter: Base58 | null, who: Base58) => (who === reporter ? t.reporter : t.others);
 
+/** Who may report the owner's death: an active beneficiary, a living trusted person or a living listed fallback recipient; never the agent. */
+export function deathReporter(snap: EstateSnapshot, me: Base58 | null | undefined): boolean {
+  const e = snap.estate;
+  if (!isHeld(me) || me === e.agent) return false;
+  return isFamily(snap, me) || e.verifiers.includes(me) || !!snap.guardians?.fallback.recipients.some((r) => r.wallet === me && !r.dead);
+}
+
 export function canSubmitDeath(snap: EstateSnapshot, me: Base58 | null | undefined, now: number | null): boolean {
   const e = snap.estate;
-  if (!me || e.status !== "Active" || !isFamily(snap, me)) return false;
+  if (!me || e.status !== "Active" || !deathReporter(snap, me)) return false;
   if (!e.death.certHash) return true;
   const t = deathReplace(e);
   return !!t && now !== null && now >= replaceFor(t, e.death.submittedBy, me);
@@ -330,9 +342,18 @@ export function hasInbox(snap: EstateSnapshot | null | undefined, me: Base58 | n
 /* ----- replacing the agent ----- */
 
 /** While Active every trusted person, at least two. Afterwards two, or the only one left. */
-export function agentVotesNeeded(e: Pick<Estate, "status" | "verifiers">): number {
+/**
+ * Votes to replace the agent: every held seat (at least two) before the unlock, two or the only one left after it. Also
+ * two (or the only one) before the unlock once a death claim that the owner hasn't disproved has stood one grace and
+ * the owner has shown no life for the recovery timeout.
+ */
+export function agentVotesNeeded(e: Pick<Estate, "status" | "verifiers"> & Partial<Pick<Estate, "death" | "lastHeartbeat" | "waitingPeriodSecs">>, now = Math.floor(Date.now() / 1000)): number {
   const seats = eligibleSeats(e.verifiers).length;
-  return e.status === "Active" ? Math.max(seats, 2) : Math.min(seats, 2);
+  const since = e.death ? deathSince({ status: e.status, death: e.death }) : 0;
+  const claimOpen = !!e.death?.certHash && (e.lastHeartbeat ?? 0) <= since;
+  const w = e.waitingPeriodSecs ?? 0;
+  const recovery = claimOpen && now >= (e.lastHeartbeat ?? 0) + recoveryTimeout(w) && now >= since + reportGrace(w);
+  return e.status === "Unlocked" || recovery ? Math.min(seats, 2) : Math.max(seats, 2);
 }
 
 export function agentVoteFor(snap: EstateSnapshot, candidate: Base58): { got: number; needed: number; voters: Base58[] } {

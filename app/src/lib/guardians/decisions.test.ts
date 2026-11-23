@@ -100,6 +100,18 @@ describe("who may sign", () => {
     expect(claimVote(snap({ estate: { verifiers: [KID, B, C] } }), claim(), KID)).toBe("own");
   });
 
+  it("the only trusted person left, who gains, decides alone when the agent approved (never referred, never a hardship)", () => {
+    const lone = { verifiers: [A, NO_WALLET, NO_WALLET] as [string, string, string] };
+    expect(deathVote(snap({ estate: { ...active({ submittedBy: A }), ...lone } }).estate, A)).toBe("approve");
+    expect(deathVote(snap({ estate: { ...active({ submittedBy: A, verdict: "Referred" }), ...lone } }).estate, A)).toBe("own");
+    const own = claim({ beneficiary: A });
+    const family = [{ address: "bA", wallet: A, label: "A", active: true }];
+    expect(claimVote(snap({ estate: lone, beneficiaries: family }), own, A)).toBe("approve");
+    expect(claimVote(snap({ estate: lone, beneficiaries: family }), { ...own, agentVerdict: "Referred" }, A)).toBe("own");
+    expect(claimTally(snap({ estate: lone }).estate, { ...own, approvals: [true, false, false], decidedAlone: true }).met).toBe(true);
+    expect(hardshipVote(snap({ estate: lone }), hardship({ beneficiary: A }), A)).toBe("own");
+  });
+
   it("stale approvals are given again", () => {
     expect(claimVote(snap(), claim({ approvals: [true, false, false], approvalsCount: false }), A)).toBe("again");
   });
@@ -169,7 +181,11 @@ describe("replacing a stalled report (R5, R6)", () => {
     expect(canSubmitDeath(s, SIB, 169)).toBe(false);
     expect(canSubmitDeath(s, SIB, 170)).toBe(true);
     expect(canSubmitDeath(s, KID, 170)).toBe(false);
-    expect(canSubmitDeath(s, A, 999)).toBe(false);
+    expect(canSubmitDeath(s, A, 999)).toBe(true); // a trusted person may report it too
+    expect(canSubmitDeath(s, AGENT, 999)).toBe(false);
+    expect(canSubmitDeath(s, "STRANGER", 999)).toBe(false);
+    const listed = snap({ estate: active(), guardians: { fallback: { recipients: [{ wallet: BK2, name: "R", kind: "heir", dead: false }, { wallet: BK1, name: "D", kind: "heir", dead: true }], startedAt: null, readyAt: null, done: false, canStart: false } } });
+    expect([canSubmitDeath(listed, BK2, 999), canSubmitDeath(listed, BK1, 999)]).toEqual([true, false]);
   });
 
   it("a reviewed claim with nobody left stays", () => {
@@ -180,8 +196,8 @@ describe("replacing a stalled report (R5, R6)", () => {
 
   it("a seat's report, until it is confirmed", () => {
     const s = snap();
-    expect(canReportSeat(s, seat(), KID, 1119)).toBe(false);
-    expect(canReportSeat(s, seat(), KID, 1120)).toBe(true);
+    expect(canReportSeat(s, seat(), KID, 1359)).toBe(false); // reviewed: RT + 2W (6 x 60 s)
+    expect(canReportSeat(s, seat(), KID, 1360)).toBe(true);
     const confirmed = seat({ succession: { ...seat().succession!, confirmedBy: A } });
     expect(seatReplace(s.estate, confirmed)).toBeNull();
     expect(canReportSeat(s, confirmed, KID, 9999)).toBe(false);
@@ -267,10 +283,18 @@ describe("a reported fallback recipient (R4, R20)", () => {
 
 describe("replacing the agent", () => {
   it("everyone while Active, at least two; afterwards two, or the only one", () => {
-    expect(agentVotesNeeded(snap({ estate: active() }).estate)).toBe(3);
-    expect(agentVotesNeeded(snap({ estate: { ...active(), ...lastHolder } }).estate)).toBe(2);
+    expect(agentVotesNeeded(snap({ estate: active() }).estate, 100)).toBe(3);
+    expect(agentVotesNeeded(snap({ estate: { ...active(), ...lastHolder } }).estate, 100)).toBe(2);
     expect(agentVotesNeeded(snap().estate)).toBe(2);
     expect(agentVotesNeeded(snap({ estate: lastHolder }).estate)).toBe(1);
+  });
+
+  it("two before the unlock once an undisproved death claim has stood one grace and the owner showed no life for RT", () => {
+    const e = snap({ estate: active() }).estate; // claim at 50, last sign of life at 1, W = 60 s: RT = 240 s
+    expect(agentVotesNeeded(e, 240)).toBe(3);
+    expect(agentVotesNeeded(e, 241)).toBe(2);
+    expect(agentVotesNeeded({ ...e, lastHeartbeat: 60 }, 9_999)).toBe(3); // disproved: the owner checked in after it
+    expect(agentVotesNeeded({ ...e, status: "DeathPending" }, 100)).toBe(3);
   });
 
   it("only votes by people who still hold a seat", () => {

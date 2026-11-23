@@ -287,7 +287,7 @@ export async function rehearse({ conn, payer, explorer, log = () => undefined }:
     const reporter = trusted[0];
     const cert = await H("recipient");
     await does("R20", "the next recipient is reported dead", [ix.reportFallbackDeath(ctx, reporter.publicKey, estate, 0, cert)], [reporter]);
-    await does("R20", "the agent approves the report", [ix.reviewFallbackDeath(estate, a, 0, true, await H("recipient report"), cert, reporter.publicKey)], [agent]);
+    await does("R20", "the agent approves the report", [ix.reviewFallbackDeath(estate, a, 0, true, await H("recipient report"), cert, reporter.publicKey, recipient.publicKey)], [agent]);
     const sweep = ix.sweepResidual(ctx, { payer: payer.publicKey, estate, recipient: recipient.publicKey, reportIndex: 0, rules: [rule0, rule1] });
     await refuses("R20", "a sweep to them", "DeathReportOpen", [sweep]);
     await does("R20", "they say they are alive, and the sweep pays them", [
@@ -316,7 +316,7 @@ export async function rehearse({ conn, payer, explorer, log = () => undefined }:
     await does("R5", "a stale claim is replaced", [ix.submitDeathClaim(ctx, estate, second.publicKey, c2)], [second]);
     await refuses("R5", "the agent's review of the replaced claim", "ReportChanged", [ix.reviewDeath(estate, a, "Approve", await H("c1 report"), c1)], [agent]);
     await does("R6", "a stale seat report gives way", [ix.reportSeatDeath(ctx, second.publicKey, estate, 1, s2, { beneficiary: true })], [second]);
-    await refuses("R6", "the agent's review of the replaced report", "ReportChanged", [ix.reviewSeatDeath(estate, a, 1, true, await H("s1 report"), s1)], [agent]);
+    await refuses("R6", "the agent's review of the replaced report", "ReportChanged", [ix.reviewSeatDeath(estate, a, 1, true, await H("s1 report"), s1, trusted[1].publicKey)], [agent]);
 
     await does("R2", "the agent reviews the claim that stands", [ix.reviewDeath(estate, a, "Approve", await H("c2 report"), c2)], [agent]);
     await does("R2", "a trusted person attests", [ix.attestDeath(estate, trusted[0].publicKey)], [trusted[0]]);
@@ -344,9 +344,9 @@ export async function rehearse({ conn, payer, explorer, log = () => undefined }:
       const confirmer = trusted[i + 1];
       const cert = await H(`seat ${i}`);
       await does("setup", `seat ${i}: reported`, [ix.reportSeatDeath(ctx, first.publicKey, estate, i, cert, { beneficiary: true })], [first]);
-      await does("setup", `seat ${i}: reviewed`, [ix.reviewSeatDeath(estate, a, i, true, await H(`seat ${i} report`), cert)], [agent]);
+      await does("setup", `seat ${i}: reviewed`, [ix.reviewSeatDeath(estate, a, i, true, await H(`seat ${i} report`), cert, trusted[i].publicKey)], [agent]);
       await does("setup", `seat ${i}: confirmed`, [ix.confirmSeatDeath(ctx, confirmer.publicKey, estate, i)], [confirmer]);
-      await does("setup", `seat ${i}: vacant`, [ix.finalizeSuccession(ctx, estate, i, payer.publicKey, confirmer.publicKey)]);
+      await does("setup", `seat ${i}: vacant`, [ix.finalizeSuccession(ctx, estate, i, payer.publicKey)]);
     }
 
     const lone = await H("lone death");
@@ -358,15 +358,12 @@ export async function rehearse({ conn, payer, explorer, log = () => undefined }:
 
     const lastSeat = await H("seat 2");
     await does("R18", "the last holder is reported dead", [ix.reportSeatDeath(ctx, first.publicKey, estate, 2, lastSeat, { beneficiary: true })], [first]);
-    await does("R18", "reviewed", [ix.reviewSeatDeath(estate, a, 2, true, await H("seat 2 report"), lastSeat)], [agent]);
+    await does("R18", "reviewed", [ix.reviewSeatDeath(estate, a, 2, true, await H("seat 2 report"), lastSeat, trusted[2].publicKey)], [agent]);
     await refuses("R18", "the reporter confirms", "NotConfirmer", [ix.confirmSeatDeath(ctx, first.publicKey, estate, 2, { beneficiary: true })], [first]);
     await does("R18", "another beneficiary confirms", [ix.confirmSeatDeath(ctx, second.publicKey, estate, 2, { beneficiary: true })], [second]);
     await does("R18", "the owner checks in after it", [ix.heartbeat(ctx, o)], [owner]);
-    const finalize = ix.finalizeSuccession(ctx, estate, 2, payer.publicKey, second.publicKey);
-    const without = ix.finalizeSuccession(ctx, estate, 2, payer.publicKey, second.publicKey);
-    without.keys.pop();
-    await refuses("R18", "finalising without the confirmer's account", "NotConfirmer", [without]);
-    await does("R18", "with it the confirmation stands", [finalize]);
+    // The program reads no remaining account any more: the beneficiary's confirmation stands on its own.
+    await does("R18", "the confirmation stands", [ix.finalizeSuccession(ctx, estate, 2, payer.publicKey)]);
     const last = await must("Seat", seatPda(programId, estate, 2));
     proven("R18", "the last seat is vacant", key(last, "holder") === PublicKey.default.toBase58());
 
@@ -380,7 +377,7 @@ export async function rehearse({ conn, payer, explorer, log = () => undefined }:
     const died = await H("second recipient");
     await refuses("R4", "a stranger reports a recipient dead", "NotParticipant", [ix.reportFallbackDeath(ctx, stranger.publicKey, estate, 1, died)], [stranger]);
     await does("R4", "a family member reports", [ix.reportFallbackDeath(ctx, first.publicKey, estate, 1, died, { beneficiary: true })], [first]);
-    await does("R4", "the agent approves", [ix.reviewFallbackDeath(estate, a, 1, true, await H("second recipient report"), died, first.publicKey)], [agent]);
+    await does("R4", "the agent approves", [ix.reviewFallbackDeath(estate, a, 1, true, await H("second recipient report"), died, first.publicKey, after.publicKey)], [agent]);
     const report = await must("FallbackReport", fallbackReportPda(programId, estate, 1));
     proven("R4", "the agent's approval alone marks nobody dead",
       num(await must("Guard", guard), "fallback_dead") === 0 && enumOf(report, "verdict", ["Pending", "Approved"] as const) === "Approved");

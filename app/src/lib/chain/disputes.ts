@@ -44,7 +44,9 @@ export function decodeDispute(address: Base58, o: Raw, estate: Estate, names: Re
   // A vacant seat's vote no longer counts. A challenge to an unlock from before the owner's last sign of life is void.
   const seats = eligibleSeats(estate.verifiers);
   const counted = (mask: number) => seats.filter((i) => mask & (1 << i)).length;
-  const voided = kind === "Unlock" && raisedAt < estate.lastHeartbeat;
+  // Voided by a new report (raised_at 0), or an unlock challenge raised before the owner's last sign of life. Once
+  // decided, raised_at is when it was decided.
+  const voided = raisedAt === 0 || (kind === "Unlock" && raisedAt < estate.lastHeartbeat);
   return {
     address, kind: kind as DisputeKind, target: key(o, "target"), disputer,
     disputerName: names[disputer] ?? (estate.verifiers.includes(disputer) ? estate.verifierNames[estate.verifiers.indexOf(disputer)] : shortAddress(disputer)),

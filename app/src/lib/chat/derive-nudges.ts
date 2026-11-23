@@ -11,6 +11,7 @@ import { chatCopy, fill } from "./nudge-copy";
 import { ask as askEnglish, type AskCopy } from "@/content/ask";
 import { askStatus, decider } from "@/lib/ask/logic";
 import { openDisputeOn } from "@/lib/disputes/types";
+import { unlockWaitSecs } from "@/lib/death-rules";
 import { shortName } from "@/lib/names";
 import type { Nudge, NudgeKind } from "./types";
 import { openToPeople } from "@/lib/verdict";
@@ -169,7 +170,7 @@ export function deriveNudges(snap: EstateSnapshot | null, role: Role | null, now
   }
 
   // Waiting period over: anyone can finalise the unlock.
-  if (e.status === "DeathPending" && d.pendingSince !== null && now >= d.pendingSince + e.waitingPeriodSecs && role !== "owner" && role !== "buyer") {
+  if (e.status === "DeathPending" && d.pendingSince !== null && now >= d.pendingSince + unlockWaitSecs(e) && role !== "owner" && role !== "buyer") {
     push({
       id: `unlock:${e.address}:${d.pendingSince}`, kind: "unlock-ready", urgency: "now", title: c.unlockReady.title,
       body: fill(c.unlockReady.body, { owner }),

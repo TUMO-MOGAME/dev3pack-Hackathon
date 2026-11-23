@@ -143,7 +143,7 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
         `Trusted person whose death is reported: seat ${index + 1}, wallet ${holder}${name ? `, name: ${name}` : ""}. This is not the estate owner.`,
         ...(name ? [] : ["Their name is not on record: judge the document itself. A second trusted person confirms who it is before anything changes."]),
       ].join("\n"),
-      instruction: (agent, outcome, hash) => reviewSeatDeath(estateKey, agent, index, outcome === "Approve", hash, p.sha256),
+      instruction: (agent, outcome, hash) => reviewSeatDeath(estateKey, agent, index, outcome === "Approve", hash, p.sha256, new PublicKey(holder)),
     };
   }
 
@@ -169,6 +169,6 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
         "Their name is not on record: judge the document itself. A missing name is no reason to reject or to answer needs_human: "
           + "after the wait a second person confirms who it is, and the recipient can say they are alive.",
       ].join("\n"),
-    instruction: (agent, outcome, hash) => reviewFallbackDeath(estateKey, agent, index, outcome === "Approve", hash, p.sha256, rentTo),
+    instruction: (agent, outcome, hash) => reviewFallbackDeath(estateKey, agent, index, outcome === "Approve", hash, p.sha256, rentTo, new PublicKey(recipient)),
   };
 }

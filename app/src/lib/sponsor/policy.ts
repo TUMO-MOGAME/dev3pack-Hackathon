@@ -17,11 +17,13 @@
  *  - Heirloom program: instructions whose 8-byte discriminator is on the allow-list. The permissionless ones
  *    (finalize_unlock, finalize_succession, start_fallback, lapse_objection) take any wallet as a signing `caller`,
  *    so they too have a user signature to check and rate-limit; the sponsor can never be that caller.
- *  - So the sponsor is never a reporter (who pays a report's rent), `rent_to`, a `payer` other than approve_claim's,
+ *  - So the sponsor is never a reporter (who pays a report's rent), `rent_to`, a `payer` other than approve_claim's
+ *    and approve_hardship's,
  *    a `co_signer` or a close destination, as a named or a remaining account.
  *  - Rent for one account per transaction: one token account or one approval stamp.
  *  - The sponsor's key may appear in no instruction at all, except as the rent payer of an allowed ATA creation, or as
- *    the `payer` of approve_claim (rent for the claim's small ApprovalStamp, once per tx, only when `sponsorPaysRent`):
+ *    the `payer` of approve_claim or approve_hardship (rent for the small ApprovalStamp of the claim or the hardship,
+ *    once per tx, only when `sponsorPaysRent`):
  *    so it is never a source, authority, owner, or account any program can debit beyond that rent.
  *  - Estimated fee (5000 lamports × signatures + priority fee) ≤ maxFeeLamports.
  *  - Every signer is one the transaction needs (plan §18.9 H3): a token transfer's authority, a Heirloom instruction's
@@ -37,8 +39,8 @@ export const TOKEN_ACCOUNT_RENT = 2_039_280; // rent-exempt minimum for a 165-by
 export const MAX_TX_BYTES = 1232;
 /** Rent-exempt minimum for an ApprovalStamp (8 + 32 + 1 + 32 + 8 + 1 = 82 bytes). */
 export const APPROVAL_STAMP_RENT = (82 + 128) * 6960;
-/** Heirloom instructions whose named account the sponsor may fill as the rent payer (guardians: the approval stamp). */
-export const SPONSOR_RENT_PAYER_ACCOUNTS: Record<string, string> = { approve_claim: "payer" };
+/** Heirloom instructions whose named account the sponsor may fill as the rent payer (the approval stamp of a claim or a hardship). */
+export const SPONSOR_RENT_PAYER_ACCOUNTS: Record<string, string> = { approve_claim: "payer", approve_hardship: "payer" };
 
 /** User-initiated Heirloom instructions the sponsor will pay fees for. Agent-only ones (review_*, list_asset, accept_offer) are excluded. */
 export const SPONSORED_HEIRLOOM_IXS = [

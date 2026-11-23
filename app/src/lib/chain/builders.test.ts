@@ -37,6 +37,7 @@ interface Case { build(): TransactionInstruction; accounts?: Accounts; args?: un
 /** Accounts that mean the same in every instruction. */
 const SAME: Accounts = {
   estate: E, guard, seat0: seats[0], seat1: seats[1], seat2: seats[2], usdt_mint: usdt, vault: ata(usdt, E),
+  fallback_report0: report(0), fallback_report1: report(1), fallback_report2: report(2), fallback_report3: report(3),
   system_program: SYSTEM_PROGRAM_ID, token_program: TOKEN_PROGRAM_ID, associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
 };
 
@@ -61,7 +62,7 @@ const CASES: Record<string, Case[]> = {
   set_will: [{ build: () => ix.setWill(ctx, owner, H, "heirloom:will:x"), accounts: { owner }, args: [H, "heirloom:will:x"] }],
   add_beneficiary: [{ build: () => ix.addBeneficiary(ctx, owner, heir, "Family member 1"), accounts: { owner, wallet: heir, beneficiary: ben(heir) }, args: ["Family member 1"] }],
   add_payee: [{ build: () => ix.addPayee(ctx, owner, payee, "School", "A school"), accounts: { owner, wallet: payee, payee: payeePda(P, E, payee) }, args: ["school", "A school"] }],
-  add_rule: [
+  add_rule_v2: [
     {
       build: () => ix.addRule(ctx, owner, { ...ruleInput, recurring: { amount: 4n, intervalSecs: 60, firstDue: 1_900_000_000, payeeWallet: payee } }),
       accounts: { owner, beneficiary: ben(heir), rule, payee: payeePda(P, E, payee), year_cap: yearCapPda(P, rule) },
@@ -79,7 +80,12 @@ const CASES: Record<string, Case[]> = {
     build: () => ix.registerAsset(ctx, owner, { nftMint: nft, floorPrice: 9n, hardshipFloor: 7n, askingPrice: 10n, proceedsTo: recipient, docHashHex: H }),
     accounts: { owner, nft_mint: nft, owner_nft: ata(nft, owner), nft_escrow: ata(nft, E), asset }, args: ["9", "7", "10", recipient, H],
   }],
-  submit_death_claim: [{ build: () => ix.submitDeathClaim(ctx, E, heir, H), accounts: { beneficiary: heir, beneficiary_account: ben(heir) }, args: [H] }],
+  // Only the account the reporter holds: a passed optional account must exist.
+  submit_death_claim: [
+    { build: () => ix.submitDeathClaim(ctx, E, heir, H), accounts: { beneficiary: heir, beneficiary_account: ben(heir), guard: null, objection: objectionPda(P, E) }, args: [H] },
+    { build: () => ix.submitDeathClaim(ctx, E, v[1], H, {}), accounts: { beneficiary: v[1], beneficiary_account: null, guard: null, objection: objectionPda(P, E) }, args: [H] },
+    { build: () => ix.submitDeathClaim(ctx, E, recipient, H, { listed: true }), accounts: { beneficiary: recipient, beneficiary_account: null, guard, objection: objectionPda(P, E) }, args: [H] },
+  ],
   review_death: [{ build: () => ix.reviewDeath(E, agent, "Refer", R, C), accounts: { agent }, args: ["refer", R, C] }],
   attest_death: [{ build: () => ix.attestDeath(E, v[0]), accounts: { verifier: v[0] } }],
   veto_death: [{ build: () => ix.vetoDeath(ctx, owner), accounts: { owner } }],
@@ -110,15 +116,15 @@ const CASES: Record<string, Case[]> = {
   withdraw_offer: [{ build: () => ix.withdrawOffer(ctx, E, asset, buyer), accounts: { ...offerAccounts, buyer_usdt: ata(usdt, buyer) } }],
   submit_hardship: [{ build: () => ix.submitHardship(ctx, E, asset, heir, H), accounts: { beneficiary: heir, beneficiary_account: ben(heir), asset, hardship }, args: [H] }],
   review_hardship: [{ build: () => ix.reviewHardship(E, agent, asset, hardship, "Approve", R), accounts: { agent, asset, hardship }, args: ["approve", R] }],
-  approve_hardship: [{ build: () => ix.approveHardship(E, v[2], asset, hardship), accounts: { verifier: v[2], asset, hardship } }],
+  approve_hardship: [{ build: () => ix.approveHardship(E, v[2], asset, hardship), accounts: { verifier: v[2], asset, hardship, payer: v[2], approval_stamp: stampPda(P, hardship) } }],
   accept_offer: [
     {
       build: () => ix.acceptOffer(ctx, { ...sale, coSigner: v[0] }),
-      accounts: { ...saleAccounts, hardship_objection: SYSTEM_PROGRAM_ID, co_signer: v[0] }, args: ["9"],
+      accounts: { ...saleAccounts, hardship_objection: SYSTEM_PROGRAM_ID, hardship_stamp: SYSTEM_PROGRAM_ID, co_signer: v[0] }, args: ["9"],
     },
     {
       build: () => ix.acceptOffer(ctx, { ...sale, coSigner: null, hardshipBeneficiary: heir }),
-      accounts: { ...saleAccounts, hardship_objection: objectionPda(P, hardship), co_signer: null }, args: ["9"],
+      accounts: { ...saleAccounts, hardship_objection: objectionPda(P, hardship), hardship_stamp: stampPda(P, hardship), co_signer: null }, args: ["9"],
     },
   ],
   init_guard: [{ build: () => ix.initGuard(ctx, owner, E, { objectionWindowSecs: 1, successionWaitSecs: 2, fallbackWaitSecs: 3 }), accounts: { authority: owner }, args: ["1", "2", "3"] }],
@@ -126,21 +132,25 @@ const CASES: Record<string, Case[]> = {
   set_seat_backups: [{ build: () => ix.setSeatBackups(ctx, v[2], E, 2, [heir, who]), accounts: { authority: v[2], seat: seats[2] }, args: [2, [heir, who]] }],
   set_seat_monitors: [{ build: () => ix.setSeatMonitors(ctx, owner, 1, [who]), accounts: { owner, seat: seats[1] }, args: [1, [who, NONE]] }],
   set_fallback: [{ build: () => ix.setFallback(ctx, owner, [heir, recipient]), accounts: { owner }, args: [[heir, recipient, NONE, NONE]] }],
-  owner_replace_seat: [{ build: () => ix.ownerReplaceSeat(ctx, owner, 1, newKey), accounts: { owner, seat: seats[1] }, args: [1, newKey] }],
-  report_seat_death: [
-    { build: () => ix.reportSeatDeath(ctx, who, E, 2, C, { beneficiary: true }), accounts: { reporter: who, seat: seats[2], beneficiary_account: ben(who) }, args: [2, C] },
-    { build: () => ix.reportSeatDeath(ctx, who, E, 2, C), accounts: { reporter: who, seat: seats[2], beneficiary_account: null }, args: [2, C] },
+  owner_replace_seat: [
+    { build: () => ix.ownerReplaceSeat(ctx, owner, 1, newKey), accounts: { owner, seat: seats[1], next_seat: seats[2], last_seat: seats[0] }, args: [1, newKey] },
+    { build: () => ix.ownerReplaceSeat(ctx, owner, 2, newKey), accounts: { owner, seat: seats[2], next_seat: seats[0], last_seat: seats[1] }, args: [2, newKey] },
   ],
-  review_seat_death: [{ build: () => ix.reviewSeatDeath(E, agent, 2, true, R, C), accounts: { agent, seat: seats[2] }, args: [2, true, R, C] }],
+  report_seat_death: [
+    {
+      build: () => ix.reportSeatDeath(ctx, who, E, 2, C, { beneficiary: true }),
+      accounts: { reporter: who, seat: seats[2], beneficiary_account: ben(who), objection: objectionPda(P, seats[2]) }, args: [2, C],
+    },
+    { build: () => ix.reportSeatDeath(ctx, who, E, 2, C), accounts: { reporter: who, seat: seats[2], beneficiary_account: null, objection: objectionPda(P, seats[2]) }, args: [2, C] },
+  ],
+  review_seat_death: [{ build: () => ix.reviewSeatDeath(E, agent, 2, true, R, C, v[2]), accounts: { agent, seat: seats[2] }, args: [2, true, R, C, v[2]] }],
   confirm_seat_death: [
     { build: () => ix.confirmSeatDeath(ctx, who, E, 2, { beneficiary: true }), accounts: { confirmer: who, seat: seats[2], beneficiary_account: ben(who) }, args: [2] },
     { build: () => ix.confirmSeatDeath(ctx, v[0], E, 2), accounts: { confirmer: v[0], seat: seats[2], beneficiary_account: null }, args: [2] },
   ],
   veto_seat_death: [{ build: () => ix.vetoSeatDeath(ctx, v[2], E, 2), accounts: { holder: v[2], seat: seats[2] }, args: [2] }],
-  finalize_succession: [
-    { build: () => ix.finalizeSuccession(ctx, E, 2, caller, NONE), accounts: { seat: seats[2], objection: objectionPda(P, seats[2]), caller }, args: [2], remaining: [ben(NONE)] },
-    { build: () => ix.finalizeSuccession(ctx, E, 2, caller, who), accounts: { seat: seats[2], objection: objectionPda(P, seats[2]), caller }, args: [2], remaining: [ben(who)] },
-  ],
+  // No remaining account: the program reads none.
+  finalize_succession: [{ build: () => ix.finalizeSuccession(ctx, E, 2, caller), accounts: { seat: seats[2], objection: objectionPda(P, seats[2]), caller }, args: [2] }],
   raise_objection: [
     {
       build: () => ix.raiseObjection(ctx, { objector: who, estate: E, kind: "Hardship", target: hardship, seatIndex: 1, reasonHashHex: H, monitorSeat: 1, hardshipAsset: asset }),
@@ -174,8 +184,8 @@ const CASES: Record<string, Case[]> = {
     { build: () => ix.reportFallbackDeath(ctx, v[0], E, 1, C), accounts: { reporter: v[0], fallback_report: report(1), signer_seat: null, beneficiary_account: null }, args: [1, C] },
   ],
   review_fallback_death: [{
-    build: () => ix.reviewFallbackDeath(E, agent, 1, false, R, C, rentTo),
-    accounts: { agent, fallback_report: report(1), rent_to: rentTo }, args: [1, false, R, C],
+    build: () => ix.reviewFallbackDeath(E, agent, 1, false, R, C, rentTo, recipient),
+    accounts: { agent, fallback_report: report(1), rent_to: rentTo }, args: [1, false, R, C, recipient],
   }],
   resolve_fallback_death: [
     {
@@ -191,7 +201,9 @@ const CASES: Record<string, Case[]> = {
   lapse_objection: [{ build: () => ix.lapseObjection(ctx, E, caller), accounts: { objection: objectionPda(P, guard), caller } }],
   execute_fallback: [{
     build: () => ix.executeFallback(ctx, { payer, estate: E, recipient, recipientIndex: 2 }),
-    accounts: { payer, objection: objectionPda(P, guard), recipient, recipient_usdt: ata(usdt, recipient), fallback_report: report(2) },
+    accounts: {
+      payer, objection: objectionPda(P, guard), recipient, recipient_usdt: ata(usdt, recipient), fallback_report: report(2), unlock_objection: objectionPda(P, E),
+    },
   }],
   raise_dispute: [
     {

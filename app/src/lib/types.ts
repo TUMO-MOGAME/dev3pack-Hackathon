@@ -41,6 +41,11 @@ export interface Estate {
     submittedBy: Base58 | null;
     verdict: Verdict;
     attestations: boolean[]; // index = verifier index
+    /**
+     * The only trusted person left was the one who reported it, and confirmed it alone (bit 7 of death_attestations,
+     * DECIDED_ALONE): the unlock then waits twice the waiting period. Not a seat's vote.
+     */
+    decidedAlone?: boolean;
     /** When the quorum confirmed the death. Null while Active, also when a claim is open (see submittedAt). */
     pendingSince: number | null;
     /** Active with an open claim: when it was submitted (0 = before times were stored). See death-rules.ts. */
@@ -108,6 +113,11 @@ export interface Claim {
   agentVerdict: Verdict;
   agentReport?: AgentReport;
   approvals: boolean[];
+  /**
+   * The only trusted person left was the claimant, and approved it alone (bit 7 of approvals, DECIDED_ALONE): its
+   * objection window is then twice as long. Not a seat's vote.
+   */
+  decidedAlone?: boolean;
   /** Living plan: the owner approved this claim himself while alive (counts as full approval). */
   ownerApproved: boolean;
   status: ClaimStatus;
@@ -211,7 +221,8 @@ export interface CarValuation {
 export interface OfferRanking {
   bestOffer: Base58 | null;
   eligible: { offer: Base58; amount: bigint; reason: string }[];
-  ineligible: { offer: Base58; amount: bigint; reason: string }[];
+  /** `readyAt`: acceptable from then, once its objection window (or the hardship approval's) has passed. */
+  ineligible: { offer: Base58; amount: bigint; reason: string; readyAt?: number }[];
 }
 
 export interface ActivityItem {

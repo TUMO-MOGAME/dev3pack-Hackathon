@@ -33,16 +33,17 @@ function setup(opts: { notOwner?: boolean } = {}) {
 }
 
 describe("chain ownerReplaceSeat", () => {
-  it("sends owner_replace_seat(index, new_holder) with owner, estate and seat in IDL order", async () => {
+  it("sends owner_replace_seat(index, new_holder) with owner, estate, the seat and the other two seats in IDL order", async () => {
     const { svc, sent } = setup();
     await svc.ownerReplaceSeat(estate, 2, { wallet: ` ${newHolder} `, name: "Mr. Sizwe Dlamini" });
     expect(sent).toHaveLength(1);
     const [t] = sent[0];
     expect(t.programId.equals(programId)).toBe(true);
     const def = findInstruction("owner_replace_seat");
-    expect(def.accounts.map((a) => a.name)).toEqual(["owner", "estate", "seat"]);
-    expect(t.keys.map((k) => k.pubkey.toBase58())).toEqual([owner.toBase58(), estate, seatPda(programId, new PublicKey(estate), 2).toBase58()]);
-    expect(t.keys.map((k) => [k.isSigner, k.isWritable])).toEqual([[true, false], [false, true], [false, true]]);
+    expect(def.accounts.map((a) => a.name)).toEqual(["owner", "estate", "seat", "next_seat", "last_seat"]);
+    const seat = (i: number) => seatPda(programId, new PublicKey(estate), i).toBase58();
+    expect(t.keys.map((k) => k.pubkey.toBase58())).toEqual([owner.toBase58(), estate, seat(2), seat(0), seat(1)]);
+    expect(t.keys.map((k) => [k.isSigner, k.isWritable])).toEqual([[true, false], [false, true], [false, true], [false, true], [false, true]]);
     const decoded = getCoder().instruction.decode(Buffer.from(t.data)) as unknown as { name: string; data: { index: number; new_holder: PublicKey } };
     expect(decoded.name).toBe(def.name);
     expect(decoded.data.index).toBe(2);
