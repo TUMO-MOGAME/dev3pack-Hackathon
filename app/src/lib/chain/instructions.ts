@@ -691,9 +691,17 @@ export function removeMember(ctx: Ctx, owner: PublicKey, p: { beneficiary?: Publ
   });
 }
 
-/** A trusted person votes to replace the agent's key. The vote that carries it sets back what the old agent reviewed. */
-export function voteAgent(ctx: Ctx, estate: PublicKey, verifier: PublicKey, candidate: PublicKey) {
-  return buildIx("vote_agent", [candidate], {
+/**
+ * A trusted person votes to replace the agent's key. The vote that carries it sets back what the old agent reviewed.
+ * Remaining accounts: [0] the voter's Beneficiary PDA, always (missing or wrong reads as someone who gains, so it fails
+ * closed); [1] after the unlock, the voter's own open claim when they have one (the lone voter who gains waits 2 RT
+ * from it while the agent hasn't approved it).
+ */
+export function voteAgent(ctx: Ctx, estate: PublicKey, verifier: PublicKey, candidate: PublicKey, openClaim?: PublicKey | null) {
+  const t = buildIx("vote_agent", [candidate], {
     verifier, estate, agent_vote: agentVotePda(ctx.programId, estate, candidate), ...seatAccounts(ctx, estate), ...fallbackReportAccounts(ctx, estate),
   });
+  t.keys.push({ pubkey: beneficiaryPda(ctx.programId, estate, verifier), isSigner: false, isWritable: false });
+  if (openClaim) t.keys.push({ pubkey: openClaim, isSigner: false, isWritable: false });
+  return t;
 }

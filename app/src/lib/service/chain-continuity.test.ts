@@ -170,6 +170,24 @@ describe("the agent", () => {
     expect(all()[0].keys[0].pubkey.toBase58()).toBe(h.me);
   });
 
+  it("voteAgent passes the voter's Beneficiary PDA always, and after the unlock their own latest open claim", async () => {
+    const tail = () => all()[all().length - 1].keys.slice(-2).map((m) => [m.pubkey.toBase58(), m.isSigner, m.isWritable]);
+    h.me = kid;
+    const benPda = beneficiaryPda(programId, estate, kid).toBase58();
+    await svc().voteAgent(estate, key());
+    expect(tail()[1]).toEqual([benPda, false, false]);
+    const [older, newer, other_] = [key(), key(), key()];
+    Object.assign(snap, {
+      estate: { status: "Unlocked" },
+      claims: [
+        { address: older, beneficiary: kid, status: "Open", createdAt: 100 }, { address: newer, beneficiary: kid, status: "Open", createdAt: 200 },
+        { address: other_, beneficiary: other, status: "Open", createdAt: 300 },
+      ],
+    });
+    await svc().voteAgent(estate, key());
+    expect(tail()).toEqual([[benPda, false, false], [newer, false, false]]);
+  });
+
   it("voteAgent refuses a malformed wallet", async () => refused(svc().voteAgent(estate, "x"), "BadAgent"));
 });
 

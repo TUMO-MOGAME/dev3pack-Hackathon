@@ -6,7 +6,7 @@
  * - "resume": this person's own unreviewed report of this very file. Nothing is sent; only the review is asked again
  *   (a review that failed would otherwise lock the reporter out until their own report is stale).
  */
-import { fallbackGrace, refuteWait, replaceableAt, reviewedHold, seatReviewedHold } from "../death-rules";
+import { fallbackGrace, NEVER, refuteWait, replaceableAt, reviewedHold, seatReviewedHold } from "../death-rules";
 import type { Base58, Verdict } from "../types";
 import { enumOf, hex, key, keyArray, num, waitingOf, type Raw } from "../chain/decoders";
 import { ChainServiceError, must } from "./chain-errors";
@@ -21,10 +21,11 @@ const MAX_GUARD_WAIT = 180 * 86_400;
 
 interface Standing { verdict: Verdict; reportedAt: number; reporter: Base58; hash: string }
 
-function step(standing: Standing, who: Base58, hash: string, waitingSecs: number, hold: number, now: number, code: string, grace?: number): ReportStep {
+function step(standing: Standing, who: Base58, hash: string, waitingSecs: number, hold: number, now: number, code: string, grace?: number, death = false): ReportStep {
   if (standing.verdict === "Pending" && standing.reporter === who && standing.hash === hash) return "resume";
-  const at = replaceableAt({ verdict: standing.verdict, reportedAt: standing.reportedAt, reporter: standing.reporter, who, waitingSecs, hold, grace });
+  const at = replaceableAt({ verdict: standing.verdict, reportedAt: standing.reportedAt, reporter: standing.reporter, who, waitingSecs, hold, grace, death });
   if (now >= at) return "send";
+  if (at === NEVER) throw new ChainServiceError(code, "A report is already open and the agent hasn't reviewed it yet, so it can't be replaced until it has.");
   const when = `${new Date(at * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC`;
   throw new ChainServiceError(code, `A report is already open. You can replace it from ${when}, unless it is decided before then.`, at);
 }
@@ -44,7 +45,7 @@ export function deathClaimStep(estate: Raw, who: Base58, hash: string, now: numb
   const waiting = waitingOf(estate);
   return step(
     { verdict, reportedAt: num(estate, "death_pending_since"), reporter: key(estate, "death_submitted_by"), hash: standing },
-    who, hash, waiting, reviewedHold(waiting), now, "BadStatus",
+    who, hash, waiting, reviewedHold(waiting), now, "BadStatus", undefined, true,
   );
 }
 

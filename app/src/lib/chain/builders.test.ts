@@ -228,7 +228,11 @@ const CASES: Record<string, Case[]> = {
     remaining: [rulePda(P, E, 0), rulePda(P, E, 1)],
   })),
   set_agent: [{ build: () => ix.setAgent(ctx, owner, newKey), accounts: { owner }, args: [newKey] }],
-  vote_agent: [{ build: () => ix.voteAgent(ctx, E, v[0], newKey), accounts: { verifier: v[0], agent_vote: agentVotePda(P, E, newKey) }, args: [newKey] }],
+  // Remaining: [0] the voter's Beneficiary PDA always, [1] after the unlock their own open claim.
+  vote_agent: [
+    { build: () => ix.voteAgent(ctx, E, v[0], newKey), accounts: { verifier: v[0], agent_vote: agentVotePda(P, E, newKey) }, args: [newKey], remaining: [ben(v[0])] },
+    { build: () => ix.voteAgent(ctx, E, v[0], newKey, claim), accounts: { verifier: v[0], agent_vote: agentVotePda(P, E, newKey) }, args: [newKey], remaining: [ben(v[0]), claim] },
+  ],
   release_asset: [{
     build: () => ix.releaseAsset(ctx, owner, asset, nft),
     accounts: { owner, asset, nft_mint: nft, nft_escrow: ata(nft, E), owner_nft: ata(nft, owner) },

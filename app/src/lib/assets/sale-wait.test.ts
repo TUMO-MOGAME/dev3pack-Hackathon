@@ -57,5 +57,6 @@ describe("an offer that can't be accepted yet", () => {
     expect(clockTime(now + 2 * 86_400, now, "en")).toMatch(/14:06/);
     expect(clockTime(now + 2 * 86_400, now, "en")).not.toBe("14:06");
     expect(clockTime(now + 20, now, "zu")).toMatch(/14.06/);
+    expect(clockTime(now + 240 * 86_400, now, "en")).toMatch(/2027/); // a week or more away: the date
   });
 });

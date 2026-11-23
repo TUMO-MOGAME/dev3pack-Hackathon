@@ -5,7 +5,7 @@
 import type { EstateSnapshot } from "../service/types";
 import type { Asset, Base58, Claim, Estate, Hardship, Verdict } from "../types";
 import {
-  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, quorum, recoveryTimeout, refuteWait, replaceableAt, reportGrace,
+  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, quorum, recoveryTimeout, refuteWait, replaceableAt,
   reviewedHold, seatReviewedHold,
 } from "../death-rules";
 import { openToPeople } from "../verdict";
@@ -196,8 +196,8 @@ export interface ReplaceTimes {
   reporter: number;
 }
 
-function replaceTimes(verdict: Verdict, reportedAt: number, waitingSecs: number, hold: number, grace?: number): ReplaceTimes {
-  const at = (who: Base58) => replaceableAt({ verdict, reportedAt, reporter: "reporter", who, waitingSecs, hold, grace });
+function replaceTimes(verdict: Verdict, reportedAt: number, waitingSecs: number, hold: number, grace?: number, death = false): ReplaceTimes {
+  const at = (who: Base58) => replaceableAt({ verdict, reportedAt, reporter: "reporter", who, waitingSecs, hold, grace, death });
   return { others: at("someone else"), reporter: at("reporter") };
 }
 
@@ -205,7 +205,8 @@ function replaceTimes(verdict: Verdict, reportedAt: number, waitingSecs: number,
 export function deathReplace(e: Estate): ReplaceTimes | null {
   if (e.status !== "Active" || !e.death.certHash) return null;
   if (e.death.verdict !== "Pending" && !hasLivingSeat(e)) return null;
-  return replaceTimes(e.death.verdict, e.death.submittedAt ?? 0, e.waitingPeriodSecs, reviewedHold(e.waitingPeriodSecs));
+  // Unreviewed: never replaced (NEVER), it waits for the agent's review.
+  return replaceTimes(e.death.verdict, e.death.submittedAt ?? 0, e.waitingPeriodSecs, reviewedHold(e.waitingPeriodSecs), undefined, true);
 }
 
 export function seatReplace(e: Estate, seat: Pick<Seat, "succession">): ReplaceTimes | null {
@@ -378,17 +379,56 @@ export function agentVotesNeeded(e: AgentVoteEstate, now = Math.floor(Date.now()
 type AgentVoteEstate = Pick<Estate, "status" | "verifiers"> & Partial<Pick<Estate, "death" | "lastHeartbeat" | "waitingPeriodSecs">>;
 
 /**
- * The votes needed, and why: "all" before the unlock (every held seat, at least two, DeathPending included), "recovery"
- * before the unlock once a reported passing stood unanswered (two, or the only one), "after" the unlock (the same).
+ * When the recovery route (H7) opens before the unlock: a death claim open, not disproved and still unreviewed (an
+ * unreviewed claim is never replaced, so its time is this death's first claim), from max(last sign of life, the
+ * claim) + RT. Null when there is no such claim.
  */
-export function agentVoteRule(e: AgentVoteEstate, now = Math.floor(Date.now() / 1000)): { needed: number; why: "all" | "recovery" | "after" } {
+export function agentRecoveryAt(e: AgentVoteEstate): number | null {
+  if (e.status === "Unlocked" || !e.death?.certHash || e.death.verdict !== "Pending") return null;
+  const since = deathSince({ status: e.status, death: e.death });
+  const heartbeat = e.lastHeartbeat ?? 0;
+  if (heartbeat > since) return null; // disproved
+  return Math.max(heartbeat, since) + recoveryTimeout(e.waitingPeriodSecs ?? 0);
+}
+
+/**
+ * The votes needed, and why: "all" before the unlock (every held seat, at least two, DeathPending included), "recovery"
+ * before the unlock once the recovery route is open (two, or the only one), "after" the unlock (the same).
+ * `recoveryAt`: when the route opens, while it hasn't yet.
+ */
+export function agentVoteRule(e: AgentVoteEstate, now = Math.floor(Date.now() / 1000)): { needed: number; why: "all" | "recovery" | "after"; recoveryAt?: number } {
   const seats = eligibleSeats(e.verifiers).length;
   if (e.status === "Unlocked") return { needed: Math.min(seats, 2), why: "after" };
-  const since = e.death ? deathSince({ status: e.status, death: e.death }) : 0;
-  const claimOpen = !!e.death?.certHash && (e.lastHeartbeat ?? 0) <= since;
-  const w = e.waitingPeriodSecs ?? 0;
-  const recovery = claimOpen && now >= (e.lastHeartbeat ?? 0) + recoveryTimeout(w) && now >= since + reportGrace(w);
-  return recovery ? { needed: Math.min(seats, 2), why: "recovery" } : { needed: Math.max(seats, 2), why: "all" };
+  const at = agentRecoveryAt(e);
+  if (at !== null && now >= at) return { needed: Math.min(seats, 2), why: "recovery" };
+  return { needed: Math.max(seats, 2), why: "all", ...(at !== null ? { recoveryAt: at } : {}) };
+}
+
+/** The voter's own open claim the program reads after the unlock (vote_agent's remaining account [1]): the latest. */
+export function ownOpenClaim<C extends Pick<Claim, "beneficiary" | "status" | "createdAt">>(claims: readonly C[], voter: Base58): C | null {
+  return claims.filter((c) => c.beneficiary === voter && c.status === "Open").sort((x, y) => y.createdAt - x.createdAt)[0] ?? null;
+}
+
+/**
+ * From when this voter's vote counts, when that is later than for anyone else (vote_agent): the only trusted person
+ * left, whose vote alone is the quorum, and who gains (the death claim's submitter or any active beneficiary) waits
+ * twice RT. Before the unlock from max(last sign of life, the claim), the recovery route's own base; after it from
+ * their own open claim's submission while the agent hasn't approved it (no claim: no clock; a hardship starts none).
+ * Null: no extra wait.
+ */
+export function agentVoteFrom(snap: Pick<EstateSnapshot, "estate" | "claims" | "beneficiaries">, voter: Base58 | null | undefined): number | null {
+  const e = snap.estate;
+  const seats = eligibleSeats(e.verifiers);
+  if (!isHeld(voter) || seats.length !== 1 || e.verifiers[seats[0]] !== voter) return null;
+  const rt = recoveryTimeout(e.waitingPeriodSecs);
+  if (e.status !== "Unlocked") {
+    const gains = voter === e.death.submittedBy || isFamily(snap, voter);
+    const at = agentRecoveryAt(e);
+    return gains && at !== null ? at + rt : null; // the route's base + 2 RT
+  }
+  if (!isFamily(snap, voter)) return null;
+  const claim = ownOpenClaim(snap.claims, voter);
+  return claim && claim.agentVerdict !== "Approved" ? claim.createdAt + 2 * rt : null;
 }
 
 export function agentVoteFor(snap: EstateSnapshot, candidate: Base58, now?: number): { got: number; needed: number; voters: Base58[] } {

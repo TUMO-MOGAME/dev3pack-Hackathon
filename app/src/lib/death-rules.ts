@@ -61,14 +61,20 @@ export const fallbackGrace = (waitingSecs: number, fallbackWaitSecs: number) =>
 /** Fallback death: how long the person reported has to refute before anyone can confirm. */
 export const refuteWait = (fallbackWaitSecs: number) => Math.max(fallbackWaitSecs, MIN_WAIT_SECS);
 
+/** Never: an unreviewed death claim waits for the agent's review (or a lost agent is replaced, then reviews it). */
+export const NEVER = Number.POSITIVE_INFINITY;
+
 /**
  * From when `who` may replace an unconfirmed report. `hold` is reviewedHold(waiting), or for a fallback death twice
  * refuteWait(fallback wait). Whoever made the report waits one grace longer. `grace`: reportGrace(waiting) unless
- * given (a fallback death's is fallbackGrace).
+ * given (a fallback death's is fallbackGrace). `death`: the owner's death claim, which is never replaced while
+ * unreviewed (NEVER), so its time stays when this death's first claim was made; a disproved one is replaced at once
+ * (lib/guardians/decisions.ts deathDisproved).
  */
 export function replaceableAt(input: {
-  verdict: Verdict; reportedAt: number; reporter: Base58 | null; who: Base58; waitingSecs: number; hold: number; grace?: number;
+  verdict: Verdict; reportedAt: number; reporter: Base58 | null; who: Base58; waitingSecs: number; hold: number; grace?: number; death?: boolean;
 }): number {
+  if (input.death && input.verdict === "Pending") return NEVER;
   const grace = input.grace ?? reportGrace(input.waitingSecs);
   const base = input.verdict === "Pending" ? grace : input.hold;
   return input.reportedAt + base + (input.reporter === input.who ? grace : 0);

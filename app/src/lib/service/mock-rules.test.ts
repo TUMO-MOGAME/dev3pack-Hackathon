@@ -311,19 +311,26 @@ describe("R4 a fallback recipient is only dead when a second person confirms", (
 });
 
 describe("R5 an abandoned death claim can be replaced", () => {
-  it("unreviewed: another person after one grace, whoever made it after two", async () => {
+  it("unreviewed: never replaced, so its time stays when this death's first claim was made", async () => {
     const t = await start("funded", { opts: { agent: () => "down" } });
     await t.death("lerato");
-    expect((await t.snap()).estate.death).toMatchObject({ verdict: "Pending", submittedAt: now(), pendingSince: null });
-    advance(59);
+    const at = now();
+    expect((await t.snap()).estate.death).toMatchObject({ verdict: "Pending", submittedAt: at, pendingSince: null });
+    advance(10_000);
+    await expect(t.death("sipho")).rejects.toThrow(/^BadStatus: .*hasn't reviewed it/);
+    await expect(t.death("lerato")).rejects.toThrow(/^BadStatus/);
+    expect((await t.snap()).estate.death).toMatchObject({ submittedBy: who("lerato"), submittedAt: at });
+  });
+
+  it("reviewed and approved: another person after two waiting periods, whoever made it one grace later", async () => {
+    const t = await start();
+    await t.death("lerato");
+    advance(119);
     await expect(t.death("sipho")).rejects.toThrow(/^BadStatus/);
     advance(1);
     await expect(t.death("lerato")).rejects.toThrow(/^BadStatus/);
     await t.death("sipho");
     expect((await t.snap()).estate.death.submittedBy).toBe(who("sipho"));
-    advance(120);
-    await t.death("sipho");
-    expect((await t.snap()).estate.death.submittedAt).toBe(now());
   });
 
   it("reviewed without a quorum: after two waiting periods", async () => {
@@ -1502,5 +1509,34 @@ describe("a succession wait stored as 0 (Guard::succession_wait)", () => {
     await expect(t.svc.finalizeSuccession(t.estate, 2)).rejects.toThrow(/^WaitingPeriodNotOver/);
     advance(31);
     await t.svc.finalizeSuccession(t.estate, 2);
+  });
+});
+
+describe("the agent's recovery route (H7, re-review)", () => {
+  it("only while the death claim is unreviewed, from max(sign of life, claim) + RT; the lone trusted person who gains waits 2 RT", async () => {
+    let down = false;
+    const t = await start("funded", { guarded: true, opts: { agent: () => (down ? "down" : null) } });
+    t.act("thabo"); await t.svc.ownerReplaceSeat(t.estate, 0, { wallet: who("lerato"), name: "Lerato" });
+    await t.vacate(1); await t.vacate(2);
+    down = true;
+    await t.death("lerato");
+    const since = now();
+    const rt = 4 * 60; // W = 60 s
+    t.act("lerato");
+    advance(rt);
+    expect(now()).toBe(since + rt);
+    await expect(t.svc.voteAgent(t.estate, NEW_AGENT)).rejects.toThrow(/^BadStatus: You are the only trusted person left/);
+    advance(rt);
+    await t.svc.voteAgent(t.estate, NEW_AGENT);
+    expect((await t.snap()).estate.agent).toBe(NEW_AGENT);
+  });
+
+  it("not once the agent has reviewed the claim", async () => {
+    const t = await start();
+    await t.death("lerato");
+    advance(10_000);
+    t.act("nomsa");
+    await t.svc.voteAgent(t.estate, NEW_AGENT);
+    expect((await t.snap()).estate.agent).not.toBe(NEW_AGENT); // every held seat still has to vote
   });
 });

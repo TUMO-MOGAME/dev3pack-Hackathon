@@ -102,6 +102,7 @@ export const safeguards = {
     cta: "Report again",
     deathTitle: "Replace the report",
     deathBody: "The earlier report and its confirmations are cleared. The agent reads your certificate first.",
+    untilReviewed: "Nobody can replace it before the agent has reviewed it. If the agent stays silent, the trusted people can replace the agent (see People).",
   },
 
   review: {
@@ -240,6 +241,8 @@ export const safeguards = {
     alone: "One trusted person can't replace the agent alone before the estate unlocks.",
     needNow: "Votes needed now: {need}.",
     needRecovery: "A passing is reported and the owner hasn't checked in for a long time, so two votes are enough now, or the only one left.",
+    recoveryAt: "The reported passing is still waiting for the agent's review. If that doesn't change and the owner doesn't check in, two votes, or the only one left, are enough from {time}.",
+    gainerAt: "You are the only trusted person left and you would gain, so your vote counts from {time}: twice as long as for anyone else.",
   },
 
   remove: {

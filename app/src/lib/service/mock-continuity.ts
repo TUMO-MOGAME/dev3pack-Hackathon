@@ -6,7 +6,7 @@ import type { Base58 } from "../types";
 import type { EstateSnapshot, TxResult } from "./types";
 import type { AgentVoteInfo, RemoveMemberInput } from "../continuity/types";
 import { rulesEndedByRemoval } from "../continuity/logic";
-import { agentVotesNeeded, deathSince, isHeld } from "../guardians/decisions";
+import { agentVoteFrom, agentVotesNeeded, deathSince, isHeld } from "../guardians/decisions";
 import { eligibleSeats } from "../death-rules";
 import { fail, need } from "./mock-errors";
 import { proofOfLife } from "./mock-rules";
@@ -78,6 +78,9 @@ export function createMockContinuity(d: ContinuityDeps) {
     const i = isHeld(me) ? e.verifiers.indexOf(me) : -1;
     need(i >= 0, "NotVerifier", "Only one of the trusted people can do this.");
     checkCandidate(w);
+    // The only trusted person left who would gain waits twice the recovery timeout (lib/guardians/decisions.ts).
+    const from = agentVoteFrom(d.snap(), me);
+    need(from === null || d.now() >= from, "BadStatus", "You are the only trusted person left and you would gain, so your vote can't count yet.");
     const stored = d.votes()[w];
     const voters = stored?.replaces === e.agent ? [...stored.voters] : [null, null, null];
     const firstTime = voters[i] !== me;

@@ -658,11 +658,13 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(e.status === "Active", "BadStatus", "A passing has already been reported for this estate.");
     const d = e.death;
     if (!d.certHash) return;
-    // One open claim at a time, until it is stale. With nobody left a reviewed one is the fallback plan's proof (R5).
+    // One open claim at a time. An unreviewed one is never replaced (it waits for the agent's review); a reviewed one
+    // once stale. With nobody left a reviewed one is the fallback plan's proof (R5).
+    need(d.verdict !== "Pending", "BadStatus", "A passing has already been reported and the agent hasn't reviewed it yet, so it can't be replaced until it has.");
     need(
-      (d.verdict === "Pending" || hasLivingSeat(e)) && nowSecs() >= replaceableAt({
+      hasLivingSeat(e) && nowSecs() >= replaceableAt({
         verdict: d.verdict, reportedAt: d.submittedAt ?? 0, reporter: d.submittedBy, who: me(),
-        waitingSecs: e.waitingPeriodSecs, hold: reviewedHold(e.waitingPeriodSecs),
+        waitingSecs: e.waitingPeriodSecs, hold: reviewedHold(e.waitingPeriodSecs), death: true,
       }),
       "BadStatus", "A passing has already been reported, and it is too soon to replace that report.",
     );

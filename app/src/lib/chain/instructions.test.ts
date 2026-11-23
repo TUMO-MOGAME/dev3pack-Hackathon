@@ -94,7 +94,8 @@ describe("instruction builders vs IDL", () => {
       const t = build();
       expect(t.programId.equals(programId)).toBe(true);
       // buildIx throws if any account is missing; check the count matches the IDL too.
-      expect(t.keys.length).toBe(findInstruction(name).accounts.length);
+      // vote_agent always carries one remaining account: the voter's Beneficiary PDA.
+      expect(t.keys.length).toBe(findInstruction(name).accounts.length + (name === "vote_agent" ? 1 : 0));
       const decoded = getCoder().instruction.decode(Buffer.from(t.data));
       expect(decoded?.name).toBe(findInstruction(name).name);
     });

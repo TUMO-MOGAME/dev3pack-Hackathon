@@ -64,6 +64,10 @@ export function ReplaceWhen({ times, who, className = "mt-3" }: { times: Replace
   const t = useCopy().guardians.rules.replace;
   const now = useNow();
   if (!times || now === null) return null;
+  // An unreviewed death claim is never replaced: it waits for the agent's review.
+  if (!Number.isFinite(times.others)) {
+    return <div className={`min-w-0 text-small ${className}`}><p className="font-semibold">{t.title}</p><p className="text-ink-2">{t.untilReviewed}</p></div>;
+  }
   const line = (at: number, person: string) => (now >= at ? fmt(t.now, { who: person }) : fmt(t.in, { who: person, time: clock(at - now) }));
   return (
     <div className={`min-w-0 text-small ${className}`}>

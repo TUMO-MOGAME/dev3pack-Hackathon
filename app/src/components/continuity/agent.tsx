@@ -3,7 +3,9 @@
 import { useId, useState, type FormEvent } from "react";
 import { Check, Repeat } from "@/components/ui/icons";
 import type { EstateSnapshot } from "@/lib/service";
-import { agentVoteFor, agentVoteRule, deathOpen, hasLivingSeat, isHeld } from "@/lib/guardians/decisions";
+import { agentVoteFor, agentVoteFrom, agentVoteRule, deathOpen, hasLivingSeat, isHeld } from "@/lib/guardians/decisions";
+import { clockTime } from "@/lib/assets/sale-wait";
+import { useLocale } from "@/lib/i18n/client";
 import { useNow } from "@/lib/hooks/use-now";
 import { eligibleSeats } from "@/lib/death-rules";
 import { useEstate } from "@/lib/hooks/estate";
@@ -34,11 +36,19 @@ export function AgentControl({ snap }: { snap: EstateSnapshot }) {
   // two or the only one left after it, or once a reported passing has stood unanswered.
   const now = useNow(15000) ?? undefined;
   const rule = agentVoteRule(e, now);
-  // Before the unlock one person alone can never reach the two votes it takes.
+  const locale = useLocale();
+  const when = (at: number) => (now === undefined ? "" : clockTime(at, now, locale));
+  // The only trusted person left who would gain waits twice the recovery timeout before their vote counts.
+  const from = voter ? agentVoteFrom(snap, me) : null;
+  const early = from !== null && (now ?? 0) < from;
+  // Before the unlock one person alone can never reach the two votes it takes, unless the recovery route opens.
   const alone = voter && rule.needed > eligibleSeats(e.verifiers).length;
+  const routeLine = rule.recoveryAt !== undefined && <span className="block font-normal text-ink-2">{fmt(t.recoveryAt, { time: when(rule.recoveryAt) })}</span>;
   const needLine = (
     <p className="mt-2 text-small font-semibold tabular-nums">
       {fmt(t.needNow, { need: rule.needed })}{rule.why === "recovery" && <span className="block font-normal text-ink-2">{t.needRecovery}</span>}
+      {routeLine}
+      {early && <span className="block font-normal">{fmt(t.gainerAt, { time: when(from ?? 0) })}</span>}
     </p>
   );
 
@@ -82,7 +92,7 @@ export function AgentControl({ snap }: { snap: EstateSnapshot }) {
                   <p className="break-all font-mono">{candidate}</p>
                   <p className="mt-1 font-semibold tabular-nums">{fmt(t.progress, { got: v.got, need: v.needed })}</p>
                   <p className="text-ink-2">{fmt(t.votedBy, { names: v.voters.map(who).join(", ") })}</p>
-                  {voter && (voted && !finish ? <p className="mt-1">{t.waiting}</p> : !alone && (
+                  {voter && (voted && !finish ? <p className="mt-1">{t.waiting}</p> : !alone && !early && (
                     <>
                       <p className="mt-2 text-ink-2">{t.warn}</p>
                       <Button small className="mt-2" loading={busy === `vote-${candidate}`} disabled={!!busy}
@@ -100,7 +110,7 @@ export function AgentControl({ snap }: { snap: EstateSnapshot }) {
       )}
 
       {(owner || (voter && hasLivingSeat(e))) && (
-        alone ? <p className="mt-3 text-small text-ink-2">{t.alone}</p> : !asking ? (
+        alone || early ? <div className="mt-3 text-small text-ink-2">{alone && <p>{t.alone}</p>}{needLine}</div> : !asking ? (
           <>
             {voter && !owner && needLine}
             <Button variant="secondary" small className="mt-3" onClick={() => setAsking(true)}>

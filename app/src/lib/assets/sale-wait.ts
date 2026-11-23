@@ -50,12 +50,14 @@ export function bestWaiting(ranking: OfferRanking | null): { offer: Base58; amou
 }
 
 /**
- * "14:06" (the next whole minute, so it is never early), with the weekday when it isn't today, in the visitor's
- * language and time zone.
+ * "14:06" (the next whole minute, so it is never early), with the weekday when it isn't today, or the date when it is
+ * a week or more away, in the visitor's language and time zone.
  */
 export function clockTime(at: number, now: number, locale: Locale): string {
   const d = new Date(Math.ceil(at / 60) * 60_000);
   const sameDay = d.toDateString() === new Date(now * 1000).toDateString();
-  const opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: false, ...(sameDay ? {} : { weekday: "short" }) };
+  const far = at - now >= 6 * 86_400;
+  const day: Intl.DateTimeFormatOptions = far ? { day: "numeric", month: "short", year: "numeric" } : sameDay ? {} : { weekday: "short" };
+  const opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: false, ...day };
   try { return new Intl.DateTimeFormat(LOCALE_TAGS[locale], opts).format(d); } catch { return new Intl.DateTimeFormat("en-ZA", opts).format(d); }
 }
