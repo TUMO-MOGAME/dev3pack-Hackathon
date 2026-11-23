@@ -22,7 +22,7 @@ import { PausedNotice } from "@/components/guardians/parts";
 import { guardiansOf, isMonitor, mayRaise } from "@/components/guardians/derive";
 import { ReplaceWhen, useWho, VoteTally } from "@/components/guardians/decision";
 import { canSubmitDeath, deathDisproved, deathOpen, deathReplace, deathTally, hasLivingSeat, reporterKind } from "@/lib/guardians/decisions";
-import { unlockWaitSecs } from "@/lib/death-rules";
+import { MIN_WAIT_SECS, unlockWaitSecs } from "@/lib/death-rules";
 import { RaiseObjection } from "@/components/guardians/objections";
 import { SuccessionTimeline } from "@/components/guardians/section";
 import { DisputePanel } from "@/components/disputes/disputes";
@@ -67,7 +67,9 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
   const disproved = deathDisproved(e);
   const remaining = e.status === "DeathPending" && d.pendingSince !== null && now !== null ? d.pendingSince + wait - now : null;
   const waitOver = remaining !== null && remaining <= 0;
-  const period = wait >= 86400 ? fmt(copy.periodDays, { days: Math.round(wait / 86400) }) : fmt(copy.periodDemo, { secs: wait });
+  // The plan's own pause; when it was decided alone the sentence below says it is twice that, and the countdown counts it.
+  const base = Math.max(e.waitingPeriodSecs, MIN_WAIT_SECS);
+  const period = base >= 86400 ? fmt(copy.periodDays, { days: Math.round(base / 86400) }) : fmt(copy.periodDemo, { secs: base });
   const family = reporterKind(snap, session?.address) === "family";
   const reports = reporterKind(snap, session?.address) !== null;
   const reporter = d.submittedBy ? snap.beneficiaries.find((b) => b.wallet === d.submittedBy)?.label ?? who(d.submittedBy) : "";
