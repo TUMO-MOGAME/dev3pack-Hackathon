@@ -427,14 +427,6 @@ export function createMockService(opts: MockOptions = {}): MockService {
       s.names[p.wallet] = p.name;
       return p;
     };
-    // "Everyday needs" (General, paid to an "Other" payee): the child's own wallet is an approved payee too.
-    for (const r of draft.rules.filter((x) => x.category === "General" && x.allowedPayeeKind === "Other")) {
-      const ben = s.snap.beneficiaries.find((b) => b.label.toLowerCase().startsWith(r.beneficiaryLabel.toLowerCase().split(" ")[0]));
-      if (ben && !s.snap.payees.some((p) => p.wallet === ben.wallet)) {
-        s.snap.payees.push({ address: fakeAddr(), wallet: ben.wallet, kind: "Other", name: `${ben.label.split(" ")[0]}'s own wallet` });
-        s.names[ben.wallet] = s.names[ben.wallet] ?? ben.label;
-      }
-    }
     draft.rules.forEach((r, i) => {
       const ben = s.snap.beneficiaries.find((b) => b.label.toLowerCase().startsWith(r.beneficiaryLabel.toLowerCase().split(" ")[0])) ?? s.snap.beneficiaries[0];
       // A payee the demo doesn't know yet (a bill template's "Funeral cover insurer") gets a made-up wallet of its own.
@@ -449,7 +441,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
         // The demo clock pays every 60 s; the signed plan still reads the interval the owner chose.
         ...(r.recurring && fixed ? { every: r.recurring.every } : {}),
         // Living schedules are due straight away; legacy schedules start when the estate unlocks.
-        nextDue: r.recurring && fixed && r.startsNow ? nowSecs() : null,
+        // As on-chain: a living schedule is first due one interval after signing.
+        nextDue: r.recurring && fixed && r.startsNow ? nowSecs() + DEMO_INTERVAL_SECS : null,
         fixedPayee: r.recurring && fixed ? fixed.wallet : null,
       });
     });
@@ -458,6 +451,21 @@ export function createMockService(opts: MockOptions = {}): MockService {
     t = tx(); txs.push(t);
     log("WillSet", `Plan signed and locked: ${draft.rules.filter((r) => r.startsNow).length} rules start now, ${draft.rules.filter((r) => !r.startsNow).length} after a passing`, t);
     return txs;
+  }
+
+  /**
+   * The demo story's own step after signing: Thabo adds Lerato's own wallet as an approved payee for her everyday needs
+   * (as an owner would under People). Signing itself adds no payee the plan didn't name, as on-chain.
+   */
+  function addOwnWallets(draft: WillDraft) {
+    // "Everyday needs" (General, paid to an "Other" payee): the child's own wallet is an approved payee too.
+    for (const r of draft.rules.filter((x) => x.category === "General" && x.allowedPayeeKind === "Other")) {
+      const ben = s.snap.beneficiaries.find((b) => b.label.toLowerCase().startsWith(r.beneficiaryLabel.toLowerCase().split(" ")[0]));
+      if (ben && !s.snap.payees.some((p) => p.wallet === ben.wallet)) {
+        s.snap.payees.push({ address: fakeAddr(), wallet: ben.wallet, kind: "Other", name: `${ben.label.split(" ")[0]}'s own wallet` });
+        s.names[ben.wallet] = s.names[ben.wallet] ?? ben.label;
+      }
+    }
   }
 
   function addPayee(input: { wallet: Base58; kind: PayeeKind; name: string }): TxResult {
@@ -936,7 +944,11 @@ export function createMockService(opts: MockOptions = {}): MockService {
     const a = s.snap.assets.find((x) => x.address === assetAddr) ?? fail("BadStatus", "That listing does not exist.");
     const hardship = !!a.hardshipBeneficiary;
     const min = hardship ? a.hardshipFloor : a.floorPrice;
-    const offers = s.snap.offers.filter((o) => o.asset === a.address).sort((x, y) => (y.amount > x.amount ? 1 : y.amount < x.amount ? -1 : x.createdAt - y.createdAt));
+    const all = s.snap.offers.filter((o) => o.asset === a.address).sort((x, y) => (y.amount > x.amount ? 1 : y.amount < x.amount ? -1 : x.createdAt - y.createdAt));
+    // As the chain's ranking (lib/agent/offers.ts): an offer nobody could co-sign never ranks, so it can't block the others.
+    const held = est().verifiers.filter(isHeld);
+    const unsignable = (buyer: Base58) => buyer === est().agent || (held.length > 0 && held.every((v) => v === buyer || v === est().agent));
+    const offers = all.filter((o) => !unsignable(o.buyer));
     const eligible = offers.filter((o) => o.amount >= min).map((o, i) => ({
       offer: o.address, amount: o.amount,
       reason: i === 0 ? (hardship ? "Highest offer at or above the hardship floor" : "Highest offer at or above the minimum price") : "Meets the minimum, but a higher offer exists",
@@ -945,7 +957,11 @@ export function createMockService(opts: MockOptions = {}): MockService {
       offer: o.address, amount: o.amount,
       reason: hardship ? `Below the hardship floor of ${usd(a.hardshipFloor)}. The contract will never accept this` : `Below the minimum price of ${usd(a.floorPrice)}. Blocked unless a hardship request is approved`,
     }));
-    return { a, ranking: { bestOffer: eligible[0]?.offer ?? null, eligible, ineligible }, min, hardship };
+    const blocked = all.filter((o) => unsignable(o.buyer)).map((o) => ({
+      offer: o.address, amount: o.amount,
+      reason: o.buyer === est().agent ? "The agent can't buy from a plan it serves." : "No trusted person other than the buyer is left to co-sign this sale.",
+    }));
+    return { a, ranking: { bestOffer: eligible[0]?.offer ?? null, eligible, ineligible: [...ineligible, ...blocked] }, min, hardship };
   }
 
   /** accept_offer(expected_amount): the agent signs and pays, the trusted person co-signs (R12, R19). */
@@ -1226,6 +1242,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     draft.ownerName = "Thabo Mokoena";
     as("thabo", () => {
       createEstate(draft);
+      addOwnWallets(draft);
       deposit(24000);
       // Naledi's school fees: at most 3,000 USD₮ a year (yearly cap), on top of 1,500 per claim and 9,000 in total.
       const school = s.snap.rules.find((r) => r.category === "Tuition" && r.allowedPayeeKind === "School");

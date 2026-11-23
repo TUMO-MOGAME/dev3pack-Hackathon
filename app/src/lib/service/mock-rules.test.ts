@@ -622,7 +622,10 @@ describe("R12 a trusted person co-signs the sale", () => {
     t.act("nomsa"); await t.svc.listAsset(t.estate, car, 7 * 86_400);
     t.act("zanele"); await t.svc.placeOffer(t.estate, car, 13_400);
     t.act("nomsa");
-    await expect(t.svc.acceptBestOffer(t.estate, car)).rejects.toThrow(/^BadAgent/);
+    // As the chain ranks it: the agent's offer never ranks, so another buyer's wins (or nothing sells).
+    expect((await t.svc.rankOffers(car)).ineligible.map((x) => x.reason)).toContain("The agent can't buy from a plan it serves.");
+    await t.svc.acceptBestOffer(t.estate, car);
+    expect((await t.snap()).activity.find((a) => a.kind === "AssetSold")?.sale?.buyer).not.toBe(who("zanele"));
   });
 
   it("with nobody left, only after the listing ends", async () => {
@@ -1309,5 +1312,19 @@ describe("Low: a schedule pays what was shown or nothing", () => {
     t.svc.makeDue();
     await expect(t.svc.executeScheduled(t.estate, r.address, { amount: r.recurringAmount + 1n, payee: r.fixedPayee! })).rejects.toMatchObject({ code: "ScheduleChanged" });
     await t.svc.executeScheduled(t.estate, r.address, { amount: r.recurringAmount, payee: r.fixedPayee! });
+  });
+});
+
+describe("Low: the demo signs a plan as the chain does", () => {
+  it("adds no payee the plan didn't name, and a living schedule is first due one interval later", async () => {
+    storage();
+    const svc = createMockService({ instant: true });
+    svc.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const { draft } = await svc.willChat([{ role: "user", text: "a" }, { role: "user", text: "b" }, { role: "user", text: "c" }]);
+    const { estate } = await svc.createEstateFromWill(draft!);
+    const s = await svc.getEstate(estate);
+    expect(s.payees.some((p) => p.wallet === who("lerato"))).toBe(false);
+    const living = s.rules.find((r) => r.startsNow && r.recurringAmount > 0n)!;
+    expect(living.nextDue).toBe(now() + 60);
   });
 });
