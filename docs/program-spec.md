@@ -377,164 +377,226 @@ No existing account layout changed. This section overrides anything above it tha
 `OwnClaimDispute 6045`, `TimeOutOfRange 6046`, `TooManyRules 6047`, `BadAgent 6048`, `RulesIncomplete 6049`,
 `NoResidualRecipient 6050`, `NothingToSweep 6051`, `ObjectionCooldown 6052`.
 
-## Second security review (added 2026-11-22, plan.md 18.2)
+## Second security review and independent review (plans 18.2, 18.8 and 18.10)
 
-**This section overrides anything above it that disagrees.** No existing account layout or PDA seed changed; enum
-variants, errors and events were only appended. Program and clients ship together.
+**This section overrides anything above it that disagrees, and describes the code as it is.** No existing
+account layout or PDA seed changed; enum variants, errors and events were only appended. Program and clients
+ship together. `RT` (recovery timeout) = 4 x `W`, with `W` = max(waiting period, 60 s). `g` = the waiting period
+clamped to 60 s..1 day. `R` = max(fallback wait, 60 s).
 
 ### Rules
 
-- **Proof of life.** `heartbeat`, `veto_death`, `owner_replace_seat`, `remove_member` and `set_agent` set
-  `last_heartbeat` and clear an open death claim (status Active again, `DeathVetoed`). A countdown started earlier
-  is void. So are Unlock and Fallback challenges raised earlier, with their votes: they read as lapsed.
-- **Approvals.** `approve_claim` works only when Unlocked. While Active only `owner_approve_claim` approves, and
-  that approval still pays after the unlock. Verifier approvals count only if they were given after this death:
-  the claim was created after `death_pending_since`, or the stamp's `approved_at >= death_pending_since`, or the
-  stamp is collecting (`approved_at == 0` and `seat_index == 255`). Others neither pay nor block: the next
-  `approve_claim` resets the bitmap and starts again.
-- **Quorum** (death, claim, hardship) = `min(needed, eligible)` and never zero. `needed` is the threshold
-  (`max(threshold, 2)` when Referred). `eligible` is the seats with a holder other than the claimant (or the death
-  claim's submitter). Only those seats' bits count. One seat, one vote: a successor holds the seat's vote.
-  Signing again is accepted only when it completes a quorum that has dropped (it stamps the window, or starts the
-  death wait); otherwise `AlreadyApproved`. A quorum lost to a vacancy needs another approval and a fresh window.
-- **Replaceable reports** (death claim, seat death, fallback death). With `g` = waiting period clamped to
-  60 s..1 day and `W` = max(waiting period, 60 s):
+- **Waiting period.** Read as at least 60 s, also for estates created before the bound (a stored 0 waits 60 s).
+- **Proof of life.** These are signed only by the living owner and set `last_heartbeat`, clear an open death
+  claim (status Active again, `DeathVetoed`) and void a countdown started earlier: `heartbeat`, `veto_death`,
+  `owner_replace_seat`, `remove_member`, `set_agent`, `set_fallback`, `set_seat_monitors`, the owner's
+  `vote_objection` and the owner's `resolve_dispute`. Unlock and Fallback challenges raised before it are void
+  with their votes: they block nothing, votes on them fail with ObjectionLapsed, `lapse_objection` closes them
+  at once and a new one may be raised. Other owner instructions (deposit, withdraw, owner_approve_claim,
+  set_will, rules, assets) are not proof of life.
+- **A disproved claim.** An open claim older than `last_heartbeat` (a check-in under the older program, which
+  did not clear it) is disproved: `review_death`, `attest_death` and `finalize_unlock` refuse it
+  (DeathDisproved), the fallback treats the death as not established, and anyone who may report replaces it at
+  once, also in DeathPending (status Active again). Older claims stored with time 0 are always disproved.
+- **Who reports the owner's death.** An active beneficiary, a living trusted person or a living listed
+  fallback recipient (with `guard`); never the agent (NotParticipant). The agent can't review a claim it
+  submitted (OwnApproval). A new claim voids a challenge raised against the one it replaces.
+- **Approvals of claims.** `approve_claim` works only when Unlocked; while Active only `owner_approve_claim`
+  approves, and that approval still pays after the unlock. Approvals given before the quorum of this death are
+  not counted: they count only if the claim was created after `death_pending_since`, or the stamp's
+  `approved_at >= death_pending_since`, or the stamp is collecting (`approved_at == 0`, `seat_index == 255`).
+  `death_pending_since` is when the quorum was reached, so approvals given during the death's wait (under an
+  older program) count. Others neither pay nor block: the next approval resets the bitmap.
+- **Quorum** (death, claim, hardship) = min(needed, eligible), never zero. `needed` is the threshold
+  (max(threshold, 2) when Referred). `eligible` is the held seats other than whoever gains (the claimant, the
+  hardship's beneficiary, the death claim's submitter). Only their bits count; a successor holds the seat's vote.
+  Signing again is accepted only when it completes a quorum that is not met; otherwise AlreadyApproved.
+- **A lost quorum (claims).** Each approval drops the votes of seats that no longer decide. A claim's approvals
+  stand only if no counted vote has been lost to a vacancy, unless what remains still reaches the full threshold.
+  So a quorum that drops below the threshold through a vacancy needs another approval, which stamps a fresh
+  objection window; one that only becomes smaller (fewer eligible seats, no vote lost) still pays.
+- **The only trusted person left, who gains.** When no other seat is held and the agent Approved (never
+  Referred), that person may attest the death or approve their own claim. It is marked by bit 7 of
+  `death_attestations` / `approvals` (DECIDED_ALONE): the unlock then waits twice the waiting period and the
+  claim twice the objection window. Not for hardship.
+- **Replaceable reports.**
 
   | Report | Another person may replace at | Whoever made it, at |
   |---|---|---|
-  | Unreviewed | reported + g | reported + 2g |
-  | Death or seat death, reviewed, no quorum or confirmation | reported + 2W | reported + 2W + g |
-  | Fallback death, reviewed | reported + 2R (R = max(fallback wait, 60 s)) | reported + 2R + g |
+  | Death claim, unreviewed | reported + g | reported + 2g |
+  | Death claim, reviewed, no quorum | reported + 2W | reported + 2W + g |
+  | Seat death, unreviewed | reported + g | reported + 2g |
+  | Seat death, reviewed, not confirmed | reported + RT + 2W | reported + RT + 2W + g |
+  | Fallback death, unreviewed | reported + min(g, R/2) | twice that |
+  | Fallback death, reviewed | reported + 2R | reported + 2R + min(g, R/2) |
 
-  A confirmed report is never replaceable. With no living seat a reviewed death claim is not replaceable either:
-  it is the fallback plan's proof. A stored time of 0 (older reports) is stale at once.
-- **Fallback.** The death is established when Unlocked, or when the claim's verdict is Approved or Referred. The
-  wait is twice `fallback_wait` while status is Active and the verdict Referred. A countdown is valid only if
-  `last_heartbeat < fallback_started_at` and `death_pending_since <= fallback_started_at`; otherwise
-  `start_fallback` may start it again.
-- **Nobody in their own favour.** A claimant, a hardship's beneficiary and a death claim's submitter can't approve
-  it (`OwnApproval`). They, and the next fallback recipient, can't raise the one challenge on it
-  (`OwnClaimDispute`) or vote to dismiss one (`OwnApproval`); they may vote to uphold. Objection and dispute
-  votes of vacant seats don't count.
-- **Agent.** It can't be a trusted person or backup, isn't promoted, can't report or confirm a death, can't be
-  the buyer, and can't accept an offer alone.
+  A confirmed report is never replaceable. With no living seat a reviewed death claim is not replaceable: it is
+  the fallback plan's proof. A new seat report voids a challenge to the one it replaces.
+- **Confirming a seat's death.** Never the reporter, the holder, the agent, or `backups[0]` unless they hold
+  another seat (they can't be promoted then). Who may:
+  - the holder of another seat;
+  - `backups[1]` or a monitor of the seat, when no other seat is held or the approved report has waited RT;
+  - an active beneficiary, when no other seat is held and nobody watches the seat (a monitor other than
+    `backups[0]`, or `backups[1]`), or when the approved report has waited RT.
+- **Confirmations the owner revokes.** When the owner replaces a holder, changes a seat's monitors or removes a
+  beneficiary, a pending confirmation by someone who then holds no seat is cleared at once
+  (SeatDeathReportCleared); the owner's replacement also clears the replaced seat's own report. A check-in
+  revokes nothing, and a confirmer who has since died keeps the confirmation.
+- **Finalizing a succession.** A report or confirmation by whoever is now the agent is cleared. The first
+  backup who is not the owner, the agent, a holder of another seat, the reporter or the confirmer takes the seat;
+  the other backup stays a backup (also one who reported). When only the reporter or confirmer could take it: if
+  nobody watches the seat and no other is held, that backup takes it RT after the confirmation (before that,
+  WaitingPeriodNotOver); otherwise the report is cleared for a fresh one. The seat vacates when every backup is
+  the owner, the current agent or the holder of another seat (or there is none).
+- **Fallback.** The death is established when Unlocked, or when the claim is Approved or Referred and not
+  disproved. A countdown is valid only if `last_heartbeat < fallback_started_at` and
+  `death_pending_since <= fallback_started_at`. It pays at the later of `started + max(fallback wait, 60 s)`
+  (twice that while Active with a Referred claim) and the death's own wait (`death_pending_since` plus the
+  waiting period while Active, plus the unlock delay while DeathPending). An open Unlock challenge blocks it, as
+  does an open Fallback objection; a Fallback objection lapses after R, and one raised before the owner's last
+  sign of life or before the current countdown started is void. Recipients can't be the estate (BadFallback);
+  one that an older list names is skipped. The payment goes to the recipient's ATA (created if missing) or any
+  other token account of the mint they own.
+- **After the fallback ran** no rule reserves anything in `sweep_residual`.
+- **Disputes.** The living owner (Active or DeathPending) decides a dispute alone. Trusted people decide claim
+  disputes only after the unlock (NotOwner before). Once resolved, `raised_at` is when it was resolved, and a
+  claim's objection window runs from there.
+- **Challenges.** Monitors may take over an unlock's open dispute. Once a monitors' objection is resolved,
+  `raised_at` is when it was resolved. With a Guard an offer waits out the objection window before it is
+  accepted, and so does a hardship's quorum (its `["stamp", hardship]`); an offer made at or before an upheld
+  sale objection was decided can't be accepted (OfferTooOld).
+- **Nobody in their own favour.** Whoever gains can't approve outside the route above (OwnApproval), raise the
+  one challenge (OwnClaimDispute) or vote to dismiss one (OwnApproval); they may vote to uphold. Votes of vacant
+  seats don't count. Fallback votes: one wallet, one vote.
+- **Agent replacement.** By the owner while Active (`set_agent`), or by trusted people (`vote_agent`): every
+  held seat (at least two) before the unlock, two or the only one left after it. Also two (or the only one) before
+  the unlock when a death claim is open, not disproved, has stood one grace and the owner has shown no life for
+  RT. A new agent sets back what the old one reviewed: the death claim's verdict (with its attestations; the
+  status is Active again and the claim's time restarts), seat reports (verdict Pending, confirmation cleared) and
+  fallback reports (verdict Pending), emitting AgentReviewCleared. A candidate can't be a backup (BadAgent).
+- **What the agent may not be or do.** It can't be a trusted person (create_estate, owner_replace_seat) or a
+  backup (set_seat_backups, set_agent, vote_agent), is never promoted, can't report the owner's, a seat's or a
+  fallback recipient's death, confirm one, review a claim, hardship or report that it made or that is its own,
+  be the buyer, or accept an offer without a co-signer. It may be a beneficiary, payee, monitor or fallback
+  recipient; as a monitor it can raise and vote on objections.
 
 ### Changed field meanings (same bytes)
 
 | Field | Meaning now | Read the state from |
 |---|---|---|
-| `Estate.death_pending_since` | Active with a claim: submission time. DeathPending or Unlocked: when the quorum (or, from Active, the fallback) took effect | `status`, `death_cert_hash`. The wait is `since + waiting` only when DeathPending |
-| `Seat.death_pending_since` | report time; confirmation time once confirmed | `death_confirmed_by`. The wait is `since + succession_wait` only when that is set |
-| `ApprovalStamp.seat_index` | 255 until the quorum is reached, then the seat that reached it | `approved_at > 0` |
-| `ApprovalStamp.approved_at` | may restart when a lost quorum is reached again; older than `death_pending_since` = stale | |
+| `Estate.waiting_period_secs` | read as at least 60 s | |
+| `Estate.death_pending_since` | Active with a claim: submission time (or the time the review was set back after a new agent). DeathPending or Unlocked: when the quorum (or, from Active, the fallback) took effect | `status`, `death_cert_hash` |
+| `Estate.death_attestations` | bits 0-2 the seats, bit 7 DECIDED_ALONE | |
+| `Claim.approvals` | bits 0-2 the seats, bit 7 DECIDED_ALONE | |
+| `Seat.death_pending_since` | report time; confirmation time once confirmed; the time a new agent set the review back | `death_confirmed_by` |
+| `ApprovalStamp` | also `["stamp", hardship]` for hardships; `seat_index` 255 until the quorum; `approved_at` restarts when a lost quorum is reached again | `approved_at > 0` |
+| `Objection.raised_at` | when raised while Open; when resolved once Upheld or Dismissed; 0 once a new report voided it | `status` |
+| `FallbackReport.recipient` | default once `set_fallback` voided it | |
+| `FallbackReport.reported_at` | also reset when a new agent set its verdict back | |
 | `Rule.claim_count` | next claim id; its high 16 bits number the rule that holds the slot | a claim is current iff `claim.id >> 16 == rule.claim_count >> 16` |
-| `Rule` at an id | may be a newer rule than the one older claims and events refer to | `RuleReused` |
-| `Objection` votes (Fallback) | a monitor's bit is their lowest position `2i + j`; a vote at any of their positions is their vote | |
-| `Beneficiary.active` | false = removed; every client list must check it | |
+| `Beneficiary.active` | false = removed | |
 
-### New account
+### Accounts
 
 `FallbackReport` `["fallbackreport", estate, [index u8]]`: estate, index u8, recipient, reporter, rent_payer,
 cert_hash, verdict, reported_at i64, bump. Closed on rejection, refutation and confirmation, always to
-`rent_payer`. A report that replaces it keeps the first `rent_payer`. It is void (replaceable at once, not
-reviewable) when `recipient != guard.fallback[index]`.
+`rent_payer`; a report that replaces it keeps the first `rent_payer`. Void (replaceable at once, not reviewable,
+holds nothing) when `recipient != guard.fallback[index]`.
 
-### New instructions
+### Instructions (full list of what differs from the deployed program)
 
-Accounts are in IDL order. w = writable, s = signer, o = optional (None = the program id).
-
-| Instruction | Args | Accounts | Rules |
-|---|---|---|---|
-| `resolve_fallback_death` | index u8, dead bool | signer(s), estate, guard(w), fallback_report(w), rent_to(w) = report.rent_payer, signer_seat(o), beneficiary_account(o) | `dead = false`: the recipient refutes, any time before confirmation (NotParticipant), emits FallbackDeathRefuted. `dead = true`: verdict Approved (AgentNotApproved); signer is a participant, not the recipient, reporter, agent or next living recipient after `index` (NotConfirmer); now >= reported + R (WaitingPeriodNotOver); sets the dead bit, restarts a valid countdown, emits FallbackDeathConfirmed. Both close the report |
-| `release_asset` | none | owner(w,s), estate, asset(w), nft_mint, nft_escrow(w), owner_nft(w), token_program | Active, Held (BadStatus). Title to the owner; escrow and Asset closed to the owner. `owner_nft` must exist. The AssetMedia stays, and is found again on a re-registration |
-| `remove_member` | none | owner(w,s), estate(w), beneficiary_account(w,o), payee_account(w,o) | Active; at least one (BadStatus). Beneficiary: `active = false`, undone by add_beneficiary. Payee: closed to the owner, undone by add_payee. Proof of life. Emits MemberRemoved for each |
-
-Participants of a fallback report: living trusted people, a monitor (passes `signer_seat`), an active beneficiary
-(passes `beneficiary_account`) and living listed recipients. The agent never.
-
-### Changed instructions
+Accounts in IDL order. w = writable, s = signer, o = optional (None = the program id). New accounts in bold.
 
 | Instruction | Args | Accounts | Rules |
 |---|---|---|---|
 | `create_estate` | same | same | verifiers real (InvalidWallet); agent real, not the owner or a verifier (BadAgent) |
-| `add_beneficiary` | same | same | init_if_needed: adds back a removed one; an active one gives BadStatus |
-| `add_rule` | **rule_id u16 first**, then as before | owner(w,s), estate(w), beneficiary, rule(w) `["rule", estate, rule_id]`, payee(o), system_program, **year_cap(w)** `["yearcap", rule]` | rule_id = rule_count makes a slot (max 16). An existing id needs an ended rule (else BadStatus) and is overwritten: spent 0, claim_count at the next multiple of 65,536, year cap closed to the owner, rule_count unchanged, emits RuleReused. valid_until > now (TimeOutOfRange) |
-| `register_asset` | same | same | mint and freeze authority None (InvalidNft); proceeds_to real (InvalidWallet); the estate itself is allowed and means the vault |
-| `submit_death_claim` | same | same | replaces a stale claim (else BadStatus); stores the time |
-| `review_death` | outcome, report_hash, **cert_hash** | same | cert_hash must equal the stored one (ReportChanged) |
-| `attest_death` | same | same | quorum as above; OwnApproval |
-| `heartbeat` | same | same | proof of life |
-| `submit_claim` | same | same | the 65,536 ids of a rule can't run out into the next range (MathOverflow) |
-| `approve_claim` | same | same | Unlocked only (BadStatus); quorum as above; OwnApproval |
+| `add_beneficiary` | same | same | init_if_needed: adds back a removed one; an active one: BadStatus |
+| **`add_rule_v2`** (was `add_rule`, which no longer exists) | **rule_id u16**, category, allowed_payee_kind, max_per_claim, lifetime_cap, valid_until, starts_now, recurring_amount, interval_secs, first_due | owner(w,s), estate(w), beneficiary, rule(w) `["rule", estate, rule_id]`, payee(o), system_program, **year_cap(w)** | rule_id = rule_count makes a slot (max 16); an ended rule's id reuses it (spent 0, claim ids from the next multiple of 65,536, its year cap closed to the owner, RuleReused). valid_until > now |
+| `register_asset` | same | same | mint and freeze authority None (InvalidNft); proceeds_to real (the estate means the vault) |
+| `release_asset` (new) | none | owner(w,s), estate, asset(w), nft_mint, nft_escrow(w), owner_nft(w), token_program | Active, Held |
+| `remove_member` (new) | none | owner(w,s), estate(w), beneficiary_account(w,o), payee_account(w,o), **seat0(w), seat1(w), seat2(w)** `["seat", estate, [i]]` | Active, at least one. Proof of life; releases the removed beneficiary's confirmations |
+| `heartbeat`, `veto_death` | same | same | proof of life |
+| `submit_death_claim` | cert_hash | beneficiary(s), estate(w), beneficiary_account(**o**), **guard(o)**, **objection(w)** `["objection", estate]` | reporters as above; replacement rules; a disproved claim is replaced at once |
+| `review_death` | outcome, report_hash, **cert_hash** | same | ReportChanged, DeathDisproved; not its own submission |
+| `attest_death` | same | same | quorum and lone-person route; DeathDisproved |
+| `finalize_unlock` | same | same | DeathDisproved; doubled wait when decided alone |
+| `submit_claim` | same | same | claim ids stay in the rule's range (MathOverflow) |
+| `review_claim`, `review_hardship` | same | same | not its own claim or hardship (OwnApproval) |
+| `approve_claim` | same | same | Unlocked only; quorum, lost quorum and lone-person route |
 | `owner_approve_claim` | same | same | ClaimFromEndedRule |
-| `execute_claim` | same | payer(w,s), estate, rule(w), claim(w), payee_wallet, usdt_mint, vault(w), payee_usdt(w), token_program, associated_token_program, system_program, guard, approval_stamp, objection, year_cap(w), **beneficiary_account** `["beneficiary", estate, claim.beneficiary]`, **payee_account** `["payee", estate, claim.payee]` | current claim (ClaimFromEndedRule); beneficiary active (NotBeneficiary); payee present (Anchor 3012 when removed) and of the rule's kind (WrongPayeeKind) |
-| `execute_scheduled` | same | payer(w,s), estate, rule(w), payee_wallet, usdt_mint, vault(w), payee_usdt(w), token_program, associated_token_program, system_program, year_cap(w), **beneficiary_account** `["beneficiary", estate, rule.beneficiary]`, **payee_account** `["payee", estate, rule.fixed_payee]` | as execute_claim, without the claim check |
-| `approve_hardship` | same | same | quorum as above; OwnApproval |
-| `accept_offer` | **expected_amount u64** (R19) | as before, then **co_signer(s,o)** | buyer is not the agent (BadAgent). A living seat exists: co_signer is a holder, not the buyer or agent (CoSignerRequired). None left: now >= listing_ends (ListingStillOpen). The agent still signs and pays |
-| `set_seat_backups` | same | same | never the agent; a stale report is cleared instead of blocking |
-| `report_seat_death` | same | reporter(s), estate, seat(w), **beneficiary_account(o)** | reporter: trusted person, owner, this seat's monitor or backup, active beneficiary; not the agent (NotParticipant). Replaces a stale unconfirmed report; stores the time |
-| `review_seat_death` | index, approve, report_hash, **cert_hash** | same | ReportChanged |
-| `confirm_seat_death` | same | confirmer(s), estate, seat(w), **beneficiary_account(o)** (R18) | never the agent; the beneficiary route below |
-| `finalize_succession` | same | same | never BadBackup, and may succeed without promoting: clears the report (SeatDeathReportCleared) when the only possible backup reported or confirmed it, or the owner has since removed the confirmer (they confirmed at or before `last_heartbeat` and could not confirm now). Vacates when no backup could ever be eligible |
-| `owner_replace_seat` | same | same | proof of life; not the agent (BadAgent) |
-| `raise_objection` | same | same | not by whoever gains (OwnClaimDispute). Unlock: once per claim while Active and once per wait. Claim: one dismissed before this death doesn't use up the objection. Fallback: only on a valid countdown |
-| `vote_objection` | same | voter(s), estate(w), guard(w), objection(w), target_account(w,o), asset(w,o); **voter_seat removed**. **Remaining accounts for a monitor's Fallback vote: seat0, seat1, seat2, in order** | one wallet, one vote. target_account is needed to dismiss a Claim or Hardship objection as well as to uphold |
-| `raise_dispute` | same | same | a death claim's submitter can't dispute that unlock |
-| `resolve_dispute` | same | same | target_account is needed to dismiss a Claim dispute as well as to uphold |
-| `lapse_objection` | same | same | also at once for a challenge voided by proof of life |
-| `report_fallback_death` | index, cert_hash | **reporter(w,s)** (pays rent), estate, guard, **fallback_report(w)**, **signer_seat(o)**, **beneficiary_account(o)**, **system_program** | participants other than the recipient (NotParticipant); a pending report blocks until stale (BadStatus) |
-| `review_fallback_death` | index, approve, report_hash, **cert_hash** | agent(s), estate, guard (no longer writable), **fallback_report(w)**, **rent_to(w)** = report.rent_payer | only sets the verdict; a rejection closes the report. Never sets the dead bit |
-| `start_fallback` | same | same | Referred accepted; restarts an invalid countdown; `runs_at` includes the doubled wait |
-| `execute_fallback` | same | as before, then **fallback_report** `["fallbackreport", estate, [guard's first living index, else 255]]` (may not exist) | an Approved report on the recipient made before runs_at holds payment until reported + 2R (DeathReportOpen) |
-| `set_agent` | same | same | proof of life |
-| `vote_agent` | same | same | voting again completes a quorum that has dropped |
+| `execute_claim` | same | as deployed, then year_cap(w), **beneficiary_account**, **payee_account** | as above; doubled window when decided alone; dispute hold from its resolution |
+| `execute_scheduled` | same | as deployed, then year_cap(w), **beneficiary_account**, **payee_account** | beneficiary active, payee present and of the rule's kind |
+| `submit_hardship` | same | same | init_if_needed: again after the agent rejected it; one rejected by people stays final |
+| `approve_hardship` | same | verifier(s), estate, asset(w), hardship(w), **payer(w,s)**, **approval_stamp(w)** `["stamp", hardship]`, **system_program** | quorum; BadStatus while another beneficiary's approved hardship stands; writes the stamp |
+| `accept_offer` | **expected_amount u64** | as deployed, then objection, hardship_objection, **co_signer(s,o)**, **guard** `["guard", estate]`, **hardship_stamp** (`["stamp", Hardship PDA]` when a hardship stands, else any account) | OfferChanged; BadAgent; CoSignerRequired / ListingStillOpen; OfferTooOld; with a Guard ObjectionWindowOpen for the offer and the hardship's quorum |
+| `set_asset_media` | same | same | the owner while Active only |
+| `set_seat_backups` | same | same | never the agent; a stale report is cleared |
+| `set_seat_monitors` | same | owner(s), estate(**w**), seat(w) | proof of life; releases confirmations by a non-holder |
+| `set_fallback` | same | owner(s), estate(**w**), guard(w), **fallback_report0..3(w)** `["fallbackreport", estate, [i]]` | proof of life; recipients not the estate; every open report voided |
+| `report_seat_death` | same | reporter(s), estate, seat(w), **beneficiary_account(o)**, **objection(w)** `["objection", seat]` | participants; replacement rules; voids an old challenge |
+| `review_seat_death` | index, approve, report_hash, **cert_hash**, **holder** | same | ReportChanged unless both match; not its own report |
+| `confirm_seat_death` | same | confirmer(s), estate, seat(w), **beneficiary_account(o)** | as above |
+| `finalize_succession` | same | same (remaining accounts ignored) | as above |
+| `owner_replace_seat` | same | owner(s), estate(w), seat(w), **next_seat(w)** `["seat", estate, [(index+1)%3]]`, **last_seat(w)** `["seat", estate, [(index+2)%3]]` | proof of life; not the agent; releases confirmations |
+| `raise_objection` | same | same | as above (takeover of an unlock dispute; void fallback objections don't block) |
+| `vote_objection` | same | voter(s), estate(w), guard(w), objection(w), target_account(w,o), asset(w,o), remaining seats for a monitor's Fallback vote (deployed: voter_seat after guard) | asset only for Hardship (BadStatus); owner decides while Active or DeathPending (proof of life) |
+| `raise_dispute` | same | as deployed, then **guard(w)** `["guard", estate]` | the submitter can't dispute that unlock; fixes the open-objection count |
+| `resolve_dispute` | same | same | the owner decides; seats only after the unlock for claims |
+| `report_fallback_death` | index, cert_hash | reporter(w,s), estate, guard, **fallback_report(w)**, **signer_seat(o)**, **beneficiary_account(o)**, **system_program** | participants, not the recipient or the agent |
+| `review_fallback_death` | index, approve, report_hash, **cert_hash**, **recipient** | agent(s), estate, guard, **fallback_report(w)**, **rent_to(w)** | only sets the verdict; not its own report |
+| `resolve_fallback_death` (new) | index, dead | signer(s), estate, guard(w), fallback_report(w), rent_to(w), signer_seat(o), beneficiary_account(o) | refute or confirm |
+| `start_fallback` | same | same | runs_at as above |
+| `execute_fallback` | same | as deployed with recipient_usdt (**now any token account of the mint the recipient owns, or their ATA created here**), then **fallback_report** `["fallbackreport", estate, [first living index, else 255]]`, **unlock_objection** `["objection", estate]` | as above |
+| `sweep_residual` | same | as deployed (recipient_usdt as in execute_fallback), then **fallback_report** (same seeds, 255 without a Guard); remaining: the rules | no reserve after the fallback; the report hold |
+| `set_agent` | same | owner(s), estate(w), **seat0..2(w)**, **fallback_report0..3(w)** | proof of life; candidate not a backup; reviews set back |
+| `vote_agent` | same | verifier(w,s), estate(w), agent_vote(w), system_program, **seat0..2(w)**, **fallback_report0..3(w)** | quorum as above; reviews set back |
+| `lapse_objection` | same | same | also void challenges at once |
 
 ### Errors (appended)
 
 `NotParticipant 6053, OwnApproval 6054, CoSignerRequired 6055, ListingStillOpen 6056, InvalidWallet 6057,
-ReportChanged 6058, DeathReportOpen 6059, ClaimFromEndedRule 6060`.
+ReportChanged 6058, DeathReportOpen 6059, ClaimFromEndedRule 6060, OfferChanged 6061, DeathDisproved 6062,
+OfferTooOld 6063`.
 
 ### Events (appended)
 
-`SeatDeathReportCleared {estate, seat_index, ts}`, `FallbackDeathConfirmed {estate, index, recipient, confirmed_by, ts}`,
-`FallbackDeathRefuted {estate, index, recipient, ts}`, `AssetReleased {estate, asset, nft_mint, ts}`,
-`MemberRemoved {estate, wallet, payee bool, ts}`, `RuleReused {estate, rule, first_claim_id u32, ts}`.
-`FallbackDeathReviewed.approved` no longer means the recipient is marked dead.
+`SeatDeathReportCleared {estate, seat_index, ts}`, `FallbackDeathConfirmed {estate, index, recipient,
+confirmed_by, ts}`, `FallbackDeathRefuted {estate, index, recipient, ts}`, `AssetReleased {estate, asset,
+nft_mint, ts}`, `MemberRemoved {estate, wallet, payee bool, ts}`, `RuleReused {estate, rule, first_claim_id u32,
+ts}`, `AgentReviewCleared {estate, target, ts}`. `FallbackDeathReviewed.approved` no longer means the recipient
+is marked dead.
+
+### Mixed versions
+
+Every instruction whose arguments or account list changed fails on the new program when an old client sends it
+(missing data or accounts), and `add_rule_v2` fails on the old program. The reverse is not true: the deployed
+program ignores trailing arguments and accounts, so a new client talking to the old program is silently
+misread on these: `accept_offer` (no amount or co-signature check), `review_fallback_death` (the old program marks
+the recipient dead at once), `review_death`, `review_seat_death`, `approve_hardship`, `confirm_seat_death`,
+`execute_claim`, `execute_scheduled`, `execute_fallback`, `owner_replace_seat`, `raise_dispute`,
+`report_fallback_death`, `report_seat_death`, `set_agent`, `set_fallback`, `submit_death_claim`,
+`sweep_residual`, `vote_agent`. Instructions whose layout didn't change but whose rules did (`heartbeat`,
+`vote_objection`'s owner, and others above) behave as the deployed program there. So the client must refuse to
+write unless the deployed program is the one its IDL was built from.
+
+### Limits kept (documented, not fixed)
+
+- Agent votes are bound to the agent they replace, not to a round: if the agent changes and returns, votes cast
+  against it earlier count again (L4). A round would need a field in AgentVote or Estate.
+- A referred claim with one trusted person left is paid by that person (the quorum is min(needed, eligible)):
+  "a referred claim needs two" holds only while two may decide (L14).
+- `sweep_residual` pays the fallback list without the fallback countdown once the estate is Unlocked.
+- Votes on Succession objections and claim disputes cast before the owner replaced the voter still count until
+  the challenge lapses or the owner decides it.
 
 ### Client notes
 
 - A report cleared by `finalize_succession` can be followed by a fresh report in the same transaction.
-- Removing a payee or beneficiary doesn't end their rules: those keep their reserve in `sweep_residual` until
-  they expire. Send `end_rule` with the removal when the rule should go. Adding the member back lets their open
-  claims and schedules on live rules pay again.
+- Removing a payee or beneficiary doesn't end their rules; send `end_rule` with the removal when it should.
 - A title mint must give up both authorities before `register_asset`.
+- `finalize_succession` reads no remaining account any more.
 
 ### Build
 
 `[profile.release.package.heirloom] opt-level = "z"` in the root Cargo.toml: the upgrade budget caps the binary
 at 1,020,000 bytes. Without the program keypair build with `anchor build --ignore-keys`; never `anchor keys sync`.
-
-### Open items (plan.md 18.8: R18 to R22)
-
-| Instruction | Args | Accounts | Rules |
-|---|---|---|---|
-| `confirm_seat_death` | index | confirmer(s), estate, seat(w), **beneficiary_account(o)** | R18. When no other seat is held and this seat has neither a monitor nor `backups[1]`, an active beneficiary may confirm: never the reporter, the holder, `backups[0]` or the agent |
-| `finalize_succession` | index | same five accounts. **In one case, one remaining account** (below) | R18. Such a confirmation stands while that route applies and the confirmer is an active beneficiary |
-| `set_seat_monitors` | same | same | R18. Giving a seat a monitor closes the route: it clears a confirmation made by it (SeatDeathReportCleared) |
-| `accept_offer` | **expected_amount u64** | same | R19. Must equal `offer.amount` (OfferChanged) |
-| `sweep_residual` | none | payer(w,s), estate, residual, guard, recipient, usdt_mint, vault(w), recipient_usdt(w), token_program, associated_token_program, system_program, **fallback_report** `["fallbackreport", estate, [the Guard's first living index, else 255]]` (255 also without a Guard; may not exist). Remaining: the rules, in id order | R20. Only when paying by the fallback list: an Approved report on that recipient holds the sweep while now < reported_at + 2R (DeathReportOpen) |
-| `approve_hardship` | same | same | R21. BadStatus while another beneficiary's approved hardship stands on the asset. An upheld objection to that one frees it |
-| `set_asset_media` | same | same | R22. `estate.owner` while Active only (NotOwner) |
-
-**The one case for `finalize_succession`:** `death_pending_since <= last_heartbeat` (the owner showed life at or
-after the confirmation), the confirmer is neither a holder, a monitor of the seat nor `backups[1]`, and the
-beneficiary route applies to the seat. Then the first remaining account must be
-`["beneficiary", estate, death_confirmed_by]`, whether or not it exists: active, the succession goes on; inactive
-or missing, the report is cleared. Not passed: NotConfirmer, so leaving it out can't revoke a confirmation.
-In every other case it is ignored, so the simplest client always passes it.
-
-**How the sweep's hold is bounded:** each report holds for at most 2R from when it was made. A report that
-replaces it starts Pending and holds nothing until the agent approves it. The recipient can refute and sweep in
-the same transaction at any time.
-
-Error appended: `OfferChanged 6061`.

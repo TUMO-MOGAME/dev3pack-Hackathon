@@ -4,7 +4,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use super::{close_token_account_cpi, count_bits, now, objection_is_open, transfer_checked_cpi};
+use super::{account_exists, close_token_account_cpi, count_bits, now, objection_is_open, read_account, transfer_checked_cpi};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -244,8 +244,9 @@ pub struct SubmitHardship<'info> {
     #[account(has_one = estate)]
     pub asset: Box<Account<'info, Asset>>,
 
+    /// New, or one the agent rejected (L7): that is not final, an upheld objection is.
     #[account(
-        init,
+        init_if_needed,
         payer = beneficiary,
         space = 8 + Hardship::INIT_SPACE,
         seeds = [HARDSHIP_SEED, asset.key().as_ref(), beneficiary.key().as_ref()],
@@ -264,6 +265,12 @@ pub fn submit_hardship_handler(ctx: Context<SubmitHardship>, evidence_hash: [u8;
     );
     require!(
         ctx.accounts.asset.status != AssetStatus::Sold,
+        HeirloomError::BadStatus
+    );
+    let existing = &ctx.accounts.hardship;
+    require!(
+        existing.asset == Pubkey::default()
+            || (existing.status == HardshipStatus::Rejected && existing.agent_verdict == Verdict::Rejected),
         HeirloomError::BadStatus
     );
 
@@ -312,6 +319,7 @@ pub fn review_hardship_handler(ctx: Context<ReviewHardship>, outcome: ReviewOutc
         hardship.status == HardshipStatus::Open && hardship.agent_verdict == Verdict::Pending,
         HeirloomError::BadStatus
     );
+    require!(hardship.beneficiary != ctx.accounts.agent.key(), HeirloomError::OwnApproval);
 
     hardship.agent_report_hash = report_hash;
     let ts = now()?;
@@ -356,6 +364,22 @@ pub struct ApproveHardship<'info> {
 
     #[account(mut, has_one = asset)]
     pub hardship: Account<'info, Hardship>,
+
+    /// Pays the ApprovalStamp rent (the verifier or a sponsor).
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    /// ["stamp", hardship]: when the quorum was reached, so monitors get the objection window before a sale (M8).
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 8 + ApprovalStamp::INIT_SPACE,
+        seeds = [STAMP_SEED, hardship.key().as_ref()],
+        bump
+    )]
+    pub approval_stamp: Box<Account<'info, ApprovalStamp>>,
+
+    pub system_program: Program<'info, System>,
 }
 
 pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
@@ -385,12 +409,22 @@ pub fn approve_hardship_handler(ctx: Context<ApproveHardship>) -> Result<()> {
     let quorum_reached = estate.quorum_met(hardship.approvals, &claimant, needed);
     // Signing again only completes a quorum that has dropped since.
     require!(first_time || quorum_reached, HeirloomError::AlreadyApproved);
+    let ts = now()?;
+    let stamp = &mut ctx.accounts.approval_stamp;
+    if stamp.target == Pubkey::default() {
+        stamp.target = hardship.key();
+        stamp.bump = ctx.bumps.approval_stamp;
+    }
+    stamp.approver = verifier;
     if quorum_reached {
         hardship.status = HardshipStatus::Approved;
         asset.hardship_beneficiary = Some(hardship.beneficiary);
+        stamp.seat_index = idx as u8;
+        stamp.approved_at = ts;
+    } else {
+        stamp.seat_index = NO_SEAT;
     }
 
-    let ts = now()?;
     emit!(HardshipApproved {
         asset: asset.key(),
         hardship: hardship.key(),
@@ -491,6 +525,16 @@ pub struct AcceptOffer<'info> {
     /// A living trusted person other than the buyer and the agent. None only when no seat has a holder, and
     /// then the sale waits for the listing to end.
     pub co_signer: Option<Signer<'info>>,
+
+    /// CHECK: the ["guard", estate] PDA; may not exist. With a Guard an offer, and a hardship's quorum, wait out
+    /// the objection window before a sale (M8).
+    #[account(seeds = [GUARD_SEED, estate.key().as_ref()], bump)]
+    pub guard: UncheckedAccount<'info>,
+
+    /// CHECK: when asset.hardship_beneficiary is Some(b): the ["stamp", Hardship PDA(asset, b)] PDA (address
+    /// checked in the handler; it may not exist for a hardship approved before stamps). Otherwise not read: pass
+    /// any account, e.g. the system program.
+    pub hardship_stamp: UncheckedAccount<'info>,
 }
 
 /// `expected_amount` is what the agent and the co-signer agreed to: the buyer can't swap in another offer.
@@ -502,6 +546,7 @@ pub fn accept_offer_handler(ctx: Context<AcceptOffer>, expected_amount: u64) -> 
         !objection_is_open(&ctx.accounts.objection.to_account_info(), &ctx.accounts.estate)?,
         HeirloomError::ObjectionOpen
     );
+    let mut hardship_pda = None;
     if let Some(b) = asset.hardship_beneficiary {
         let asset_key = asset.key();
         let (hardship, _) =
@@ -510,6 +555,16 @@ pub fn accept_offer_handler(ctx: Context<AcceptOffer>, expected_amount: u64) -> 
         let info = ctx.accounts.hardship_objection.to_account_info();
         require_keys_eq!(info.key(), expected, HeirloomError::BadStatus);
         require!(!objection_is_open(&info, &ctx.accounts.estate)?, HeirloomError::ObjectionOpen);
+        hardship_pda = Some(hardship);
+    }
+    // An offer made before an objection to the sale was upheld belongs to the cancelled listing (M8).
+    let sale_objection = ctx.accounts.objection.to_account_info();
+    if account_exists(&sale_objection) {
+        let o: Objection = read_account(&sale_objection)?;
+        require!(
+            !(o.status == ObjectionStatus::Upheld && ctx.accounts.offer.created_at <= o.raised_at),
+            HeirloomError::OfferTooOld
+        );
     }
 
     // The agent alone never decides who the title goes to.
@@ -532,6 +587,22 @@ pub fn accept_offer_handler(ctx: Context<AcceptOffer>, expected_amount: u64) -> 
         require!(amount >= asset.hardship_floor, HeirloomError::BelowHardshipFloor);
     } else {
         require!(amount >= asset.floor_price, HeirloomError::BelowFloor);
+    }
+
+    // With a Guard, monitors get the objection window to object to the offer, and to a hardship's quorum.
+    let guard_info = ctx.accounts.guard.to_account_info();
+    if account_exists(&guard_info) {
+        let window = read_account::<Guard>(&guard_info)?.objection_window();
+        require!(ts >= ctx.accounts.offer.created_at.saturating_add(window), HeirloomError::ObjectionWindowOpen);
+        if let Some(hardship) = hardship_pda {
+            let (expected, _) = Pubkey::find_program_address(&[STAMP_SEED, hardship.as_ref()], &crate::ID);
+            let info = ctx.accounts.hardship_stamp.to_account_info();
+            require_keys_eq!(info.key(), expected, HeirloomError::BadStatus);
+            if account_exists(&info) {
+                let stamp: ApprovalStamp = read_account(&info)?;
+                require!(ts >= stamp.approved_at.saturating_add(window), HeirloomError::ObjectionWindowOpen);
+            }
+        }
     }
 
     let asset_key = asset.key();

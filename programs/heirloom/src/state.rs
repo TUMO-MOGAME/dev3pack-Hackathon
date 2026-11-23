@@ -46,6 +46,9 @@ pub const MAX_RULES: u16 = 16;
 pub const REFERRED_MIN_APPROVALS: u8 = 2;
 /// An unreviewed death report keeps its place for one waiting period, at least 60 s and at most this long.
 pub const MAX_REPORT_GRACE_SECS: i64 = 86_400;
+/// High bit of `Estate.death_attestations` and `Claim.approvals`: the only trusted person left, who is also the
+/// one who gains, decided alone (H4). The wait or the objection window is then doubled.
+pub const DECIDED_ALONE: u8 = 1 << 7;
 
 // ---------------------------------------------------------------- enums (Borsh order matters)
 
@@ -162,9 +165,9 @@ impl Estate {
         self.verifiers.iter().position(|v| v == key)
     }
 
-    /// The waiting period, clamped for estates created before the bound existed.
+    /// The waiting period, clamped for estates created before the bounds existed (never under 60 s).
     pub fn waiting_secs(&self) -> i64 {
-        self.waiting_period_secs.clamp(0, MAX_WAITING_SECS)
+        self.waiting_period_secs.clamp(MIN_WAITING_SECS, MAX_WAITING_SECS)
     }
 
     /// Bitmap of the seats someone holds, leaving out `who` (nobody decides in their own favour).
@@ -177,8 +180,43 @@ impl Estate {
     /// `votes` reach min(`needed`, the living seats that may decide), which is never zero. One seat, one vote:
     /// a successor holds the seat's vote; a vacant seat's vote no longer counts.
     pub fn quorum_met(&self, votes: u8, interested: &Pubkey, needed: u8) -> bool {
-        let eligible = self.living_seats_except(interested);
+        Self::votes_meet(votes, self.living_seats_except(interested), needed)
+    }
+
+    /// `votes` reach min(`needed`, the seats in `eligible`), and `eligible` is not empty.
+    pub fn votes_meet(votes: u8, eligible: u8, needed: u8) -> bool {
         eligible != 0 && (votes & eligible).count_ones() >= u32::from(needed).min(eligible.count_ones())
+    }
+
+    /// The seats that decide, leaving out whoever gains. When nobody else holds a seat and the agent approved
+    /// (never referred), the one who gains may decide alone (H4).
+    pub fn deciders(&self, interested: &Pubkey, verdict: Verdict) -> u8 {
+        let others = self.living_seats_except(interested);
+        if others == 0 && verdict == Verdict::Approved { self.living_seats_except(&Pubkey::default()) } else { others }
+    }
+
+    /// The owner showed life after the open death claim was made (or quorum reached), for example under an older
+    /// program whose check-in did not clear it (M2). Such a claim can't go on; anyone may replace it.
+    pub fn death_disproved(&self) -> bool {
+        self.death_cert_hash != [0u8; 32]
+            && self.status != EstateStatus::Unlocked
+            && self.last_heartbeat > self.death_pending_since
+    }
+
+    /// RT: how long an unanswered step waits before a recovery route opens (H3, H7).
+    pub fn recovery_timeout(&self) -> i64 {
+        self.reviewed_hold().saturating_mul(2)
+    }
+
+    /// The waiting period, clamped to 60 s..1 day: how long an unreviewed report keeps its place.
+    pub fn report_grace(&self) -> i64 {
+        self.waiting_secs().clamp(MIN_WAITING_SECS, MAX_REPORT_GRACE_SECS)
+    }
+
+    /// The wait between the quorum and the unlock: doubled when the one who gains decided alone.
+    pub fn unlock_delay(&self) -> i64 {
+        let times = if self.death_attestations & DECIDED_ALONE != 0 { 2 } else { 1 };
+        self.waiting_secs().saturating_mul(times)
     }
 
     pub fn has_living_seat(&self) -> bool {
@@ -199,10 +237,10 @@ impl Estate {
         since: i64,
         reporter: &Pubkey,
         who: &Pubkey,
+        grace: i64,
         reviewed_hold: i64,
         ts: i64,
     ) -> bool {
-        let grace = self.waiting_secs().clamp(MIN_WAITING_SECS, MAX_REPORT_GRACE_SECS);
         let mut hold = if verdict == Verdict::Pending { grace } else { reviewed_hold };
         if reporter == who {
             hold = hold.saturating_add(grace);
@@ -437,7 +475,9 @@ impl Seat {
                 self.death_pending_since,
                 &self.death_reported_by,
                 who,
-                estate.reviewed_hold(),
+                estate.report_grace(),
+                // A reviewed report stands long enough for the recovery route to open (H3) and be used.
+                estate.recovery_timeout().saturating_add(estate.reviewed_hold()),
                 ts,
             )
     }
@@ -485,8 +525,17 @@ impl Guard {
         self.fallback_wait().max(MIN_WAITING_SECS)
     }
 
+    /// Set, not proven dead and not the estate itself (an older list could name it; paying the vault to itself
+    /// can never execute, L1).
     pub fn is_living_recipient(&self, index: usize) -> bool {
-        index < FALLBACK_COUNT && self.fallback[index] != Pubkey::default() && self.fallback_dead & (1u8 << index) == 0
+        index < FALLBACK_COUNT
+            && self.fallback[index] != Pubkey::default()
+            && self.fallback[index] != self.estate
+            && self.fallback_dead & (1u8 << index) == 0
+    }
+
+    pub fn is_living_listed(&self, who: &Pubkey) -> bool {
+        (0..FALLBACK_COUNT).any(|i| self.is_living_recipient(i) && self.fallback[i] == *who)
     }
 
     /// The first living recipient at or after `from`.

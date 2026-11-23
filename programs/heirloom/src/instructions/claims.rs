@@ -16,6 +16,18 @@ fn rule_open_for(estate: &Estate, rule: &Rule) -> bool {
         || (estate.status == EstateStatus::Active && rule.starts_now)
 }
 
+/// The approvals stand: a quorum of the seats that decide now, none of it lost to a vacancy unless what is left
+/// still reaches the full threshold (L8), and, when the claimant is the only trusted person left, given by them
+/// through that route (H4).
+fn approvals_stand(estate: &Estate, claim: &Claim) -> bool {
+    let votes = claim.approvals;
+    let eligible = estate.deciders(&claim.beneficiary, claim.agent_verdict);
+    let needed = claim.agent_verdict.quorum(estate.claim_threshold);
+    let lost = votes & 0b111 & !eligible != 0 && count_bits(votes & eligible) < needed;
+    let alone = estate.living_seats_except(&claim.beneficiary) == 0;
+    Estate::votes_meet(votes, eligible, needed) && !lost && (!alone || votes & DECIDED_ALONE != 0)
+}
+
 /// Every payout: the beneficiary is still in the plan and the payee is still one the rule allows (a removed
 /// payee's account is closed, so it can't be passed at all).
 fn check_parties(rule: &Rule, beneficiary: &Beneficiary, payee: &Payee) -> Result<()> {
@@ -145,6 +157,7 @@ pub fn review_claim_handler(ctx: Context<ReviewClaim>, outcome: ReviewOutcome, r
         claim.status == ClaimStatus::Open && claim.agent_verdict == Verdict::Pending,
         HeirloomError::BadStatus
     );
+    require!(claim.beneficiary != ctx.accounts.agent.key(), HeirloomError::OwnApproval);
 
     claim.agent_report_hash = report_hash;
     let ts = now()?;
@@ -213,7 +226,9 @@ pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
     require!(claim.status == ClaimStatus::Open, HeirloomError::BadStatus);
     require!(claim.agent_verdict.open_to_people(), HeirloomError::AgentNotApproved);
     let claimant = claim.beneficiary;
-    require!(verifier != claimant, HeirloomError::OwnApproval);
+    let bit = 1u8 << idx;
+    let eligible = estate.deciders(&claimant, claim.agent_verdict);
+    require!(verifier != claimant || eligible & bit != 0, HeirloomError::OwnApproval);
 
     let claim_key = claim.key();
     let estate_key = estate.key();
@@ -228,18 +243,21 @@ pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
         stamp.bump = ctx.bumps.approval_stamp;
     }
 
-    let needed = claim.agent_verdict.quorum(estate.claim_threshold);
-    let was_met = estate.quorum_met(claim.approvals, &claimant, needed);
-    let bit = 1u8 << idx;
+    let was_met = approvals_stand(estate, claim);
     let first_time = claim.approvals & bit == 0;
+    // Votes of seats that no longer decide are dropped, so whoever is left can restore a lost quorum (L8).
+    claim.approvals &= eligible | DECIDED_ALONE;
     claim.approvals |= bit;
+    if verifier == claimant {
+        claim.approvals |= DECIDED_ALONE;
+    }
     // The approval that reaches the quorum starts the objection window, again if the quorum had been lost.
     // Signing again only completes a quorum that has dropped since.
-    let starts = estate.quorum_met(claim.approvals, &claimant, needed) && (stamp.approved_at == 0 || !was_met);
+    let starts = approvals_stand(estate, claim) && (stamp.approved_at == 0 || !was_met);
     require!(first_time || starts, HeirloomError::AlreadyApproved);
 
     let ts = now()?;
-    let count = count_bits(claim.approvals & estate.living_seats_except(&claimant));
+    let count = count_bits(claim.approvals & eligible);
     if starts {
         stamp.seat_index = idx as u8;
         stamp.approver = verifier;
@@ -355,7 +373,7 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
     let approved = claim.owner_approved
         || (estate.status == EstateStatus::Unlocked
             && ApprovalStamp::votes_count(stamp.as_ref(), claim, estate)
-            && estate.quorum_met(claim.approvals, &claim.beneficiary, claim.agent_verdict.quorum(estate.claim_threshold)));
+            && approvals_stand(estate, claim));
     require!(approved, HeirloomError::InsufficientApprovals);
 
     // Guardians: a monitor's open objection pauses the payment; with a Guard, a quorum approval
@@ -369,17 +387,21 @@ pub fn execute_claim_handler(ctx: Context<ExecuteClaim>) -> Result<()> {
         let guard: Guard = read_account(&guard_info)?;
         let stamp = stamp.ok_or(HeirloomError::ObjectionWindowOpen)?;
         require!(stamp.approved_at > 0, HeirloomError::ObjectionWindowOpen);
-        let window = guard.objection_window();
+        // A quorum the claimant reached alone gets twice the window.
+        let times = if claim.approvals & DECIDED_ALONE != 0 { 2 } else { 1 };
+        let window = guard.objection_window().saturating_mul(times);
         let mut open_until = stamp
             .approved_at
             .checked_add(window)
             .ok_or(HeirloomError::MathOverflow)?;
-        // A dispute held the objection PDA, so the monitors get their window after it.
+        // A dispute held the objection PDA, so the monitors get their window after it: after it lapsed, or after it
+        // was resolved (a resolved dispute's raised_at is when it was resolved, H5).
         let objection_info = ctx.accounts.objection.to_account_info();
         if account_exists(&objection_info) {
             let o: Objection = read_account(&objection_info)?;
             if o.is_dispute() {
-                open_until = open_until.max(o.lapses_at(&ctx.accounts.estate).saturating_add(window));
+                let ended = if o.status == ObjectionStatus::Open { o.lapses_at(&ctx.accounts.estate) } else { o.raised_at };
+                open_until = open_until.max(ended.saturating_add(window));
             }
         }
         require!(now()? >= open_until, HeirloomError::ObjectionWindowOpen);

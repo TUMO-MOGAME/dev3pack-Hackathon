@@ -344,6 +344,37 @@
           ],
           "signer": true,
           "optional": true
+        },
+        {
+          "name": "guard",
+          "docs": [
+            "the objection window before a sale (M8)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "hardship_stamp",
+          "docs": [
+            "checked in the handler; it may not exist for a hardship approved before stamps). Otherwise not read: pass",
+            "any account, e.g. the system program."
+          ]
         }
       ],
       "args": [
@@ -539,16 +570,19 @@
       ]
     },
     {
-      "name": "add_rule",
+      "name": "add_rule_v2",
+      "docs": [
+        "Renamed from add_rule when rule_id became the first argument, so old clients and old programs fail closed."
+      ],
       "discriminator": [
-        26,
-        241,
-        95,
-        174,
-        205,
-        5,
-        235,
-        77
+        17,
+        236,
+        182,
+        176,
+        122,
+        96,
+        103,
+        11
       ],
       "accounts": [
         {
@@ -808,6 +842,43 @@
         {
           "name": "hardship",
           "writable": true
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Pays the ApprovalStamp rent (the verifier or a sponsor)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "approval_stamp",
+          "docs": [
+            "[\"stamp\", hardship]: when the quorum was reached, so monitors get the objection window before a sale (M8)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  109,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "hardship"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -852,8 +923,9 @@
         {
           "name": "confirmer",
           "docs": [
-            "Holder of another seat; if no other seat has a living holder: backups[1] or a monitor of this seat, or,",
-            "when it has neither, an active beneficiary."
+            "Holder of another seat (a first backup too, once they hold one). If no other seat has a living holder, or",
+            "the approved report has waited the recovery timeout: backups[1] or a monitor of this seat. An active",
+            "beneficiary when nobody watches the seat and no other is held, or after the recovery timeout."
           ],
           "signer": true
         },
@@ -1633,60 +1705,7 @@
         },
         {
           "name": "recipient_usdt",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "recipient"
-              },
-              {
-                "kind": "account",
-                "path": "token_program"
-              },
-              {
-                "kind": "account",
-                "path": "usdt_mint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
-          }
+          "writable": true
         },
         {
           "name": "token_program",
@@ -1705,6 +1724,31 @@
           "docs": [
             "report made during the countdown holds the payment until it can be confirmed or refuted."
           ]
+        },
+        {
+          "name": "unlock_objection",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -2465,6 +2509,17 @@
         {
           "name": "seat",
           "writable": true
+        },
+        {
+          "name": "next_seat",
+          "docs": [
+            "way (the owner just made a living trusted person available)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "last_seat",
+          "writable": true
         }
       ],
       "args": [
@@ -2682,6 +2737,31 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "guard",
+          "docs": [
+            "place of a monitors' objection that lapsed (L13)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -3214,6 +3294,21 @@
           ],
           "writable": true,
           "optional": true
+        },
+        {
+          "name": "seat0",
+          "docs": [
+            "gives way."
+          ],
+          "writable": true
+        },
+        {
+          "name": "seat1",
+          "writable": true
+        },
+        {
+          "name": "seat2",
+          "writable": true
         }
       ],
       "args": []
@@ -3341,6 +3436,32 @@
             "The reporter's Beneficiary PDA when a beneficiary reports; otherwise None."
           ],
           "optional": true
+        },
+        {
+          "name": "objection",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "seat"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -3375,7 +3496,7 @@
         {
           "name": "verifier",
           "docs": [
-            "A verifier other than the one who raised the dispute."
+            "The owner while alive, who decides alone; otherwise a verifier other than the one who raised the dispute."
           ],
           "signer": true
         },
@@ -3697,6 +3818,10 @@
               32
             ]
           }
+        },
+        {
+          "name": "recipient",
+          "type": "pubkey"
         }
       ]
     },
@@ -3814,6 +3939,10 @@
               32
             ]
           }
+        },
+        {
+          "name": "holder",
+          "type": "pubkey"
         }
       ]
     },
@@ -3859,6 +3988,37 @@
               }
             ]
           }
+        },
+        {
+          "name": "seat0",
+          "docs": [
+            "candidate must not be a backup (L9)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "seat1",
+          "writable": true
+        },
+        {
+          "name": "seat2",
+          "writable": true
+        },
+        {
+          "name": "fallback_report0",
+          "writable": true
+        },
+        {
+          "name": "fallback_report1",
+          "writable": true
+        },
+        {
+          "name": "fallback_report2",
+          "writable": true
+        },
+        {
+          "name": "fallback_report3",
+          "writable": true
         }
       ],
       "args": [
@@ -3971,6 +4131,7 @@
         },
         {
           "name": "estate",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -4015,6 +4176,22 @@
               }
             ]
           }
+        },
+        {
+          "name": "fallback_report0",
+          "writable": true
+        },
+        {
+          "name": "fallback_report1",
+          "writable": true
+        },
+        {
+          "name": "fallback_report2",
+          "writable": true
+        },
+        {
+          "name": "fallback_report3",
+          "writable": true
         }
       ],
       "args": [
@@ -4178,6 +4355,7 @@
         },
         {
           "name": "estate",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -4583,14 +4761,24 @@
       "accounts": [
         {
           "name": "beneficiary",
+          "docs": [
+            "An active beneficiary, a living trusted person or a living listed fallback recipient (M10); never the agent."
+          ],
           "signer": true
         },
         {
           "name": "estate",
-          "writable": true
+          "writable": true,
+          "relations": [
+            "guard"
+          ]
         },
         {
           "name": "beneficiary_account",
+          "docs": [
+            "The signer's Beneficiary PDA when a beneficiary submits; otherwise None."
+          ],
+          "optional": true,
           "pda": {
             "seeds": [
               {
@@ -4616,6 +4804,57 @@
               {
                 "kind": "account",
                 "path": "beneficiary"
+              }
+            ]
+          }
+        },
+        {
+          "name": "guard",
+          "docs": [
+            "The Guard when a listed fallback recipient submits; otherwise None."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
+              }
+            ]
+          }
+        },
+        {
+          "name": "objection",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  106,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "estate"
               }
             ]
           }
@@ -4693,6 +4932,9 @@
         },
         {
           "name": "hardship",
+          "docs": [
+            "New, or one the agent rejected (L7): that is not final, an upheld objection is."
+          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -4871,60 +5113,7 @@
         },
         {
           "name": "recipient_usdt",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "recipient"
-              },
-              {
-                "kind": "account",
-                "path": "token_program"
-              },
-              {
-                "kind": "account",
-                "path": "usdt_mint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
-          }
+          "writable": true
         },
         {
           "name": "token_program",
@@ -5086,6 +5275,37 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "seat0",
+          "docs": [
+            "candidate must not be a backup (L9)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "seat1",
+          "writable": true
+        },
+        {
+          "name": "seat2",
+          "writable": true
+        },
+        {
+          "name": "fallback_report0",
+          "writable": true
+        },
+        {
+          "name": "fallback_report1",
+          "writable": true
+        },
+        {
+          "name": "fallback_report2",
+          "writable": true
+        },
+        {
+          "name": "fallback_report3",
+          "writable": true
         }
       ],
       "args": [
@@ -5185,7 +5405,8 @@
         {
           "name": "asset",
           "docs": [
-            "The hardship's Asset (Hardship objections only; its hardship floor is withdrawn if upheld)."
+            "The hardship's Asset (Hardship objections only; its hardship floor is withdrawn if upheld). Refused for",
+            "any other kind, so it can't be the target passed twice and overwrite what was written (H1)."
           ],
           "writable": true,
           "optional": true
@@ -5682,6 +5903,19 @@
         255,
         16,
         191
+      ]
+    },
+    {
+      "name": "AgentReviewCleared",
+      "discriminator": [
+        29,
+        27,
+        106,
+        123,
+        56,
+        100,
+        37,
+        159
       ]
     },
     {
@@ -6697,6 +6931,16 @@
       "code": 6061,
       "name": "OfferChanged",
       "msg": "The offer is no longer the amount that was agreed"
+    },
+    {
+      "code": 6062,
+      "name": "DeathDisproved",
+      "msg": "The owner showed life after this death claim was made"
+    },
+    {
+      "code": 6063,
+      "name": "OfferTooOld",
+      "msg": "This offer was made before an objection to the sale was upheld"
     }
   ],
   "types": [
@@ -6715,6 +6959,30 @@
           },
           {
             "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentReviewCleared",
+      "docs": [
+        "A review by an agent that has since been replaced was set back to Pending: the new agent reviews it again.",
+        "`target` is the estate (its death claim), a Seat or a FallbackReport."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "estate",
+            "type": "pubkey"
+          },
+          {
+            "name": "target",
             "type": "pubkey"
           },
           {

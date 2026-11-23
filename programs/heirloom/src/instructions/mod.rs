@@ -17,11 +17,26 @@ pub use sale::*;
 pub use setup::*;
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, CloseAccount, TransferChecked};
+use anchor_spl::associated_token::{self, get_associated_token_address, Create};
+use anchor_spl::token::{self, CloseAccount, TokenAccount, TransferChecked};
 
 use crate::errors::HeirloomError;
 use crate::events::DeathVetoed;
 use crate::state::{Estate, EstateStatus, Objection};
+
+/// A new report takes the place of the one a challenge was raised against (M7): the challenge, and any votes on
+/// it, read as lapsed from now on. `info` is the `["objection", target]` PDA (address checked by the caller).
+pub(crate) fn void_objection(info: &AccountInfo) -> Result<()> {
+    if !account_exists(info) {
+        return Ok(());
+    }
+    let mut o: Objection = read_account(info)?;
+    if o.raised_at != 0 {
+        o.raised_at = 0;
+        write_account(info, &o)?;
+    }
+    Ok(())
+}
 
 pub(crate) fn now() -> Result<i64> {
     Ok(Clock::get()?.unix_timestamp)
@@ -64,6 +79,36 @@ pub(crate) fn transfer_checked_cpi<'info>(
         amount,
         decimals,
     )
+}
+
+/// The token account a payment goes to: `authority`'s canonical ATA, created here if missing, or any existing
+/// token account of `mint` that `authority` owns. A recipient who moved their ATA to someone else can't block a
+/// payment that others are owed after them (L2): pass another account they own.
+pub(crate) fn ready_token_account<'info>(
+    payer: AccountInfo<'info>,
+    account: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+    mint: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
+    system_program: AccountInfo<'info>,
+    ata_program: AccountInfo<'info>,
+) -> Result<()> {
+    if account.data_is_empty() {
+        require_keys_eq!(account.key(), get_associated_token_address(authority.key, mint.key), HeirloomError::WrongMint);
+        let accounts = Create {
+            payer,
+            associated_token: account,
+            authority,
+            mint,
+            system_program,
+            token_program,
+        };
+        return associated_token::create(CpiContext::new(ata_program.key(), accounts));
+    }
+    require_keys_eq!(*account.owner, token::ID, HeirloomError::WrongMint);
+    let held = TokenAccount::try_deserialize(&mut &account.try_borrow_data()?[..])?;
+    require!(held.mint == mint.key() && held.owner == authority.key(), HeirloomError::WrongMint);
+    Ok(())
 }
 
 /// `close_account` CPI signed by a PDA; the rent goes to `destination`.
