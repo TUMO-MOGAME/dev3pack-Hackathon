@@ -28,6 +28,7 @@ import { SpecFields } from "./spec-editor";
 import type { SpecKey } from "@/lib/assets/spec";
 import { draftFromVehicle, draftToSpec, specToDraft, type SpecDraft } from "@/lib/assets/spec-form";
 import { savePhotos } from "./media";
+import { nextPlanned, proceedsFromPlan } from "@/lib/assets/planned";
 
 const num = (s: string) => parseAmount(s) ?? Number.NaN;
 
@@ -52,16 +53,19 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
   const [year, setYear] = useState<string>(r.defaults.year);
   const [mileage, setMileage] = useState<string>(r.defaults.mileage);
   const [condition, setCondition] = useState<string>(r.conditions[1]);
-  const [title, setTitle] = useState("");
-  const [titleTouched, setTitleTouched] = useState(false);
+  // The signed plan's asset, not added yet (M4): its name, prices and who gets the money are filled in.
+  const [plan] = useState(() => nextPlanned(snap.plannedAssets, snap.assets));
+  const [title, setTitle] = useState(plan?.title ?? "");
+  const [titleTouched, setTitleTouched] = useState(!!plan);
+  const [proceeds, setProceeds] = useState<string>(() => (plan ? proceedsFromPlan(plan.proceedsTo, snap.estate.address, snap.beneficiaries) : snap.estate.address) ?? "");
   const [description, setDescription] = useState("");
   const [valuing, setValuing] = useState(false);
   const [valuation, setValuation] = useState<CarValuation | null>(null);
   // Shown beside the valuation button, not with the form's errors further down, so a failed valuation is seen.
   const [valuationError, setValuationError] = useState<string | null>(null);
-  const [asking, setAsking] = useState("");
-  const [floor, setFloor] = useState("");
-  const [hardship, setHardship] = useState("");
+  const [asking, setAsking] = useState(plan ? amountText(plan.askingPriceUsdt) : "");
+  const [floor, setFloor] = useState(plan ? amountText(plan.floorPriceUsdt) : "");
+  const [hardship, setHardship] = useState(plan ? amountText(plan.hardshipFloorUsdt) : "");
   const [doc, setDoc] = useState<File | null>(null);
   const [photos, setPhotos] = useState<DraftPhoto[]>([]);
   const [specDraft, setSpecDraft] = useState<SpecDraft>(() => specToDraft());
@@ -91,9 +95,12 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
     try {
       const v = await service.valueCar({ make, model, year: Number(year), mileageKm: num(mileage), condition, kind });
       setValuation(v);
-      setAsking(amountText(v.suggestedAskingUsdt));
-      setFloor(amountText(v.lowUsdt));
-      setHardship(amountText(Math.round(v.lowUsdt * 0.84 / 50) * 50));
+      // The plan's own prices stand: the valuation is advice beside them.
+      if (!plan) {
+        setAsking(amountText(v.suggestedAskingUsdt));
+        setFloor(amountText(v.lowUsdt));
+        setHardship(amountText(Math.round(v.lowUsdt * 0.84 / 50) * 50));
+      }
     } catch {
       // A timeout or a busy agent: the owner can try again or type the prices.
       setValuationError(r.valuationFailed);
@@ -116,6 +123,7 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
       requestAnimationFrame(() => document.getElementById(`asset-spec-${sheet.invalid[0]}`)?.focus());
       return;
     }
+    if (!proceeds) { setError(a.proceeds); document.getElementById("asset-proceeds")?.focus(); return; }
     if (!consent) { setError(common.consentRequired); return; }
     setError(null);
     let photoError: string | null = null;
@@ -123,7 +131,7 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
     const res = await run("register", async (s, est) => {
       const before = new Set(snap.assets.map((x) => x.address));
       await s.registerAsset(est, {
-        nftMint: "", title: name, floorUsdt: f, hardshipFloorUsdt: h, askingUsdt: ask, proceedsTo: snap.estate.address,
+        nftMint: "", title: name, floorUsdt: f, hardshipFloorUsdt: h, askingUsdt: ask, proceedsTo: proceeds,
         docFile: vehicle ? doc ?? undefined : undefined,
       });
       const added = (await s.getEstate(est)).assets.find((x) => !before.has(x.address));
@@ -153,6 +161,7 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader eyebrow={copy.eyebrow} title={a.title} body={a.body} />
+      {plan && <p role="status" className="mb-4 rounded-md border-[1.5px] border-dashed border-ink p-3 text-small font-semibold">{a.fromPlan}</p>}
       <div className="grid gap-4 *:min-w-0">
         <Card>
           <fieldset className="min-w-0">
@@ -233,6 +242,13 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
               <Field label={r.hardship} htmlFor="car-hard" hint={zar(hardship) ?? r.hardshipHint}><input id="car-hard" inputMode="numeric" value={hardship} onChange={(e) => setHardship(e.target.value)} className={`${inputClass} tabular-nums`} /></Field>
             </div>
             {(zar(floor) || zar(hardship)) && <p className="text-small text-ink-2">{r.floorHint} {r.hardshipHint}</p>}
+            <Field label={a.proceeds} htmlFor="asset-proceeds">
+              <select id="asset-proceeds" value={proceeds} onChange={(e) => { setProceeds(e.target.value); setError(null); }} className={inputClass}>
+                {!proceeds && <option value="">{a.proceeds}</option>}
+                <option value={snap.estate.address}>{a.proceedsVault}</option>
+                {snap.beneficiaries.filter((b) => b.active).map((b) => <option key={b.wallet} value={b.wallet}>{b.label}</option>)}
+              </select>
+            </Field>
             {vehicle && <FilePicker id="car-doc" label={r.doc} hint={r.docHint} file={doc} onFile={setDoc} samples={r.docSamples} copy={common.file} />}
 
             <PhotoUploader id="asset-photos" copy={copy.photos} labels={copy.labels} title={name} items={photos} onChange={setPhotos} disabled={working} />

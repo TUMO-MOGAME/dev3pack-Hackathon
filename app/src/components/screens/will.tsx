@@ -587,6 +587,7 @@ function Review({ copy, draft, edited, onBack, onSign, signing, blocked, setup }
           <h2 className="text-h3">{r.carTitle}</h2>
           <p className="mt-2">{fmt(r.car, { title: a.title, floor: usd(a.floorPriceUsdt), proceeds: a.proceedsTo })}</p>
           <p className="mt-2 text-ink-2">{fmt(r.carHardship, { policy: a.hardshipPolicy, floor: usd(a.hardshipFloorUsdt) })}</p>
+          <p className="mt-2 text-small font-semibold">{r.carNotRegistered}</p>
         </section>
       ))}
 

@@ -823,6 +823,7 @@ export const zu: Bundle = {
         carTitle: "Imoto",
         car: "I-{title} ingathengiswa ngo-{floor} noma ngaphezulu, uma umuntu othembekile esayinela isicelo esiqondile. I-agent ihlela izicelo. Imali iya ku: {proceeds}.",
         carHardship: "{policy} Intengo ephansi yobunzima ngu-{floor}.",
+        carNotRegistered: "Ukusayina akukubhalisi lokhu. Ngemva kokusayina, kwengeze ngaphansi kwe-Izimpahla: lezi zintengo nalapho imali iya khona kuzogcwaliswa lapho.",
         limitsTitle: "Kuhle ukwazi",
         limits: [
           "Lokhu kuhlala eceleni kwencwadi yefa yakho esayinwe phambi kofakazi. Akuyithathi indawo yayo.",
@@ -2174,6 +2175,9 @@ export const zu: Bundle = {
       title: "Engeza *impahla*",
       body: "Engeza okuthile ofuna kuthengiswe ngemuva kokushona kwakho. Ifa liphatha ubunikazi bayo bedijithali futhi liyithengisele umndeni wakho.",
       kindLegend: "Kuyini?",
+      proceeds: "Imali yokuthengisa iya ku-",
+      proceedsVault: "Isisefo sefa (semithetho yohlelo)",
+      fromPlan: "Kugcwaliswe kusukela ohlelweni lwakho olusayiniwe. Kuhlole, bese ukwengeza.",
       titleLabel: "Igama",
       titleHint: "Isibonelo: Itafula lokudlela le-oki elinezihlalo eziyisithupha",
       titlePlaceholder: {

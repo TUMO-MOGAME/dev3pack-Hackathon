@@ -23,6 +23,9 @@ export const assets = {
     title: "Add an *asset*",
     body: "Add something you want sold after your death. The estate holds its digital title and sells it for your family.",
     kindLegend: "What is it?",
+    proceeds: "The sale money goes to",
+    proceedsVault: "The estate's vault (for the plan's rules)",
+    fromPlan: "Filled in from your signed plan. Check it, then add it.",
     titleLabel: "Name",
     titleHint: "For example: Oak dining table with six chairs",
     titlePlaceholder: {

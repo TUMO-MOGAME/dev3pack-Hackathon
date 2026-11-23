@@ -267,6 +267,7 @@ export const screens = {
       carTitle: "The car",
       car: "{title} can sell at or above {floor}, when a trusted person co-signs the exact offer. The agent ranks the offers. The money goes to: {proceeds}.",
       carHardship: "{policy} The hardship floor is {floor}.",
+      carNotRegistered: "Signing doesn't register this. After signing, add it under Assets: these prices and where the money goes are filled in for you there.",
       limitsTitle: "Good to know",
       limits: [
         "This sits beside your signed, witnessed will. It does not replace one.",

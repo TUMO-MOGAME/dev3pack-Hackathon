@@ -831,6 +831,7 @@ export const st: Bundle = {
         carTitle: "Koloi",
         car: "{title} e ka rekiswa ka {floor} kapa ho feta, ha motho ya tshepahalang a saena bakeng sa tlhahiso e tobileng. Agent e hlophisa ditlhahiso. Tjhelete e ya ho: {proceeds}.",
         carHardship: "{policy} Theko e tlase ya mathata ke {floor}.",
+        carNotRegistered: "Ho saena ha ho e ngolise. Ka mora ho saena, e kenye tlasa Thepa: ditheko tsena le moo tjhelete e yang teng di tla tlatswa moo.",
         limitsTitle: "Ho molemo ho tseba",
         limits: [
           "Sena se ema pela lengolo la hao la thato le saennweng ka pela dipaki. Ha se le nkele sebaka.",
@@ -2233,6 +2234,9 @@ export const st: Bundle = {
       title: "Kenya *thepa*",
       body: "Kenya ntho eo o batlang e rekiswa kamora lefu la hao. Lefa le tshwara tokomane ya yona ya botho ya dijithale mme le e rekisetsa lelapa la hao.",
       kindLegend: "Ke eng?",
+      proceeds: "Tjhelete ya thekiso e ya ho",
+      proceedsVault: "Polokelo ya lefa (bakeng sa melao ya moralo)",
+      fromPlan: "E tladitswe ho tswa moralong wa hao o saennweng. E hlahlobe, ebe o e kenya.",
       titleLabel: "Lebitso",
       titleHint: "Mohlala: Tafole ya ho jela ya oak e nang le ditulo tse tsheletseng",
       titlePlaceholder: {

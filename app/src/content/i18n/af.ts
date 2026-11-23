@@ -823,6 +823,7 @@ export const af: Bundle = {
         carTitle: "Die motor",
         car: "{title} kan teen of bo {floor} verkoop, wanneer 'n vertroude persoon die presiese aanbod saam teken. Die agent rangskik die aanbiedinge. Die geld gaan na: {proceeds}.",
         carHardship: "{policy} Die swaarkryminimum is {floor}.",
+        carNotRegistered: "Ondertekening registreer dit nie. Voeg dit ná ondertekening by onder Bates: hierdie pryse en waarheen die geld gaan, word daar vir jou ingevul.",
         limitsTitle: "Goed om te weet",
         limits: [
           "Dit staan langs jou getekende, getuigde testament. Dit vervang nie een nie.",
@@ -2207,6 +2208,9 @@ export const af: Bundle = {
       title: "Voeg 'n *bate* by",
       body: "Voeg iets by wat jy ná jou dood verkoop wil hê. Die boedel hou die digitale titel daarvan en verkoop dit vir jou gesin.",
       kindLegend: "Wat is dit?",
+      proceeds: "Die verkoopgeld gaan na",
+      proceedsVault: "Die boedel se kluis (vir die plan se reëls)",
+      fromPlan: "Ingevul uit jou getekende plan. Gaan dit na en voeg dit dan by.",
       titleLabel: "Naam",
       titleHint: "Byvoorbeeld: Eikehout-eettafel met ses stoele",
       titlePlaceholder: {

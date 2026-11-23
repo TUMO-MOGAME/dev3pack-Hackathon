@@ -1290,3 +1290,14 @@ describe("H6: a plan whose signing was interrupted is finished", () => {
     expect((await reloaded.listEstatesFor(who("thabo")))).toHaveLength(1);
   });
 });
+
+describe("M4: the plan's asset terms reach the asset", () => {
+  it("the demo keeps the signed plan's asset to fill in, until it is added", async () => {
+    storage();
+    const svc = createMockService({ instant: true });
+    svc.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const { draft } = await svc.willChat([{ role: "user", text: "a" }, { role: "user", text: "b" }, { role: "user", text: "c" }]);
+    const { estate } = await svc.createEstateFromWill(draft!);
+    expect((await svc.getEstate(estate)).plannedAssets?.[0].title).toBe(draft!.assets[0].title);
+  });
+});
