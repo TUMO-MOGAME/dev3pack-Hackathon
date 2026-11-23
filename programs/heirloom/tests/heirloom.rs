@@ -3061,9 +3061,15 @@ impl Env {
         send(&mut self.svm, i, &[signer])
     }
 
+    /// As a client does: the voter's Beneficiary PDA as the first remaining account.
     fn vote_agent(&mut self, voter: &Keypair, candidate: Pubkey) -> Result<(), String> {
+        let b = beneficiary_pda(&self.estate, &voter.pubkey());
+        self.vote_agent_with(voter, candidate, &[b])
+    }
+
+    fn vote_agent_with(&mut self, voter: &Keypair, candidate: Pubkey, extra: &[Pubkey]) -> Result<(), String> {
         self.svm.expire_blockhash();
-        let i = ix(
+        let mut i = ix(
             heirloom::accounts::VoteAgent {
                 verifier: voter.pubkey(),
                 estate: self.estate,
@@ -3079,6 +3085,9 @@ impl Env {
             },
             heirloom::instruction::VoteAgent { candidate },
         );
+        for k in extra {
+            i.accounts.push(AccountMeta::new_readonly(*k, false));
+        }
         send(&mut self.svm, i, &[voter])
     }
 }
@@ -3636,23 +3645,28 @@ fn r02_replacing_is_refused_once_the_death_is_pending() {
 // ------------------------------------------------------------------- R5 a death claim cannot squat
 
 #[test]
-fn r05_an_unreviewed_death_claim_can_be_replaced_after_a_grace() {
+fn r05_an_unreviewed_death_claim_waits_for_its_review_instead_of_being_replaced() {
+    // Changed by design (N4): an unreviewed claim is never replaced, so its time stays when this death's first
+    // claim was made. The agent's rejection frees the place; a lost agent is replaced after RT (H7).
     let mut env = Env::configured();
     env.submit_death_claim(1).unwrap();
     assert_eq!(env.estate_state().death_pending_since, now(&env.svm));
-    warp(&mut env.svm, WAITING - 1);
+    warp(&mut env.svm, WAITING);
     expect_err(env.submit_death_claim(2), HeirloomError::BadStatus);
-    warp(&mut env.svm, 1);
+    warp(&mut env.svm, 10 * RT);
+    expect_err(env.submit_death_claim(2), HeirloomError::BadStatus);
+    env.review_death(false).unwrap();
     env.submit_death_claim(2).unwrap();
     let e = env.estate_state();
     assert_eq!((e.death_submitted_by, e.death_pending_since), (env.kid2.pubkey(), now(&env.svm)));
 }
 
 #[test]
-fn r05_the_same_person_waits_two_graces() {
+fn r05_the_same_person_waits_a_grace_longer() {
     let mut env = Env::configured();
     env.submit_death_claim(1).unwrap();
-    warp(&mut env.svm, 2 * WAITING - 1);
+    env.review_death(true).unwrap();
+    warp(&mut env.svm, 3 * WAITING - 1);
     expect_err(env.submit_death_claim(1), HeirloomError::BadStatus);
     warp(&mut env.svm, 1);
     env.submit_death_claim(1).unwrap();
@@ -3676,15 +3690,14 @@ fn r05_a_reviewed_claim_without_a_quorum_is_replaceable_after_two_waiting_period
 
 #[test]
 fn r05_the_grace_is_at_most_a_day() {
-    let mut env = Env::new();
-    let i = env.create_estate_ix(env.verifier_keys(), 2, 1, 2, 30 * DAY);
-    send(&mut env.svm, i, &[&env.owner]).unwrap();
-    let (k1, k2) = (env.kid1.pubkey(), env.kid2.pubkey());
-    env.add_beneficiary(k1, "Child 1");
-    env.add_beneficiary(k2, "Child 2");
-    env.submit_death_claim(1).unwrap();
-    warp(&mut env.svm, DAY);
-    env.submit_death_claim(2).unwrap();
+    // An unreviewed seat report gives way after the grace, which is at most a day.
+    let mut env = estate_with_seats(30 * DAY, FALLBACK_WAIT, [[d(); 2]; 3], [[d(); 2]; 3]);
+    let (k1, k2) = (env.kid1.insecure_clone(), env.kid2.insecure_clone());
+    env.report_seat_death(&k1, 0).unwrap();
+    warp(&mut env.svm, DAY - 1);
+    expect_err(env.report_seat_death(&k2, 0), HeirloomError::SuccessionPending);
+    warp(&mut env.svm, 1);
+    env.report_seat_death(&k2, 0).unwrap();
 }
 
 #[test]
@@ -7060,7 +7073,7 @@ fn h7_attack_a_living_owner_who_checks_in_keeps_the_agent() {
 
 #[test]
 fn h7_attack_a_fresh_death_claim_does_not_open_it_at_once() {
-    // The owner has not checked in for long, but the claim must stand one grace first.
+    // The owner has not checked in for long, but the claim must stand unreviewed for RT first (N1).
     let (mut env, _p) = guardian_env();
     let candidate = Keypair::new().pubkey();
     let (v0, v1) = (env.v(0), env.v(1));
@@ -7070,6 +7083,8 @@ fn h7_attack_a_fresh_death_claim_does_not_open_it_at_once() {
     env.vote_agent(&v1, candidate).unwrap();
     assert_eq!(env.estate_state().agent, env.agent.pubkey());
     warp(&mut env.svm, WAITING);
+    expect_err(env.vote_agent(&v1, candidate), HeirloomError::AlreadyApproved);
+    warp(&mut env.svm, RT - WAITING);
     env.vote_agent(&v1, candidate).unwrap();
     assert_eq!(env.estate_state().agent, candidate);
 }
@@ -8061,4 +8076,270 @@ fn held_error_numbers_in_the_spec() {
     assert_eq!(6000 + HeirloomError::OfferChanged as u32, 6061);
     assert_eq!(6000 + HeirloomError::DeathDisproved as u32, 6062);
     assert_eq!(6000 + HeirloomError::OfferTooOld as u32, 6063);
+}
+
+// =================================================================== re-review (plan 18.10 follow-up, N1-N7)
+
+#[test]
+fn n1_two_trusted_people_cannot_replace_an_agent_that_was_never_asked_to_review() {
+    let (mut env, _p) = guardian_env();
+    let (v0, v1) = (env.v(0), env.v(1));
+    let theirs = funded(&mut env.svm);
+    warp(&mut env.svm, RT);
+    env.submit_death_claim(1).unwrap();
+    warp(&mut env.svm, WAITING);
+    env.vote_agent(&v0, theirs.pubkey()).unwrap();
+    env.vote_agent(&v1, theirs.pubkey()).unwrap();
+    assert_eq!(env.estate_state().agent, env.agent.pubkey(), "the claim has not stood unreviewed for RT");
+    // The honest agent reviews in time: the route never opens.
+    env.review_death(true).unwrap();
+    warp(&mut env.svm, RT);
+    env.vote_agent(&v1, theirs.pubkey()).unwrap_err();
+    assert_eq!(env.estate_state().agent, env.agent.pubkey());
+}
+
+#[test]
+fn n1_after_the_claim_stood_unreviewed_for_rt_two_may_replace_the_agent() {
+    let (mut env, _p) = guardian_env();
+    let (v0, v1) = (env.v(0), env.v(1));
+    let next = funded(&mut env.svm);
+    warp(&mut env.svm, RT);
+    env.submit_death_claim(1).unwrap();
+    env.vote_agent(&v0, next.pubkey()).unwrap();
+    warp(&mut env.svm, RT - 1);
+    env.vote_agent(&v1, next.pubkey()).unwrap();
+    assert_eq!(env.estate_state().agent, env.agent.pubkey());
+    warp(&mut env.svm, 1);
+    env.vote_agent(&v1, next.pubkey()).unwrap();
+    assert_eq!(env.estate_state().agent, next.pubkey());
+}
+
+#[test]
+fn n1_control_a_check_in_during_the_wait_stops_it() {
+    let (mut env, _p) = guardian_env();
+    let (v0, v1) = (env.v(0), env.v(1));
+    let theirs = funded(&mut env.svm);
+    warp(&mut env.svm, RT);
+    env.submit_death_claim(1).unwrap();
+    warp(&mut env.svm, RT);
+    env.vote_agent(&v0, theirs.pubkey()).unwrap();
+    env.vote_agent(&v1, theirs.pubkey()).unwrap();
+    env.agent = theirs.insecure_clone();
+    env.review_death(true).unwrap();
+    env.attest_death(0).unwrap();
+    env.attest_death(1).unwrap();
+    warp(&mut env.svm, WAITING - 1);
+    env.check_in().unwrap();
+    warp(&mut env.svm, 1);
+    expect_err(env.finalize_unlock(), HeirloomError::BadStatus);
+}
+
+#[test]
+fn n4_an_unreviewed_claim_cannot_be_replaced_so_the_recovery_clock_never_restarts() {
+    let (mut env, _p) = guardian_env();
+    let (v0, v1) = (env.v(0), env.v(1));
+    let cand = Keypair::new().pubkey();
+    warp(&mut env.svm, RT);
+    env.submit_death_claim(1).unwrap();
+    let first = env.estate_state().death_pending_since;
+    env.vote_agent(&v0, cand).unwrap();
+    warp(&mut env.svm, WAITING);
+    expect_err(env.submit_death_claim(2), HeirloomError::BadStatus);
+    warp(&mut env.svm, 10 * RT);
+    expect_err(env.submit_death_claim(2), HeirloomError::BadStatus);
+    assert_eq!(env.estate_state().death_pending_since, first);
+    env.vote_agent(&v1, cand).unwrap();
+    assert_eq!(env.estate_state().agent, cand);
+}
+
+#[test]
+fn n3_limit_beneficiaries_replace_a_silent_living_trusted_person_after_rt() {
+    // By design (H3): a trusted person who doesn't answer an approved report for RT, nor veto it during the
+    // succession wait, is replaced on the confirmation of a beneficiary.
+    let (mut env, p) = guardian_env();
+    let (k1, k2, v0) = (env.kid1.insecure_clone(), env.kid2.insecure_clone(), env.v(0));
+    env.report_seat_death(&k1, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    warp(&mut env.svm, RT);
+    env.confirm_seat_death(&k2, 0).unwrap();
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    env.finalize_succession(0).unwrap();
+    assert_eq!(env.seat(0).holder, p.backups[0][0].pubkey());
+    assert_ne!(env.seat(0).holder, v0.pubkey());
+}
+
+#[test]
+fn n5_a_zero_succession_wait_still_gives_a_living_holder_sixty_seconds() {
+    let mut env = Env::configured();
+    env.guard_with(WINDOW, 0, FALLBACK_WAIT);
+    for i in 0..3u8 {
+        env.init_seat(i, [d(), d()], [d(), d()]).unwrap();
+    }
+    let (k1, v0, v1) = (env.kid1.insecure_clone(), env.v(0), env.v(1));
+    env.report_seat_death(&k1, 1).unwrap();
+    env.review_seat_death(1, true).unwrap();
+    env.confirm_seat_death(&v0, 1).unwrap();
+    expect_err(env.finalize_succession(1), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, 59);
+    env.veto_seat_death(&v1, 1).unwrap();
+    assert!(!env.seat(1).vacant);
+}
+
+#[test]
+fn n6_new_monitors_clear_the_whole_report() {
+    let (mut env, _p) = guardian_env();
+    let (k1, k2) = (env.kid1.insecure_clone(), env.kid2.insecure_clone());
+    env.report_seat_death(&k1, 0).unwrap();
+    env.review_seat_death(0, true).unwrap();
+    warp(&mut env.svm, RT);
+    env.confirm_seat_death(&k2, 0).unwrap();
+    let m = funded(&mut env.svm);
+    env.set_seat_monitors(0, [m.pubkey(), d()]).unwrap();
+    assert!(!env.seat(0).succession_pending(), "the report is cleared, not only the confirmation");
+}
+
+#[test]
+fn held_h4_a_second_attestation_does_not_shorten_the_doubled_wait() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    env.review_death(true).unwrap();
+    env.attest_death_by(&spouse).unwrap();
+    warp(&mut env.svm, WAITING);
+    expect_err(env.finalize_unlock(), HeirloomError::WaitingPeriodNotOver);
+    expect_err(env.attest_death_by(&spouse), HeirloomError::AlreadyApproved);
+    warp(&mut env.svm, WAITING);
+    env.finalize_unlock().unwrap();
+}
+
+// ------------------------------------------------------------------- N2 a lone voter who gains
+
+/// Before the unlock the only trusted person left, who gains, can't install an agent by their own vote at RT; only
+/// after the claim stood unreviewed for 2 x RT with no sign of life.
+#[test]
+fn n2_before_the_unlock_the_lone_heir_waits_two_recovery_timeouts() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let own = funded(&mut env.svm);
+    warp(&mut env.svm, RT);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    warp(&mut env.svm, RT);
+    expect_err(env.vote_agent(&spouse, own.pubkey()), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, RT - 1);
+    expect_err(env.vote_agent(&spouse, own.pubkey()), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, 1);
+    env.vote_agent(&spouse, own.pubkey()).unwrap();
+    assert_eq!(env.estate_state().agent, own.pubkey());
+}
+
+/// A lone trusted person who gains nothing keeps the RT route; without their Beneficiary account the voter counts
+/// as one who gains (fails closed).
+#[test]
+fn n2_a_lone_voter_who_gains_nothing_keeps_rt_and_a_missing_account_fails_closed() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let kid2 = env.kid2.insecure_clone();
+    env.add_beneficiary(kid2.pubkey(), "Kid");
+    env.remove_beneficiary(spouse.pubkey()).unwrap();
+    let own = funded(&mut env.svm);
+    warp(&mut env.svm, RT);
+    env.death_claim_by(&kid2, [7; 32]).unwrap();
+    warp(&mut env.svm, RT);
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[]), HeirloomError::WaitingPeriodNotOver);
+    let wrong = beneficiary_pda(&env.estate, &kid2.pubkey());
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[wrong]), HeirloomError::WaitingPeriodNotOver);
+    env.vote_agent(&spouse, own.pubkey()).unwrap();
+    assert_eq!(env.estate_state().agent, own.pubkey());
+}
+
+/// Control: a check-in before 2 x RT stops it.
+#[test]
+fn n2_control_a_check_in_stops_the_lone_heir() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let own = funded(&mut env.svm);
+    warp(&mut env.svm, RT);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    warp(&mut env.svm, 2 * RT - 1);
+    env.check_in().unwrap();
+    warp(&mut env.svm, 1);
+    let _ = env.vote_agent(&spouse, own.pubkey());
+    assert_ne!(env.estate_state().agent, own.pubkey());
+    warp(&mut env.svm, 2 * RT);
+    let _ = env.vote_agent(&spouse, own.pubkey());
+    assert_ne!(env.estate_state().agent, own.pubkey(), "the claim was disproved; no recovery");
+}
+
+/// After the unlock a lone heir whose claim the agent referred can't install their own agent at once nor at RT;
+/// only once that claim has stood unapproved for 2 x RT. Without such a claim, never alone.
+#[test]
+fn n2_after_the_unlock_the_lone_heir_replaces_a_referring_agent_only_after_two_recovery_timeouts() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let (uni, until) = (env.university.pubkey(), now(&env.svm) + YEAR);
+    let rule = env.add_rule(0, spouse.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    env.review_death(true).unwrap();
+    env.attest_death_by(&spouse).unwrap();
+    warp(&mut env.svm, 2 * WAITING);
+    env.finalize_unlock().unwrap();
+    let own = funded(&mut env.svm);
+    let b = beneficiary_pda(&env.estate, &spouse.pubkey());
+    expect_err(env.vote_agent(&spouse, own.pubkey()), HeirloomError::WaitingPeriodNotOver);
+    let claim = env.submit_claim_by(&spouse, rule, uni, 100 * USDT).unwrap();
+    env.refer_claim(claim).unwrap();
+    expect_err(env.approve_claim_by(&spouse, claim), HeirloomError::OwnApproval);
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, RT);
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, RT - 1);
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]), HeirloomError::WaitingPeriodNotOver);
+    expect_err(env.vote_agent(&spouse, own.pubkey()), HeirloomError::WaitingPeriodNotOver);
+    warp(&mut env.svm, 1);
+    env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]).unwrap();
+    assert_eq!(env.estate_state().agent, own.pubkey());
+}
+
+/// An approved claim is no clock: the agent is working.
+#[test]
+fn n2_an_approved_claim_does_not_start_the_clock() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let (uni, until) = (env.university.pubkey(), now(&env.svm) + YEAR);
+    let rule = env.add_rule(0, spouse.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    env.review_death(true).unwrap();
+    env.attest_death_by(&spouse).unwrap();
+    warp(&mut env.svm, 2 * WAITING);
+    env.finalize_unlock().unwrap();
+    let claim = env.submit_claim_by(&spouse, rule, uni, 100 * USDT).unwrap();
+    env.review_claim(claim, true).unwrap();
+    warp(&mut env.svm, 2 * RT);
+    let own = funded(&mut env.svm);
+    let b = beneficiary_pda(&env.estate, &spouse.pubkey());
+    expect_err(env.vote_agent_with(&spouse, own.pubkey(), &[b, claim]), HeirloomError::WaitingPeriodNotOver);
+}
+
+/// Attack on N2 itself: a lone heir whose agent is truly lost is never locked out, before or after the unlock.
+#[test]
+fn n2_attack_the_lone_heir_with_a_lost_agent_still_recovers() {
+    let (mut env, spouse) = sole_trusted_spouse();
+    let (uni, until) = (env.university.pubkey(), now(&env.svm) + YEAR);
+    let rule = env.add_rule(0, spouse.pubkey(), PayeeKind::University, 600 * USDT, 1_000 * USDT, until);
+    // Before the unlock: the agent never reviews the death claim.
+    warp(&mut env.svm, RT);
+    env.death_claim_by(&spouse, [7; 32]).unwrap();
+    warp(&mut env.svm, 2 * RT);
+    let second = funded(&mut env.svm);
+    env.vote_agent(&spouse, second.pubkey()).unwrap();
+    env.agent = second.insecure_clone();
+    env.review_death(true).unwrap();
+    env.attest_death_by(&spouse).unwrap();
+    warp(&mut env.svm, 2 * WAITING);
+    env.finalize_unlock().unwrap();
+    // After the unlock the new agent is lost too: the claim stands unreviewed.
+    let claim = env.submit_claim_by(&spouse, rule, uni, 100 * USDT).unwrap();
+    warp(&mut env.svm, 2 * RT);
+    let third = funded(&mut env.svm);
+    let b = beneficiary_pda(&env.estate, &spouse.pubkey());
+    env.vote_agent_with(&spouse, third.pubkey(), &[b, claim]).unwrap();
+    env.agent = third.insecure_clone();
+    env.review_claim(claim, true).unwrap();
+    env.approve_claim_by(&spouse, claim).unwrap();
+    warp(&mut env.svm, 2 * WINDOW);
+    env.execute_claim(rule, claim).unwrap();
 }

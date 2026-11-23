@@ -52,11 +52,14 @@ pub fn submit_death_claim_handler(ctx: Context<SubmitDeathClaim>, cert_hash: [u8
         HeirloomError::BadStatus
     );
     let ts = now()?;
-    // One open death claim at a time, so a second submission can't reset attestations, until it is stale.
-    // With no trusted people left a reviewed claim is the fallback plan's proof and stays.
+    // One open death claim at a time, so a second submission can't reset attestations. A reviewed claim gives way
+    // once stale. An unreviewed one never does (the agent reviews it, or a lost agent is replaced after it has
+    // stood RT), so its time stays when this death's first claim was made: replacing it can't restart the
+    // recovery clock (N4). With no trusted people left a reviewed claim is the fallback plan's proof and stays.
     if estate.death_cert_hash != [0u8; 32] && !disproved {
         require!(
-            (estate.death_verdict == Verdict::Pending || estate.has_living_seat())
+            estate.death_verdict != Verdict::Pending
+                && estate.has_living_seat()
                 && estate.report_replaceable(
                     estate.death_verdict,
                     estate.death_pending_since,

@@ -386,7 +386,8 @@ clamped to 60 s..1 day. `R` = max(fallback wait, 60 s).
 
 ### Rules
 
-- **Waiting period.** Read as at least 60 s, also for estates created before the bound (a stored 0 waits 60 s).
+- **Waiting period and succession wait.** Both read as at least 60 s, also when stored lower (a stored 0 waits
+  60 s), so a living owner or holder always has time to answer.
 - **Proof of life.** These are signed only by the living owner and set `last_heartbeat`, clear an open death
   claim (status Active again, `DeathVetoed`) and void a countdown started earlier: `heartbeat`, `veto_death`,
   `owner_replace_seat`, `remove_member`, `set_agent`, `set_fallback`, `set_seat_monitors`, the owner's
@@ -423,7 +424,7 @@ clamped to 60 s..1 day. `R` = max(fallback wait, 60 s).
 
   | Report | Another person may replace at | Whoever made it, at |
   |---|---|---|
-  | Death claim, unreviewed | reported + g | reported + 2g |
+  | Death claim, unreviewed | never (the agent's rejection frees it; a lost agent is replaced, below) | never |
   | Death claim, reviewed, no quorum | reported + 2W | reported + 2W + g |
   | Seat death, unreviewed | reported + g | reported + 2g |
   | Seat death, reviewed, not confirmed | reported + RT + 2W | reported + RT + 2W + g |
@@ -431,7 +432,9 @@ clamped to 60 s..1 day. `R` = max(fallback wait, 60 s).
   | Fallback death, reviewed | reported + 2R | reported + 2R + min(g, R/2) |
 
   A confirmed report is never replaceable. With no living seat a reviewed death claim is not replaceable: it is
-  the fallback plan's proof. A new seat report voids a challenge to the one it replaces.
+  the fallback plan's proof. A disproved claim is replaced at once. Because an unreviewed death claim stays, its
+  `death_pending_since` is when this death's first open claim was made. A new seat report voids a challenge to
+  the one it replaces.
 - **Confirming a seat's death.** Never the reporter, the holder, the agent, or `backups[0]` unless they hold
   another seat (they can't be promoted then). Who may:
   - the holder of another seat;
@@ -439,8 +442,9 @@ clamped to 60 s..1 day. `R` = max(fallback wait, 60 s).
   - an active beneficiary, when no other seat is held and nobody watches the seat (a monitor other than
     `backups[0]`, or `backups[1]`), or when the approved report has waited RT.
 - **Confirmations the owner revokes.** When the owner replaces a holder, changes a seat's monitors or removes a
-  beneficiary, a pending confirmation by someone who then holds no seat is cleared at once
-  (SeatDeathReportCleared); the owner's replacement also clears the replaced seat's own report. A check-in
+  beneficiary, a seat report confirmed by someone who then holds no seat is cleared at once, the whole report and
+  not only the confirmation (SeatDeathReportCleared); the owner's replacement also clears the replaced seat's own
+  report. A check-in
   revokes nothing, and a confirmer who has since died keeps the confirmation.
 - **Finalizing a succession.** A report or confirmation by whoever is now the agent is cleared. The first
   backup who is not the owner, the agent, a holder of another seat, the reporter or the confirmer takes the seat;
@@ -470,8 +474,15 @@ clamped to 60 s..1 day. `R` = max(fallback wait, 60 s).
   seats don't count. Fallback votes: one wallet, one vote.
 - **Agent replacement.** By the owner while Active (`set_agent`), or by trusted people (`vote_agent`): every
   held seat (at least two) before the unlock, two or the only one left after it. Also two (or the only one) before
-  the unlock when a death claim is open, not disproved, has stood one grace and the owner has shown no life for
-  RT. A new agent sets back what the old one reviewed: the death claim's verdict (with its attestations; the
+  the unlock when a death claim is open, not disproved and still unreviewed, has stood for RT since it was made
+  (an unreviewed claim can't be replaced, so this is this death's first claim), and the owner has shown no life
+  for RT. **A lone voter who gains (N2).** When the voter's own vote would be the whole quorum (the only seat
+  held) and they gain (the open death claim is theirs, or they are an active beneficiary), it replaces the agent
+  only after 2 x RT: before the unlock, measured from the later of the owner's last sign of life and the claim
+  (still unreviewed); after it, from when their own open claim was made, while the agent has not approved it (no
+  such claim: never alone). Otherwise WaitingPeriodNotOver. No new storage: the voter's Beneficiary PDA is the first
+  remaining account (missing or wrong: counted as one who gains), the claim the second. A new agent sets back what
+  the old one reviewed: the death claim's verdict (with its attestations; the
   status is Active again and the claim's time restarts), seat reports (verdict Pending, confirmation cleared) and
   fallback reports (verdict Pending), emitting AgentReviewCleared. A candidate can't be a backup (BadAgent).
 - **What the agent may not be or do.** It can't be a trusted person (create_estate, owner_replace_seat) or a
@@ -549,7 +560,7 @@ Accounts in IDL order. w = writable, s = signer, o = optional (None = the progra
 | `execute_fallback` | same | as deployed with recipient_usdt (**now any token account of the mint the recipient owns, or their ATA created here**), then **fallback_report** `["fallbackreport", estate, [first living index, else 255]]`, **unlock_objection** `["objection", estate]` | as above |
 | `sweep_residual` | same | as deployed (recipient_usdt as in execute_fallback), then **fallback_report** (same seeds, 255 without a Guard); remaining: the rules | no reserve after the fallback; the report hold |
 | `set_agent` | same | owner(s), estate(w), **seat0..2(w)**, **fallback_report0..3(w)** | proof of life; candidate not a backup; reviews set back |
-| `vote_agent` | same | verifier(w,s), estate(w), agent_vote(w), system_program, **seat0..2(w)**, **fallback_report0..3(w)** | quorum as above; reviews set back |
+| `vote_agent` | same | verifier(w,s), estate(w), agent_vote(w), system_program, **seat0..2(w)**, **fallback_report0..3(w)**; remaining: the voter's Beneficiary PDA, then (after the unlock) their own open Claim | quorum as above; reviews set back; a lone voter who gains waits 2 x RT (N2) |
 | `lapse_objection` | same | same | also void challenges at once |
 
 ### Errors (appended)
@@ -588,6 +599,14 @@ write unless the deployed program is the one its IDL was built from.
 - `sweep_residual` pays the fallback list without the fallback countdown once the estate is Unlocked.
 - Votes on Succession objections and claim disputes cast before the owner replaced the voter still count until
   the challenge lapses or the owner decides it.
+- A living trusted person who doesn't answer an approved report of their death for RT, nor veto it during the
+  succession wait, is replaced on a beneficiary's confirmation (N3). That is the price of H3, which keeps an estate
+  recoverable when every trusted person has died.
+- The only trusted person left, who is also the one who gains, can still replace the agent alone and then decide
+  alone, but only after 2 x RT with the death claim unreviewed and no sign of life, or with their own claim
+  unapproved for 2 x RT after the unlock (N2). Refusing it outright would lock an estate whose only trusted person
+  is the only heir and whose agent is lost. A lone heir whose only request is a hardship has no clock (a Hardship
+  stores no time), so files a claim to start one.
 
 ### Client notes
 

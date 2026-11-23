@@ -346,7 +346,7 @@ pub mod heirloom {
         instructions::continuity::set_agent_handler(ctx, agent)
     }
 
-    pub fn vote_agent(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<()> {
+    pub fn vote_agent<'info>(ctx: Context<'info, VoteAgent<'info>>, candidate: Pubkey) -> Result<()> {
         instructions::continuity::vote_agent_handler(ctx, candidate)
     }
 

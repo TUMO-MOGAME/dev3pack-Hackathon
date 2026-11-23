@@ -678,7 +678,6 @@ pub fn confirm_seat_death_handler(ctx: Context<ConfirmSeatDeath>, _index: u8) ->
         || (beneficiary && (timed_out || beneficiary_may_confirm(estate, seat)));
     require!(allowed, HeirloomError::NotConfirmer);
 
-    seat.death_confirmed_by = confirmer;    let ts = now()?;
     seat.death_confirmed_by = confirmer;
     seat.death_pending_since = ts;
 
