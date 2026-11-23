@@ -8,7 +8,7 @@ import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
 import { formatUsdt, formatUsdtExact, formatZar, fromBase, toBase } from "@/lib/format";
-import { amountText, parseAmount } from "@/lib/amount";
+import { amountHint, amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Button, ButtonLink, Card, ExplorerLink, Field, inputClass, Meter, Money, Notice, PageHeader } from "@/components/ui/primitives";
@@ -115,7 +115,7 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
           </div>
           <div id="vault-panel" role="tabpanel" aria-labelledby={`vault-tab-${tab}`}>
           <form onSubmit={submit} noValidate className="mt-4 flex flex-col gap-3">
-            <Field label={copy.amount} htmlFor="vault-amount" error={error} hint={valid ? `= ${formatUsdtExact(toBase(n))}${rate ? ` · ${fmt(copy.amountHint, { zar: formatZar(toBase(n), rate) })}` : ""}` : copy.onlyUsdt}>
+            <Field label={copy.amount} htmlFor="vault-amount" error={error} hint={amountHint(amount, (x) => (x > 0 ? `= ${formatUsdtExact(toBase(x))}${rate ? ` · ${fmt(copy.amountHint, { zar: formatZar(toBase(x), rate) })}` : ""}` : copy.onlyUsdt), { unclear: common.amountUnclear, format: `${copy.onlyUsdt} ${common.amountFormat}` })}>
               <div className="relative">
                 <input
                   id="vault-amount" inputMode="decimal" autoComplete="off" placeholder="0" value={amount}

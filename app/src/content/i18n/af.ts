@@ -431,6 +431,7 @@ export const af: Bundle = {
     consent: { before: "Ek stem in dat Heirloom hierdie inligting verwerk soos beskryf in die", link: "privaatheidsbeleid", after: "." },
     consentRequired: "Merk asseblief die blokkie om voort te gaan.",
     amountUnclear: "Daardie bedrag kan op twee maniere gelees word. Skryf dit soos 1 234,50 of 1234.50.",
+    amountFormat: "“1,000” beteken een duisend. Vir sente, sit een of twee syfers ná die komma: 9,50.",
     file: {
       choose: "Kies 'n foto of PDF", change: "Tik om 'n ander lêer te kies", samplesLabel: "Geen papiere byderhand nie? Gebruik 'n voorbeeld:", chosen: "Gekose lêer:",
       rules: "'n PDF, JPG of PNG, tot 4 MB.",

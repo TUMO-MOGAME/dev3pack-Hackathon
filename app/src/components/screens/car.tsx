@@ -10,7 +10,7 @@ import { clockTime, nextReadyAt, offerWait } from "@/lib/assets/sale-wait";
 import type { EstateSnapshot } from "@/lib/service";
 import type { Asset, OfferRanking, Role, WalletSession } from "@/lib/types";
 import { formatUsdt, formatUsdtExact, formatZar, fromBase, shortAddress, toBase } from "@/lib/format";
-import { amountText, parseAmount } from "@/lib/amount";
+import { amountHint, amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Badge, Button, ButtonLink, Card, Consent, EmptyState, Eyebrow, ExplorerLink, Field, inputClass, Money, Notice, TickDisc } from "@/components/ui/primitives";
@@ -471,7 +471,7 @@ function OfferForm({ copy, car, mine }: { copy: Copy; car: Asset; mine: bigint |
         </div>
       )}
       <form onSubmit={submit} noValidate className="mt-3 flex flex-col gap-3">
-        <Field label={o.amount} htmlFor="offer-amount" error={error} hint={`${valid ? `= ${formatUsdtExact(toBase(n))} · ` : ""}${valid && rate ? `${fmt(o.zar, { zar: formatZar(toBase(n), rate) })} · ` : ""}${fmt(o.wallet, { amount: formatUsdt(walletUsdt, { decimals: 0 }) })}`}>
+        <Field label={o.amount} htmlFor="offer-amount" error={error} hint={`${amountHint(amount, (x) => (x > 0 ? `= ${formatUsdtExact(toBase(x))}${rate ? ` · ${fmt(o.zar, { zar: formatZar(toBase(x), rate) })}` : ""}` : undefined), { unclear: common.amountUnclear, format: common.amountFormat }) ?? ""} · ${fmt(o.wallet, { amount: formatUsdt(walletUsdt, { decimals: 0 }) })}`.replace(/^ · /, "")}>
           <div className="relative">
             <input
               id="offer-amount" inputMode="decimal" autoComplete="off" placeholder={amountText(fromBase(car.askingPrice))} value={amount}

@@ -7,7 +7,7 @@ import { useId, useState, type FormEvent } from "react";
 import type { Rule } from "@/lib/types";
 import { currentPeriod } from "@/lib/disputes/types";
 import { formatUsdt, formatUsdtExact, fromBase, toBase } from "@/lib/format";
-import { amountText, parseAmount } from "@/lib/amount";
+import { amountHint, amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Button, Field, inputClass, Meter } from "@/components/ui/primitives";
@@ -36,7 +36,7 @@ export function YearlyUsage({ rule, now, category }: { rule: Rule; now: number |
 
 /** Owner, estate Active: set or change a rule's yearly cap. */
 export function YearlyCapEditor({ rule, category }: { rule: Rule; category: string }) {
-  const { disputes: c } = useCopy();
+  const { disputes: c, common } = useCopy();
   const { snap, session } = useEstate();
   const id = useId();
   const { act, busy, receipt, refusal } = useAction();
@@ -76,7 +76,7 @@ export function YearlyCapEditor({ rule, category }: { rule: Rule; category: stri
         <p className="font-semibold">{fmt(y.formTitle, { category })}</p>
         <p className="text-small text-ink-2">{y.formBody}</p>
       </div>
-      <Field label={y.label} htmlFor={`${id}-cap`} hint={`${(parseAmount(value) ?? 0) > 0 ? `= ${formatUsdtExact(toBase(parseAmount(value)!))} · ` : ""}${fmt(y.hint, bounds)}`} error={error}>
+      <Field label={y.label} htmlFor={`${id}-cap`} hint={`${amountHint(value, (x) => (x > 0 ? `= ${formatUsdtExact(toBase(x))}` : undefined), { unclear: common.amountUnclear, format: common.amountFormat }) ?? ""} · ${fmt(y.hint, bounds)}`.replace(/^ · /, "")} error={error}>
         <input id={`${id}-cap`} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => { setValue(e.target.value); setError(null); }}
           aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-cap-error` : `${id}-cap-hint`} className={inputClass} />
       </Field>

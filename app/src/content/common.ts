@@ -199,6 +199,7 @@ export const common = {
   consentRequired: "Please tick the box to continue.",
   /** An amount the strict reader can't take as one clear number (lib/amount.ts). */
   amountUnclear: "That amount could be read two ways. Write it like 1 234,50 or 1234.50.",
+  amountFormat: "“1,000” means one thousand. For cents, put one or two digits after the comma: 9,50.",
   file: {
     choose: "Choose a photo or PDF", change: "Tap to choose a different file", samplesLabel: "No papers to hand? Use a sample:", chosen: "Selected file:",
     rules: "A PDF, JPG or PNG, up to 4 MB.",

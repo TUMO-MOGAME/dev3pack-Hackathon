@@ -172,7 +172,7 @@ function AskForm({ c, preset, onClose }: { c: AskCopy; preset?: string; onClose:
             {currency === "USDT" && <span aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-semibold text-ink-2">USD₮</span>}
           </div>
         </Field>
-        <p id={`${amountId}-about`} className="text-small text-ink-2" aria-live="polite">{other ? `= ${currency === "ZAR" ? `R ${typed.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : formatUsdtExact(base)} · ${fmt(s.about, { amount: other })}` : text.trim() && Number.isNaN(typed) ? common.amountUnclear : " "}</p>
+        <p id={`${amountId}-about`} className="text-small text-ink-2" aria-live="polite">{other ? `= ${currency === "ZAR" ? `R ${typed.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : formatUsdtExact(base)} · ${fmt(s.about, { amount: other })}` : text.trim() && Number.isNaN(typed) ? common.amountUnclear : common.amountFormat}</p>
       </div>
 
       <fieldset>

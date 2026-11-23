@@ -101,3 +101,13 @@ export function amountsInText(text: string): FoundAmount[] {
   }
   return out;
 }
+
+/**
+ * The hint under an amount field (N9): how to write one while it is empty (or `ok` has nothing to say), the unclear-amount words when what was
+ * typed could be read two ways (never a conversion of a guess), else `ok`, the field's own hint for the amount read.
+ */
+export function amountHint(text: string, ok: (n: number) => string | undefined, words: { unclear: string; format: string }): string {
+  if (!text.trim()) return words.format;
+  const n = parseAmount(text);
+  return n === null ? words.unclear : ok(n) ?? words.format;
+}
