@@ -40,7 +40,7 @@ vi.mock("@/lib/chain/tx", async (original: () => Promise<object>) => ({
 }));
 vi.mock("@/lib/chain/reads", () => ({ invalidateProgramAccounts: () => { h.fresh++; }, fetchAccountRaw: async () => null }));
 vi.mock("@/lib/server/estate", () => ({ loadPublicSnapshot: async () => h.snap }));
-vi.mock("@/lib/agent/budget", () => ({ spendAgentAllowance: async () => { h.spent++; } }));
+vi.mock("@/lib/agent/budget", () => ({ spendAgentAllowance: async () => { h.spent++; }, spendAgentRent: async () => undefined }));
 vi.mock("@/lib/agent/agent-wallet", async (original: () => Promise<object>) => ({
   ...(await original()),
   hasAgentWallet: () => true,

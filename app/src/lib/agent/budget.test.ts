@@ -73,6 +73,20 @@ describe("allowances", () => {
   });
 });
 
+describe("rent the agent pays (M7)", () => {
+  it("sales: a cap for all estates together, on this instance and in the shared store", async () => {
+    for (let i = 0; i < budget.AGENT_RENT.settleDay; i++) await budget.spendAgentRent("settle", `E${i}`, T0 + i);
+    await expect(budget.spendAgentRent("settle", "another", T0 + 99)).rejects.toMatchObject({ status: 429, code: "agent_limit" });
+    expect(h.takes.at(-1)).toEqual([{ key: "agent:rent:settle", max: budget.AGENT_RENT.settleDay, windowSecs: 86_400 }]);
+  });
+
+  it("another instance using it up counts here too", async () => {
+    h.taken = { ok: false, retryAfterSecs: 500 };
+    await expect(budget.spendAgentRent("schedule", "E", T0)).rejects.toMatchObject({ retryAfterSecs: 500 });
+    expect(budget.agentRentLeft("schedule", "E", T0 + 1)).toBe(false);
+  });
+});
+
 describe("the chain backstop, without a shared store", () => {
   it("stops at the hour's spend", async () => {
     h.spend = { hour: budget.AGENT_SPEND.hour, day: budget.AGENT_SPEND.hour, complete: true };

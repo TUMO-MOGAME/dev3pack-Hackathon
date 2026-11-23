@@ -107,6 +107,54 @@ export async function agentBackstop(now: number): Promise<void> {
   passBlind("agent", now);
 }
 
+/**
+ * Rent the agent pays for accounts it creates (plan §18.9 M7): a scheduled payment to a payee with no USD₮ account
+ * creates one (and a payee can close it after each payment, to be paid its rent again), and a sale creates the
+ * buyer's title account and the recipient's USD₮ account. Counted on this instance and in the shared store.
+ */
+export const AGENT_RENT = {
+  /** Scheduled payments that create a payee's account: in all, and for one estate, a day. */
+  scheduleDay: 30,
+  schedulePerEstate: 3,
+  /** Sales settled by the agent, in all, a day (each estate has its own allowance in AGENT_DAILY as well). */
+  settleDay: 20,
+} as const;
+
+const rentHits = new Map<string, number[]>();
+type RentKind = "schedule" | "settle";
+
+function rentChecks(kind: RentKind, estate: string, now: number) {
+  const checks = kind === "schedule"
+    ? [{ key: "rent:schedule", max: AGENT_RENT.scheduleDay }, { key: `rent:schedule:e:${estate}`, max: AGENT_RENT.schedulePerEstate }]
+    : [{ key: "rent:settle", max: AGENT_RENT.settleDay }];
+  return checks.map((c) => ({ ...c, at: (rentHits.get(c.key) ?? []).filter((t) => now - t < DAY_MS) }));
+}
+
+/** Whether this instance still allows this rent today. Records nothing (a payment that fails creates no account). */
+export function agentRentLeft(kind: RentKind, estate: string, now = Date.now()): boolean {
+  return rentChecks(kind, estate, now).every((c) => c.at.length < c.max);
+}
+
+/**
+ * Counts this rent here and in the shared store; throws 429 agent_limit when there is none left today. When the shared
+ * store says another instance used it up, this instance counts the day as full too. Always await it.
+ */
+export async function spendAgentRent(kind: RentKind, estate: string, now = Date.now()): Promise<void> {
+  const recent = rentChecks(kind, estate, now);
+  const full = recent.find((c) => c.at.length >= c.max);
+  if (full) throw limitReached(Math.max(1, Math.ceil((full.at[full.at.length - full.max] + DAY_MS - now) / 1000)));
+  for (const c of recent) rentHits.set(c.key, [...c.at, now]);
+  if (rentHits.size > 50_000) for (const [k, ts] of rentHits) if (!ts.some((t) => now - t < DAY_MS)) rentHits.delete(k);
+  const taken = await takeShared(recent.map((c) => ({ key: `agent:${c.key}`, max: c.max, windowSecs: DAY_MS / 1000 }))).catch(() => null);
+  if (taken && !taken.ok) {
+    for (const c of recent) rentHits.set(c.key, Array<number>(c.max).fill(now));
+    throw limitReached(taken.retryAfterSecs);
+  }
+}
+
+/** Tests only. */
+export function forgetAgentRent(): void { rentHits.clear(); }
+
 /** Throws when the agent should not sign this. Always await it. */
 export async function spendAgentAllowance(action: keyof typeof AGENT_DAILY, wallet: string, estate: string, now = Date.now()): Promise<void> {
   const limit = AGENT_DAILY[action];

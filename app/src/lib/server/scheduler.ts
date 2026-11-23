@@ -27,6 +27,7 @@ import { chainConfig } from "../chain/config";
 import { DeadlineError, withDeadline } from "./deadline";
 import { scheduleOrder, type Random } from "./schedule-order";
 import { assertProgram } from "./program";
+import { agentRentLeft, spendAgentRent } from "../agent/budget";
 
 export interface TickResult { rule: string; estate: string; ok: boolean; signature?: string; explorerUrl?: string; error?: string }
 
@@ -212,6 +213,9 @@ export async function runDueSchedules(
       } catch { continue; } // unreadable: can't be paid
       const afterThis = (taken.get(d.estate) ?? 0n) + d.rule.recurringAmount;
       if (afterThis > tokenAmount(vault!.data)) continue;
+      // A payee with no USD₮ account gets one at the agent's cost: bounded and counted (M7). Over the bound it waits.
+      const createsAccount = !payeeToken?.data.length;
+      if (createsAccount && !agentRentLeft("schedule", d.estate, clock())) continue;
 
       tried.set(d.estate, (tried.get(d.estate) ?? 0) + 1);
       const result: TickResult = { rule: d.rule.address, estate: d.estate, ok: false };
@@ -222,6 +226,7 @@ export async function runDueSchedules(
         });
         const tx = await withDeadline(agentSignAndSend([ix]), Math.min(TICK.attemptMs, left()), "Paying");
         Object.assign(result, tx, { ok: true });
+        if (createsAccount) await spendAgentRent("schedule", d.estate, clock()).catch(() => undefined);
         payments++;
         paid.set(d.estate, (paid.get(d.estate) ?? 0) + 1);
         taken.set(d.estate, afterThis);
