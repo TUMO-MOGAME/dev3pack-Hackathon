@@ -68,7 +68,7 @@ describe("the upload limit fits what Vercel accepts", () => {
     expect(MAX_UPLOAD_BYTES + 64_000).toBeLessThan(4_500_000);
   });
   it("the browser says why before anything is signed", async () => {
-    const blob = (bytes: Uint8Array, type: string) => Object.assign(new Blob([bytes as BlobPart], { type }), { type });
+    const blob = (bytes: Uint8Array, type: string) => new Blob([bytes as BlobPart], { type });
     expect(await checkUploadFile(blob(new Uint8Array([0x25, 0x50, 0x44, 0x46, 1]), "application/pdf"))).toBeNull();
     expect(await checkUploadFile(blob(new Uint8Array(MAX_UPLOAD_BYTES + 1), "application/pdf"))).toBe("size");
     expect(await checkUploadFile(blob(new Uint8Array([0x4d, 0x5a, 0, 0]), "application/pdf"))).toBe("content");
