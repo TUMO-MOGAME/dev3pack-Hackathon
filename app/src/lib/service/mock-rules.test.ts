@@ -1234,3 +1234,40 @@ describe("H9: a request the owner declined is never approved after the death", (
     await expect(svc.approveClaim(estate, ask.address)).rejects.toMatchObject({ code: "Declined" });
   });
 });
+
+describe("H7: a review that didn't finish is asked for again, with the same file", () => {
+  it("a claim waits for its review, and only its own file brings it", async () => {
+    let down = true;
+    const t = await start("unlocked", { opts: { agent: () => (down ? "down" : null) } });
+    t.act("lerato");
+    const s = await t.snap();
+    const rule = s.rules.find((r) => r.category === "Tuition" && r.beneficiary === who("lerato"))!;
+    const payee = s.payees.find((p) => p.kind === rule.allowedPayeeKind)!;
+    const file = pdf("fees.pdf");
+    await expect(t.svc.submitClaim(t.estate, { rule: rule.address, payee: payee.wallet, amountUsdt: 10, evidence: file })).rejects.toMatchObject({ code: "ReviewPending" });
+    const claim = (await t.snap()).claims.find((c) => c.agentVerdict === "Pending")!;
+    expect(claim.status).toBe("Open");
+    down = false;
+    await expect(t.svc.requestReview(t.estate, { kind: "claim", subject: claim.address, evidence: new File(["%PDF-1.4 other"], "other.pdf", { type: "application/pdf" }) }))
+      .rejects.toMatchObject({ code: "hash_mismatch" });
+    t.act("sipho");
+    await expect(t.svc.requestReview(t.estate, { kind: "claim", subject: claim.address, evidence: file })).rejects.toMatchObject({ code: "forbidden" });
+    t.act("lerato");
+    await t.svc.requestReview(t.estate, { kind: "claim", subject: claim.address, evidence: file });
+    expect((await t.snap()).claims.find((c) => c.address === claim.address)!.agentVerdict).toBe("Approved");
+  });
+
+  it("a hardship request too: it can be made only once, so it must never be stranded", async () => {
+    let down = true;
+    const t = await start("unlocked", { opts: { agent: () => (down ? "down" : null) } });
+    t.act("lerato");
+    const asset = (await t.snap()).assets[0].address;
+    const file = pdf("affidavit.pdf");
+    await expect(t.svc.submitHardship(t.estate, { asset, evidence: file })).rejects.toMatchObject({ code: "ReviewPending" });
+    const h = (await t.snap()).hardships[0];
+    expect(h.agentVerdict).toBe("Pending");
+    down = false;
+    await t.svc.requestReview(t.estate, { kind: "hardship", subject: h.address, evidence: file });
+    expect((await t.snap()).hardships[0].agentVerdict).toBe("Approved");
+  });
+});

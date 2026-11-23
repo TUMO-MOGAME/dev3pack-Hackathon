@@ -29,6 +29,12 @@ export class PaymentPending extends ChainServiceError {
   }
 }
 
+/** Sent, and the agent's review did not finish: the request stands, and its sender asks for the review again (H7). */
+export function reviewPending(cause: unknown): ChainServiceError {
+  const why = cause instanceof Error ? cause.message : String(cause);
+  return new ChainServiceError("ReviewPending", `It was sent, but the agent's review didn't finish (${why}). Ask for the review again from the request, with the same file.`);
+}
+
 export function must(ok: unknown, code: string, words: string): asserts ok {
   if (!ok) throw new ChainServiceError(code, words);
 }

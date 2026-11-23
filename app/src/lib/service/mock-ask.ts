@@ -17,7 +17,9 @@ export interface MockAskDeps {
   first(wallet: Base58): string;
   payeeName(wallet: Base58): string;
   /** mock.ts submitClaim: every program check, then the claim and its activity lines. */
-  submit(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport, reviewed: string): { t: TxResult; claim: Claim };
+  submit(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport | null, reviewed: string): { t: TxResult; claim: Claim };
+  /** True while the scripted agent can't review (MockOptions.agent "down"): the request is sent and waits for it. */
+  unreviewed?(): boolean;
   hashFile(f: File): Promise<string>;
   suspicious(f: File): boolean;
   fakeHash(): string;
@@ -63,7 +65,7 @@ export function createMockAsk(d: MockAskDeps): AskService & { seedAsk(input: { r
     d.notes()[claim] = { claim, purpose: cleanPurpose(input.purpose), currency: input.currency, typed: input.typed, createdAt: d.now(), attachment, declinedAt: null };
   }
 
-  function ask(input: { rule: Base58; payee: Base58; amountUsdt: number; purpose: string; currency: AskNote["currency"]; typed: number }, file: File | null, hash: string) {
+  function ask(input: { rule: Base58; payee: Base58; amountUsdt: number; purpose: string; currency: AskNote["currency"]; typed: number }, file: File | null, hash: string, seeding = false) {
     const purpose = cleanPurpose(input.purpose);
     if (!purpose) fail("InvalidAmount", "Say what the money is for.");
     const me = d.me();
@@ -74,8 +76,10 @@ export function createMockAsk(d: MockAskDeps): AskService & { seedAsk(input: { r
     const reviewed = !file ? `No letter attached: ${d.first(me)}'s request goes to the decision as it is`
       : report.verdict === "reject" ? "The agent could not accept the letter. The request was closed"
         : "The agent checked the letter: it matches the request";
-    const { t, claim } = d.submit({ rule: input.rule, payee: input.payee, amountUsdt: input.amountUsdt }, hash, report, reviewed);
+    const down = !seeding && !!d.unreviewed?.();
+    const { t, claim } = d.submit({ rule: input.rule, payee: input.payee, amountUsdt: input.amountUsdt }, hash, down ? null : report, reviewed);
     record(claim.address, input, !!file);
+    if (down) { d.save(); fail("ReviewPending", "It was sent, but the agent's review didn't finish. Ask for the review again from the request."); }
     return { tx: t, claim: claim.address, report };
   }
 
@@ -103,7 +107,7 @@ export function createMockAsk(d: MockAskDeps): AskService & { seedAsk(input: { r
 
     /** Demo seeding (synchronous, acting as the asker already). */
     seedAsk(input) {
-      return ask({ ...input, currency: "ZAR" }, null, d.fakeHash()).claim;
+      return ask({ ...input, currency: "ZAR" }, null, d.fakeHash(), true).claim;
     },
   };
 }

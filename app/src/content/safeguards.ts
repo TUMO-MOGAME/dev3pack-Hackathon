@@ -39,6 +39,7 @@ export const safeguards = {
     already_reviewed: "The agent has already reviewed this.",
     recurring_payee: "A scheduled payment has no approved payee, so nothing was signed. Sign the plan without that schedule, add the payee under People, then add the scheduled rule with \"Add a bill\" under Plan.",
     residual: "This person receives what is left. Choose someone else for that first.",
+    ReviewPending: "It was sent, but the agent's review didn't finish. Ask for the review again from the request, with the same file.",
   } as Record<string, string>,
 
   tally: {
@@ -84,6 +85,16 @@ export const safeguards = {
     cta: "Report again",
     deathTitle: "Replace the report",
     deathBody: "The earlier report and its confirmations are cleared. The agent reads your certificate first.",
+  },
+
+  review: {
+    title: "The agent's review didn't finish",
+    body: "It was sent, but the agent hasn't read the document yet. Ask for the review again with the same file you sent.",
+    bodyNote: "It was sent, but the agent hasn't read it yet. Ask for the review again: Heirloom writes the same request note.",
+    file: "The file you sent",
+    needFile: "Choose the same file you sent.",
+    cta: "Ask for the review again",
+    done: "The agent has reviewed it",
   },
 
   death: {

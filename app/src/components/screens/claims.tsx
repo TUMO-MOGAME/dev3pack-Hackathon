@@ -34,6 +34,7 @@ import { openToPeople, outcomeOf } from "@/lib/verdict";
 import { ReferredNote } from "@/components/continuity/continuity";
 import { claimBlock, claimPayable, claimTally, isFamily, ownerMayApprove, wasRemoved } from "@/lib/guardians/decisions";
 import { ClaimState, useWho, VoteTally } from "@/components/guardians/decision";
+import { ReviewAgain } from "@/components/agent/review-again";
 
 type Copy = ScreensCopy["claims"];
 
@@ -166,7 +167,7 @@ export function ClaimTracker({ claim, snap, copy, waitingFor }: { claim: Claim; 
 
 function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; copy: Copy }) {
   const { common, guardians } = useCopy();
-  const { fx } = useEstate();
+  const { fx, session } = useEstate();
   const nameOf = useWho(snap);
   const now = useNow(15000);
   const rate = fx?.usdtZar ?? null;
@@ -192,6 +193,9 @@ function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; 
         <Badge tone={tone}>{declined ? askCopy.status.declined : block ? guardians.rules.blocked.badge : common.status.claim[claim.status]}</Badge>
       </div>
       {claim.status === "Open" && <ReferredNote verdict={claim.agentVerdict} />}
+      {claim.status === "Open" && claim.agentVerdict === "Pending" && claim.beneficiary === session?.address && (
+        <ReviewAgain kind="claim" subject={claim.address} noFile={note?.attachment === false} className="mt-3" />
+      )}
       {declined ? <p className="mt-3 text-small font-semibold">{fmt(askCopy.line.declined, { owner: snap.estate.ownerName.split(" ")[0] })}</p> : <div className="mt-4"><ClaimTracker claim={claim} snap={snap} copy={copy} waitingFor={!block && snap.estate.status === "Active" && rule?.startsNow ? fmt(copy.card.waitingOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : undefined} /></div>}
       {claim.status === "Open" && unlocked && !block && !claim.ownerApproved && openToPeople(claim.agentVerdict) && (
         <div className="mt-3"><VoteTally tally={claimTally(snap.estate, claim)} names={snap.estate.verifierNames} /></div>
@@ -389,7 +393,7 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
             {error && <p role="alert" className="border-l-4 border-ink pl-2 text-small font-semibold text-ink">{error}</p>}
             {blocked && (
               <Blocked code={blocked.code} message={blocked.message}>
-                <Button small variant="secondary" onClick={() => { setBlocked(null); setStep(2); }}>{copy.result.tryAgain}</Button>
+                {blocked.code !== "ReviewPending" && <Button small variant="secondary" onClick={() => { setBlocked(null); setStep(2); }}>{copy.result.tryAgain}</Button>}
               </Blocked>
             )}
           </div>

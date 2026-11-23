@@ -21,8 +21,8 @@ import {
   activityFrom, deathReviewHash, fetchAccountRaw, fetchEstateRaw, fetchEvents, fetchHistory, findEstateOf, invalidateProgramAccounts,
 } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
-import { hex, key, num, optKey, type Raw } from "../chain/decoders";
-import { ChainServiceError, must, PaymentPending, writeFailure } from "./chain-errors";
+import { enumOf, hex, key, num, optKey, type Raw } from "../chain/decoders";
+import { ChainServiceError, must, PaymentPending, reviewPending, writeFailure } from "./chain-errors";
 import { mayAskToList } from "../agent/sale";
 import { createChainContinuity } from "./chain-continuity";
 import { deathClaimStep } from "./chain-reports";
@@ -675,7 +675,9 @@ export function createChainService(): HeirloomService {
         estate: pk(estate), signer: me, ruleId, claimId, payeeWallet: pk(input.payee), amount: toBase(input.amountUsdt), evidenceHashHex: h,
       })]);
       const claim = claimPda(ctx.programId, input.rule, claimId).toBase58();
-      const r = await review(input.evidence, "claim", estate, `Claim for ${input.amountUsdt} USD₮ under rule #${ruleId}, payee wallet ${input.payee}.`, claim);
+      // Sent: a review that doesn't finish leaves the claim waiting for it, to be asked for again (H7).
+      const r = await review(input.evidence, "claim", estate, `Claim for ${input.amountUsdt} USD₮ under rule #${ruleId}, payee wallet ${input.payee}.`, claim)
+        .catch((e: unknown) => { throw reviewPending(e); });
       return { tx, claim, report: r.report };
     },
 
@@ -686,8 +688,23 @@ export function createChainService(): HeirloomService {
       const h = await fileHash(input.evidence);
       const tx = await send([ix.submitHardship(ctx, pk(estate), pk(input.asset), me, h)]);
       const hardship = hardshipPda(ctx.programId, input.asset, me).toBase58();
-      const r = await review(input.evidence, "hardship", estate, "Hardship request to sell the car below the floor price.", hardship);
+      const r = await review(input.evidence, "hardship", estate, "Hardship request to sell the car below the floor price.", hardship)
+        .catch((e: unknown) => { throw reviewPending(e); });
       return { tx, report: r.report };
+    },
+
+    async requestReview(estate, { kind, subject, evidence }) {
+      const raw = await mustFetch(kind === "claim" ? "Claim" : "Hardship", subject);
+      const me = getActiveSigner().address;
+      must(key(raw, "beneficiary") === me, "forbidden", "Only the person who sent this can ask for its review.");
+      must(enumOf(raw, "agent_verdict", ["Pending", "Approved", "Rejected", "Referred"] as const) === "Pending", "already_reviewed", "The agent has already reviewed this.");
+      const file = evidence ? await requireEvidence(evidence) : kind === "claim" ? await asks.noteFileFor(estate, subject) : null;
+      must(file && await fileHash(file) === hex(raw, "evidence_hash"), "hash_mismatch", "This isn't the file that was sent. Choose that same file.");
+      const context = kind === "claim"
+        ? `Claim for ${fromBase(BigInt(String(raw.amount)))} USD₮, payee wallet ${key(raw, "payee")}. The review is asked for again after the first did not finish.`
+        : "Hardship request to sell the car below the floor price. The review is asked for again after the first did not finish.";
+      const r = await review(file, kind, estate, context, subject).finally(written);
+      return { tx: r.tx, report: r.report };
     },
 
     // ----- Verifiers -----

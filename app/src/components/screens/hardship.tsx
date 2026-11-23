@@ -16,6 +16,7 @@ import { formatUsdt } from "@/lib/format";
 import { ReferredNote } from "@/components/continuity/continuity";
 import { hardshipStands, hardshipTally, isFamily as inPlan } from "@/lib/guardians/decisions";
 import { VoteTally } from "@/components/guardians/decision";
+import { ReviewAgain } from "@/components/agent/review-again";
 
 type Copy = ScreensCopy["hardship"];
 
@@ -92,6 +93,7 @@ function HardshipView({ copy, snap, session, role }: { copy: Copy; snap: EstateS
                   </div>
                   {h.status === "Open" && (<>
                     <ReferredNote verdict={h.agentVerdict} />
+                    {h.agentVerdict === "Pending" && h.beneficiary === session.address && <ReviewAgain kind="hardship" subject={h.address} className="mt-3" />}
                     <div className="mt-3"><VoteTally tally={hardshipTally(e, h)} names={e.verifierNames} /></div>
                     {hardshipStands(snap, h) && <p className="mt-2 text-small font-semibold">{guardians.rules.vote.stands}</p>}
                   </>)}

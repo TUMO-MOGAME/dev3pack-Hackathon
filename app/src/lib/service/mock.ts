@@ -19,7 +19,7 @@ import { fail } from "./mock-errors";
 import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type MockGuardState, type Named } from "./mock-guardians";
 import { createMockDisputes } from "./mock-disputes";
 import { DEMO_PAYEES } from "./mock-payees";
-import { createMockAsk } from "./mock-ask";
+import { createMockAsk, mockAskReport } from "./mock-ask";
 import type { MockTreeState } from "./mock-tree";
 import type { TreeService } from "../tree/types";
 import type { MockLettersState } from "./mock-letters";
@@ -345,7 +345,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
   const A = createMockAsk({
     snap: () => s.snap, notes: () => (s.asks ??= {}), me, first, payeeName: (w) => s.snap.payees.find((p) => p.wallet === w)?.name ?? name(w),
     submit: (input, hash, r, reviewed) => submitClaim(input, hash, r, reviewed),
-    hashFile: (f) => hashFile(f), suspicious: (f) => suspicious(f), fakeHash, zar: (u) => zar(u), now: nowSecs, wait: async (ms) => { await wait(ms); }, save,
+    hashFile: (f) => hashFile(f), suspicious: (f) => suspicious(f), fakeHash, unreviewed: () => unreviewed(), zar: (u) => zar(u), now: nowSecs, wait: async (ms) => { await wait(ms); }, save,
   });
 
   // Trust Tree: the Mokoena family story around this demo estate (mock-tree.ts), loaded on first use so the tree's
@@ -737,7 +737,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     return t;
   }
 
-  function submitClaim(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport, reviewed?: string): { t: TxResult; claim: Claim } {
+  function submitClaim(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport | null, reviewed?: string): { t: TxResult; claim: Claim } {
     needCreated(); needBeneficiary();
     const rule = s.snap.rules.find((r) => r.address === input.rule) ?? fail("BadStatus", "That rule does not exist.");
     need(est().status === "Unlocked" || (rule.startsNow && est().status === "Active"), "BadStatus", rule.startsNow ? "Claims are paused while a passing is being confirmed." : "This rule only starts after the estate is unlocked.");
@@ -752,20 +752,27 @@ export function createMockService(opts: MockOptions = {}): MockService {
     D.checkYearly(rule, amt, false);
     const id = rule.claimCount ?? 0;
     need(isCurrentClaim(id, id + 1), "MathOverflow", "This rule can't take any more claims.");
-    // As on-chain (/api/review): only "reject" blocks; an unsure agent refers, it never approves.
-    const outcome = outcomeOf(report.verdict);
-    const approved = outcome !== "Reject";
     const claim: Claim = {
       address: fakeAddr(), rule: rule.address, id, beneficiary: me(), payee: payee.wallet, amount: amt,
-      evidenceHash, agentVerdict: outcome === "Approve" ? "Approved" : outcome === "Refer" ? "Referred" : "Rejected", agentReport: report,
-      approvals: [false, false, false], ownerApproved: false, status: approved ? "Open" : "Rejected", createdAt: nowSecs(),
+      evidenceHash, agentVerdict: "Pending", approvals: [false, false, false], ownerApproved: false, status: "Open", createdAt: nowSecs(),
     };
     s.snap.claims.unshift(claim);
     rule.claimCount = id + 1;
     const t = tx();
     log("ClaimSubmitted", `${first(me())} asked for ${usd(amt)} to be paid to ${payee.name}`, t, amt);
-    log("ClaimReviewed", reviewed ?? (outcome === "Refer" ? "The agent was not sure, so it referred the claim to people" : approved ? `The agent checked the ${rule.category.toLowerCase()} statement: it matches the claim` : "The agent could not accept the document. The claim was declined"), tx());
+    // No report: the agent's review didn't finish, and the claim waits for it (H7).
+    if (report) reviewClaim(claim, report, reviewed);
     return { t, claim };
+  }
+
+  /** review_claim: as on-chain (/api/review), only "reject" blocks; an unsure agent refers, it never approves. */
+  function reviewClaim(claim: Claim, report: AgentReport, reviewed?: string) {
+    const rule = s.snap.rules.find((r) => r.address === claim.rule);
+    const outcome = outcomeOf(report.verdict);
+    claim.agentVerdict = outcome === "Approve" ? "Approved" : outcome === "Refer" ? "Referred" : "Rejected";
+    claim.agentReport = report;
+    if (outcome === "Reject") claim.status = "Rejected";
+    log("ClaimReviewed", reviewed ?? (outcome === "Refer" ? "The agent was not sure, so it referred the claim to people" : outcome !== "Reject" ? `The agent checked the ${rule?.category.toLowerCase() ?? "claim's"} statement: it matches the claim` : "The agent could not accept the document. The claim was declined"), tx());
   }
 
   function approveClaim(address: Base58): TxResult {
@@ -973,24 +980,30 @@ export function createMockService(opts: MockOptions = {}): MockService {
     return { t, ranking };
   }
 
-  function submitHardship(assetAddr: Base58, evidenceHash: string, report: AgentReport): TxResult {
+  function submitHardship(assetAddr: Base58, evidenceHash: string, report: AgentReport | null): TxResult {
     needCreated(); needBeneficiary();
     need(est().status === "Unlocked", "BadStatus", "Hardship requests open once the estate is unlocked.");
     const a = s.snap.assets.find((x) => x.address === assetAddr) ?? fail("BadStatus", "That asset does not exist.");
     need(a.status !== "Sold", "BadStatus", "The car has already been sold.");
     // Like the contract: one request per family member per car (the account is created once and never reused).
     need(!s.snap.hardships.some((h) => h.beneficiary === me() && h.asset === assetAddr), "BadStatus", "You have already asked once for this car.");
-    const outcome = outcomeOf(report.verdict);
-    const ok = outcome !== "Reject";
     const h: Hardship = {
-      address: fakeAddr(), asset: a.address, beneficiary: me(), evidenceHash, agentVerdict: outcome === "Approve" ? "Approved" : ok ? "Referred" : "Rejected",
-      agentReport: report, approvals: [false, false, false], status: ok ? "Open" : "Rejected",
+      address: fakeAddr(), asset: a.address, beneficiary: me(), evidenceHash, agentVerdict: "Pending", approvals: [false, false, false], status: "Open",
     };
     s.snap.hardships.unshift(h);
     const t = tx();
     log("HardshipSubmitted", `${first(me())} asked for the car to be sold below the minimum price because of hardship`, t);
-    log("HardshipReviewed", ok ? "The agent checked the affidavit: commissioned, stamped and dated" : "The agent could not accept the affidavit", tx());
+    if (report) reviewHardship(h, report);
     return t;
+  }
+
+  function reviewHardship(h: Hardship, report: AgentReport) {
+    const outcome = outcomeOf(report.verdict);
+    const ok = outcome !== "Reject";
+    h.agentVerdict = outcome === "Approve" ? "Approved" : ok ? "Referred" : "Rejected";
+    h.agentReport = report;
+    h.status = ok ? "Open" : "Rejected";
+    log("HardshipReviewed", ok ? "The agent checked the affidavit: commissioned, stamped and dated" : "The agent could not accept the affidavit", tx());
   }
 
   function approveHardship(address: Base58): TxResult {
@@ -1564,8 +1577,9 @@ export function createMockService(opts: MockOptions = {}): MockService {
       await wait(1900);
       const payee = s.snap.payees.find((p) => p.wallet === input.payee);
       const r = report("claim", input.evidence, { amountUsdt: input.amountUsdt, payee: payee?.name });
-      const { t, claim } = submitClaim(input, hash, r);
+      const { t, claim } = submitClaim(input, hash, unreviewed() ? null : r);
       save();
+      if (unreviewed()) fail("ReviewPending", "It was sent, but the agent's review didn't finish. Ask for the review again from the request, with the same file.");
       return { tx: t, claim: claim.address, report: r };
     },
     async submitHardship(_e, chosen) {
@@ -1573,9 +1587,38 @@ export function createMockService(opts: MockOptions = {}): MockService {
       const hash = await hashFile(input.evidence);
       await wait(1900);
       const r = report("hardship", input.evidence, {});
-      const t = submitHardship(input.asset, hash, r);
+      const t = submitHardship(input.asset, hash, unreviewed() ? null : r);
       save();
+      if (unreviewed()) fail("ReviewPending", "It was sent, but the agent's review didn't finish. Ask for the review again from the request, with the same file.");
       return { tx: t, report: r };
+    },
+
+    async requestReview(_e, { kind, subject, evidence }) {
+      const file = evidence ? await requireEvidence(evidence) : null;
+      const hash = file ? await hashFile(file) : null;
+      await wait(1600);
+      const item = kind === "claim" ? s.snap.claims.find((c) => c.address === subject) : s.snap.hardships.find((h) => h.address === subject);
+      if (!item) fail("BadStatus", "That request does not exist.");
+      need(item!.beneficiary === me(), "forbidden", "Only the person who sent this can ask for its review.");
+      need(item!.agentVerdict === "Pending", "already_reviewed", "The agent has already reviewed this.");
+      // A request sent without a letter: the app's own note is the document, so nothing is chosen.
+      const noLetter = kind === "claim" && s.asks?.[subject]?.attachment === false;
+      need(noLetter || hash === item!.evidenceHash, "hash_mismatch", "This isn't the file that was sent. Choose that same file.");
+      need(!unreviewed(), "agent_limit", "The agent can't review this just now. Try again later.");
+      const doc = file ?? new File(["request"], "request-note.pdf");
+      let r: AgentReport;
+      if (kind === "claim") {
+        const c = item as Claim;
+        r = noLetter
+          ? mockAskReport({ purpose: s.asks![subject].purpose, amountUsdt: fromBase(c.amount), zar: zar(fromBase(c.amount)), who: first(c.beneficiary), payee: name(c.payee), file: null, suspicious: false, hash: fakeHash() })
+          : report("claim", doc, { amountUsdt: fromBase(c.amount), payee: name(c.payee) });
+        reviewClaim(c, r);
+      } else {
+        r = report("hardship", doc, {});
+        reviewHardship(item as Hardship, r);
+      }
+      save();
+      return { tx: tx(), report: r };
     },
 
     attestDeath: () => mutate(900, attestDeath),

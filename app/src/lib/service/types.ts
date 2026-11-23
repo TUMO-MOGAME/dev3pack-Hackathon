@@ -92,6 +92,12 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   submitDeathClaim(estate: Base58, certificate: File): Promise<{ tx: TxResult; report: AgentReport }>;
   submitClaim(estate: Base58, input: { rule: Base58; payee: Base58; amountUsdt: number; evidence: File }): Promise<{ tx: TxResult; claim: Base58; report: AgentReport }>;
   submitHardship(estate: Base58, input: { asset: Base58; evidence: File }): Promise<{ tx: TxResult; report: AgentReport }>;
+  /**
+   * The person who submitted a claim or hardship request asks for the agent's review again, after it did not finish
+   * (H7). Only with the same file: its SHA-256 must be the one on-chain. A request sent without a letter needs none
+   * (the app writes the same request note again). Nothing new is submitted.
+   */
+  requestReview(estate: Base58, input: { kind: "claim" | "hardship"; subject: Base58; evidence?: File | null }): Promise<{ tx: TxResult | null; report: AgentReport }>;
 
   // Verifiers
   attestDeath(estate: Base58): Promise<TxResult>;

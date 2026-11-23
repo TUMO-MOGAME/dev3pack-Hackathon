@@ -232,6 +232,34 @@ describe("H13: changing an offer", () => {
   });
 });
 
+describe("H7: a review that didn't finish", () => {
+  it("submitClaim says the claim was sent and waits for its review", async () => {
+    h.me = kid;
+    const rule = rulePda(programId, estate, 0).toBase58();
+    h.accounts.set(rule, { id: 0, claim_count: 0 });
+    vi.stubGlobal("fetch", async (url: string) => new Response(JSON.stringify(String(url) === "/api/review" ? { error: "busy" } : {}), { status: String(url) === "/api/review" ? 503 : 200 }));
+    const file = new File(["%PDF-1.4 fees"], "f.pdf", { type: "application/pdf" });
+    await expect(createChainService().submitClaim(estate, { rule, payee: res, amountUsdt: 5, evidence: file })).rejects.toMatchObject({ code: "ReviewPending" });
+    expect(names()).toEqual(["submit_claim"]);
+  });
+
+  it("requestReview: only the sender, only while pending, only the same file; nothing is signed", async () => {
+    const claim = key();
+    const file = new File(["%PDF-1.4 fees"], "f.pdf", { type: "application/pdf" });
+    const hash = [...Buffer.from(await sha256Hex(new Uint8Array(await file.arrayBuffer())), "hex")];
+    h.accounts.set(claim, { beneficiary: kid, payee: res, amount: 5, agent_verdict: { Pending: {} }, evidence_hash: hash });
+    h.me = kid;
+    await expect(createChainService().requestReview(estate, { kind: "claim", subject: claim, evidence: new File(["%PDF-1.4 other"], "o.pdf", { type: "application/pdf" }) }))
+      .rejects.toMatchObject({ code: "hash_mismatch" });
+    h.me = res;
+    await expect(createChainService().requestReview(estate, { kind: "claim", subject: claim, evidence: file })).rejects.toMatchObject({ code: "forbidden" });
+    expect(h.posts).not.toContain("/api/review");
+    h.me = kid;
+    expect((await createChainService().requestReview(estate, { kind: "claim", subject: claim, evidence: file })).report).toEqual({ verdict: "approve" });
+    expect([h.signed.length, h.posts.filter((p) => p === "/api/review").length]).toEqual([0, 1]);
+  });
+});
+
 describe("approveHardship (R21)", () => {
   it("not while someone else's approved hardship stands", async () => {
     const [hardship, asset] = [key(), key()];

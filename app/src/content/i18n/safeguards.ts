@@ -40,6 +40,7 @@ export const safeguardsAf: SafeguardsCopy = {
     already_reviewed: "Die agent het dit reeds nagegaan.",
     recurring_payee: "'n Geskeduleerde betaling het geen goedgekeurde begunstigde nie, so niks is geteken nie. Teken die plan sonder daardie skedule, voeg die begunstigde onder Mense by, en voeg dan die geskeduleerde reël by met \"Voeg 'n rekening by\" onder Plan.",
     residual: "Hierdie persoon ontvang wat oorbly. Kies eers iemand anders daarvoor.",
+    ReviewPending: "Dit is gestuur, maar die agent se nagaan het nie klaargemaak nie. Vra weer vir die nagaan by die versoek, met dieselfde lêer.",
   },
 
   tally: {
@@ -87,6 +88,15 @@ export const safeguardsAf: SafeguardsCopy = {
     deathBody: "Die vorige verslag en sy bevestigings word uitgevee. Die agent lees eers jou sertifikaat.",
   },
 
+  review: {
+    title: "Die agent se nagaan het nie klaargemaak nie",
+    body: "Dit is gestuur, maar die agent het die dokument nog nie gelees nie. Vra weer vir die nagaan met dieselfde lêer wat jy gestuur het.",
+    bodyNote: "Dit is gestuur, maar die agent het dit nog nie gelees nie. Vra weer vir die nagaan: Heirloom skryf dieselfde versoeknota.",
+    file: "Die lêer wat jy gestuur het",
+    needFile: "Kies dieselfde lêer wat jy gestuur het.",
+    cta: "Vra weer vir die nagaan",
+    done: "Die agent het dit nagegaan",
+  },
   death: {
     pending: "Aangemeld deur {name}. Die agent het die sertifikaat nog nie nagegaan nie.",
     referred: "Aangemeld deur {name}. Die agent was onseker oor die sertifikaat, so mense besluit.",
@@ -306,6 +316,7 @@ export const safeguardsSt: SafeguardsCopy = {
     already_reviewed: "Agent e se e hlahlobile sena.",
     recurring_payee: "Tefo e hlophisitsweng ha e na ya dumelletsweng ho lefuwa, kahoo ha ho letho le saennweng. Saena moralo ntle le kemiso eo, kenya ya lefuwang tlasa Batho, ebe o kenya molao o hlophisitsweng ka \"Kenya koloto\" tlasa Moralo.",
     residual: "Motho enwa o amohela se setseng. Kgetha motho e mong bakeng sa seo pele.",
+    ReviewPending: "E rometswe, empa tlhahlobo ya agent ha e a phethwa. Kopa tlhahlobo hape ho kopo, ka faele yona eo.",
   },
 
   tally: {
@@ -353,6 +364,15 @@ export const safeguardsSt: SafeguardsCopy = {
     deathBody: "Tlaleho ya pele le dinetefatso tsa yona di a hlakolwa. Agent e bala setifikeiti sa hao pele.",
   },
 
+  review: {
+    title: "Tlhahlobo ya agent ha e a phethwa",
+    body: "E rometswe, empa agent ha e so bale tokomane. Kopa tlhahlobo hape ka faele yona eo o e rometseng.",
+    bodyNote: "E rometswe, empa agent ha e so e bale. Kopa tlhahlobo hape: Heirloom e ngola ntlha ya kopo yona eo.",
+    file: "Faele eo o e rometseng",
+    needFile: "Kgetha faele yona eo o e rometseng.",
+    cta: "Kopa tlhahlobo hape",
+    done: "Agent e e hlahlobile",
+  },
   death: {
     pending: "Le tlalehilwe ke {name}. Agent ha e so hlahlobe setifikeiti.",
     referred: "Le tlalehilwe ke {name}. Agent e ne e sa kgodisehe ka setifikeiti, kahoo batho ba etsa qeto.",
@@ -572,6 +592,7 @@ export const safeguardsZu: SafeguardsCopy = {
     already_reviewed: "I-agent seyikuhlolile lokhu.",
     recurring_payee: "Inkokhelo ehleliwe ayinaye ogunyaziwe ukukhokhelwa, ngakho akukho okusayiniwe. Sayina uhlelo ngaphandle kwalelo sheduli, faka okhokhelwayo ngaphansi kwaBantu, bese ufaka umthetho ohleliwe ngo-\"Engeza isikweletu\" ngaphansi koHlelo.",
     residual: "Lo muntu uthola okusele. Khethela lokho omunye umuntu kuqala.",
+    ReviewPending: "Kuthunyelwe, kodwa ukubuyekezwa kwe-agent akuphelanga. Cela ukubuyekezwa futhi esicelweni, ngefayela elifanayo.",
   },
 
   tally: {
@@ -619,6 +640,15 @@ export const safeguardsZu: SafeguardsCopy = {
     deathBody: "Umbiko wangaphambili neziqinisekiso zawo kuyasulwa. I-agent ifunda isitifiketi sakho kuqala.",
   },
 
+  review: {
+    title: "Ukubuyekezwa kwe-agent akuphelanga",
+    body: "Kuthunyelwe, kodwa i-agent ayikayifundi idokhumenti. Cela ukubuyekezwa futhi ngefayela elifanayo olithumele.",
+    bodyNote: "Kuthunyelwe, kodwa i-agent ayikakufundi. Cela ukubuyekezwa futhi: i-Heirloom ibhala inothi lesicelo elifanayo.",
+    file: "Ifayela olithumele",
+    needFile: "Khetha ifayela elifanayo olithumele.",
+    cta: "Cela ukubuyekezwa futhi",
+    done: "I-agent ikubuyekezile",
+  },
   death: {
     pending: "Kubikwe ngu-{name}. I-agent ayikasihloli isitifiketi.",
     referred: "Kubikwe ngu-{name}. I-agent ibingaqiniseki ngesitifiketi, ngakho abantu bayanquma.",
