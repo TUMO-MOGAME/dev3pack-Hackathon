@@ -476,7 +476,13 @@ clamped to 60 s..1 day. `R` = max(fallback wait, 60 s).
   held seat (at least two) before the unlock, two or the only one left after it. Also two (or the only one) before
   the unlock when a death claim is open, not disproved and still unreviewed, has stood for RT since it was made
   (an unreviewed claim can't be replaced, so this is this death's first claim), and the owner has shown no life
-  for RT. A new agent sets back what the old one reviewed: the death claim's verdict (with its attestations; the
+  for RT. **A lone voter who gains (N2).** When the voter's own vote would be the whole quorum (the only seat
+  held) and they gain (the open death claim is theirs, or they are an active beneficiary), it replaces the agent
+  only after 2 x RT: before the unlock, measured from the later of the owner's last sign of life and the claim
+  (still unreviewed); after it, from when their own open claim was made, while the agent has not approved it (no
+  such claim: never alone). Otherwise WaitingPeriodNotOver. No new storage: the voter's Beneficiary PDA is the first
+  remaining account (missing or wrong: counted as one who gains), the claim the second. A new agent sets back what
+  the old one reviewed: the death claim's verdict (with its attestations; the
   status is Active again and the claim's time restarts), seat reports (verdict Pending, confirmation cleared) and
   fallback reports (verdict Pending), emitting AgentReviewCleared. A candidate can't be a backup (BadAgent).
 - **What the agent may not be or do.** It can't be a trusted person (create_estate, owner_replace_seat) or a
@@ -554,7 +560,7 @@ Accounts in IDL order. w = writable, s = signer, o = optional (None = the progra
 | `execute_fallback` | same | as deployed with recipient_usdt (**now any token account of the mint the recipient owns, or their ATA created here**), then **fallback_report** `["fallbackreport", estate, [first living index, else 255]]`, **unlock_objection** `["objection", estate]` | as above |
 | `sweep_residual` | same | as deployed (recipient_usdt as in execute_fallback), then **fallback_report** (same seeds, 255 without a Guard); remaining: the rules | no reserve after the fallback; the report hold |
 | `set_agent` | same | owner(s), estate(w), **seat0..2(w)**, **fallback_report0..3(w)** | proof of life; candidate not a backup; reviews set back |
-| `vote_agent` | same | verifier(w,s), estate(w), agent_vote(w), system_program, **seat0..2(w)**, **fallback_report0..3(w)** | quorum as above; reviews set back |
+| `vote_agent` | same | verifier(w,s), estate(w), agent_vote(w), system_program, **seat0..2(w)**, **fallback_report0..3(w)**; remaining: the voter's Beneficiary PDA, then (after the unlock) their own open Claim | quorum as above; reviews set back; a lone voter who gains waits 2 x RT (N2) |
 | `lapse_objection` | same | same | also void challenges at once |
 
 ### Errors (appended)
@@ -596,9 +602,11 @@ write unless the deployed program is the one its IDL was built from.
 - A living trusted person who doesn't answer an approved report of their death for RT, nor veto it during the
   succession wait, is replaced on a beneficiary's confirmation (N3). That is the price of H3, which keeps an estate
   recoverable when every trusted person has died.
-- The only trusted person left, who is also the one who gains, can replace the agent alone (after the unlock, or
-  through the recovery route) and then decide alone through the route for a lone trusted person (N2, open:
-  refusing it would lock an estate whose only trusted person is the only heir and whose agent is lost).
+- The only trusted person left, who is also the one who gains, can still replace the agent alone and then decide
+  alone, but only after 2 x RT with the death claim unreviewed and no sign of life, or with their own claim
+  unapproved for 2 x RT after the unlock (N2). Refusing it outright would lock an estate whose only trusted person
+  is the only heir and whose agent is lost. A lone heir whose only request is a hardship has no clock (a Hardship
+  stores no time), so files a claim to start one.
 
 ### Client notes
 
