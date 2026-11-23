@@ -852,7 +852,15 @@ export function createChainService(): HeirloomService {
     },
 
     async placeOffer(estate, asset, amountUsdt, buyerName) {
-      const tx = await send([ix.placeOffer(chainCtx(), pk(estate), pk(asset), pk(getActiveSigner().address), toBase(amountUsdt))],
+      const me = pk(getActiveSigner().address);
+      const ctx = chainCtx();
+      // Changing an offer: place_offer creates the Offer account, so the old one is withdrawn first, in the same
+      // transaction (H13). Both or neither: the escrow never sits empty between them.
+      const existing = await getConnection().getAccountInfo(offerPda(ctx.programId, asset, me.toBase58()), "confirmed");
+      const tx = await send([
+        ...(existing ? [ix.withdrawOffer(ctx, pk(estate), pk(asset), me)] : []),
+        ix.placeOffer(ctx, pk(estate), pk(asset), me, toBase(amountUsdt)),
+      ],
         { kind: "offer", to: asset, toLabel: "Offer escrow", amount: toBase(amountUsdt).toString() });
       // The buyer's own name beside the offer and on the sale (off-chain; never replaces a name the owner gave).
       const name = buyerName?.trim().slice(0, 64);

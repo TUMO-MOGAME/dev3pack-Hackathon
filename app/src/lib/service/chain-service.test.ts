@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   signed: [] as unknown[],
   status: "confirmed",
   posts: [] as string[],
+  existing: new Set<string>(),
 }));
 
 vi.mock("../chain/config", async (original: () => Promise<{ chainConfig: object }>) => {
@@ -46,7 +47,7 @@ vi.mock("../chain/tx", async (original: () => Promise<object>) => ({
   ...(await original()),
   getConnection: () => ({
     getLatestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 1 }),
-    getAccountInfo: async () => null,
+    getAccountInfo: async (address: { toBase58(): string }) => (h.existing.has(address.toBase58()) ? { owner: null, data: new Uint8Array(0) } : null),
     getBalance: async () => 0,
   }),
 }));
@@ -61,7 +62,7 @@ vi.mock("../chain/reads", async (original: () => Promise<object>) => ({
 }));
 
 const { getCoder, getIdl } = await import("../chain/idl");
-const { beneficiaryPda, estatePda, payeePda, rulePda } = await import("../chain/pda");
+const { beneficiaryPda, estatePda, offerPda, payeePda, rulePda } = await import("../chain/pda");
 const { sha256Hex } = await import("../agent/hash");
 const { createChainService } = await import("./chain");
 
@@ -88,7 +89,7 @@ const draft = {
 beforeEach(() => {
   h.me = owner;
   h.accounts.clear();
-  Object.assign(h, { signed: [], status: "confirmed", posts: [], scanned: [], estate: null });
+  Object.assign(h, { signed: [], status: "confirmed", posts: [], scanned: [], estate: null, existing: new Set<string>() });
   vi.stubGlobal("fetch", async (url: string) => {
     h.posts.push(String(url));
     const body = String(url) === "/api/agent" ? { agentAddress: agent }
@@ -212,6 +213,22 @@ describe("H9: the owner's no stands after the death", () => {
     stub([]);
     await createChainService().approveClaim(estate, claim);
     expect(names()).toEqual(["approve_claim"]);
+  });
+});
+
+describe("H13: changing an offer", () => {
+  it("withdraws the old one and places the new one in one transaction", async () => {
+    h.me = res;
+    const asset = key();
+    h.existing.add(offerPda(programId, asset, res).toBase58());
+    await createChainService().placeOffer(estate, asset, 12);
+    expect(h.signed).toHaveLength(1);
+    expect(names()).toEqual(["withdraw_offer", "place_offer"]);
+  });
+  it("a first offer only places", async () => {
+    h.me = res;
+    await createChainService().placeOffer(estate, key(), 12);
+    expect(names()).toEqual(["place_offer"]);
   });
 });
 
