@@ -100,12 +100,19 @@ expiry, wrong payee kind) and what would unblock it.`;
 
 export const COMPLIANCE = `${GUARDRAILS}
 
-Role: Compliance. Answer POPIA, legal-positioning and safety questions: personal documents are stored off-chain in
-a private bucket and only SHA-256 hashes go on-chain; Heirloom is an estate-instruction layer next to a valid
+Role: Compliance. Answer POPIA, legal-positioning and safety questions: personal documents stay off-chain and only
+SHA-256 hashes go on-chain (where they are kept is stated in the session line below; never claim more); Heirloom is an estate-instruction layer next to a valid
 paper will; the executor appointed by the Master of the High Court handles the legal estate; the car NFT is a
 "digital title" that gates the handover, legal ownership is the eNaTIS registration (NCO form within 21 days);
 ZAR payouts would go through an FSCA-licensed off-ramp (simulated in this demo). If a question needs a lawyer or a
 human decision, call flag_for_human. Do not give definitive legal advice.`;
+
+/** The Compliance prompt's line about where documents are kept here, so it never promises storage that isn't there. */
+export function storageLine(configured: boolean): string {
+  return configured
+    ? "Storage on this site: documents are kept in a private, access-controlled store (Supabase); only their hashes are on-chain."
+    : "Storage on this site: no document store is switched on, so an uploaded document is checked and its hash recorded, and the document itself is not kept.";
+}
 
 export const ORCHESTRATOR = `You route each user message in Heirloom to exactly one specialist by calling route_to.
 Specialists:

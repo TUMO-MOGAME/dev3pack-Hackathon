@@ -19,7 +19,9 @@ import { base64ToBytes, getConnection } from "../chain/tx";
 import { programFailure } from "../chain/program-errors";
 import { chainBackstop } from "../agent/budget";
 import { takeShared } from "../server/shared-store";
-import { DEFAULT_LIMITS, SPONSOR_RENT_PAYER_ACCOUNTS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, validateSponsoredTx, type SponsorPolicy } from "./policy";
+import { assertProgram, programProblem } from "../server/program";
+import { RELEASE_WORDS } from "../chain/release";
+import { DEFAULT_LIMITS, SPONSOR_RENT_PAYER_ACCOUNTS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, validateSponsoredTx, type SponsorDecision, type SponsorPolicy } from "./policy";
 import { DEFAULT_SPONSOR_LIMITS, SponsorLimiter, sharedTakes, type SponsorLimits } from "./limits";
 
 const envInt = (name: string, dflt: number) => {
@@ -40,24 +42,35 @@ function sponsorLimits(): SponsorLimits {
   return { ...DEFAULT_SPONSOR_LIMITS, dailyBudgetLamports: envInt("SPONSOR_DAILY_BUDGET_LAMPORTS", DEFAULT_SPONSOR_LIMITS.dailyBudgetLamports) };
 }
 
+/** Each sponsored Heirloom instruction's signer accounts and estate account, by the IDL. */
+export function heirloomAccounts(): Record<string, { signers: number[]; estate: number }> {
+  return Object.fromEntries(getIdl().instructions.map((ix) => [ix.name, {
+    signers: ix.accounts.flatMap((a, i) => ("signer" in a && a.signer ? [i] : [])),
+    estate: ix.accounts.findIndex((a) => a.name === "estate"),
+  }]));
+}
+
 /**
  * One sponsored transaction from every allowance, or none: this instance's, then the shared ones, else (no shared
  * store) the backstop read from the chain, as for the agent's own signatures. Always await it.
  */
-async function spendSponsorAllowance(user: string, cost: number, rent: boolean, maxFeeLamports: number, now = Date.now()): Promise<void> {
+async function spendSponsorAllowance(who: string[], cost: number, rent: boolean, maxFeeLamports: number, ip?: string, now = Date.now()): Promise<void> {
   const lim = getLimiter();
-  const limited = lim.check(user, cost, rent, now);
+  const limited = lim.check(who, cost, rent, now, ip);
   if (limited) throw new SponsorLimited(limited);
-  lim.record(user, cost, rent, now); // before any await, so requests arriving together can't all pass
+  lim.record(who, cost, rent, now, ip); // before any await, so requests arriving together can't all pass
   try {
-    const taken = await takeShared(sharedTakes(user, rent, sponsorLimits(), maxFeeLamports));
+    const taken = await takeShared(sharedTakes(who, rent, sponsorLimits(), maxFeeLamports, ip));
     if (!taken) await chainBackstop(now);
     else if (!taken.ok) throw new SponsorLimited("The fee sponsor's limit for now is used up. Please try again later.");
   } catch (e) {
-    lim.refund(user, cost, rent, now);
+    lim.refund(who, cost, rent, now, ip);
     throw e;
   }
 }
+
+/** Who a sponsored transaction is charged to: every signer, and the estate of any permissionless instruction. */
+export const chargedTo = (d: Pick<SponsorDecision, "signers" | "cranks">): string[] => [...d.signers, ...d.cranks.map((e) => `estate:${e}`)];
 
 export async function sponsorPolicy(): Promise<SponsorPolicy> {
   const sponsor = await agentAddress();
@@ -76,6 +89,7 @@ export async function sponsorPolicy(): Promise<SponsorPolicy> {
     maxFeeLamports: envInt("SPONSOR_MAX_FEE_LAMPORTS", DEFAULT_LIMITS.maxFeeLamports),
     sponsorPaysRent: process.env.SPONSOR_PAYS_RENT !== "0",
     heirloomRentPayerSlots: rentPayerSlots(),
+    heirloomAccounts: heirloomAccounts(),
   };
 }
 
@@ -99,6 +113,8 @@ export async function sponsorInfo(conn: Connection = getConnection()): Promise<S
   const off = (reason: string, feePayer: string | null = null, balanceLamports: number | null = null) =>
     ({ available: false, feePayer, maxFeeLamports: 0, paysRent: false, reason, balanceLamports });
   if (!sponsorEnabled()) return off("Fee sponsorship is not configured.");
+  const problem = await programProblem();
+  if (problem) return off(`Not sponsoring: ${RELEASE_WORDS[problem]}.`);
   try {
     const policy = await sponsorPolicy();
     const bal = await conn.getBalance(policy.sponsor, "confirmed");
@@ -116,17 +132,18 @@ export interface SponsorResult { signature: string; wireBase64: string; feeLampo
  * costs the fee payer), then co-signs with the sponsor's WDK wallet. With `submit`, also broadcasts it.
  * The pay-once client uses submit=false: it stores the fully signed bytes first, then broadcasts them itself.
  */
-export async function sponsorTransaction(wireBase64: string, opts: { submit: boolean }, conn: Connection = getConnection()): Promise<SponsorResult> {
+export async function sponsorTransaction(wireBase64: string, opts: { submit: boolean; ip?: string }, conn: Connection = getConnection()): Promise<SponsorResult> {
   if (!sponsorEnabled()) throw new SponsorUnavailable("Fee sponsorship is not configured.");
+  await assertProgram();
   const policy = await sponsorPolicy();
   let wire: Uint8Array;
   try { wire = base64ToBytes(wireBase64); } catch { throw new SponsorRejection("malformed", "Transaction must be base64."); }
   const decision = validateSponsoredTx(wire, policy);
-  const user = decision.signers[0];
+  const who = chargedTo(decision);
   const cost = decision.feeLamports + decision.rentLamports;
 
   // Cheap, before any RPC call; the allowance itself is taken once the transaction is known to work.
-  const limited = getLimiter().check(user, cost, decision.rentLamports > 0);
+  const limited = getLimiter().check(who, cost, decision.rentLamports > 0, Date.now(), opts.ip);
   if (limited) throw new SponsorLimited(limited);
 
   const bal = await conn.getBalance(policy.sponsor, "confirmed");
@@ -141,7 +158,7 @@ export async function sponsorTransaction(wireBase64: string, opts: { submit: boo
     throw new SimulationFailed(msg);
   }
 
-  await spendSponsorAllowance(user, cost, decision.rentLamports > 0, policy.maxFeeLamports);
+  await spendSponsorAllowance(who, cost, decision.rentLamports > 0, policy.maxFeeLamports, opts.ip);
   const { wireBase64: full, signature } = await agentCoSign(wireBase64);
   let submitted = false;
   if (opts.submit) {

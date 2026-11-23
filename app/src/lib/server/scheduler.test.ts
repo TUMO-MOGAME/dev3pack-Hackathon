@@ -25,6 +25,8 @@ const h = vi.hoisted(() => ({
   ixs: [] as { keys: { pubkey: { toBase58(): string } }[] }[],
 }));
 
+// The version gate (plan §18.9 C1) has its own tests: lib/chain/release.test.ts.
+vi.mock("@/lib/server/program", () => ({ assertProgram: async () => undefined, programProblem: async () => null }));
 vi.mock("../chain/config", async (original: () => Promise<{ chainConfig: object }>) => {
   const m = await original();
   return { ...m, chainConfig: { ...m.chainConfig, usdtMint: h.mint } };
@@ -67,6 +69,7 @@ const { getCoder, getIdl } = await import("../chain/idl");
 const { TOKEN_PROGRAM_ID, ata, beneficiaryPda, payeePda, yearCapPda } = await import("../chain/pda");
 const { TICK, isDue, runDueSchedules, servedPayments } = await import("./scheduler");
 const { fairOrder, scheduleOrder } = await import("./schedule-order");
+const { AGENT_RENT, forgetAgentRent } = await import("../agent/budget");
 
 h.ruleSlot = getIdl().instructions.find((i) => i.name === "execute_scheduled")!.accounts.findIndex((a) => a.name === "rule");
 const programId = new PublicKey(getIdl().address);
@@ -147,6 +150,7 @@ const tick = (seed = 1) => runDueSchedules(NOW, { random: seeded(seed), clock: (
 const paidIn = (results: { rule: string; ok: boolean }[]) => results.filter((r) => r.ok).map((r) => r.rule);
 
 beforeEach(() => {
+  forgetAgentRent();
   h.agent = key().toBase58();
   h.accounts.clear(); h.failing.clear(); h.hanging.clear();
   h.sent = []; h.ixs = []; h.reads = []; h.clock = 0; h.sendMs = 0; h.readFails = 0;
@@ -328,6 +332,30 @@ describe("what can't pay is passed over without a transaction (S1)", () => {
     const due = (estate: string) => ({ estate, rule: { recurringAmount: ONE } });
     const estates = new Map([["a", { agent: "A", usdtMint: "M" }], ["b", { agent: "other", usdtMint: "M" }]]);
     expect(servedPayments([due("a"), due("b"), due("c")], estates, "A", "M")).toEqual([due("a")]);
+  });
+});
+
+describe("rent for payees' accounts is bounded and counted (M7)", () => {
+  it("a payee who closes their account after each payment gets its rent back a few times a day, never more", async () => {
+    const estate = await addEstate({ vault: 10_000n * ONE });
+    let paid = 0;
+    for (let day = 0; day < 1; day++) {
+      for (let i = 0; i < 6; i++) {
+        await addRule(estate); // a payee with no USD₮ account each time
+        paid += paidIn(await tick(i + 1)).length;
+      }
+    }
+    expect(paid).toBe(AGENT_RENT.schedulePerEstate);
+  });
+
+  it("across estates the day's rent stops at its cap, and payees who have an account are still paid", async () => {
+    for (let e = 0; e < AGENT_RENT.scheduleDay + 5; e++) await addRule(await addEstate());
+    const held = await addRule(await addEstate());
+    token(held.payee, 0n);
+    let paid: string[] = [];
+    for (let t = 0; t < 8; t++) paid = [...paid, ...paidIn(await tick(t + 1))];
+    expect(paid).toContain(held.address);
+    expect(paid.filter((r) => r !== held.address)).toHaveLength(AGENT_RENT.scheduleDay);
   });
 });
 

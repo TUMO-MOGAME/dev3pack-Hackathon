@@ -169,7 +169,7 @@ describe("sponsor policy: rejected", () => {
 
 describe("sponsor limiter", () => {
   it("limits per wallet per minute and per day, rent creations, and the daily budget", () => {
-    const l = new SponsorLimiter({ perMinute: 2, perDay: 3, rentPerDay: 1, dailyBudgetLamports: 3_000_000 });
+    const l = new SponsorLimiter({ perMinute: 2, perDay: 3, rentPerDay: 1, dailyBudgetLamports: 3_000_000, ipFeesPerDay: 10, ipRentPerDay: 10 });
     const t = 1_000_000;
     expect(l.check("a", 10_000, false, t)).toBeNull();
     l.record("a", 10_000, false, t);
@@ -340,6 +340,13 @@ describe("second security review (22 Nov 2026)", () => {
     const stamp = built.approve_claim();
     stamp.keys[payerSlot] = { ...stamp.keys[payerSlot], pubkey: sponsor.publicKey };
     rejects(wire([stamp, createAta(), transfer()]), "rent_not_allowed", withSlot);
+  });
+});
+
+describe("instruction names the IDL may change (plan §18.10 C1)", () => {
+  it("whatever add_rule is called in the IDL is built and sponsored", () => {
+    expect(names).toContain(ix.addRuleIx());
+    expect(Object.keys(policy().heirloomDiscriminators)).toContain(ix.addRuleIx());
   });
 });
 

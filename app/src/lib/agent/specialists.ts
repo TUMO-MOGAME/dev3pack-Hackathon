@@ -11,7 +11,7 @@ import type { SpecialistName } from "../voice/types";
 import type { WillChatMessage, WillDraft } from "../types";
 import type { Locale } from "../i18n/locales";
 import { generate, geminiVoiceModel, hasGemini, jsonSchemaOf } from "./gemini";
-import { CAR_BROKER, CLAIMS_GUIDE, COMPLIANCE, DOCUMENT_REVIEWER, ESTATE_GUIDE, replyLanguage } from "./prompts";
+import { CAR_BROKER, CLAIMS_GUIDE, COMPLIANCE, DOCUMENT_REVIEWER, ESTATE_GUIDE, replyLanguage, storageLine } from "./prompts";
 import { uiActionSchema, type UiAction } from "./actions";
 import { checkClaim, type EstateFacts } from "./facts";
 import { rankOffers } from "./offers";
@@ -33,6 +33,9 @@ export interface SpecialistResult {
   draft?: WillDraft | null;
   needsHuman?: string[];
 }
+
+/** Whether documents are kept here (lib/storage keeps them only in Supabase). */
+const documentStore = () => Boolean((process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL) && process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 interface Tool<A extends z.ZodType> {
   name: string;
@@ -141,7 +144,7 @@ export async function runSpecialist(name: Exclude<SpecialistName, "Orchestrator"
   }
   if (!hasGemini()) return cannedSpecialist(name, input);
 
-  const spec = SPECS[name];
+  const spec = name === "Compliance" ? { ...SPECS[name], system: `${COMPLIANCE}\n${storageLine(documentStore())}` } : SPECS[name];
   const st: RunState = { facts: input.facts, actions: [], needsHuman: [] };
   const decls: FunctionDeclaration[] = spec.tools.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: jsonSchemaOf(t.params) }));
   const contents: Content[] = toContents(input.history);
@@ -190,7 +193,7 @@ function cannedSpecialist(name: Exclude<SpecialistName, "Orchestrator" | "WillWr
       : "Open your estate to see your rules and caps.",
     CarBroker: f?.asset ? `The car's floor price is ${f.asset.floorUsdt} USD₮; offers below it are blocked by the contract.` : "No car is registered yet.",
     EstateGuide: f ? `The estate is ${f.estate.status}. The vault holds ${f.estate.vaultUsdt.toFixed(2)} USD₮.` : "Open your estate to see its status.",
-    Compliance: "Your documents stay off-chain in a private store; only their SHA-256 fingerprints go on-chain. Heirloom works next to a signed paper will, it does not replace it.",
+    Compliance: `${documentStore() ? "Your documents stay off-chain in a private store" : "On this site documents are checked and not kept"}; only their SHA-256 fingerprints go on-chain. Heirloom works next to a signed paper will, it does not replace it.`,
   };
   const actions: UiAction[] = name === "DocumentReviewer" ? [{ type: "startUpload", purpose: "claim" }] : [];
   return { specialist: name, reply: CANNED_PREFIX + text[name], actions };

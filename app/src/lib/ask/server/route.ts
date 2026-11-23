@@ -69,6 +69,13 @@ export function askRoutes(deps: AskRouteDeps = defaults) {
     if (b.action === "note") {
       if (key(claim, "beneficiary") !== b.wallet) throw new HttpError(403, "Only the person who asked can describe the request.", "forbidden");
       if (!purpose) throw new HttpError(400, "Say what the money is for.");
+      // Once someone decided on the request, what it is for can't be rewritten under them.
+      const status = enumOf(claim, "status", ["Open", "Paid", "Rejected"] as const);
+      const approvals = "approvals" in claim ? num(claim, "approvals") : 0;
+      const held = await getAsk(b.claim);
+      if (status === "Paid" || bool(claim, "owner_approved") || approvals !== 0 || (held?.purpose && (held.declinedAt !== null || status !== "Open"))) {
+        throw new HttpError(409, "This request is already decided, so what it is for can't be changed.", "decided");
+      }
       await saveAsk({ estate: b.estate, claim: b.claim, purpose, currency: b.currency, typed: b.typed, attachment: b.attachment, createdAt, declinedAt: null });
       return json({ ok: true });
     }

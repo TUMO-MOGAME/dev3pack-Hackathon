@@ -24,6 +24,10 @@
  *    the `payer` of approve_claim (rent for the claim's small ApprovalStamp, once per tx, only when `sponsorPaysRent`):
  *    so it is never a source, authority, owner, or account any program can debit beyond that rent.
  *  - Estimated fee (5000 lamports × signatures + priority fee) ≤ maxFeeLamports.
+ *  - Every signer is one the transaction needs (plan §18.9 H3): a token transfer's authority, a Heirloom instruction's
+ *    signer by the IDL (`heirloomAccounts`), or a user-paid ATA's payer when it is one of those. A throwaway extra
+ *    signer is refused, so limits keyed on the signers are keyed on the real actors. A permissionless instruction (any
+ *    caller) also names its estate in `cranks`, so the server can limit cranking one estate however many callers.
  */
 import { ComputeBudgetProgram, PublicKey, Transaction, type TransactionInstruction } from "@solana/web3.js";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
@@ -38,7 +42,7 @@ export const SPONSOR_RENT_PAYER_ACCOUNTS: Record<string, string> = { approve_cla
 
 /** User-initiated Heirloom instructions the sponsor will pay fees for. Agent-only ones (review_*, list_asset, accept_offer) are excluded. */
 export const SPONSORED_HEIRLOOM_IXS = [
-  "create_estate", "set_will", "add_beneficiary", "add_payee", "add_rule", "deposit", "withdraw", "heartbeat", "veto_death",
+  "create_estate", "set_will", "add_beneficiary", "add_payee", "add_rule", "add_rule_v2", "deposit", "withdraw", "heartbeat", "veto_death",
   "register_asset", "owner_approve_claim", "submit_death_claim", "submit_claim", "submit_hardship", "attest_death",
   "approve_claim", "approve_hardship", "finalize_unlock", "execute_claim", "execute_scheduled", "place_offer", "withdraw_offer",
   // Guardians (docs/guardians-spec.md §2.2). The agent's review_seat_death / review_fallback_death are not sponsored.
@@ -69,7 +73,18 @@ export interface SponsorPolicy {
   maxAtaCreates: number;
   /** ix name → account index where the sponsor may appear as rent payer (from SPONSOR_RENT_PAYER_ACCOUNTS + the IDL). */
   heirloomRentPayerSlots?: Record<string, number>;
+  /**
+   * ix name → the IDL's signer account indexes, and the estate account's index. Without it (unit tests) a Heirloom
+   * instruction's signer flags stand in for the IDL's.
+   */
+  heirloomAccounts?: Record<string, { signers: number[]; estate: number }>;
 }
+
+/** Heirloom instructions any wallet may sign as the caller: the estate is the actor that matters. */
+export const PERMISSIONLESS_IXS: readonly string[] = [
+  "finalize_unlock", "finalize_succession", "start_fallback", "lapse_objection",
+  "execute_claim", "execute_scheduled", "execute_fallback", "sweep_residual",
+];
 
 export const DEFAULT_LIMITS = {
   maxFeeLamports: 20_000,
@@ -82,7 +97,7 @@ export const DEFAULT_LIMITS = {
 export type RejectCode =
   | "malformed" | "too_large" | "versioned" | "wrong_fee_payer" | "sponsor_signed" | "missing_signature" | "bad_signature"
   | "too_many_signers" | "unknown_program" | "sponsor_in_instruction" | "bad_compute_budget" | "bad_token_ix" | "wrong_mint"
-  | "bad_ata_ix" | "rent_not_allowed" | "bad_heirloom_ix" | "fee_too_high" | "empty";
+  | "bad_ata_ix" | "rent_not_allowed" | "bad_heirloom_ix" | "fee_too_high" | "empty" | "unneeded_signer";
 
 export class SponsorRejection extends Error {
   constructor(public code: RejectCode, message: string) { super(message); this.name = "SponsorRejection"; }
@@ -90,8 +105,10 @@ export class SponsorRejection extends Error {
 
 export interface SponsorDecision {
   tx: Transaction;
-  /** Signers other than the sponsor (for rate limiting); the first is the "user". */
+  /** Signers other than the sponsor: every one is an actor the transaction needs, and every one is charged. */
   signers: string[];
+  /** Estates of the permissionless instructions in it (finalize, execute, sweep...), for a limit per estate. */
+  cranks: string[];
   feeLamports: number;
   /** Lamports the sponsor will spend on rent for new token accounts. */
   rentLamports: number;
@@ -154,6 +171,10 @@ export function validateSponsoredTx(wire: Uint8Array, p: SponsorPolicy): Sponsor
 
   const allowedDiscs = Object.entries(p.heirloomDiscriminators);
   const transfersInto = new Set<string>();
+  /** Signers some instruction needs; and user-paid ATA payers, which must be among them. */
+  const needed = new Set<string>();
+  const ataPayers: string[] = [];
+  const cranks = new Set<string>();
   const ataCreates: { ata: PublicKey; sponsorPays: boolean }[] = [];
   let stampRents = 0;
   let cuLimit: number | null = null;
@@ -194,6 +215,7 @@ export function validateSponsoredTx(wire: Uint8Array, p: SponsorPolicy): Sponsor
       if (!authority.isSigner || !signers.includes(authority.pubkey.toBase58())) reject("bad_token_ix", "The token owner must sign the transfer.");
       if (source.pubkey.equals(dest.pubkey)) reject("bad_token_ix", "Source and destination are the same.");
       transfersInto.add(dest.pubkey.toBase58());
+      needed.add(authority.pubkey.toBase58());
       summary.push(`USD₮ transfer ${amount} → ${dest.pubkey.toBase58()}`);
       continue;
     }
@@ -212,6 +234,7 @@ export function validateSponsoredTx(wire: Uint8Array, p: SponsorPolicy): Sponsor
       const sponsorPays = payer.pubkey.equals(p.sponsor);
       if (!sponsorPays && !signers.includes(payer.pubkey.toBase58())) reject("bad_ata_ix", "The rent payer must sign.");
       ataCreates.push({ ata: ataKey.pubkey, sponsorPays });
+      if (!sponsorPays) ataPayers.push(payer.pubkey.toBase58());
       if (ataCreates.length > p.maxAtaCreates) reject("bad_ata_ix", "Too many token accounts created in one transaction.");
       summary.push(`create USD₮ account for ${owner.pubkey.toBase58()}${sponsorPays ? " (rent sponsored)" : ""}`);
       continue;
@@ -223,6 +246,13 @@ export function validateSponsoredTx(wire: Uint8Array, p: SponsorPolicy): Sponsor
       if (!hit) reject("bad_heirloom_ix", "This Heirloom instruction is not eligible for sponsored fees.");
       const slot = p.heirloomRentPayerSlots?.[hit![0]];
       if (sponsorIn(ix, slot)) reject("sponsor_in_instruction", "The sponsor cannot be an account of a Heirloom instruction.");
+      const shape = p.heirloomAccounts?.[hit![0]];
+      const signerSlots = shape ? shape.signers : ix.keys.flatMap((k, i) => (k.isSigner ? [i] : []));
+      for (const i of signerSlots) if (ix.keys[i] && i !== slot) needed.add(ix.keys[i].pubkey.toBase58());
+      if (PERMISSIONLESS_IXS.includes(hit![0])) {
+        const estate = ix.keys[shape?.estate ?? 0];
+        if (estate) cranks.add(estate.pubkey.toBase58());
+      }
       if (slot !== undefined && ix.keys[slot]?.pubkey.equals(p.sponsor)) {
         if (!p.sponsorPaysRent) reject("rent_not_allowed", "The sponsor does not pay rent.");
         if (++stampRents > 1) reject("rent_not_allowed", "Only one sponsored approval per transaction.");
@@ -234,6 +264,13 @@ export function validateSponsoredTx(wire: Uint8Array, p: SponsorPolicy): Sponsor
     }
 
     reject("unknown_program", `Program ${ix.programId.toBase58()} is not eligible for sponsored fees.`);
+  }
+
+  for (const payer of ataPayers) {
+    if (!needed.has(payer)) reject("unneeded_signer", "A new token account's rent payer must be someone the transaction needs.");
+  }
+  for (const s of signers) {
+    if (!needed.has(s)) reject("unneeded_signer", `${s} signs, but nothing in the transaction needs that signature.`);
   }
 
   if (stampRents + ataCreates.filter((c) => c.sponsorPays).length > 1) reject("rent_not_allowed", "The sponsor pays rent for one new account per transaction.");
@@ -251,5 +288,5 @@ export function validateSponsoredTx(wire: Uint8Array, p: SponsorPolicy): Sponsor
   const feeLamports = LAMPORTS_PER_SIGNATURE * tx.signatures.length + priority;
   if (feeLamports > p.maxFeeLamports) reject("fee_too_high", `Fee ${feeLamports} lamports is above the sponsor cap (${p.maxFeeLamports}).`);
 
-  return { tx, signers, feeLamports, rentLamports, summary };
+  return { tx, signers, cranks: [...cranks], feeLamports, rentLamports, summary };
 }

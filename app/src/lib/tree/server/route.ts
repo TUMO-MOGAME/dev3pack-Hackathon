@@ -5,6 +5,7 @@ import "server-only";
  * GET is for members only, with a read pass (lib/access).
  * POST needs a fresh, single-use ed25519 signature (lib/tree/links.ts treeMessage) from the acting wallet:
  *  - relate / unrelate: the wallet must own the estate (read from the chain);
+ *  - every write: the signer is a member of the estate's family (lib/access isMember);
  *  - hide: the signer hides or shows only themselves (the flag is stored for the signing wallet).
  * The demo (mock mode) keeps the tree in the browser, so writes are refused there.
  */
@@ -17,7 +18,7 @@ import { key, type Raw } from "@/lib/chain/decoders";
 import { PERSON_ID, RELATIONSHIP_KINDS, relationshipId, TREE_MAX_SKEW_MS, treeBody, treeMessage } from "../links";
 import type { RelationshipKind } from "../types";
 import { getLinks, putLink, removeLink, setHiddenFlag } from "./store";
-import { requireMember, type MemberCheck } from "@/lib/access/server";
+import { isMember, requireMember, type MemberCheck } from "@/lib/access/server";
 import { createNonces } from "@/lib/access/nonces";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
@@ -33,7 +34,9 @@ export type TreePost = z.infer<typeof body>;
 
 export interface TreeRouteDeps {
   member?: MemberCheck;
-  fetchRaw(type: "Estate", address: string): Promise<Raw | null>;
+  fetchRaw(type: string, address: string): Promise<Raw | null>;
+  /** Whether `wallet` belongs to the estate's family (lib/access isMember); by default read with `fetchRaw`. */
+  memberOf?(estate: string, wallet: string): Promise<boolean>;
   now(): number;
   chain(): boolean;
 }
@@ -63,6 +66,9 @@ export function treeRoutes(deps: TreeRouteDeps = defaults) {
 
     const estate = await deps.fetchRaw("Estate", b.estate);
     if (!estate) throw new HttpError(404, "Estate not found on-chain.");
+    // Strangers write nothing here: not a hidden flag, not a photo (plan §18.9 H5).
+    const member = deps.memberOf ?? ((e: string, w: string) => isMember(e, w, (t, a) => deps.fetchRaw(t, a)));
+    if (!(await member(b.estate, b.wallet))) throw new HttpError(403, "Only this family can change its tree.", "members_only");
     const at = Math.floor(now / 1000);
 
     if (b.action === "hide") {

@@ -134,6 +134,12 @@ export function addPayee(ctx: Ctx, owner: PublicKey, wallet: PublicKey, k: Payee
 }
 
 /**
+ * add_rule's name in the bundled IDL. The program renames it add_rule_v2 (plan §18.10 C1), so a client built for the
+ * old argument list fails on the new program instead of shifting every value; whichever the IDL has is the one built.
+ */
+export const addRuleIx = (): string => (getIdl().instructions.some((i) => i.name === "add_rule_v2") ? "add_rule_v2" : "add_rule");
+
+/**
  * 5. `ruleId`: the estate's current rule_count for a new slot, or the id of an ended rule whose slot is reused (its
  * yearly cap then closes to the owner).
  * Living plans: `startsNow` lets the rule pay while the owner is alive; `recurring` makes it a scheduled payment
@@ -150,7 +156,7 @@ export function addRule(ctx: Ctx, owner: PublicKey, p: {
     !!p.startsNow, u64(p.recurring?.amount ?? 0n), i64(p.recurring?.intervalSecs ?? 0), i64(p.recurring?.firstDue ?? 0),
   ];
   const rule = rulePda(ctx.programId, estate, p.ruleId);
-  return buildIx("add_rule", args, {
+  return buildIx(addRuleIx(), args, {
     owner, estate, rule, year_cap: yearCapPda(ctx.programId, rule),
     beneficiary: beneficiaryPda(ctx.programId, estate, p.beneficiaryWallet),
     ...(p.recurring ? { payee: payeePda(ctx.programId, estate, p.recurring.payeeWallet) } : {}),

@@ -39,7 +39,12 @@ export interface CallOptions {
   thinking?: "low" | "medium" | "high";
   /** Model id for this call; defaults to geminiModel(). */
   model?: string;
+  /** Epoch ms after which no attempt or retry starts, and by which a running one is cut off (the route's time limit). */
+  deadline?: number;
 }
+
+/** Less than this left before the deadline: don't start another attempt. */
+const MIN_ATTEMPT_MS = 2_000;
 
 const LEVEL = { low: ThinkingLevel.LOW, medium: ThinkingLevel.MEDIUM, high: ThinkingLevel.HIGH };
 
@@ -49,9 +54,11 @@ function transient(e: unknown): boolean {
 }
 
 export async function generate(opts: CallOptions): Promise<GenerateContentResponse> {
-  const timeoutMs = opts.timeoutMs ?? 30_000;
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
+    const left = opts.deadline === undefined ? Infinity : opts.deadline - Date.now();
+    if (left < MIN_ATTEMPT_MS) { lastErr ??= new Error("timeout"); break; }
+    const timeoutMs = Math.min(opts.timeoutMs ?? 30_000, left);
     try {
       return await client().models.generateContent({
         model: opts.model ?? geminiModel(),
@@ -66,7 +73,10 @@ export async function generate(opts: CallOptions): Promise<GenerateContentRespon
     } catch (e) {
       lastErr = e;
       if (e instanceof AgentError) throw e;
-      if (attempt === 0 && transient(e)) { await new Promise((r) => setTimeout(r, 600)); continue; }
+      if (attempt === 0 && transient(e) && (opts.deadline === undefined || opts.deadline - Date.now() > 600 + MIN_ATTEMPT_MS)) {
+        await new Promise((r) => setTimeout(r, 600));
+        continue;
+      }
       break;
     }
   }
@@ -99,6 +109,7 @@ export async function generateJson<T>(schema: z.ZodType<T>, opts: CallOptions): 
   const config = { ...opts.config, responseMimeType: "application/json", responseJsonSchema: jsonSchemaOf(schema) };
   let contents = opts.contents;
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0 && opts.deadline !== undefined && opts.deadline - Date.now() < MIN_ATTEMPT_MS) break;
     const res = await generate({ ...opts, contents, config });
     const text = res.text ?? "";
     const parsed = safeParseJson(text);

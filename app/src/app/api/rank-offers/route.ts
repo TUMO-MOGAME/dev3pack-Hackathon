@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
+import { dailyCap, handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
 import { rankOffersBody } from "@/lib/agent/schemas";
 import { rankOffers, type RankAsset, type RankOffer, type SaleSigners } from "@/lib/agent/offers";
-import { explainRanking } from "@/lib/agent/explain";
+import { explainRanking, plainExplanation } from "@/lib/agent/explain";
 import { loadPublicSnapshot } from "@/lib/server/estate";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
@@ -38,6 +38,8 @@ export const POST = handler(async (req) => {
     explain = b.explain ?? true;
   }
   const ranking = rankOffers(asset, offers, signers);
-  const explanation = explain ? await explainRanking(asset, ranking) : null;
+  // The ranking never waits on the AI: past the day's free use it comes with the plain explanation.
+  const aiAllowed = explain && (await dailyCap(req, "model").then(() => true, () => false));
+  const explanation = explain ? (aiAllowed ? await explainRanking(asset, ranking) : plainExplanation(asset, ranking)) : null;
   return json({ ...ranking, explanation });
 });

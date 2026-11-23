@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   sendFails: false,
 }));
 
+// The version gate (plan §18.9 C1) has its own tests: lib/chain/release.test.ts.
+vi.mock("@/lib/server/program", () => ({ assertProgram: async () => undefined, programProblem: async () => null }));
 vi.mock("../chain/config", async (original: () => Promise<{ chainConfig: object }>) => {
   const m = await original();
   return { ...m, chainConfig: { ...m.chainConfig, dataMode: "chain", cluster: "devnet", usdtMint: h.mint } };
@@ -64,7 +66,7 @@ vi.mock("../chain/tx", async (original: () => Promise<object>) => {
           h.accounts.set(toPubkey.toBase58(), { lamports: (was?.lamports ?? 0) + Number(lamports), data: Buffer.alloc(0) });
         } else if (program.startsWith("AToken")) {
           const at = ix.keys[1].pubkey.toBase58();
-          if (h.accounts.has(at)) throw new Error("account already exists");
+          if (h.accounts.get(at)?.data.length) throw new Error("account already exists"); // lamports alone are no account
           h.accounts.set(at, { lamports: 1_488_440, data: Buffer.alloc(165) });
         } else if (program.startsWith("Memo")) {
           memo = `[${ix.data.length}] ${ix.data.toString("utf8")}`;
@@ -172,6 +174,21 @@ describe("the grant", () => {
     expect(tx.instructions[4].data.toString("utf8")).toMatch(/^heirloom-starter:\d+:\d+:[0-9a-f]{16}:[0-9a-f]{32}$/);
   });
 
+  it("a wallet that already holds USD₮ but was never granted is told so, not that it had its test money", async () => {
+    const wallet = person();
+    const { ata } = await import("../chain/pda");
+    h.accounts.set(ata(h.mint, wallet).toBase58(), { lamports: 2_039_280, data: Buffer.alloc(165) });
+    expect(await ask(wallet)).toBe("has_usdt_account");
+    expect(h.sent).toHaveLength(0);
+  });
+
+  it("lamports sent to a wallet's token-account address don't block its grant", async () => {
+    const wallet = person();
+    const { ata } = await import("../chain/pda");
+    h.accounts.set(ata(h.mint, wallet).toBase58(), { lamports: 1_000, data: Buffer.alloc(0) });
+    expect(await ask(wallet)).toBe("granted");
+  });
+
   it("is once per wallet", async () => {
     const wallet = person();
     expect(await ask(wallet)).toBe("granted");
@@ -253,7 +270,7 @@ describe("POST /api/starter", () => {
     return { address, signMessage: async (m: string) => edSign(null, Buffer.from(m, "utf8"), privateKey).toString("hex") };
   }
 
-  async function post(opts: { proof?: "none" | "other-wallet" | "old" } = {}) {
+  async function post(opts: { proof?: "none" | "other-wallet" | "old"; ip?: string } = {}) {
     const who = signer();
     const { actionHeaders } = await import("../access/client");
     const { actionBody } = await import("../access/messages");
@@ -267,7 +284,7 @@ describe("POST /api/starter", () => {
     return POST(new Request("http://t/api/starter", {
       method: "POST",
       headers: {
-        "x-forwarded-for": `198.51.100.${++visitor}`, // each from its own network
+        "x-forwarded-for": opts.ip ?? `198.51.100.${++visitor}`, // each from its own network unless told
         ...(await actionHeaders(who, "starter", who.address, actionBody.starter(), h.now)),
       },
       body: JSON.stringify({ wallet: who.address, proof }),
@@ -284,6 +301,41 @@ describe("POST /api/starter", () => {
   it("grants with one", async () => {
     expect((await post()).status).toBe(200);
     expect(h.sent).toHaveLength(1);
+  });
+
+  it("one address takes 4 an hour, and another address is still served (H2)", async () => {
+    const codes: (string | number)[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await post({ ip: "203.0.113.7" });
+      codes.push(res.status === 200 ? 200 : ((await res.json()) as { code: string }).code);
+    }
+    expect(codes).toEqual([200, 200, 200, 200, "rate_limited", "rate_limited"]);
+    expect((await post({ ip: "203.0.113.8" })).status).toBe(200);
+  });
+
+  it("and 8 a day, however the hours fall", async () => {
+    let granted = 0;
+    for (let hour = 0; hour < 4; hour++) {
+      for (let i = 0; i < 4; i++) if ((await post({ ip: "203.0.113.9" })).status === 200) granted++;
+      later(ONE_HOUR + 1_000);
+    }
+    expect(granted).toBe(server.STARTER.perIpDay);
+  });
+
+  it("a room of ten, each on their own phone, is served across the hour", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      statuses.push((await post({ ip: `192.0.2.${i + 1}` })).status);
+      later(6 * 60_000);
+    }
+    expect(statuses).toEqual(Array(10).fill(200));
+  });
+
+  it("an address that took its four leaves the hour to everyone else", async () => {
+    for (let i = 0; i < 6; i++) await post({ ip: "203.0.113.10" });
+    const others: number[] = [];
+    for (let i = 0; i < server.STARTER.perHour - server.STARTER.perIpHour; i++) others.push((await post()).status);
+    expect(others).toEqual(Array(server.STARTER.perHour - server.STARTER.perIpHour).fill(200));
   });
 
   it("the client's refusal keeps the code and the time", async () => {

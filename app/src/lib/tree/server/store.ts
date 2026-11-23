@@ -8,6 +8,7 @@ import "server-only";
  * per person, at most 60 KB; removing one deletes the row.
  */
 import { getSupabase } from "@/lib/supabase";
+import { HttpError } from "@/lib/api/http";
 import type { Base58 } from "@/lib/types";
 import type { Relationship, RelationshipKind } from "../types";
 import { defaultRelationships, type FamilyLinks } from "../links";
@@ -21,8 +22,16 @@ const mem = {
   photos: new Map<string, Map<string, StoredPhoto>>(),
 };
 /** Photos kept per estate (a family is far smaller; this bounds memory and the GET). */
-const MAX_PHOTOS = 200;
-const MAX_PER_ESTATE = 500;
+export const MAX_PHOTOS = 200;
+export const MAX_PER_ESTATE = 500;
+/**
+ * The most photo data one GET returns, in characters: Vercel refuses a function response over 4.5 MB, and 200 photos
+ * of 84,000 characters would be 16.8 MB. A write that would pass it is refused, so the GET never has to drop one.
+ */
+export const MAX_PHOTO_CHARS = 4_000_000;
+
+/** Full: a new entry is refused. Nothing a family stored is ever pushed out to make room (plan §18.9 H5). */
+const full = (what: string) => new HttpError(409, `This family's ${what} are full. Remove one first.`, "full");
 
 function warn(what: string, err: { message: string } | null) {
   if (err) console.warn(`[family_links] ${what} failed: ${err.message}`);
@@ -64,11 +73,13 @@ async function write(row: Row): Promise<void> {
   const sb = getSupabase();
   if (!sb) {
     const m = mem.links.get(row.estate) ?? new Map<string, Row>();
+    if (!m.has(row.id) && m.size >= MAX_PER_ESTATE) throw full("relationships");
     m.set(row.id, row);
-    if (m.size > MAX_PER_ESTATE) m.delete(m.keys().next().value!);
     mem.links.set(row.estate, m);
     return;
   }
+  const { data: held } = await sb.from("family_links").select("id").eq("estate", row.estate).limit(MAX_PER_ESTATE);
+  if ((held?.length ?? 0) >= MAX_PER_ESTATE && !held!.some((r) => r.id === row.id)) throw full("relationships");
   const { error } = await sb.from("family_links").upsert(row, { onConflict: "estate,id" });
   warn("write", error);
   if (error) throw new Error("The relationship could not be saved. Please try again.");
@@ -78,6 +89,7 @@ export async function setHiddenFlag(estate: Base58, wallet: Base58, hidden: bool
   const sb = getSupabase();
   if (!sb) {
     const m = mem.hidden.get(estate) ?? new Map<Base58, boolean>();
+    if (!m.has(wallet) && m.size >= MAX_PER_ESTATE) throw full("choices to hide");
     m.set(wallet, hidden);
     mem.hidden.set(estate, m);
     return;
@@ -91,21 +103,36 @@ export async function setHiddenFlag(estate: Base58, wallet: Base58, hidden: bool
 
 interface PhotoRow { estate: string; person: string; data: string; created_by: string; created_at: number }
 
-export async function getPhotos(estate: Base58): Promise<FamilyPhotos> {
+async function storedPhotos(estate: Base58): Promise<Map<string, StoredPhoto>> {
   const sb = getSupabase();
-  if (!sb) return { photos: Object.fromEntries(mem.photos.get(estate) ?? new Map()) };
-  const { data, error } = await sb.from("family_photos").select("person, data, created_by, created_at").eq("estate", estate).limit(MAX_PHOTOS);
+  if (!sb) return mem.photos.get(estate) ?? new Map();
+  const { data, error } = await sb.from("family_photos").select("person, data, created_by, created_at").eq("estate", estate)
+    .order("created_at", { ascending: true }).limit(MAX_PHOTOS);
   warn("getPhotos", error);
-  return { photos: Object.fromEntries(((data ?? []) as Omit<PhotoRow, "estate">[]).map((r) => [r.person, { src: r.data, by: r.created_by, at: Number(r.created_at) }])) };
+  return new Map(((data ?? []) as Omit<PhotoRow, "estate">[]).map((r) => [r.person, { src: r.data, by: r.created_by, at: Number(r.created_at) }]));
+}
+
+/** The estate's photos, oldest first, never more than MAX_PHOTO_CHARS of image data (rows written before the cap). */
+export async function getPhotos(estate: Base58): Promise<FamilyPhotos> {
+  const photos: Record<string, StoredPhoto> = {};
+  let chars = 0;
+  for (const [person, p] of await storedPhotos(estate)) {
+    if ((chars += p.src.length) > MAX_PHOTO_CHARS) break;
+    photos[person] = p;
+  }
+  return { photos };
 }
 
 export async function putPhoto(estate: Base58, person: string, photo: StoredPhoto): Promise<void> {
+  const held = await storedPhotos(estate);
+  const others = [...held].filter(([p]) => p !== person);
+  if ((!held.has(person) && held.size >= MAX_PHOTOS) || others.reduce((n, [, p]) => n + p.src.length, photo.src.length) > MAX_PHOTO_CHARS) {
+    throw full("photos");
+  }
   const sb = getSupabase();
   if (!sb) {
     const m = mem.photos.get(estate) ?? new Map<string, StoredPhoto>();
-    m.delete(person);
     m.set(person, photo);
-    if (m.size > MAX_PHOTOS) m.delete(m.keys().next().value!);
     mem.photos.set(estate, m);
     return;
   }

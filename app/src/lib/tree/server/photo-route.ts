@@ -6,6 +6,8 @@ import "server-only";
  * GET is for members only, with a read pass (lib/access). POST needs a fresh, single-use
  * ed25519 signature (lib/tree/links.ts treeMessage, action "photo") from the acting wallet over the person and the
  * photo, then:
+ *  - the signer is a member of the estate's family (lib/access isMember), and the estate's photos stay under
+ *    MAX_PHOTOS and MAX_PHOTO_CHARS (409 full; nothing stored is pushed out);
  *  - the photo is a WebP data URL of at most 60 KB (lib/tree/photos.ts checkPhoto; 415 / 413 otherwise);
  *  - consent (photoConsent): a living adult sets or removes only their own photo; the estate's owner (read from the
  *    chain) does it for a child, someone who has passed, someone without a wallet or an organisation. What the
@@ -23,7 +25,7 @@ import { DEVNET_DEMO_ESTATE, DEVNET_DEMO_FALLBACK_KINDS } from "@/lib/chain/demo
 import { defaultPeople, PERSON_ID, TREE_MAX_SKEW_MS, treeBody, treeMessage } from "../links";
 import { checkPhoto, PHOTO_MAX_BODY, photoConsent, type PhotoSubject } from "../photos";
 import { getLinks, getPhotos, putPhoto } from "./store";
-import { requireMember, type MemberCheck } from "@/lib/access/server";
+import { isMember, requireMember, type MemberCheck } from "@/lib/access/server";
 import { createNonces } from "@/lib/access/nonces";
 
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
@@ -38,7 +40,9 @@ export type TreePhotoPost = z.infer<typeof body>;
 
 export interface PhotoRouteDeps {
   member?: MemberCheck;
-  fetchRaw(type: "Estate", address: string): Promise<Raw | null>;
+  fetchRaw(type: string, address: string): Promise<Raw | null>;
+  /** Whether `wallet` belongs to the estate's family (lib/access isMember); by default read with `fetchRaw`. */
+  memberOf?(estate: string, wallet: string): Promise<boolean>;
   now(): number;
   chain(): boolean;
 }
@@ -84,6 +88,9 @@ export function photoRoutes(deps: PhotoRouteDeps = defaults) {
 
     const estate = await deps.fetchRaw("Estate", b.estate);
     if (!estate) throw new HttpError(404, "Estate not found on-chain.");
+    // Strangers write nothing here: not a hidden flag, not a photo (plan §18.9 H5).
+    const member = deps.memberOf ?? ((e: string, w: string) => isMember(e, w, (t, a) => deps.fetchRaw(t, a)));
+    if (!(await member(b.estate, b.wallet))) throw new HttpError(403, "Only this family can change its tree.", "members_only");
     const today = new Date(now).getUTCFullYear();
     const subject = await subjectOf(b.estate, b.person);
     if (!photoConsent(subject, b.wallet, key(estate, "owner") === b.wallet, today)) {

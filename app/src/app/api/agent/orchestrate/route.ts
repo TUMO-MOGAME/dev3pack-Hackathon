@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
+import { dailyCap, handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
 import { chatMessageSchema, localeSchema } from "@/lib/agent/schemas";
 import { orchestrate, ROUTABLE } from "@/lib/agent/orchestrator";
 import { toEstateFacts, type EstateFacts } from "@/lib/agent/facts";
@@ -55,6 +55,7 @@ export const POST = handler(async (req) => {
   await rateLimitShared(req, `orchestrate-${channel}`, channel === "voice" ? 120 : 20);
 
   const b = await parseJson(req, body);
+  await dailyCap(req, channel === "voice" ? "model-voice" : "model");
   const userText = b.text ?? b.message;
   const history = [...(b.history ?? []), ...(userText ? [{ role: "user" as const, text: userText }] : [])].slice(-20);
   const persona = b.context?.persona ?? b.persona;

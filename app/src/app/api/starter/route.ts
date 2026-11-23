@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
+import { clientIp, handler, HttpError, isChainMode, json, parseJson, rateLimitShared } from "@/lib/api/http";
 import { verifyAction } from "@/lib/access/server";
 import { actionBody } from "@/lib/access/messages";
 import { grantStarter } from "@/lib/starter/server";
@@ -27,7 +27,6 @@ export const POST = handler(async (req) => {
   if (!proof || !checkProof(wallet, proof)) {
     throw new HttpError(400, "The proof of work is missing or out of date. Reload and try again now.", "proof", 1);
   }
-  // Per network, so one person can't empty the day's grants. Generous enough for a room on shared Wi-Fi.
-  await rateLimitShared(req, "starter-hour", 8, 60 * 60_000);
-  return json(await grantStarter(wallet));
+  // Grants are paced per network address too (STARTER.perIpHour, perIpDay), counted only when one is sent.
+  return json(await grantStarter(wallet, undefined, clientIp(req)));
 });

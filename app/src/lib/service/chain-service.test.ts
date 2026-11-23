@@ -16,6 +16,8 @@ const h = vi.hoisted(() => ({
   posts: [] as string[],
 }));
 
+// The version gate (plan §18.9 C1) has its own tests: lib/chain/release.test.ts.
+vi.mock("../chain/write-guard", () => ({ requireCurrentApp: async () => undefined }));
 vi.mock("../chain/config", async (original: () => Promise<{ chainConfig: object }>) => {
   const m = await original();
   return { ...m, chainConfig: { ...m.chainConfig, usdtMint: h.mint } };

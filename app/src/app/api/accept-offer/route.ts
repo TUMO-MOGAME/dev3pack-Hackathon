@@ -10,9 +10,10 @@ import { invalidateProgramAccounts } from "@/lib/chain/reads";
 import { base64ToBytes, getConnection } from "@/lib/chain/tx";
 import { agentAddress, agentCoSignSale, agentSignAndSend, hasAgentWallet } from "@/lib/agent/agent-wallet";
 import { loadPublicSnapshot } from "@/lib/server/estate";
-import { spendAgentAllowance } from "@/lib/agent/budget";
+import { spendAgentAllowance, spendAgentRent } from "@/lib/agent/budget";
 import { assertServedEstate, verifyAction } from "@/lib/access/server";
 import { actionBody } from "@/lib/access/messages";
+import { assertProgram } from "@/lib/server/program";
 
 export const maxDuration = 60;
 
@@ -34,6 +35,7 @@ export const POST = handler(async (req) => {
   if (!isChainMode()) throw new HttpError(409, "On-chain sale runs in chain mode only.");
   const wallet = await verifyAction(req, "accept-offer", b.estate, actionBody.acceptOffer(b));
   if (!hasAgentWallet()) throw new HttpError(503, "The agent wallet is not configured (AGENT_SEED_PHRASE).");
+  await assertProgram();
   invalidateProgramAccounts(); // a higher or withdrawn offer of a second ago must count
   const snap = await loadPublicSnapshot(b.estate);
   const { verifiers } = snap.estate;
@@ -63,6 +65,7 @@ export const POST = handler(async (req) => {
       throw new HttpError(409, "The agent's wallet can't be an account of a sale.", "agent_account");
     }
     await spendAgentAllowance("accept-offer", wallet, b.estate);
+    await spendAgentRent("settle", b.estate);
     const tx = await agentSignAndSend([alone]).catch(refusedByProgram);
     return json({ tx, ranking });
   }
@@ -80,6 +83,7 @@ export const POST = handler(async (req) => {
     throw new HttpError(409, "The signed sale is too old to send. Look at the offers and sign again.", "stale_sale");
   }
   await spendAgentAllowance("accept-offer", wallet, b.estate);
+  await spendAgentRent("settle", b.estate);
   const tx = await agentCoSignSale(signed).catch(refusedByProgram);
   return json({ tx, ranking });
 });

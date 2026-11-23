@@ -19,13 +19,18 @@ const EXPECTED: Record<ReviewPurpose, string> = {
   death: "a South African death certificate (Department of Home Affairs)",
   claim: "a fee statement, invoice, enrolment letter or lease supporting a payout to an institution",
   hardship: "a sworn affidavit (commissioned, e.g. at SAPS) describing financial hardship, optionally with supporting statements",
-  "seat-death": "a South African death certificate (Department of Home Affairs) for the trusted person named in the context, NOT the estate owner; the name must match that person",
-  "fallback-death": "a South African death certificate (Department of Home Affairs) for the fallback recipient named in the context, NOT the estate owner; the name must match that person",
+  "seat-death": "a South African death certificate (Department of Home Affairs) for the trusted person named in the context, NOT the estate owner; when the context gives that person's name it must match, when it gives none judge the document itself",
+  "fallback-death": "a South African death certificate (Department of Home Affairs) for the fallback recipient in the context, NOT the estate owner; when the context gives that person's name it must match, when it gives none judge the document itself",
 };
 
-export async function finalizeReport(m: ModelReport): Promise<AgentReport> {
+/**
+ * `ref` names what was reviewed (estate, purpose, subject, file). It goes into the report, so two estates never share
+ * one report hash: the stored report is found by its hash, and a shared one would be overwritten by the other family's.
+ */
+export async function finalizeReport(m: ModelReport, ref?: string): Promise<AgentReport> {
   const extracted: Record<string, string> = {};
   for (const { field, value } of m.extracted) extracted[field] = value;
+  if (ref) extracted["Review reference"] = (await hashJson(ref)).slice(0, 16);
   const body = {
     verdict: m.verdict, documentType: m.documentType, extracted, redFlags: m.redFlags,
     confidence: Math.round(m.confidence * 100) / 100, summary: m.summary,
@@ -63,13 +68,18 @@ export async function reviewDocument(input: {
   facts?: string;
   /** Typed by the caller. */
   untrusted?: string;
+  /** Epoch ms by which the model must have answered, retries included. */
+  deadline?: number;
+  /** What is reviewed, for finalizeReport. */
+  ref?: string;
 }): Promise<AgentReport> {
-  if (!hasGemini()) return finalizeReport(cannedReport(input.purpose));
+  if (!hasGemini()) return finalizeReport(cannedReport(input.purpose), input.ref);
   const data = Buffer.from(input.bytes).toString("base64");
   const report = await generateJson(modelReportSchema, {
     system: DOCUMENT_REVIEWER,
     thinking: "medium",
     timeoutMs: 60_000,
+    deadline: input.deadline,
     contents: [{
       role: "user",
       parts: [
@@ -81,5 +91,5 @@ export async function reviewDocument(input: {
   });
   // Safety net: low confidence never auto-approves.
   if (report.verdict === "approve" && report.confidence < 0.6) report.verdict = "needs_human";
-  return finalizeReport(report);
+  return finalizeReport(report, input.ref);
 }

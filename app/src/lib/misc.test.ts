@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { formatUsdt, fromBase, shortAddress, toBase, explorerTx } from "./format";
 import { getUsdtZar, parseValrSummary, _resetFxCache, FALLBACK_USDT_ZAR } from "./fx";
 import { sniff, validateUpload, UploadError } from "./storage";
+import { MAX_UPLOAD_BYTES, checkUploadFile } from "./evidence-file";
 import { SimulatedZarPayout } from "./offramp";
 import { summarize } from "./agent/valuation";
-import { rateLimit, HttpError } from "./api/http";
+import { clientIp, rateLimit, HttpError } from "./api/http";
 import { bits } from "./chain/decoders";
 import { humanizeProgramError } from "./chain/tx";
 
@@ -57,7 +58,22 @@ describe("upload validation", () => {
     expect(() => validateUpload(pdf, "image/png")).toThrow(UploadError);
     expect(() => validateUpload(pdf, "text/html")).toThrow(/PDF, JPG or PNG/);
     expect(() => validateUpload(new Uint8Array(), "application/pdf")).toThrow(/empty/);
-    expect(() => validateUpload(new Uint8Array(10 * 1024 * 1024 + 1), "application/pdf")).toThrow(/10 MB/);
+    expect(() => validateUpload(new Uint8Array(4 * 1024 * 1024 + 1), "application/pdf")).toThrow(/4 MB/);
+  });
+});
+
+describe("the upload limit fits what Vercel accepts", () => {
+  it("a full upload and its form stay under the 4.5 MB request limit", () => {
+    expect(MAX_UPLOAD_BYTES).toBe(4 * 1024 * 1024);
+    expect(MAX_UPLOAD_BYTES + 64_000).toBeLessThan(4_500_000);
+  });
+  it("the browser says why before anything is signed", async () => {
+    const blob = (bytes: Uint8Array, type: string) => new Blob([bytes as BlobPart], { type });
+    expect(await checkUploadFile(blob(new Uint8Array([0x25, 0x50, 0x44, 0x46, 1]), "application/pdf"))).toBeNull();
+    expect(await checkUploadFile(blob(new Uint8Array(MAX_UPLOAD_BYTES + 1), "application/pdf"))).toBe("size");
+    expect(await checkUploadFile(blob(new Uint8Array([0x4d, 0x5a, 0, 0]), "application/pdf"))).toBe("content");
+    expect(await checkUploadFile(blob(new Uint8Array([1]), "text/html"))).toBe("type");
+    expect(await checkUploadFile(blob(new Uint8Array(), "application/pdf"))).toBe("empty");
   });
 });
 
@@ -92,6 +108,16 @@ describe("rate limit", () => {
     expect(() => rateLimit(req, "t", 3, 60_000, 70_000)).not.toThrow();
     const other = new Request("http://x", { headers: { "x-forwarded-for": "5.6.7.8" } });
     expect(() => rateLimit(other, "t", 3, 60_000, 1000)).not.toThrow();
+  });
+});
+
+describe("clientIp", () => {
+  const ip = (v: string) => clientIp(new Request("http://x", { headers: { "x-forwarded-for": v } }));
+  it("counts an IPv6 caller by its /64, so a phone can't take a new address per request", () => {
+    expect(ip("2001:db8:1:2:aaaa::1")).toBe("2001:db8:1:2::/64");
+    expect(ip("2001:db8:1:2:bbbb:cccc:dddd:eeee")).toBe("2001:db8:1:2::/64");
+    expect(ip("2001:db8::7")).toBe("2001:db8:0:0::/64");
+    expect(ip("203.0.113.9, 10.0.0.1")).toBe("203.0.113.9");
   });
 });
 

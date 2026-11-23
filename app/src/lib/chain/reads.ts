@@ -63,6 +63,16 @@ export function invalidateProgramAccounts(): void { scan = null; }
 
 const startsWith = (data: Uint8Array, prefix: Uint8Array, at = 0) => prefix.every((b, i) => data[at + i] === b);
 
+/**
+ * An account of `type` written by this program, as raw IDL fields, or null. Anyone can create an account with the
+ * right discriminator under another program (or send lamports to a PDA), so the owner is checked before anything is
+ * decoded or trusted (plan §18.9 H4). A getProgramAccounts scan needs no check: the RPC returns only this program's.
+ */
+export function ownAccount(type: string, info: { owner: PublicKey; data: Uint8Array } | null): Raw | null {
+  if (!info || !info.owner.equals(programId()) || !startsWith(info.data, accountDiscriminator(type))) return null;
+  return decode(type, info.data);
+}
+
 /** Accounts of `type` whose first field (after the 8-byte discriminator) is `parent`, optionally another key at `offset`. */
 export async function scanAccounts(type: string, match: { offset: number; key: PublicKey }[], conn = getConnection()): Promise<ProgramAccount[]> {
   const disc = accountDiscriminator(type);
@@ -76,9 +86,8 @@ async function fetchChildren(conn: Connection, type: string, parent: PublicKey):
 
 export async function fetchEstateRaw(estate: Base58, names: OffChainNames = {}, conn = getConnection()): Promise<RawSnapshot> {
   const estateKey = new PublicKey(estate);
-  const info = await conn.getAccountInfo(estateKey, "confirmed");
-  if (!info) throw new Error(`No Heirloom estate at ${estate} on this cluster.`);
-  const raw = decode("Estate", info.data);
+  const raw = ownAccount("Estate", await conn.getAccountInfo(estateKey, "confirmed"));
+  if (!raw) throw new Error(`No Heirloom estate at ${estate} on this cluster.`);
   const mint = new PublicKey(key(raw, "usdt_mint"));
   const vault = vaultAta(mint, estateKey);
   const vaultBal = await conn.getTokenAccountBalance(vault, "confirmed").then((b) => BigInt(b.value.amount)).catch(() => 0n);
@@ -143,8 +152,7 @@ export async function fetchEstateRaw(estate: Base58, names: OffChainNames = {}, 
 /** Does `owner` have an estate? Returns its address or null. */
 export async function findEstateOf(owner: Base58, conn = getConnection()): Promise<Base58 | null> {
   const pda = estatePda(programId(), owner);
-  const info = await conn.getAccountInfo(pda, "confirmed");
-  return info ? pda.toBase58() : null;
+  return ownAccount("Estate", await conn.getAccountInfo(pda, "confirmed")) ? pda.toBase58() : null;
 }
 
 // Confirmed transactions never change, so each is fetched once and remembered.
@@ -288,10 +296,9 @@ export async function fetchActivity(estate: Base58, limit = 40, conn = getConnec
   return activityFrom(await fetchEvents(estate, limit, conn, budgetMs));
 }
 
-/** Fetch and decode a single program account (raw IDL field names). Null if it does not exist. */
+/** Fetch and decode a single account of this program (raw IDL field names). Null if there is none of that type. */
 export async function fetchAccountRaw(type: string, address: Base58, conn = getConnection()): Promise<Raw | null> {
-  const info = await conn.getAccountInfo(new PublicKey(address), "confirmed");
-  return info ? decode(type, info.data) : null;
+  return ownAccount(type, await conn.getAccountInfo(new PublicKey(address), "confirmed"));
 }
 
 /**

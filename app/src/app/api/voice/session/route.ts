@@ -1,4 +1,4 @@
-import { handler, HttpError, json, rateLimitShared } from "@/lib/api/http";
+import { dailyCap, handler, HttpError, json, rateLimitShared } from "@/lib/api/http";
 import { gone } from "@/lib/legacy/server/gone";
 
 /**
@@ -11,6 +11,7 @@ export const GET = handler(async (req) => {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   const agentId = process.env.ELEVENLABS_AGENT_ID;
   if (!apiKey || !agentId) throw new HttpError(503, "Voice is not configured.", "unavailable");
+  await dailyCap(req, "voice");
   const url = `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(agentId)}`;
   const res = await fetch(url, { headers: { "xi-api-key": apiKey }, signal: AbortSignal.timeout(8000), cache: "no-store" });
   if (!res.ok) throw new HttpError(502, `Voice service error (${res.status}).`, "upstream");

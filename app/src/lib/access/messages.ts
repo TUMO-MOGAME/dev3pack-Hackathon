@@ -13,7 +13,8 @@ export const READ_HEADER = "x-heirloom-read";
 export const ACTION_MAX_SKEW_MS = 5 * 60 * 1000;
 export const READ_PASS_MS = 7 * 24 * 60 * 60 * 1000;
 
-export type AgentAction = "review" | "list-asset" | "accept-offer" | "starter";
+/** "reason": saving the words of one's own dispute or objection (/api/reasons). */
+export type AgentAction = "review" | "list-asset" | "accept-offer" | "starter" | "reason";
 
 export function actionMessage(action: AgentAction, estate: Base58, wallet: Base58, ts: number, bodyHex: string): string {
   return `Heirloom agent request\naction:${action}\nestate:${estate}\nwallet:${wallet}\nts:${ts}\nbody:${bodyHex}`;
@@ -30,4 +31,6 @@ export const actionBody = {
   listAsset: (p: { asset: Base58; durationSecs: number }) => `${p.asset}|${p.durationSecs}`,
   acceptOffer: (p: { asset: Base58; tx?: string }) => `${p.asset}|${p.tx ?? ""}`,
   starter: () => "starter",
+  /** `hash`: the SHA-256 (hex) of the reason's text, as on-chain. */
+  reason: (p: { target: Base58; hash: string }) => `${p.target}|${p.hash}`,
 };

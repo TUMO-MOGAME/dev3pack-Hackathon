@@ -6,11 +6,34 @@ import "server-only";
  */
 import { getSupabase } from "@/lib/supabase";
 import type { AskNote } from "../types";
+import { roomFor } from "@/lib/server/memory-limits";
 
 export type StoredAsk = AskNote & { estate: string };
 
 const mem = new Map<string, StoredAsk>();
-const MAX_MEM = 2000;
+/** Without Supabase: notes kept for one estate (as many as the Supabase list returns), and for all of them. */
+export const MAX_PER_ESTATE = 200;
+const MAX_MEM = 20_000;
+
+/**
+ * Room in memory for `claim`: an estate at its limit lets go of its own oldest note (one with no decline first); a new
+ * estate is refused when the store is full. One family never pushes out another's notes (plan §18.9 M6).
+ */
+const byEstate = new Map<string, Set<string>>();
+function makeRoom(estate: string, claim: string): void {
+  if (mem.has(claim)) return;
+  const claims = byEstate.get(estate) ?? new Set<string>();
+  if (claims.size >= MAX_PER_ESTATE) {
+    const own = [...claims].map((c) => mem.get(c)!).sort((x, y) => x.createdAt - y.createdAt);
+    const gone = (own.find((n) => n.declinedAt === null) ?? own[0]).claim;
+    mem.delete(gone);
+    claims.delete(gone);
+  } else {
+    roomFor(mem, claim, MAX_MEM, "requests");
+  }
+  claims.add(claim);
+  byEstate.set(estate, claims);
+}
 
 function warn(what: string, err: { message: string } | null) {
   if (err) console.warn(`[asks] ${what} failed: ${err.message}`);
@@ -44,8 +67,8 @@ export async function saveAsk(n: StoredAsk): Promise<void> {
   const sb = getSupabase();
   if (!sb) {
     const prev = mem.get(n.claim);
+    makeRoom(n.estate, n.claim);
     mem.set(n.claim, { ...n, declinedAt: prev?.declinedAt ?? n.declinedAt });
-    if (mem.size > MAX_MEM) mem.delete(mem.keys().next().value!);
     return;
   }
   const { error } = await sb.from("asks").upsert({
@@ -58,6 +81,7 @@ export async function declineAsk(estate: string, claim: string, at: number, crea
   const sb = getSupabase();
   if (!sb) {
     const prev = mem.get(claim);
+    makeRoom(estate, claim);
     mem.set(claim, prev ? { ...prev, declinedAt: at } : { estate, claim, purpose: "", currency: "USDT", typed: 0, attachment: true, createdAt, declinedAt: at });
     return;
   }
@@ -66,4 +90,4 @@ export async function declineAsk(estate: string, claim: string, at: number, crea
 }
 
 /** Tests only. */
-export function resetAskMemory() { mem.clear(); }
+export function resetAskMemory() { mem.clear(); byEstate.clear(); }

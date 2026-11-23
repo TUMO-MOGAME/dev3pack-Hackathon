@@ -10,7 +10,7 @@ import { fetchAccountRaw } from "../chain/reads";
 import { beneficiaryPda, fallbackReportPda, guardPda, payeePda, seatPda } from "../chain/pda";
 import { reviewClaim, reviewDeath, reviewFallbackDeath, reviewHardship, reviewSeatDeath } from "../chain/instructions";
 import { getIdl } from "../chain/idl";
-import { getEstateMeta } from "../db";
+import { getEstateMeta, trustedNames } from "../db";
 import { fromBase } from "../format";
 import type { ReviewOutcome } from "../verdict";
 import type { ReviewPurpose } from "./review";
@@ -27,6 +27,12 @@ export interface ReviewTarget {
   facts: string;
   /** False for seat and fallback deaths: there an unsure agent rejects (a clearer certificate can be sent). */
   canRefer: boolean;
+  /**
+   * A seat or fallback death whose person has no name on record: the document is judged by itself, and who it is is
+   * checked later by people (the second person's confirmation, the recipient's chance to refute). An unsure review
+   * of such a report is never turned into a rejection for that alone (plan §18.9 H12).
+   */
+  unnamed?: boolean;
   instruction(agent: PublicKey, outcome: ReviewOutcome, reportHash: string): TransactionInstruction;
 }
 
@@ -52,7 +58,9 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
   const estate = { agent: key(raw, "agent"), usdtMint: key(raw, "usdt_mint") };
   const programId = new PublicKey(getIdl().address);
   const meta = await getEstateMeta(p.estate);
-  const named = (wallet: string): string | null => meta?.buyerNames[wallet] ?? null;
+  // Only names the owner gave: a buyer's name for themselves says nothing about who they are.
+  const trusted = trustedNames(meta);
+  const named = (wallet: string): string | null => trusted[wallet] ?? null;
   // The ledger holds roles, not names (chain/public-names.ts): without the off-chain name nobody can be matched.
   const personOf = (wallet: string, label: string): string =>
     named(wallet) ?? (isRoleOnly(label) ? `${label} (their name is not on record, so a name on the document cannot be checked: use needs_human)` : label);
@@ -129,7 +137,7 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
     const holder = key(seat, "holder");
     const name = named(holder) ?? (num(seat, "generation") === 0 ? meta?.verifierNames[index] : null) ?? null;
     return {
-      estate, canRefer: false,
+      estate, canRefer: false, unnamed: !name,
       submitter: key(seat, "death_reported_by"),
       facts: [
         `Trusted person whose death is reported: seat ${index + 1}, wallet ${holder}${name ? `, name: ${name}` : ""}. This is not the estate owner.`,
@@ -153,10 +161,14 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
   const rentTo = new PublicKey(key(report, "rent_payer"));
   const name = named(recipient);
   return {
-    estate, canRefer: false, submitter: key(report, "reporter"),
+    estate, canRefer: false, unnamed: !name, submitter: key(report, "reporter"),
     facts: name
       ? `Fallback recipient whose death is reported: ${name} (wallet ${recipient}). This is not the estate owner.`
-      : `Fallback recipient whose death is reported: wallet ${recipient}. Their name is not on record, so the certificate cannot be matched to them: use needs_human.`,
+      : [
+        `Fallback recipient whose death is reported: wallet ${recipient}. This is not the estate owner.`,
+        "Their name is not on record: judge the document itself. A missing name is no reason to reject or to answer needs_human: "
+          + "after the wait a second person confirms who it is, and the recipient can say they are alive.",
+      ].join("\n"),
     instruction: (agent, outcome, hash) => reviewFallbackDeath(estateKey, agent, index, outcome === "Approve", hash, p.sha256, rentTo),
   };
 }

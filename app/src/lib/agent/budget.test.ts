@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   taken: null as null | { ok: true } | { ok: false; retryAfterSecs: number },
   takes: [] as { key: string; max: number; windowSecs: number }[][],
-  spend: { hour: 0, day: 0, complete: true } as { hour: number; day: number; complete: boolean } | Error,
+  spend: { hour: 0, day: 0, complete: true } as { hour: number; day: number; complete: boolean; read?: boolean } | Error,
+  /** The agent's own share; by default all of it. */
+  own: null as { hour: number; day: number } | null,
   reads: 0,
 }));
 
@@ -16,7 +18,7 @@ vi.mock("../server/agent-ledger", () => ({
     spend: async () => {
       h.reads++;
       if (h.spend instanceof Error) throw h.spend;
-      return h.spend;
+      return { read: true, ...h.spend, own: h.own ?? { hour: h.spend.hour, day: h.spend.day } };
     },
   }),
 }));
@@ -30,7 +32,7 @@ const spend = (i: number, now = T0, estate = `E${i}`) => budget.spendAgentAllowa
 beforeEach(async () => {
   vi.resetModules();
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
-  Object.assign(h, { taken: null, takes: [], spend: { hour: 0, day: 0, complete: true }, reads: 0 });
+  Object.assign(h, { taken: null, takes: [], spend: { hour: 0, day: 0, complete: true }, own: null, reads: 0 });
   budget = await import("./budget");
 });
 
@@ -71,17 +73,52 @@ describe("allowances", () => {
   });
 });
 
+describe("rent the agent pays (M7)", () => {
+  it("sales: a cap for all estates together, on this instance and in the shared store", async () => {
+    for (let i = 0; i < budget.AGENT_RENT.settleDay; i++) await budget.spendAgentRent("settle", `E${i}`, T0 + i);
+    await expect(budget.spendAgentRent("settle", "another", T0 + 99)).rejects.toMatchObject({ status: 429, code: "agent_limit" });
+    expect(h.takes.at(-1)).toEqual([{ key: "agent:rent:settle", max: budget.AGENT_RENT.settleDay, windowSecs: 86_400 }]);
+  });
+
+  it("another instance using it up counts here too", async () => {
+    h.taken = { ok: false, retryAfterSecs: 500 };
+    await expect(budget.spendAgentRent("schedule", "E", T0)).rejects.toMatchObject({ retryAfterSecs: 500 });
+    expect(budget.agentRentLeft("schedule", "E", T0 + 1)).toBe(false);
+  });
+});
+
 describe("the chain backstop, without a shared store", () => {
   it("stops at the hour's spend", async () => {
     h.spend = { hour: budget.AGENT_SPEND.hour, day: budget.AGENT_SPEND.hour, complete: true };
+    h.own = { hour: budget.AGENT_OWN_SPEND.hour, day: budget.AGENT_OWN_SPEND.hour };
     await expect(spend(1)).rejects.toMatchObject({ status: 429, retryAfterSecs: 3_600 });
+    await expect(budget.chainBackstop(T0)).rejects.toMatchObject({ status: 429, retryAfterSecs: 3_600 });
   });
 
   it("the sponsor's whole day spent in one judging hour doesn't stop the agent", async () => {
     const budgetLamports = 300_000_000;
     h.spend = { hour: budgetLamports, day: budgetLamports, complete: true };
+    h.own = { hour: 0, day: 0 };
     await expect(spend(1)).resolves.toBeUndefined();
   });
+
+  it("no amount of sponsored fees switches off reviews, listings or sales (H3)", async () => {
+    h.spend = { hour: 50 * budget.AGENT_SPEND.hour, day: 50 * budget.AGENT_SPEND.day, complete: true };
+    h.own = { hour: 1_000_000, day: 2_000_000 };
+    for (const action of ["review", "list-asset", "accept-offer"] as const) {
+      await expect(budget.spendAgentAllowance(action, "W", "E", T0)).resolves.toBeUndefined();
+    }
+    // The sponsor itself is stopped by the same reading.
+    await expect(budget.chainBackstop(T0)).rejects.toMatchObject({ status: 429, code: "agent_limit" });
+  });
+
+  it("nor does a sponsored backlog still being read, nor the sponsor using up its blind allowance", async () => {
+    h.spend = { hour: 0, day: 0, complete: true, read: false };
+    for (let i = 0; i < budget.AGENT_SPEND.blind; i++) await budget.chainBackstop(T0 + i);
+    await expect(budget.chainBackstop(T0 + 20)).rejects.toMatchObject({ status: 503 });
+    for (let i = 0; i < 2 * budget.AGENT_SPEND.blind; i++) await spend(i, T0 + i);
+  });
+
 
   it("stops at the day's spend", async () => {
     h.spend = { hour: 0, day: budget.AGENT_SPEND.day, complete: true };
