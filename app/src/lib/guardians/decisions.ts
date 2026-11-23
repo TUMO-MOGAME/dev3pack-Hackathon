@@ -48,8 +48,12 @@ export const deathOpen = (e: Pick<Estate, "status" | "death">) => e.status === "
  * didn't clear it, or a claim stored with time 0). Nobody may review, confirm or finalize it (DeathDisproved), and
  * anyone who may report replaces it at once, also while DeathPending.
  */
-export const deathDisproved = (e: Pick<Estate, "status" | "death" | "lastHeartbeat">) =>
-  !!e.death.certHash && e.status !== "Unlocked" && e.lastHeartbeat > deathSince(e);
+export function deathDisproved(e: Pick<Estate, "status" | "death" | "lastHeartbeat">): boolean {
+  if (!e.death.certHash || e.status === "Unlocked") return false;
+  // The claim's time as read (0 = stored before times were); unknown when the snapshot doesn't carry it.
+  const since = e.status === "Active" ? e.death.submittedAt : e.death.pendingSince;
+  return since !== undefined && since !== null && e.lastHeartbeat > since;
+}
 
 /** The program's `death_pending_since`: the submission while Active, else when the death took effect. */
 export function deathSince(e: Pick<Estate, "status" | "death">): number {

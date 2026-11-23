@@ -171,7 +171,7 @@ describe("submitDeathClaim", () => {
   const cert = () => new File(["%PDF-1.4 certificate"], "c.pdf", { type: "application/pdf" });
   const standing = (by: string, hash: number[], since: number) => h.accounts.set(estate, {
     status: { Active: {} }, agent, waiting_period_secs: 120, verifiers: [v1, v2, v3], death_cert_hash: hash,
-    death_verdict: { Pending: {} }, death_submitted_by: by, death_pending_since: since,
+    death_verdict: { Pending: {} }, death_submitted_by: by, death_pending_since: since, last_heartbeat: 0,
   });
   const nowSecs = () => Math.floor(Date.now() / 1000);
 
