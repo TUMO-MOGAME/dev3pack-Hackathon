@@ -512,8 +512,9 @@ impl Guard {
         self.objection_window_secs.clamp(0, MAX_GUARD_WAIT_SECS)
     }
 
+    /// At least 60 s, so a living holder always has time to say "I'm still here" (a stored 0 waits 60 s).
     pub fn succession_wait(&self) -> i64 {
-        self.succession_wait_secs.clamp(0, MAX_GUARD_WAIT_SECS)
+        self.succession_wait_secs.clamp(MIN_WAITING_SECS, MAX_GUARD_WAIT_SECS)
     }
 
     pub fn fallback_wait(&self) -> i64 {

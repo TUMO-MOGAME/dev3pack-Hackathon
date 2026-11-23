@@ -232,6 +232,32 @@ macro_rules! agent_accounts {
     }};
 }
 
+/// The voter gains from deciding alone: the open death claim is theirs, or they are an active beneficiary. The
+/// voter's Beneficiary PDA comes first in remaining_accounts; without it the voter counts as one (fails closed).
+fn gains(estate: &Account<Estate>, voter: &Pubkey, claim_open: bool, infos: &[AccountInfo]) -> bool {
+    if claim_open && estate.death_submitted_by == *voter {
+        return true;
+    }
+    let key = estate.key();
+    let pda = Pubkey::find_program_address(&[BENEFICIARY_SEED, key.as_ref(), voter.as_ref()], &crate::ID).0;
+    match infos.first().filter(|i| i.key() == pda) {
+        None => true,
+        Some(info) if !account_exists(info) => false,
+        Some(info) => read_account::<Beneficiary>(info).map_or(true, |b| b.active),
+    }
+}
+
+/// After the unlock: when the voter's own open claim (second in remaining_accounts) was made, while the agent has
+/// not approved it. None without such a claim.
+fn stuck_claim_since(estate: &Pubkey, voter: &Pubkey, info: Option<&AccountInfo>) -> Option<i64> {
+    let claim: Claim = read_account(info?).ok()?;
+    (claim.estate == *estate
+        && claim.beneficiary == *voter
+        && claim.status == ClaimStatus::Open
+        && claim.agent_verdict != Verdict::Approved)
+        .then_some(claim.created_at)
+}
+
 fn check_candidate(estate: &Estate, candidate: &Pubkey) -> Result<()> {
     require!(
         *candidate != Pubkey::default()
@@ -343,9 +369,9 @@ pub struct VoteAgent<'info> {
 
 /// Trusted people replace the agent. Before the unlock it takes every one of them (at least two): the owner may
 /// already have died with the agent's key lost. Afterwards it takes two, or the only one left; so it does before
-/// the unlock once a death claim has stood a grace with no sign of life from the owner for the recovery timeout
-/// (H7). The old agent's reviews go back to Pending (M6).
-pub fn vote_agent_handler(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<()> {
+/// the unlock once a death claim has stood unreviewed for the recovery timeout with no sign of life from the owner
+/// for as long (H7). The old agent's reviews go back to Pending (M6).
+pub fn vote_agent_handler<'info>(ctx: Context<'info, VoteAgent<'info>>, candidate: Pubkey) -> Result<()> {
     let (seat_infos, reports) = agent_accounts!(ctx);
     let verifier = ctx.accounts.verifier.key();
     let estate = &mut ctx.accounts.estate;
@@ -377,10 +403,23 @@ pub fn vote_agent_handler(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<
     }
     let ts = now()?;
     let claim_open = estate.death_cert_hash != [0u8; 32] && !estate.death_disproved();
+    // The death claim has stood unreviewed for RT (an unreviewed claim can't be replaced, so this is this death's
+    // first claim) and the owner has shown no life for RT (N1).
     let recovery = claim_open
+        && estate.death_verdict == Verdict::Pending
         && ts >= estate.last_heartbeat.saturating_add(estate.recovery_timeout())
-        && ts >= estate.death_pending_since.saturating_add(estate.report_grace());
+        && ts >= estate.death_pending_since.saturating_add(estate.recovery_timeout());
     let needed = if estate.status == EstateStatus::Unlocked || recovery { seats.min(2) } else { seats.max(2) };
+    // N2: a voter who would decide alone and who gains waits 2 x RT before their vote alone replaces the agent.
+    if needed == 1 && count == 1 && gains(estate, &verifier, claim_open, ctx.remaining_accounts) {
+        let late = estate.recovery_timeout().saturating_mul(2);
+        let since = if estate.status == EstateStatus::Unlocked {
+            stuck_claim_since(&estate.key(), &verifier, ctx.remaining_accounts.get(1))
+        } else {
+            Some(estate.last_heartbeat.max(estate.death_pending_since))
+        };
+        require!(since.is_some_and(|s| ts >= s.saturating_add(late)), HeirloomError::WaitingPeriodNotOver);
+    }
 
     // Voting again only completes a quorum that has dropped since.
     require!(first_time || count >= needed, HeirloomError::AlreadyApproved);
