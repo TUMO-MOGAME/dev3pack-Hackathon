@@ -11,6 +11,7 @@ import { APPROVAL_STAMP_RENT, DEFAULT_LIMITS, SPONSOR_RENT_PAYER_ACCOUNTS, SPONS
 import { SponsorLimiter } from "./limits";
 import { AGENT_ALLOWED } from "../agent/agent-wallet";
 import * as ix from "../chain/instructions";
+import { txBytes } from "../chain/pack";
 import { estatePda } from "../chain/pda";
 
 const sponsor = Keypair.generate();
@@ -310,6 +311,11 @@ describe("second security review (22 Nov 2026)", () => {
     vote_agent: () => ix.voteAgent(ctx, estate, u, k()),
     approve_claim: () => ix.approveClaim(estate, u, k(), k()),
   };
+
+  it.each(Object.keys(built))("%s: fits one sponsored transaction with its compute budget", (name) => {
+    const budget = [ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000 })];
+    expect(txBytes([...budget, built[name]()], sponsor.publicKey)).toBeLessThanOrEqual(1232);
+  });
 
   it.each(Object.keys(built))("%s: sponsored, with no rent from the sponsor", (name) => {
     expect(SPONSORED_HEIRLOOM_IXS).toContain(name);
