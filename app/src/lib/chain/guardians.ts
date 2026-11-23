@@ -199,7 +199,8 @@ export function assembleGuardians(
         ? claim ? `Approved ${formatUsdt(claim.amount)} to ${name(claim.payee)} for ${name(claim.beneficiary)}` : "Approved a claim"
         : kind === "Unlock" ? `Confirmed ${estate.ownerName}'s passing`
           : kind === "Hardship" ? "Approved a request to sell below the minimum price" : "Approved";
-      const deadline = kind === "Claim" ? (stampAt > 0 ? stampAt + window : null)
+      // Decided alone by the claimant: monitors get twice the window, as claimPayableAt above.
+      const deadline = kind === "Claim" ? (stampAt > 0 ? stampAt + window * (claim?.decidedAlone ? 2 : 1) : null)
         : kind === "Unlock" && estate.status === "DeathPending" && estate.death.pendingSince ? estate.death.pendingSince + unlockWaitSecs(estate) : null;
       return {
         seatIndex: num(e.data, "seat_index"), approver, approverName: name(approver), kind, target, summary,

@@ -73,6 +73,9 @@ describe("assembleGuardians", () => {
     expect(g.claimPayableAt).toEqual({ [claim.toBase58()]: 460 });
     expect(g.feed[0]).toMatchObject({ seatIndex: 2, kind: "Claim", objectionDeadline: 460, txSignature: "sig" });
     expect(g.feed[0].summary).toContain("Lerato");
+    // Decided alone: twice the window, both for paying and for the monitors' countdown.
+    const lone = assembleGuardians(raw, { estate, claims: [{ ...c, decidedAlone: true }], events, extras: { names: {}, reasons: {}, fallbackKinds: {}, reports: {} } });
+    expect([lone.claimPayableAt?.[claim.toBase58()], lone.feed[0].objectionDeadline]).toEqual([520, 520]);
     expect(g.fallback.recipients).toEqual([
       { wallet: lerato.toBase58(), name: "Lerato", kind: "family", dead: true, report: null },
       expect.objectContaining({ wallet: sipho.toBase58(), dead: false }),

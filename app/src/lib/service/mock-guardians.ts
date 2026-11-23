@@ -971,13 +971,15 @@ export function createMockGuardians(d: GuardDeps) {
 
   function endObjectionWindow() {
     const back = g().objectionWindowSecs;
-    for (const st of Object.values(g().stamps)) {
+    // A claim decided alone has twice the window: it ends too.
+    const lone = (target: Base58) => !!d.snap().claims.find((c) => c.address === target)?.decidedAlone;
+    for (const [target, st] of Object.entries(g().stamps)) {
       if (!st.approvedAt) continue;
       st.givenAt ??= st.approvedAt;
-      st.approvedAt -= back;
+      st.approvedAt -= back * (lone(target) ? 2 : 1);
       st.windowEnded = true;
     }
-    for (const f of g().feed) if (f.objectionDeadline !== null) f.objectionDeadline -= back;
+    for (const f of g().feed) if (f.objectionDeadline !== null) f.objectionDeadline -= back * (lone(f.target) ? 2 : 1);
   }
   function endSuccessionWait() {
     for (const s of g().seats) {
