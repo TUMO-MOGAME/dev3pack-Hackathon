@@ -96,6 +96,8 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   const pendingKind = useRef<string | undefined>(undefined);
   const attempts = useRef(0);
   const [stepNote, setStepNote] = useState<string | null>(null);
+  // The payment id being checked, for rendering (the ref is for the effects).
+  const [checkingId, setCheckingId] = useState<string | null>(null);
   // The fee of a payment the contract makes, quoted from the network before it is approved (M3).
   const [quoting, setQuoting] = useState<"no" | "loading" | "failed">("no");
   const shownUser = useRef(0);
@@ -167,30 +169,6 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     return () => { alive = false; window.clearInterval(t); };
   }, [service, online, pendingIds, track, notify, refresh, copy]);
 
-  const pay = useCallback((r: PayRequest) => new Promise<PayResult>((resolve) => {
-    const source = r.source ?? "wallet";
-    const available = source === "vault" ? snap?.estate.vaultBalance ?? BigInt(0) : walletUsdt;
-    const cluster = process.env.NEXT_PUBLIC_SOLANA_CLUSTER === "mainnet-beta" ? "mainnet-beta" : process.env.NEXT_PUBLIC_SOLANA_CLUSTER === "localnet" ? "localnet" : "devnet";
-    const built: PaymentReview = r.review ?? {
-      id: `local_${Math.random().toString(36).slice(2)}`, kind: r.kind, from: source === "vault" ? snap?.estate.address ?? "" : session?.address ?? "", to: r.to, toLabel: r.toLabel, amount: r.amount,
-      token: { symbol: "USD₮", mint: snap?.estate.usdtMint ?? "", verified: true },
-      network: { name: `Solana ${cluster}`, cluster },
-      fee: sponsor?.available && sponsor.feePayer
-        ? { lamports: 10_000, sol: 0.00001, payer: sponsor.feePayer, sponsored: true }
-        : { lamports: 5000, sol: 0.000005, payer: session?.address ?? "", sponsored: false },
-      balances: { usdt: available, sol: session?.solBalance ?? 0, sufficient: available >= r.amount },
-      warnings: r.warnings ?? [], simulated: isMock,
-    };
-    resolver.current = resolve;
-    activeId.current = built.id;
-    pendingKind.current = undefined;
-    attempts.current = 0;
-    reqRef.current = r;
-    selfPay.current = false;
-    setReview(built); setReq(r); setPhase("review"); setError(null); setSignature(undefined); setStepNote(null);
-    if (r.execute && !r.review) void quote(r, built.id);
-  }), [snap, session, walletUsdt, isMock, sponsor]); // eslint-disable-line react-hooks/exhaustive-deps
-
   /** What it costs now, and whether this wallet holds the SOL for its part. False when it couldn't be read. */
   const quote = async (r: PayRequest, id: string): Promise<{ changed: boolean } | null> => {
     if (!service || !snap) return null;
@@ -213,6 +191,31 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       return null;
     }
   };
+  const pay = useCallback((r: PayRequest) => new Promise<PayResult>((resolve) => {
+    const source = r.source ?? "wallet";
+    const available = source === "vault" ? snap?.estate.vaultBalance ?? BigInt(0) : walletUsdt;
+    const cluster = process.env.NEXT_PUBLIC_SOLANA_CLUSTER === "mainnet-beta" ? "mainnet-beta" : process.env.NEXT_PUBLIC_SOLANA_CLUSTER === "localnet" ? "localnet" : "devnet";
+    const built: PaymentReview = r.review ?? {
+      id: `local_${Math.random().toString(36).slice(2)}`, kind: r.kind, from: source === "vault" ? snap?.estate.address ?? "" : session?.address ?? "", to: r.to, toLabel: r.toLabel, amount: r.amount,
+      token: { symbol: "USD₮", mint: snap?.estate.usdtMint ?? "", verified: true },
+      network: { name: `Solana ${cluster}`, cluster },
+      fee: sponsor?.available && sponsor.feePayer
+        ? { lamports: 10_000, sol: 0.00001, payer: sponsor.feePayer, sponsored: true }
+        : { lamports: 5000, sol: 0.000005, payer: session?.address ?? "", sponsored: false },
+      balances: { usdt: available, sol: session?.solBalance ?? 0, sufficient: available >= r.amount },
+      warnings: r.warnings ?? [], simulated: isMock,
+    };
+    resolver.current = resolve;
+    activeId.current = built.id;
+    pendingKind.current = undefined;
+    attempts.current = 0;
+    reqRef.current = r;
+    selfPay.current = false;
+    setReview(built); setReq(r); setPhase("review"); setError(null); setSignature(undefined); setStepNote(null); setCheckingId(null);
+    if (r.execute && !r.review) void quote(r, built.id);
+  }), [snap, session, walletUsdt, isMock, sponsor]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
 
   const finish = (result: PayResult) => { resolver.current?.(result); resolver.current = null; };
   const close = () => {
@@ -226,6 +229,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   // Submitted, not settled: "checking" on that payment id, never a failure that invites paying again (H8).
   const checking = (p: { paymentId: string; signature: string; kind?: string }) => {
     activeId.current = p.paymentId;
+    setCheckingId(p.paymentId);
     pendingKind.current = p.kind;
     setSignature(p.signature);
     track(p.paymentId, true);
@@ -415,10 +419,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
               <div className="flex flex-col gap-3">
                 {contractBlock
                   ? <Blocked code={error.code} message={error.message} />
-                  : <Notice tone="danger" icon={<CircleAlert className="size-5" aria-hidden="true" />} title={error.message}><p role="alert">{pendingIds.includes(activeId.current ?? review.id) ? "" : copy.failed.body}</p></Notice>}
+                  : <Notice tone="danger" icon={<CircleAlert className="size-5" aria-hidden="true" />} title={error.message}><p role="alert">{pendingIds.includes(checkingId ?? review.id) ? "" : copy.failed.body}</p></Notice>}
                 <div className="flex gap-3">
                   <Button variant="secondary" className="flex-1" onClick={close}>{copy.failed.close}</Button>
-                  {!contractBlock && !pendingIds.includes(activeId.current ?? review.id) && <Button className="flex-1" onClick={() => void retry()}>{copy.failed.retry}</Button>}
+                  {!contractBlock && !pendingIds.includes(checkingId ?? review.id) && <Button className="flex-1" onClick={() => void retry()}>{copy.failed.retry}</Button>}
                 </div>
               </div>
             )}
