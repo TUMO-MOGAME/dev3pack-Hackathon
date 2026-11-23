@@ -1472,3 +1472,20 @@ describe("review wave (plan 18.10): the mock as the program", () => {
     expect((await f.snap()).guardians!.fallback.recipients[0].report ?? null).toBeNull();
   });
 });
+
+describe("a disproved passing, as the program (DeathDisproved)", () => {
+  it("an older check-in after the claim: nobody confirms or unlocks it, and anyone who may report replaces it at once", async () => {
+    const saved = storage();
+    const first = await start();
+    await first.death(); await first.attest("nomsa", "david");
+    expect((await first.snap()).estate.status).toBe("DeathPending");
+    // The older program's check-in didn't clear the claim: a sign of life stored after it.
+    saved.edit((s) => { s.snap.estate.lastHeartbeat = now() + 1; });
+    advance(120);
+    const t = await open(createMockService({ instant: true }));
+    await expect(t.svc.finalizeUnlock(t.estate)).rejects.toThrow(/^DeathDisproved/);
+    await t.death("nomsa"); // a trusted person replaces it at once
+    const e = (await t.snap()).estate;
+    expect([e.status, e.death.submittedBy, e.death.attestations]).toEqual(["Active", who("nomsa"), [false, false, false]]);
+  });
+});

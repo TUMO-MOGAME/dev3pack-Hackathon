@@ -8,6 +8,7 @@ import {
   agentVoteFor, agentVotesNeeded, canConfirmRecipient, canConfirmSeat, canReportRecipient, canReportSeat, canSign, canSubmitDeath,
   claimBlock, claimPayable, claimTally, claimVote, deathOpen, deathReplace, deathSince, deathTally, deathVote, hardshipStands,
   hardshipTally, hardshipVote, hasInbox, interestedIn, mayList, NO_WALLET, ownerMayApprove, payoutHeldUntil, reportsAbout, seatReplace, successionOutcome, sweepHeldUntil, wasRemoved,
+  agentVoteRule, deathDisproved, reporterKind, votesAlone,
 } from "./decisions";
 
 const [A, B, C, KID, SIB, MON, BK1, BK2, AGENT, OWNER] = ["A", "B", "C", "KID", "SIB", "MON", "BK1", "BK2", "AGENT", "OWNER"];
@@ -348,5 +349,50 @@ describe("M10: everyone with something to decide has the inbox", () => {
     expect([hasInbox(s, KID, "beneficiary"), hasInbox(s, SIB, "beneficiary"), hasInbox(s, MON, "beneficiary"), hasInbox(s, A, "owner")]).toEqual([true, true, true, true]);
     expect(hasInbox(s, OWNER, "owner")).toBe(false);
     expect(hasInbox(s, OWNER, "owner", 1)).toBe(true);
+  });
+});
+
+describe("who reports the owner's passing, in which words (r4 client)", () => {
+  const listed = (s: EstateSnapshot["guardians"]) => ({ ...s!, fallback: { ...s!.fallback, recipients: [{ wallet: BK2, name: "R", kind: "heir" as const, dead: false }, { wallet: BK1, name: "D", kind: "heir" as const, dead: true }] } });
+  it("family, a trusted person or a living listed recipient; never the agent or a stranger", () => {
+    const s = snap({ estate: active({ certHash: null, submittedBy: null }) });
+    const l = { ...s, guardians: listed(s.guardians) };
+    expect([KID, A, BK2, BK1, AGENT, "STRANGER", OWNER].map((w) => reporterKind(l, w))).toEqual(["family", "trusted", "listed", null, null, null, null]);
+    expect([KID, A, BK2, BK1, AGENT, "STRANGER"].map((w) => canSubmitDeath(l, w, 0))).toEqual([true, true, true, false, false, false]);
+  });
+});
+
+describe("a disproved passing (DeathDisproved)", () => {
+  it("the owner showed life after it: nobody confirms it, and anyone who may report replaces it at once, also while DeathPending", () => {
+    const pending = snap({ estate: { status: "DeathPending", lastHeartbeat: 150 } }); // death took effect at 100
+    expect(deathDisproved(pending.estate)).toBe(true);
+    expect([canSubmitDeath(pending, SIB, 0), canSubmitDeath(pending, A, 0), canSubmitDeath(pending, AGENT, 0)]).toEqual([true, true, false]);
+    const open = snap({ estate: { ...active(), lastHeartbeat: 60 } }); // claim at 50
+    expect(deathDisproved(open.estate)).toBe(true);
+    expect(deathVote(open.estate, A)).toBeNull();
+    expect(canSubmitDeath(open, KID, 51)).toBe(true); // even the reporter, before any hold
+    expect(deathDisproved(snap({ estate: active() }).estate)).toBe(false);
+    expect(deathDisproved(snap({ estate: { lastHeartbeat: 999 } }).estate)).toBe(false); // Unlocked
+  });
+});
+
+describe("decided alone (DECIDED_ALONE)", () => {
+  it("only the only trusted person left, who gains, with the agent's approval", () => {
+    const lone = { verifiers: [NO_WALLET, NO_WALLET, KID] as [string, string, string] };
+    expect(votesAlone(lone, KID, "Approved", KID)).toBe(true);
+    expect(votesAlone(lone, KID, "Referred", KID)).toBe(false);
+    expect(votesAlone(snap().estate, A, "Approved", A)).toBe(false); // others may decide
+    expect(votesAlone(lone, SIB, "Approved", KID)).toBe(false); // doesn't gain
+  });
+});
+
+describe("the votes to replace the agent, and why", () => {
+  it("every held seat before the unlock (DeathPending too), two after it or in the recovery case", () => {
+    const e = snap({ estate: active() }).estate;
+    expect(agentVoteRule(e, 100)).toEqual({ needed: 3, why: "all" });
+    expect(agentVoteRule(e, 241)).toEqual({ needed: 2, why: "recovery" });
+    expect(agentVoteRule({ ...e, status: "DeathPending" }, 100)).toEqual({ needed: 3, why: "all" });
+    expect(agentVoteRule(snap().estate)).toEqual({ needed: 2, why: "after" });
+    expect(agentVoteFor(snap({ estate: active(), agentVotes: [{ candidate: "N", voters: [A, B] }] }), "N", 241)).toMatchObject({ got: 2, needed: 2 });
   });
 });

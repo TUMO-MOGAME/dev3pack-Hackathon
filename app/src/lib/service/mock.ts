@@ -77,7 +77,7 @@ import { MOCK_STORE_KEY } from "./is-mock";
 import { MAX_RULES, MIN_LISTING_SECS, listingEnded, nextDueAfter, ruleEnded, surplusOf } from "../continuity/logic";
 import { openToPeople, outcomeOf } from "../verdict";
 import { MIN_WAIT_SECS, decidesAlone, isCurrentClaim, replaceableAt, reviewedHold, unlockWaitSecs } from "../death-rules";
-import { claimTally, deathTally, hardshipTally, hasLivingSeat, isHeld, mayList } from "../guardians/decisions";
+import { claimTally, deathDisproved, deathTally, hardshipTally, hasLivingSeat, isHeld, mayList } from "../guardians/decisions";
 import { clearDeath, proofOfLife } from "./mock-rules";
 import { createMockContinuity, type MockAgentVotes } from "./mock-continuity";
 
@@ -653,6 +653,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(who !== e.agent, "NotParticipant", "The agent never reports the owner's passing.");
     need(s.snap.beneficiaries.some((b) => b.wallet === who && b.active) || (isHeld(who) && e.verifiers.includes(who)) || G.livingListed(who),
       "NotBeneficiary", "Only the family in this plan, a trusted person or someone on the fallback list can report the owner's passing.");
+    // A disproved claim (the owner showed life after it) is replaced at once, also while DeathPending.
+    if (deathDisproved(e)) return;
     need(e.status === "Active", "BadStatus", "A passing has already been reported for this estate.");
     const d = e.death;
     if (!d.certHash) return;
@@ -673,6 +675,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     const t = tx();
     log("DeathClaimSubmitted", `${first(me())} reported that ${first(e.owner)} has passed away`, t);
     clearDeath(e);
+    e.status = "Active"; // a disproved claim replaced while DeathPending
     const outcome = r ? outcomeOf(r.verdict) : null;
     if (outcome === "Reject") {
       log("DeathReviewed", "The agent could not accept the certificate. Nothing has changed", tx());
@@ -696,6 +699,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(!!d.certHash, "NoDeathClaim", "No passing has been reported.");
     need(e.status === "Active" || e.status === "DeathPending", "BadStatus", "The estate has already unlocked.");
     need(openToPeople(d.verdict), "AgentNotApproved", "The agent has not cleared the certificate.");
+    need(!deathDisproved(e), "DeathDisproved", "The owner showed they are alive after this passing was reported.");
     // Whoever reported it confirms only as the only trusted person left, and only when the agent approved.
     const alone = me() === d.submittedBy;
     need(!alone || decidesAlone(e.verifiers, me(), d.verdict), "OwnApproval", "You cannot approve in your own favour.");
@@ -751,6 +755,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     needCreated();
     const e = est();
     need(e.status === "DeathPending", "BadStatus", "The estate is not waiting to unlock.");
+    need(force || !deathDisproved(e), "DeathDisproved", "The owner showed they are alive after this passing was reported.");
     need(force || nowSecs() >= (e.death.pendingSince ?? 0) + unlockWaitSecs(e), "WaitingPeriodNotOver", "The waiting period has not ended yet.");
     G.checkNotObjected(e.address);
     D.checkNotDisputed(e.address);

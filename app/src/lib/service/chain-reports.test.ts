@@ -11,7 +11,7 @@ const T = 1_000_000;
 
 const estate = (over: Record<string, unknown> = {}) => ({
   status: { Active: {} }, waiting_period_secs: 120, verifiers: ["v", NOBODY, NOBODY],
-  death_cert_hash: hash(7), death_verdict: { Pending: {} }, death_pending_since: T, death_submitted_by: A, ...over,
+  death_cert_hash: hash(7), death_verdict: { Pending: {} }, death_pending_since: T, death_submitted_by: A, last_heartbeat: 0, ...over,
 });
 
 describe("the owner's death claim", () => {
@@ -20,6 +20,13 @@ describe("the owner's death claim", () => {
   it("unreviewed: someone else after one grace", () => {
     expect(() => deathClaimStep(estate(), B, hexOf(9), T + 119)).toThrowError(expect.objectContaining({ code: "BadStatus", retryAt: T + 120 }));
     expect(deathClaimStep(estate(), B, hexOf(9), T + 120)).toBe("send");
+  });
+
+  it("disproved (the owner showed life after it): replaced at once, also while DeathPending; never once unlocked", () => {
+    expect(deathClaimStep(estate({ last_heartbeat: T + 1 }), A, hexOf(9), T + 2)).toBe("send");
+    expect(deathClaimStep(estate({ last_heartbeat: T + 1, status: { DeathPending: {} } }), B, hexOf(9), T + 2)).toBe("send");
+    expect(() => deathClaimStep(estate({ last_heartbeat: T + 1, status: { Unlocked: {} } }), B, hexOf(9), T + 2)).toThrow(/^BadStatus/);
+    expect(() => deathClaimStep(estate({ last_heartbeat: T, status: { DeathPending: {} } }), B, hexOf(9), T + 2)).toThrow(/^BadStatus/);
   });
 
   it("the person who made it waits two", () => {

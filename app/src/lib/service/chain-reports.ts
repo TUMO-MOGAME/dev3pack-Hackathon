@@ -30,9 +30,13 @@ function step(standing: Standing, who: Base58, hash: string, waitingSecs: number
 }
 
 export function deathClaimStep(estate: Raw, who: Base58, hash: string, now: number): ReportStep {
-  must(enumOf(estate, "status", ["Active", "DeathPending", "Unlocked", "Frozen"] as const) === "Active",
-    "BadStatus", "The passing was already confirmed, so there is nothing to report.");
+  const status = enumOf(estate, "status", ["Active", "DeathPending", "Unlocked", "Frozen"] as const);
   const standing = hex(estate, "death_cert_hash");
+  // Estate::death_disproved: the owner showed life after it, so anyone who may report replaces it at once, also while
+  // DeathPending (submit_death_claim).
+  const disproved = standing !== NO_HASH && status !== "Unlocked" && num(estate, "last_heartbeat") > num(estate, "death_pending_since");
+  if (disproved && (status === "Active" || status === "DeathPending")) return "send";
+  must(status === "Active", "BadStatus", "The passing was already confirmed, so there is nothing to report.");
   if (standing === NO_HASH) return "send";
   const verdict = enumOf(estate, "death_verdict", VERDICT);
   must(verdict === "Pending" || keyArray(estate, "verifiers").some((v) => v !== NOBODY),
