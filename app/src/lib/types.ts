@@ -221,7 +221,8 @@ export interface CarValuation {
 export interface OfferRanking {
   bestOffer: Base58 | null;
   eligible: { offer: Base58; amount: bigint; reason: string }[];
-  ineligible: { offer: Base58; amount: bigint; reason: string }[];
+  /** `readyAt`: acceptable from then, once its objection window (or the hardship approval's) has passed. */
+  ineligible: { offer: Base58; amount: bigint; reason: string; readyAt?: number }[];
 }
 
 export interface ActivityItem {

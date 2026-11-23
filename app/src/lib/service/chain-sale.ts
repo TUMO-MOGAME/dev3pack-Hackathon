@@ -4,7 +4,7 @@
  */
 import type { Base58, OfferRanking } from "../types";
 import type { SeenOffer, TxResult } from "./types";
-import { rankOffers } from "../agent/offers";
+import { rankOffers, type SaleTiming } from "../agent/offers";
 import { saleTransaction } from "../agent/sale";
 import { eligibleSeats } from "../death-rules";
 import { actionBody } from "../access/messages";
@@ -18,6 +18,8 @@ export interface ChainSaleDeps {
   /** The estate read afresh. */
   fetchEstate(estate: Base58): Promise<RawSnapshot>;
   latestBlockhash(): Promise<string>;
+  /** What the program checks against the clock (lib/chain/sale-timing.ts), read as the agent's server reads it. */
+  saleTiming(estate: Base58, asset: { address: Base58; hardshipBeneficiary: Base58 | null }): Promise<SaleTiming>;
   /** The signed request headers for this action and body. */
   headers(estate: Base58, body: string): Promise<Record<string, string>>;
   fetch?: typeof fetch;
@@ -42,9 +44,16 @@ export async function acceptBestOffer(d: ChainSaleDeps, estate: Base58, assetAdd
   const asset = snap.assets.find((a) => a.address === assetAddress);
   must(asset, "BadStatus", "That asset is not in this plan.");
   const offers = snap.offers.filter((o) => o.asset === asset.address);
-  const best = offers.find((o) => o.address === rankOffers(asset, offers, { agent, verifiers }).bestOffer);
+  // Offers the program would refuse now (too old, still in their objection window) are never the one signed.
+  const timing = await d.saleTiming(estate, asset);
+  const ranked = rankOffers(asset, offers, { agent, verifiers }, timing);
+  const best = offers.find((o) => o.address === ranked.bestOffer);
   // Seen as "no acceptable offer": one that arrived since is shown first, never signed unread.
   must(seen !== null || !best, "OfferChanged", "An offer arrived after you looked. Check it before you sign.");
+  const ready = ranked.ineligible.flatMap((r) => (r.readyAt ? [r.readyAt] : []));
+  if (!best && ready.length) {
+    throw new ChainServiceError("ObjectionWindowOpen", "Monitors can still object, so no offer can be accepted yet. Try again once the window closes.", Math.min(...ready));
+  }
   must(best, asset.hardshipBeneficiary ? "BelowHardshipFloor" : "BelowFloor", "No offer can be accepted yet.");
 
   // Nobody signs for an offer, amount or recipient other than the one they read.

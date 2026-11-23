@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   coSigned: [] as unknown[],
   refuse: null as string | null,
   spent: 0,
+  /** Accounts by address for fetchAccountRaw (the Guard, the sale's objection, a hardship's stamp). */
+  raw: {} as Record<string, unknown>,
 }));
 
 // The version gate (plan §18.9 C1) has its own tests: lib/chain/release.test.ts.
@@ -38,7 +40,7 @@ vi.mock("@/lib/chain/client", async () => {
 vi.mock("@/lib/chain/tx", async (original: () => Promise<object>) => ({
   ...(await original()), getConnection: () => ({ isBlockhashValid: async () => ({ value: h.blockhashValid }) }),
 }));
-vi.mock("@/lib/chain/reads", () => ({ invalidateProgramAccounts: () => { h.fresh++; }, fetchAccountRaw: async () => null }));
+vi.mock("@/lib/chain/reads", () => ({ invalidateProgramAccounts: () => { h.fresh++; }, fetchAccountRaw: async (_t: string, address: string) => h.raw[address] ?? null }));
 vi.mock("@/lib/server/estate", () => ({ loadPublicSnapshot: async () => h.snap }));
 vi.mock("@/lib/agent/budget", () => ({ spendAgentAllowance: async () => { h.spent++; }, spendAgentRent: async () => undefined }));
 vi.mock("@/lib/agent/agent-wallet", async (original: () => Promise<object>) => ({
@@ -54,7 +56,7 @@ vi.mock("@/lib/agent/agent-wallet", async (original: () => Promise<object>) => (
 }));
 
 const { getIdl, getCoder, findInstruction } = await import("@/lib/chain/idl");
-const { estatePda, assetPda, offerPda, ata, hardshipPda, objectionPda } = await import("@/lib/chain/pda");
+const { estatePda, assetPda, offerPda, ata, hardshipPda, objectionPda, guardPda, stampPda } = await import("@/lib/chain/pda");
 const ix = await import("@/lib/chain/instructions");
 const { saleInstruction, saleTransaction, checkSaleTx } = await import("./sale");
 const { rankOffers } = await import("./offers");
@@ -97,7 +99,7 @@ beforeEach(() => {
     estate: { agent: agent.publicKey.toBase58(), usdtMint: h.mint, verifiers: [trusted.address, second.address, key()] },
     beneficiaries: [{ wallet: child.address, active: true }], assets: [asset], offers: [low, best],
   };
-  Object.assign(h, { agent: agent.publicKey.toBase58(), snap: world, fresh: 0, blockhashValid: true, alone: [], coSigned: [], refuse: null, spent: 0 });
+  Object.assign(h, { agent: agent.publicKey.toBase58(), snap: world, fresh: 0, blockhashValid: true, alone: [], coSigned: [], refuse: null, spent: 0, raw: {} });
 });
 
 const sale = (over: Partial<Parameters<typeof saleInstruction>[1]> = {}) =>
@@ -301,6 +303,50 @@ describe("who may co-sign", () => {
   it("the program's refusal reaches the caller as 409", async () => {
     h.refuse = "Rejected by the Heirloom program: OfferChanged: The offer changed";
     await refused(await send(b64(wire())), 409, "OfferChanged");
+  });
+});
+
+describe("what the program would refuse now is never co-signed (OfferTooOld, ObjectionWindowOpen)", () => {
+  const now = () => Math.floor(Date.now() / 1000);
+  const guard = (windowSecs: number) => { h.raw[guardPda(programId, estate).toBase58()] = { objection_window_secs: windowSecs }; };
+
+  it("an offer still in its objection window: the agent co-signs only the best offer past it", async () => {
+    guard(3_600);
+    best.createdAt = now();
+    await refused(await send(b64(wire())), 409, "sale_changed");
+    const res = await send(b64(wire([theSale({ offer: low })])));
+    expect(res.status).toBe(200);
+    const { ranking } = (await res.json()) as { ranking: { bestOffer: string; ineligible: { offer: string; readyAt?: number }[] } };
+    expect(ranking.bestOffer).toBe(low.address);
+    expect(ranking.ineligible).toEqual([expect.objectContaining({ offer: best.address, readyAt: best.createdAt + 3_600 })]);
+  });
+
+  it("every offer in its window: nothing is signed", async () => {
+    guard(3_600);
+    best.createdAt = now();
+    low.createdAt = now();
+    await refused(await send(b64(wire())), 409, "ObjectionWindowOpen");
+  });
+
+  it("a standing hardship approved within the window: nothing is signed", async () => {
+    guard(3_600);
+    asset.hardshipBeneficiary = child.address;
+    h.raw[stampPda(programId, hardshipPda(programId, asset.address, child.address)).toBase58()] = { approved_at: now() };
+    await refused(await send(b64(wire([theSale()]))), 409, "ObjectionWindowOpen");
+  });
+
+  it("an offer made at or before an upheld objection to the sale was decided: never the one signed", async () => {
+    h.raw[objectionPda(programId, asset.address).toBase58()] = { status: { Upheld: {} }, raised_at: 1_000 };
+    best.createdAt = 1_000;
+    low.createdAt = 1_001;
+    await refused(await send(b64(wire())), 409, "sale_changed");
+    expect((await send(b64(wire([theSale({ offer: low })])))).status).toBe(200);
+  });
+
+  it("a dismissed objection holds nothing back", async () => {
+    h.raw[objectionPda(programId, asset.address).toBase58()] = { status: { Dismissed: {} }, raised_at: 1_000 };
+    best.createdAt = 1_000;
+    expect((await send(b64(wire()))).status).toBe(200);
   });
 });
 

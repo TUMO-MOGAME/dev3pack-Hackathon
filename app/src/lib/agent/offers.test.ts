@@ -50,3 +50,33 @@ describe("rankOffers (mirrors accept_offer)", () => {
     expect(r.ineligible[0].reason).toMatch(/not listed/);
   });
 });
+
+describe("what accept_offer checks against the clock", () => {
+  const t = { now: 1_000, objectionWindowSecs: null, saleObjectionUpheldAt: null, hardshipQuorumAt: null };
+  const high = () => offer("high", 12000, 990);
+  const mid = () => offer("mid", 11000, 100);
+
+  it("no guard: nothing waits", () => expect(rankOffers(asset(), [high(), mid()], undefined, t).bestOffer).toBe("high"));
+
+  it("with a guard an offer waits out the objection window, and says until when", () => {
+    const r = rankOffers(asset(), [high(), mid()], undefined, { ...t, objectionWindowSecs: 60 });
+    expect(r.bestOffer).toBe("mid");
+    expect(r.ineligible).toEqual([expect.objectContaining({ offer: "high", readyAt: 1_050, reason: expect.stringMatching(/object to this offer until/) })]);
+    expect(rankOffers(asset(), [high()], undefined, { ...t, now: 1_050, objectionWindowSecs: 60 }).bestOffer).toBe("high");
+  });
+
+  it("an offer made at or before an upheld sale objection was decided is never accepted (OfferTooOld)", () => {
+    const r = rankOffers(asset(), [high(), mid()], undefined, { ...t, saleObjectionUpheldAt: 100 });
+    expect(r.bestOffer).toBe("high");
+    expect(r.ineligible).toEqual([expect.objectContaining({ offer: "mid", reason: expect.stringMatching(/objection to the sale was upheld/) })]);
+    expect(r.ineligible[0].readyAt).toBeUndefined();
+  });
+
+  it("a standing hardship's approval waits out the window too", () => {
+    const hardship = asset({ hardshipBeneficiary: "kid" });
+    const r = rankOffers(hardship, [mid()], undefined, { ...t, objectionWindowSecs: 60, hardshipQuorumAt: 980 });
+    expect(r.bestOffer).toBeNull();
+    expect(r.ineligible[0]).toMatchObject({ readyAt: 1_040, reason: expect.stringMatching(/hardship approval/) });
+    expect(rankOffers(asset(), [mid()], undefined, { ...t, objectionWindowSecs: 60, hardshipQuorumAt: 980 }).bestOffer).toBe("mid");
+  });
+});

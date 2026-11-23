@@ -28,6 +28,7 @@ import { createChainContinuity } from "./chain-continuity";
 import { deathClaimStep } from "./chain-reports";
 import { checkPeople, planSetup } from "./chain-setup";
 import { acceptBestOffer, reviveRanking, type WireRanking } from "./chain-sale";
+import { loadSaleTiming } from "../chain/sale-timing";
 import { getActiveSigner, peekActiveSigner } from "../wallet/signer";
 import {
   defaultReceiptStore, feeForReview, newPaymentId, openReceipts, recheck, resumeOnReconnect, runPayment, sameOpen, signSponsoredOrSelf, SponsorError, waitForFinal,
@@ -1027,6 +1028,7 @@ export function createChainService(): HeirloomService {
     acceptBestOffer: (estate, asset, seen) => acceptBestOffer({
       fetchEstate: freshEstate,
       latestBlockhash: async () => (await getConnection().getLatestBlockhash("confirmed")).blockhash,
+      saleTiming: (e, a) => loadSaleTiming(e, a),
       headers: (e, body) => actionHeaders(getActiveSigner(), "accept-offer", e, body),
     }, estate, asset, seen).finally(written),
 
