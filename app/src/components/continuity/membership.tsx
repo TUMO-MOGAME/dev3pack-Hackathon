@@ -39,6 +39,29 @@ export function ReleaseAsset({ asset, title }: { asset: Asset; title: string }) 
   );
 }
 
+/** A family member the owner removed comes back into the plan (add_beneficiary allows it). */
+export function RestoreMember({ snap, wallet, name }: { snap: EstateSnapshot; wallet: Base58; name: string }) {
+  const t = useCopy().guardians.rules.remove;
+  const { session } = useEstate();
+  const { act, busy, refusal } = useAction();
+  const [asking, setAsking] = useState(false);
+  const e = snap.estate;
+  if (session?.address !== e.owner || e.status !== "Active") return null;
+  const key = `restore-${wallet}`;
+  if (!asking) return <Button variant="ghost" small onClick={() => setAsking(true)} aria-label={fmt(t.restoreSr, { name })}><Undo2 className="size-4" aria-hidden="true" />{t.restore}</Button>;
+  return (
+    <div role="group" aria-label={fmt(t.restoreTitle, { name })} className="mt-2 w-full min-w-0 basis-full rounded-md border-2 border-ink bg-surface p-3 text-small">
+      <p className="text-body font-semibold">{fmt(t.restoreTitle, { name })}</p>
+      <p className="mt-1">{t.restoreBody}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="ghost" small autoFocus onClick={() => setAsking(false)}>{t.keep}</Button>
+        <Button small loading={busy === key} disabled={!!busy} onClick={() => void act(key, (s, est) => s.restoreMember(est, wallet), t.restored)}>{fmt(t.restoreConfirm, { name: shortName(name) })}</Button>
+      </div>
+      <ActionResult receipt={null} refusal={refusal} />
+    </div>
+  );
+}
+
 /** "Remove", then what stops, which rules end, who receives what is left instead, and a confirmation. */
 export function RemoveMember({ snap, kind, wallet, name }: { snap: EstateSnapshot; kind: "beneficiary" | "payee"; wallet: Base58; name: string }) {
   const { common, guardians } = useCopy();

@@ -6,6 +6,7 @@ import type { ScreensCopy } from "@/content/screens";
 import { useLocale, useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot, TxResult } from "@/lib/service";
 import type { WalletSession, WillChatMessage, WillDraft } from "@/lib/types";
+import type { CreateEstateOptions } from "@/lib/continuity/types";
 import { formatUsdt, fromBase, shortAddress, toBase } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, ButtonLink, Card, Consent, Eyebrow, ExplorerLink, Notice, PageHeader } from "@/components/ui/primitives";
@@ -19,6 +20,8 @@ import { BillTemplates } from "@/components/everyday/bill-templates";
 import { WillLettersCard } from "@/components/letters/lazy";
 import { FRESH_ATTR, firstDemoPersona } from "@/lib/service/fresh-visit";
 import { ruleKey, signedEvery, waitingSecsFor, waitingText, withOwnerSummary } from "@/lib/will-summary";
+import { clockOf, clockText, ruleClock, scheduleSecs } from "@/lib/schedule-clock";
+import { MIN_WAITING_SECS } from "@/lib/continuity/logic";
 import { isMockService } from "@/lib/service/is-mock";
 import { willView } from "@/lib/hooks/pick-estate";
 import { ConnectPeople, EndRule, ResidualPicker } from "@/components/continuity/continuity";
@@ -39,7 +42,18 @@ const longDate =(iso: string | number) => new Date(typeof iso === "number" ? iso
 function useWaitPeriod(copy: Copy) {
   const { service } = useEstate();
   const mode = isMockService(service) ? "mock" : "chain";
-  return (days: number) => waitingText(waitingSecsFor(days, mode), copy.preview);
+  // What the plan will really get (M5): a wait shorter than the program allows is signed as the shortest one.
+  return (days: number) => {
+    const secs = waitingSecsFor(days, mode);
+    return mode === "chain" && secs === MIN_WAITING_SECS && days * 86_400 < MIN_WAITING_SECS ? fmt(copy.preview.periodMin, { secs }) : waitingText(secs, copy.preview);
+  };
+}
+
+/** How a schedule chosen as `every` will really repeat here (H10): the demo clock, a test site's, or as chosen. */
+function useScheduleClock() {
+  const { service } = useEstate();
+  const mode = isMockService(service) ? "mock" : "chain";
+  return (every: NonNullable<WillDraft["rules"][number]["recurring"]>["every"]) => clockOf(scheduleSecs(every, mode), every);
 }
 
 export function WillScreen({ copy: english, bills: billsEnglish }: { copy: Copy; bills: BillsCopy }) {
@@ -56,13 +70,28 @@ export function WillScreen({ copy: english, bills: billsEnglish }: { copy: Copy;
 function WillFlow({ copy, bills, snap, session, firstVisit }: { copy: Copy; bills: BillsCopy; snap: EstateSnapshot | null; session: WalletSession; firstVisit?: boolean }) {
   // Kept here so the "locked in" moment survives the estate appearing underneath it.
   const [txs, setTxs] = useState<TxResult[] | null>(null);
+  const [topUpFailed, setTopUpFailed] = useState(false);
+  // A plan this wallet started signing that isn't all on-chain yet (H6). Looked up again when the estate changes.
+  const { service } = useEstate();
+  const [unfinished, setUnfinished] = useState<{ draft: WillDraft; options: CreateEstateOptions } | null>(null);
+  const [fresh, setFresh] = useState(false);
+  const snapKey = snap ? `${snap.estate.address}:${snap.estate.willHash}:${snap.rules.length}:${snap.beneficiaries.length}` : "none";
+  useEffect(() => {
+    if (!service || firstVisit) return;
+    let live = true;
+    service.unfinishedSigning().then((u) => { if (live) setUnfinished(u); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [service, session.address, snapKey, firstVisit]);
   // A family member or trusted person who plans for her own family sees the estate she belongs to here; this page
   // is about her own plan, so she is offered the plan builder (on chain it creates an estate owned by her wallet).
   const [ownPlan, setOwnPlan] = useState(false);
   const { chooseEstate, estates } = useEstate();
-  const signed = (r: { estate: string; txs: TxResult[] }) => { setTxs(r.txs); chooseEstate(r.estate); };
+  const signed = (r: { estate: string; txs: TxResult[]; topUpFailed?: boolean }) => { setTxs(r.txs); setTopUpFailed(!!r.topUpFailed); setUnfinished(null); chooseEstate(r.estate); };
   const view = willView(snap?.estate.owner ?? null, session.address, estates, snap?.estate.address ?? null);
-  if (txs) return <Done copy={copy} txs={txs} />;
+  if (txs) return <Done copy={copy} txs={txs} topUpFailed={topUpFailed} />;
+  if (unfinished && !fresh && (!snap || view.kind === "locked")) {
+    return <FinishSigning copy={copy} plan={unfinished} onSigned={signed} onFresh={snap ? undefined : () => setFresh(true)} />;
+  }
   if (snap && view.kind === "locked") return <Locked copy={copy} bills={bills} snap={snap} />;
   if (snap && view.kind !== "builder" && !(view.kind === "startOwn" && ownPlan)) {
     return <NotYourPlan copy={copy} snap={snap} session={session} own={view.kind === "openOwn" ? view.estate : null} onStart={() => setOwnPlan(true)} />;
@@ -88,7 +117,32 @@ function NotYourPlan({ copy, snap, session, own, onStart }: { copy: Copy; snap: 
   );
 }
 
-function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
+/** "Finish signing": the same plan again, which adds only what the chain is missing (H6). */
+function FinishSigning({ copy, plan, onSigned, onFresh }: {
+  copy: Copy; plan: { draft: WillDraft; options: CreateEstateOptions }; onSigned: (r: { estate: string; txs: TxResult[]; topUpFailed?: boolean }) => void; onFresh?: () => void;
+}) {
+  const { run, busy } = useEstate();
+  const f = copy.finish;
+  const finish = async () => {
+    const res = await run("sign", (s) => s.createEstateFromWill(plan.draft, plan.options));
+    if (res.ok) onSigned(res.value);
+  };
+  return (
+    <div className="mx-auto max-w-xl">
+      <PageHeader eyebrow={copy.eyebrow} title={f.title} body={f.body} />
+      <Card>
+        <h2 className="text-h3">{f.summary}</h2>
+        <p className="mt-2 whitespace-pre-line">{plan.draft.plainLanguageSummary}</p>
+      </Card>
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <Button onClick={() => void finish()} loading={busy === "sign"} disabled={!!busy}><Lock className="size-5" aria-hidden="true" />{f.cta}</Button>
+        {onFresh && <Button variant="secondary" onClick={onFresh} disabled={!!busy}>{f.again}</Button>}
+      </div>
+    </div>
+  );
+}
+
+function Done({ copy, txs, topUpFailed = false }: { copy: Copy; txs: TxResult[]; topUpFailed?: boolean }) {
   return (
     <div className="enter mx-auto max-w-xl text-center [--enter-dur:0.35s] [--from-s:0.97] [--from-y:0]">
       <span className="spring-pop mx-auto grid size-20 place-items-center rounded-full bg-accent text-accent-ink [--enter-delay:0.1s] [--from-s:0]">
@@ -96,6 +150,7 @@ function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
       </span>
       <h1 className="mt-5 text-h1" role="status">{copy.done.title}</h1>
       <p className="mt-3 text-lead text-ink-2">{copy.done.body}</p>
+      {topUpFailed && <Notice tone="warn" className="mt-4 text-left"><p role="status">{copy.done.topUp}</p></Notice>}
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
         <ButtonLink href="/vault">{copy.done.fund}<ArrowRight className="size-5" aria-hidden="true" /></ButtonLink>
         <ButtonLink href="/car" variant="secondary">{copy.done.car}</ButtonLink>
@@ -152,10 +207,18 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
       const timed = k in starts ? { ...r, startsNow: starts[k] } : r;
       return onRequest.includes(scheduleKey(r)) ? paidOnRequest(timed) : timed;
     });
-    return withOwnerSummary(rawDraft, rules, copy.review, {
+    const out = withOwnerSummary(rawDraft, rules, copy.review, {
       category: (c) => common.status.category[c], every: (e) => copy.review.summaryEvery[e], usd, need: 2,
     });
-  }, [rawDraft, extra, starts, onRequest, copy, common]);
+    // On a fast clock the signed summary says so (H10): "every month" would be signed as every 60 seconds.
+    const fast = rules.map((r) => r.recurring && clockOf(scheduleSecs(r.recurring.every, isMock ? "mock" : "chain"), r.recurring.every)).find((c) => c?.fast);
+    // A wait shorter than the program allows is signed as the shortest one (M5): the signed text says so too.
+    const waitSecs = waitingSecsFor(rawDraft.waitingPeriodDays, isMock ? "mock" : "chain");
+    const clamped = !isMock && rawDraft.waitingPeriodDays * 86_400 < waitSecs;
+    if (!fast && !clamped) return out;
+    const note = [fast && fmt(copy.review.summaryClock, { secs: fast.secs }), clamped && `${copy.preview.waiting}: ${fmt(copy.preview.periodMin, { secs: waitSecs })}.`].filter(Boolean).join(" ");
+    return { ...out, draft: { ...out.draft, plainLanguageSummary: `${out.draft.plainLanguageSummary.slice(0, 2000 - note.length - 1)} ${note}`.trim() } };
+  }, [rawDraft, extra, starts, onRequest, copy, common, isMock]);
   const draft: WillDraft | null = owned?.draft ?? null;
   const addBill = (rule: WillDraft["rules"][number]) => {
     setExtra((x) => [...x, rule]);
@@ -243,6 +306,10 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
     const known = isMock ? DEMO_PAYEES : [];
     const noPayee = missingPayees(draft.rules, known, practice);
     const made = practice ? [...new Set(missingPayees(draft.rules, known).map((m) => m.name))] : [];
+    const secsNow = scheduleSecs("month", isMock ? "mock" : "chain");
+    const everyWords = clockOf(secsNow, "month").fast
+      ? Object.fromEntries(Object.keys(copy.preview.every).map((k) => [k, fmt(copy.preview.secondsHere, { secs: secsNow })])) as Record<keyof typeof copy.preview.every, string>
+      : copy.preview.every;
     return (
       <Review
         copy={copy} draft={draft} edited={owned?.edited ?? false} onBack={() => setView("chat")} onSign={sign} signing={busy === "sign"}
@@ -250,7 +317,7 @@ function Writer({ copy, bills, session, onSigned, firstVisit = false }: { copy: 
         setup={(
           <>
             <SetupChecks
-              draft={draft} every={copy.preview.every} trusted={trusted} missing={noPayee} made={made} refused={payeeRefused}
+              draft={draft} every={everyWords} trusted={trusted} missing={noPayee} made={made} refused={payeeRefused}
               onFixPeople={() => setView("chat")}
               onFixWallets={isMock ? undefined : () => { setWallets({}); setPractice(false); setAddressRound((n) => n + 1); }}
               onPractice={() => { setPractice(true); setPayeeRefused(false); }}
@@ -353,6 +420,7 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
   const { common } = useCopy();
   const p = copy.preview;
   const waitText = useWaitPeriod(copy);
+  const clock = useScheduleClock();
   const parts = [!!draft?.beneficiaries.length, !!draft?.rules.length, (draft?.verifiers.length ?? 0) >= 3, !!draft?.assets.length];
   const done = parts.filter(Boolean).length;
   return (
@@ -384,9 +452,10 @@ function Preview({ copy, draft, onStart, footer, bills, extraFrom, onAddBill, on
                       <p><span className="font-semibold">{r.beneficiaryLabel}</span> · {cat}</p>
                       <p className="text-ink-2">
                         {r.recurring
-                          ? fmt(p.recurringLine, { amount: usd(r.recurring.amountUsdt), every: p.every[r.recurring.every], payee: r.recurring.payeeName })
+                          ? fmt(clock(r.recurring.every).fast ? p.recurringLineFast : p.recurringLine, { amount: usd(r.recurring.amountUsdt), every: p.every[r.recurring.every], payee: r.recurring.payeeName })
                           : fmt(p.ruleLine, { category: p.onClaim, max: usd(r.maxPerClaimUsdt), cap: usd(r.lifetimeCapUsdt) })}
                       </p>
+                      {r.recurring && clockText(clock(r.recurring.every), p) && <p className="text-[0.75rem] font-semibold">{clockText(clock(r.recurring.every), p)}</p>}
                     </div>
                     {r.recurring && <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-ink px-2 py-0.5 text-[0.7rem] font-semibold text-ink"><CalendarClock className="size-3" aria-hidden="true" />{p.scheduled}</span>}
                   </div>
@@ -454,6 +523,7 @@ function Review({ copy, draft, edited, onBack, onSign, signing, blocked, setup }
   const r = copy.review;
   const need = 2;
   const waitText = useWaitPeriod(copy);
+  const clock = useScheduleClock();
   return (
     <div className="enter mx-auto max-w-2xl [--enter-dur:0.3s] [--from-y:12px]">
       <button type="button" onClick={onBack} className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-full pr-3 text-small font-semibold text-accent"><ArrowLeft className="size-4" aria-hidden="true" />{r.back}</button>
@@ -485,9 +555,12 @@ function Review({ copy, draft, edited, onBack, onSign, signing, blocked, setup }
                 return (
                   <li key={i} className="flex gap-3 rounded-md border border-line bg-surface p-3.5">
                     <span className="grid size-9 shrink-0 place-items-center rounded-sm bg-surface-2 text-amber"><Icon className="size-5" aria-hidden="true" /></span>
-                    <p>{rule.recurring
-                      ? fmt(r.recurringRule, { ...base, amount: usd(rule.recurring.amountUsdt), payee: rule.recurring.payeeName, every: copy.preview.every[rule.recurring.every] })
-                      : fmt(rule.allowedPayeeKind === "Other" ? r.ruleOther : r.rule, base)}</p>
+                    <div className="min-w-0">
+                      <p>{rule.recurring
+                        ? fmt(clock(rule.recurring.every).fast ? r.recurringRuleFast : r.recurringRule, { ...base, amount: usd(rule.recurring.amountUsdt), payee: rule.recurring.payeeName, every: copy.preview.every[rule.recurring.every] })
+                        : fmt(rule.allowedPayeeKind === "Other" ? r.ruleOther : r.rule, base)}</p>
+                      {rule.recurring && clockText(clock(rule.recurring.every), copy.preview) && <p className="mt-1 text-small font-semibold">{clockText(clock(rule.recurring.every), copy.preview)}</p>}
+                    </div>
                   </li>
                 );
               })}
@@ -514,6 +587,7 @@ function Review({ copy, draft, edited, onBack, onSign, signing, blocked, setup }
           <h2 className="text-h3">{r.carTitle}</h2>
           <p className="mt-2">{fmt(r.car, { title: a.title, floor: usd(a.floorPriceUsdt), proceeds: a.proceedsTo })}</p>
           <p className="mt-2 text-ink-2">{fmt(r.carHardship, { policy: a.hardshipPolicy, floor: usd(a.hardshipFloorUsdt) })}</p>
+          <p className="mt-2 text-small font-semibold">{r.carNotRegistered}</p>
         </section>
       ))}
 
@@ -561,8 +635,9 @@ function Locked({ copy, bills, snap }: { copy: Copy; bills: BillsCopy; snap: Est
               <div className="min-w-0">
                 <Badge tone={rule.startsNow ? "gold" : "neutral"}>{rule.startsNow ? <Zap className="size-3.5" aria-hidden="true" /> : <Hourglass className="size-3.5" aria-hidden="true" />}{rule.startsNow ? copy.preview.now : copy.preview.later}</Badge>
                 <p className="mt-1.5">{recurring
-                  ? fmt(copy.review.recurringRule, { ...base, amount: formatUsdt(rule.recurringAmount, { decimals: 0 }), payee: nameOf(rule.fixedPayee), every: copy.preview.every[signedEvery(rule)] })
+                  ? fmt(ruleClock(rule).fast ? copy.review.recurringRuleFast : copy.review.recurringRule, { ...base, amount: formatUsdt(rule.recurringAmount, { decimals: 0 }), payee: nameOf(rule.fixedPayee), every: copy.preview.every[signedEvery(rule)] })
                   : fmt(rule.allowedPayeeKind === "Other" ? copy.review.ruleOther : copy.review.rule, base)}</p>
+                {recurring && clockText(ruleClock(rule), copy.preview) && <p className="mt-1 text-small font-semibold">{clockText(ruleClock(rule), copy.preview)}</p>}
                 <EndRule snap={snap} rule={rule} />
               </div>
             </li>

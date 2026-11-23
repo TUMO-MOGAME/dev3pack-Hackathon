@@ -7,7 +7,7 @@ import type { WalletSession } from "@/lib/types";
 import { useWallet } from "@/lib/hooks/wallet-source";
 import { useEstate } from "@/lib/hooks/estate";
 import { shortName } from "@/lib/names";
-import { scheduleStepDue } from "@/lib/schedule-step";
+import { claimedAfterDeath, scheduleStepDue } from "@/lib/schedule-step";
 import type { CommonCopy } from "@/content/common";
 import { fmt, useCopy } from "./copy";
 import { openToPeople } from "@/lib/verdict";
@@ -48,7 +48,8 @@ function nextStep(snap: EstateSnapshot | null, sessions: WalletSession[]): Step 
     return { key: "attest", actor: person(next ?? holders[0]), href: "/inbox", vars: { got: t.got, need: t.needed } };
   }
   if (e.status === "DeathPending") return { key: "wait", actor: kid, href: "/family" };
-  if (snap.claims.length === 0) return { key: "claim", actor: kid, href: "/claims" };
+  // The story's fee claim: one made after the passing, not an everyday request from before it (those carry a note).
+  if (!claimedAfterDeath(snap)) return { key: "claim", actor: kid, href: "/claims" };
   // A claim nobody can ever pay, or with nobody left to decide it, is not a step.
   const open = snap.claims.find((c) => c.status === "Open" && (claimPayable(snap, c, now) || holders.some((v) => canSign(claimVote(snap, c, v, now)))));
   if (open) {

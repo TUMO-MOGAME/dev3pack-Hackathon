@@ -32,7 +32,7 @@ const ben = (w: string) => beneficiaryPda(programId, estate, w).toBase58();
 const seatAt = (i: number) => seatPda(programId, estate, i).toBase58();
 const reportAt = (i: number) => fallbackReportPda(programId, estate, i).toBase58();
 const zero = Array<number>(32).fill(0);
-const file = () => new File(["certificate"], "c.pdf", { type: "application/pdf" });
+const file = () => new File(["%PDF-1.4 certificate"], "c.pdf", { type: "application/pdf" });
 
 let sent: TransactionInstruction[];
 let reviewed: number[];
@@ -68,7 +68,7 @@ beforeEach(() => {
   h.accounts.set(guardPda(programId, estate).toBase58(), { fallback: [kid, NOBODY, recipient, NOBODY], fallback_dead: 0, fallback_wait_secs: 120 });
 });
 
-const svc = () => createChainGuardians({
+const deps = (): Parameters<typeof createChainGuardians>[0] => ({
   send: async (ixs) => {
     sent.push(...(typeof ixs === "function" ? ixs(new PublicKey(h.me)) : ixs));
     return { signature: "sent", explorerUrl: "" };
@@ -85,6 +85,7 @@ const svc = () => createChainGuardians({
   },
   getEstate: async () => ({}),
 });
+const svc = () => createChainGuardians(deps());
 
 const account = (name: string, t = sent[0]) => {
   const decoded = getCoder().instruction.decode(Buffer.from(t.data))!.name;
@@ -106,8 +107,15 @@ describe("reportSeatDeath", () => {
   it("your own unreviewed report of the same file: only the review again", async () => {
     const hash = await sha256Hex(new Uint8Array(await file().arrayBuffer()));
     setSeat(1, { death_cert_hash: [...Buffer.from(hash, "hex")], death_reported_by: v0, death_pending_since: Math.floor(Date.now() / 1000) });
-    expect((await svc().reportSeatDeath(estate, 1, file())).tx.signature).toBe("review");
+    expect((await svc().reportSeatDeath(estate, 1, file())).tx?.signature).toBe("review");
     expect(sent).toEqual([]);
+  });
+
+  it("a resumed report whose review signed nothing (an unnamed person) answers tx: null", async () => {
+    const hash = await sha256Hex(new Uint8Array(await file().arrayBuffer()));
+    setSeat(1, { death_cert_hash: [...Buffer.from(hash, "hex")], death_reported_by: v0, death_pending_since: Math.floor(Date.now() / 1000) });
+    const quiet = createChainGuardians({ ...deps(), review: async () => ({ report: { summary: "no name" } as never, tx: null }) });
+    expect((await quiet.reportSeatDeath(estate, 1, file())).tx).toBeNull();
   });
 
   it("someone else's fresh report can't be replaced yet", async () => {

@@ -8,7 +8,8 @@ import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
 import type { AgentReport, Claim, Role, WalletSession } from "@/lib/types";
-import { formatUsdt, formatZar, toBase } from "@/lib/format";
+import { formatUsdt, formatUsdtExact, formatZar, toBase } from "@/lib/format";
+import { amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, ButtonLink, Card, Consent, EmptyState, ExplorerLink, Field, inputClass, Notice, PageHeader, TickDisc } from "@/components/ui/primitives";
 import { FilePicker } from "@/components/ui/client";
@@ -33,6 +34,7 @@ import { openToPeople, outcomeOf } from "@/lib/verdict";
 import { ReferredNote } from "@/components/continuity/continuity";
 import { claimBlock, claimPayable, claimTally, isFamily, ownerMayApprove, wasRemoved } from "@/lib/guardians/decisions";
 import { ClaimState, useWho, VoteTally } from "@/components/guardians/decision";
+import { ReviewAgain } from "@/components/agent/review-again";
 
 type Copy = ScreensCopy["claims"];
 
@@ -165,7 +167,7 @@ export function ClaimTracker({ claim, snap, copy, waitingFor }: { claim: Claim; 
 
 function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; copy: Copy }) {
   const { common, guardians } = useCopy();
-  const { fx } = useEstate();
+  const { fx, session } = useEstate();
   const nameOf = useWho(snap);
   const now = useNow(15000);
   const rate = fx?.usdtZar ?? null;
@@ -191,6 +193,9 @@ function ClaimCard({ claim, snap, copy }: { claim: Claim; snap: EstateSnapshot; 
         <Badge tone={tone}>{declined ? askCopy.status.declined : block ? guardians.rules.blocked.badge : common.status.claim[claim.status]}</Badge>
       </div>
       {claim.status === "Open" && <ReferredNote verdict={claim.agentVerdict} />}
+      {claim.status === "Open" && claim.agentVerdict === "Pending" && claim.beneficiary === session?.address && (
+        <ReviewAgain kind="claim" subject={claim.address} noFile={note?.attachment === false} className="mt-3" />
+      )}
       {declined ? <p className="mt-3 text-small font-semibold">{fmt(askCopy.line.declined, { owner: snap.estate.ownerName.split(" ")[0] })}</p> : <div className="mt-4"><ClaimTracker claim={claim} snap={snap} copy={copy} waitingFor={!block && snap.estate.status === "Active" && rule?.startsNow ? fmt(copy.card.waitingOwner, { owner: snap.estate.ownerName.split(" ")[0] }) : undefined} /></div>}
       {claim.status === "Open" && unlocked && !block && !claim.ownerApproved && openToPeople(claim.agentVerdict) && (
         <div className="mt-3"><VoteTally tally={claimTally(snap.estate, claim)} names={snap.estate.verifierNames} /></div>
@@ -248,7 +253,7 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
   const [picked, setPayee] = useState(preset.payee ?? "");
   // With only one approved payee for the rule, it is chosen for the user.
   const payee = picked || (payees.length === 1 ? payees[0].wallet : "");
-  const [amount, setAmount] = useState(preset.amount ? String(preset.amount) : "");
+  const [amount, setAmount] = useState(preset.amount ? amountText(preset.amount) : "");
   const [file, setFile] = useState<File | null>(null);
   const [consent, setConsent] = useState(false);
   const [step, setStep] = useState(preset.rule && preset.payee ? 2 : preset.rule ? 1 : 0);
@@ -256,7 +261,7 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
   const [blocked, setBlocked] = useState<{ code: string; message: string } | null>(null);
   const [result, setResult] = useState<{ report: AgentReport; claim: string } | null>(null);
 
-  const n = Number(amount.replace(/[\s,]/g, ""));
+  const n = parseAmount(amount) ?? Number.NaN;
   const validAmount = Number.isFinite(n) && n > 0;
   const left = rule ? rule.lifetimeCap - rule.spentTotal : BigInt(0);
   const payeeName = snap.payees.find((p) => p.wallet === payee)?.name ?? "";
@@ -264,7 +269,7 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
   const next = () => {
     if (step === 0 && !rule) return;
     if (step === 1 && !payee) return;
-    if (step === 2 && !validAmount) { setError(w.amount.error); return; }
+    if (step === 2 && !validAmount) { setError(amount.trim() && Number.isNaN(n) ? common.amountUnclear : w.amount.error); return; }
     setError(null);
     setStep((s) => s + 1);
   };
@@ -364,11 +369,11 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
 
         {step === 2 && rule && (
           <div className="flex flex-col gap-3">
-            <Field label={w.amount.label} htmlFor="claim-amount" error={error} hint={fmt(w.amount.hint, { zar: validAmount && rate ? formatZar(toBase(n), rate) : "R 0", max: formatUsdt(rule.maxPerClaim, { decimals: 0 }) })}>
+            <Field label={w.amount.label} htmlFor="claim-amount" error={error} hint={`${validAmount ? `= ${formatUsdtExact(toBase(n))} · ` : ""}${fmt(w.amount.hint, { zar: validAmount && rate ? formatZar(toBase(n), rate) : "R 0", max: formatUsdt(rule.maxPerClaim, { decimals: 0 }) })}`}>
               <div className="relative">
                 <input
                   id="claim-amount" inputMode="decimal" autoComplete="off" placeholder="0" autoFocus value={amount}
-                  onChange={(ev) => { setAmount(ev.target.value.replace(/[^\d.,\s]/g, "")); setError(null); setBlocked(null); }}
+                  onChange={(ev) => { setAmount(ev.target.value); setError(null); setBlocked(null); }}
                   aria-invalid={!!error} aria-describedby={error ? "claim-amount-error" : "claim-amount-hint"}
                   className={`${inputClass} min-h-16 pr-20 font-display text-h2 tabular-nums`}
                 />
@@ -382,13 +387,13 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
 
         {step === 3 && (
           <div className="flex flex-col gap-4">
-            <p className="rounded-md bg-surface-2 px-3.5 py-2.5 font-semibold">{fmt(w.summary, { amount: formatUsdt(toBase(n || 0)), payee: payeeName })}</p>
+            <p className="rounded-md bg-surface-2 px-3.5 py-2.5 font-semibold">{fmt(w.summary, { amount: formatUsdtExact(toBase(n || 0)), payee: payeeName })}</p>
             <FilePicker id="claim-evidence" label={w.evidence.label} hint={w.evidence.hint} file={file} onFile={(f) => { setFile(f); setError(null); }} samples={w.evidence.samples} copy={common.file} />
             <Consent id="claim-consent" checked={consent} onChange={(v) => { setConsent(v); setError(null); }} copy={common.consent} />
             {error && <p role="alert" className="border-l-4 border-ink pl-2 text-small font-semibold text-ink">{error}</p>}
             {blocked && (
               <Blocked code={blocked.code} message={blocked.message}>
-                <Button small variant="secondary" onClick={() => { setBlocked(null); setStep(2); }}>{copy.result.tryAgain}</Button>
+                {blocked.code !== "ReviewPending" && <Button small variant="secondary" onClick={() => { setBlocked(null); setStep(2); }}>{copy.result.tryAgain}</Button>}
               </Blocked>
             )}
           </div>
@@ -438,8 +443,10 @@ function OwnerApproval({ claim, snap, copy }: { claim: Claim; snap: EstateSnapsh
           // Tracked here too, because "Try again" in the payment sheet re-runs this same function before the snapshot refreshes.
           let approved = claim.ownerApproved;
           void pay({
-            kind: "claim-payout", source: "vault", to: claim.payee, toLabel: payee, amount: claim.amount,
-            execute: async (svc, est) => {
+            kind: "claim-payout", source: "vault", to: claim.payee, toLabel: payee, amount: claim.amount, ...(claim.ownerApproved ? {} : { approve: "owner" as const, claim: claim.address }),
+            execute: async (svc, est, again) => {
+              // A first try that was still being checked may have approved it: read it again rather than approve twice.
+              if (!approved && again) approved = !!(await svc.getEstate(est)).claims.find((x) => x.address === claim.address)?.ownerApproved;
               if (!approved) { await svc.ownerApproveClaim(est, claim.address); approved = true; }
               return svc.executeClaim(est, claim.address);
             },

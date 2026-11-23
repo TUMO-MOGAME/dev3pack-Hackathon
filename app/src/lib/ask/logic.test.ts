@@ -223,3 +223,11 @@ describe("chat home cards for requests", () => {
     expect(n.primary.label).toBe("Keur goed en betaal");
   });
 });
+
+describe("H1: one strict reading", () => {
+  it("reads a decimal comma as cents and refuses what could mean two things", () => {
+    expect(parseAmount("9,50")).toBe(9.5);
+    expect(parseAmount("R 1 234,50")).toBe(1234.5);
+    expect(parseAmount("1.000")).toBeNaN();
+  });
+});

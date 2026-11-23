@@ -14,15 +14,15 @@ import type {
 import { chainCtx } from "../chain/client";
 import { chainConfig } from "../chain/config";
 import * as ix from "../chain/instructions";
-import { ata, claimPda, estatePda, offerPda, hardshipPda } from "../chain/pda";
+import { ata, claimPda, estatePda, offerPda, hardshipPda, stampPda } from "../chain/pda";
 import { demoEstateFirst } from "../chain/demo-estate";
 import { base64ToBytes, bytesToBase64, ChainTxError, getConnection } from "../chain/tx";
 import {
   activityFrom, deathReviewHash, fetchAccountRaw, fetchEstateRaw, fetchEvents, fetchHistory, findEstateOf, invalidateProgramAccounts,
 } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
-import { hex, key, num, optKey, type Raw } from "../chain/decoders";
-import { ChainServiceError, must, writeFailure } from "./chain-errors";
+import { enumOf, hex, key, num, optKey, type Raw } from "../chain/decoders";
+import { ChainServiceError, must, PaymentPending, reviewPending, writeFailure } from "./chain-errors";
 import { mayAskToList } from "../agent/sale";
 import { createChainContinuity } from "./chain-continuity";
 import { deathClaimStep } from "./chain-reports";
@@ -30,7 +30,7 @@ import { checkPeople, planSetup } from "./chain-setup";
 import { acceptBestOffer, reviveRanking, type WireRanking } from "./chain-sale";
 import { getActiveSigner, peekActiveSigner } from "../wallet/signer";
 import {
-  defaultReceiptStore, feeForReview, newPaymentId, openReceipts, recheck, resumeOnReconnect, runPayment, signSponsoredOrSelf, SponsorError, waitForFinal,
+  defaultReceiptStore, feeForReview, newPaymentId, openReceipts, recheck, resumeOnReconnect, runPayment, sameOpen, signSponsoredOrSelf, SponsorError, waitForFinal,
   type ChainOps, type SponsorClient, type SponsorStatus, type StoredPayment,
 } from "../wallet/payments";
 import { readOnly } from "../wallet/wdk";
@@ -63,6 +63,9 @@ import { actionBody, type AgentAction } from "../access/messages";
 import { clampWaiting } from "../continuity/logic";
 import { pack } from "../chain/pack";
 import { requireCurrentApp } from "../chain/write-guard";
+import { requireEvidence } from "../evidence";
+import { createSigningStore, withChosenEvery } from "./signing-store";
+import { loadReasons } from "../disputes/reasons-client";
 import { publicBeneficiaryLabel, publicPayeeName, withPrivateNames } from "../chain/public-names";
 
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
@@ -139,11 +142,30 @@ type Ixs = TransactionInstruction[] | ((feePayer: PublicKey) => TransactionInstr
  * Builds the tx (fee payer = Heirloom's sponsor when available, else the user), WDK signs it (sign-only; partial
  * when sponsored, then the server co-signs), the signature is persisted, then broadcast; returns the receipt.
  */
-async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill">, selfPay = false) {
+async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill">, selfPay = false, check?: () => Promise<void>) {
   // Before anything is signed: this tab's build is the server's, and the program on-chain is this build's (C1).
   await requireCurrentApp();
   const signer = getActiveSigner();
-  return runPayment(receipts, chainOps(), id, () => signSponsoredOrSelf({
+  return runPayment(receipts, chainOps(), id, async () => {
+    const signed = await signFor(signer, ixs, selfPay);
+    // Read again after the wallet signed (a PIN or a phone wallet can take a while): what was shown must still hold.
+    // A refusal here throws before the signature is stored, so these bytes are never sent.
+    if (check) await check();
+    return signed;
+  }, meta);
+}
+
+/**
+ * The fee the review on screen showed (M3), while a payment it covers runs: Heirloom's ("sponsored") is never
+ * swapped for the user's without showing it again, and a user-paid one never asks the sponsor. Payments run one at a
+ * time from the review sheet, so one value is enough.
+ */
+let shownFee: { sponsored: boolean } | null = null;
+
+function signFor(signer: ReturnType<typeof getActiveSigner>, ixs: Ixs, selfPayAsked: boolean) {
+  const selfPay = selfPayAsked || shownFee?.sponsored === false;
+  return signSponsoredOrSelf({
+    requireSponsor: !selfPay && shownFee?.sponsored === true,
     user: signer.address,
     async build(feePayer) {
       const conn = getConnection();
@@ -157,18 +179,46 @@ async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to"
     // A self-paid tx (a title mint: the sponsor never pays for mints) doesn't ask the sponsor at all.
     sponsor: selfPay ? undefined : sponsorClient,
     onFallback: (reason) => console.warn(`Fee sponsor unavailable, paying the fee from the wallet: ${reason}`),
-  }), meta);
+  });
+}
+
+/** Runs `work` under the fee the review showed (see `shownFee`). */
+async function withFee<T>(fee: { sponsored: boolean }, work: () => Promise<T>): Promise<T> {
+  const before = shownFee;
+  shownFee = { sponsored: fee.sponsored };
+  try { return await work(); } finally { shownFee = before; }
+}
+
+/** Account sizes whose rent a payment may pay: a token account, an Offer (8 + 32 + 32 + 8 + 8 + 1), an ApprovalStamp. */
+const TOKEN_ACCOUNT_SIZE = 165;
+const OFFER_SIZE = 89;
+const STAMP_SIZE = 82;
+
+/** An identical payment still being checked (H8): a second one is never signed while the first may land. */
+async function refuseIfStillChecking(meta: Pick<StoredPayment, "kind" | "to" | "amount" | "from">) {
+  if (!meta.to || !meta.amount) return;
+  for (const p of sameOpen(receipts, meta)) {
+    const r = await recheck(receipts, chainOps(), p.id);
+    if (r && ["signing", "submitted", "pending"].includes(r.status) && r.signature) {
+      throw new PaymentPending(p.id, r.signature, p.kind, "StillChecking: the same payment was sent a moment ago and is still being checked. Wait for it before you send it again.");
+    }
+  }
 }
 
 /**
  * Every user-initiated program tx goes through the same pay-once pipeline and waits for confirmation. `ixs` may depend
  * on the fee payer (e.g. approve_claim lets the sponsor pay the approval stamp's rent when it is the fee payer).
  */
-async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount"> = { kind: "program" }, opts: { selfPay?: boolean } = {}): Promise<TxResult> {
+async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount"> = { kind: "program" }, opts: { selfPay?: boolean; check?: () => Promise<void> } = {}): Promise<TxResult> {
+  const from = getActiveSigner().address;
+  await refuseIfStillChecking({ ...meta, from });
   const id = newPaymentId();
-  const first = await pay(id, ixs, meta, opts.selfPay);
+  const first = await pay(id, ixs, { ...meta, from }, opts.selfPay, opts.check);
   const r = first.status === "failed" ? first : await waitForFinal(receipts, chainOps(), id, 60_000, 800);
   written(); // also when it failed or is unconfirmed: the next read must see the chain as it is
+  // Signed and sent, not settled: "submitted, checking" on this id, never a failure that invites a second payment.
+  if (r?.signature && r.status !== "failed" && r.status !== "confirmed") throw new PaymentPending(id, r.signature, meta.kind);
+  if (r?.status === "failed" && r.code) throw new ChainServiceError(r.code, r.error ?? r.code);
   const failure = writeFailure(r);
   if (failure) throw new ChainTxError(r?.signature ?? "", failure);
   return { signature: r!.signature!, explorerUrl: explorerTx(r!.signature!) };
@@ -206,6 +256,9 @@ async function signedPost<T>(path: string, action: AgentAction, estate: Base58, 
 const PRACTICE_SOL_LAMPORTS = 6_000_000;
 
 /** The owner's device copy of the names, put back quietly when the server lost them (lib/estate-meta/keeper.ts). */
+/** The plan being signed, on the owner's device before the first transaction (H6). */
+const signing = createSigningStore();
+
 const namesKeeper = createNamesKeeper({
   signer: peekActiveSigner,
   owns: (estate, wallet) => estatePda(chainCtx().programId, wallet).toBase58() === estate,
@@ -415,7 +468,12 @@ export function createChainService(): HeirloomService {
         fetchEstateRaw(estate, { ...meta, ...(localOwner ? { ownerName: localOwner } : {}) }),
         cached(`activity:${estate}`, 20_000, () => fetchEvents(estate)).catch(() => []),
       ]);
-      const activity = activityFrom(events);
+      // A reused slot's line names the rule, so the statement doesn't read the old rule's payments as the new one's.
+      const activity = activityFrom(events).map((a, i) => {
+        if (a.kind !== "RuleReused") return a;
+        const rule = (() => { try { return key(events[i].data, "rule"); } catch { return undefined; } })();
+        return rule ? { ...a, reusedRule: rule } : a;
+      });
       // The death review's report hash lives in an event (the Estate account keeps only the cert hash): the review of
       // the claim that stands, never of one it replaced.
       const deathHash = deathReviewHash(events, raw.estate.death);
@@ -433,7 +491,9 @@ export function createChainService(): HeirloomService {
       const seatReports = seatHashes.length
         ? await api<Record<string, AgentReport>>(`/api/reports?estate=${estate}&hashes=${[...new Set(seatHashes)].join(",")}`).catch(() => ({} as Record<string, AgentReport>))
         : {};
-      const extras = guardianExtras(meta, { ...reports, ...seatReports });
+      // The written reasons of disputes and objections, for members (M9); each one checked against its hash.
+      const shared = await cached(`reasons:${estate}:${readerKey()}`, 20_000, () => loadReasons(estate));
+      const extras = guardianExtras(meta, { ...reports, ...seatReports }, shared);
       const guardians = await loadGuardians(estate, { estate: out.estate, claims: out.claims, events }, extras).catch(() => disabledGuardians());
       // A successor's display name (the estate meta still holds the original three names).
       const verifierNames = out.estate.verifierNames.map((n, i) => {
@@ -442,7 +502,7 @@ export function createChainService(): HeirloomService {
       }) as [string, string, string];
       // Disputes (U9) and each rule's yearly cap: new accounts, read from the same program scan.
       const [extra, askNotes, residual] = await Promise.all([
-        loadDisputes(estate, { estate: out.estate, rules: out.rules }, extras.names).catch(() => ({ disputes: [], rules: out.rules })),
+        loadDisputes(estate, { estate: out.estate, rules: out.rules }, extras.names, shared).catch(() => ({ disputes: [], rules: out.rules })),
         cached(`asks:${estate}:${readerKey()}`, 15_000, () => asks.loadAsks(estate)).catch(() => ({})),
         residualOf(estate).catch(() => null),
       ]);
@@ -456,7 +516,10 @@ export function createChainService(): HeirloomService {
         estate: out.estate, names, labels: Object.fromEntries(loadWallets().map((w) => [w.address, w.label])),
         people: [out.beneficiaries, out.payees, out.offers, guardians, residual],
       }).then((saved) => { if (saved) forget(`meta:${estate}`); }).catch(() => undefined);
-      return { ...withPrivateNames(out, names), activity: withBills, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names, asks: askNotes, residual };
+      const me = peekActiveSigner()?.address;
+      const signed = me ? signing.get(estate, me) : null;
+      return { ...withPrivateNames(out, names), activity: withBills, rules: withChosenEvery(extra.rules, signed?.draft),
+        ...(signed?.draft.assets.length ? { plannedAssets: signed.draft.assets } : {}), disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names, asks: askNotes, residual };
     },
 
     listEstatesFor(wallet) {
@@ -466,7 +529,8 @@ export function createChainService(): HeirloomService {
 
     willChat: (history: WillChatMessage[], locale?: Locale) => post<{ reply: string; draft: WillDraft | null }>("/api/will-chat", { history, locale }),
 
-    async reviewDocument({ file, purpose, context }) {
+    async reviewDocument({ file: chosen, purpose, context }) {
+      const file = await requireEvidence(chosen);
       const signer = getActiveSigner();
       const estate = estatePda(chainCtx().programId, signer.address).toBase58();
       return (await review(file, purpose, estate, context, undefined, true)).report;
@@ -536,9 +600,28 @@ export function createChainService(): HeirloomService {
 
       const heir = draft.beneficiaries.find((b) => b.label === opts.residualLabel) ?? draft.beneficiaries[0];
       if (heir?.wallet && heir.wallet !== owner.toBase58()) setup.push(ix.setResidual(ctx, owner, pk(heir.wallet)));
-      // Before sending: if signing is interrupted, the next try must know the practice payees by name.
+      // Before sending (H6): the plan and the names stay on this device, so an interrupted signing is finished from
+      // them ("Finish signing") and the names are never lost. The server gets the names as soon as the estate exists.
       rememberOnDevice(privateNames);
-      for (const group of pack(setup)) txs.push(await send(group));
+      const meta: EstateMeta = {
+        estate: estate.toBase58(), ownerWallet: owner.toBase58(), ownerName: draft.ownerName,
+        verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string],
+        assetTitles: savedMeta?.assetTitles ?? {}, buyerNames: { ...savedMeta?.buyerNames, ...privateNames },
+        updatedAt: savedMeta?.updatedAt,
+      };
+      namesKeeper.remember(meta);
+      signing.put(estate.toBase58(), { owner: owner.toBase58(), draft, options: opts, done: false });
+      let named = false;
+      for (const group of pack(setup)) {
+        txs.push(await send(group));
+        if (!named) named = await saveMeta(meta, draft).then(() => true, () => false); // names are cosmetic; retried below
+      }
+      signing.done(estate.toBase58());
+      if (!named) await saveMeta(meta, draft).catch(() => undefined);
+
+      // Practice SOL for the people in the plan: a failure here loses nothing (the plan is signed); they can ask for
+      // starter funds themselves.
+      let topUpFailed = false;
 
       if (opts.practice) {
         const people = [...new Set([...draft.beneficiaries, ...draft.verifiers].map((p) => p.wallet!))].filter((w) => w !== owner.toBase58());
@@ -546,30 +629,51 @@ export function createChainService(): HeirloomService {
         const held = await Promise.all(people.map((w) => conn.getBalance(pk(w), "confirmed")));
         const top = people.filter((_, i) => held[i] < PRACTICE_SOL_LAMPORTS);
         // Never leave the owner without rent for their own next steps; the sponsor still covers everyone's fees.
-        if (top.length && (await conn.getBalance(owner, "confirmed")) > PRACTICE_SOL_LAMPORTS * (top.length + 1)) {
-          for (const group of chunk(top, 6)) {
-            txs.push(await send(group.map((w) => SystemProgram.transfer({ fromPubkey: owner, toPubkey: pk(w), lamports: PRACTICE_SOL_LAMPORTS })), { kind: "program" }, { selfPay: true }));
+        try {
+          if (top.length && (await conn.getBalance(owner, "confirmed")) > PRACTICE_SOL_LAMPORTS * (top.length + 1)) {
+            for (const group of chunk(top, 6)) {
+              txs.push(await send(group.map((w) => SystemProgram.transfer({ fromPubkey: owner, toPubkey: pk(w), lamports: PRACTICE_SOL_LAMPORTS })), { kind: "program" }, { selfPay: true }));
+            }
           }
+        } catch (e) {
+          topUpFailed = true;
+          console.warn(`The practice top-up didn't go through: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
+      return { estate: estate.toBase58(), txs, ...(topUpFailed ? { topUpFailed } : {}) };
+    },
 
-      await saveMeta({
-        estate: estate.toBase58(), ownerWallet: owner.toBase58(), ownerName: draft.ownerName,
-        verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string],
-        assetTitles: savedMeta?.assetTitles ?? {}, buyerNames: { ...savedMeta?.buyerNames, ...privateNames },
-        updatedAt: savedMeta?.updatedAt,
-      }, draft).catch(() => undefined); // names are cosmetic; the estate itself is already on-chain
-      return { estate: estate.toBase58(), txs };
+    async unfinishedSigning() {
+      const me = peekActiveSigner()?.address;
+      if (!me) return null;
+      const estate = estatePda(chainCtx().programId, me).toBase58();
+      const rec = signing.get(estate, me);
+      if (!rec || rec.done) return null;
+      const raw = await fetchAccountRaw("Estate", estate).catch(() => undefined);
+      if (raw === undefined) return null; // can't tell now: ask again on the next read
+      if (!raw) return { draft: rec.draft, options: rec.options };
+      // What the plan on-chain still lacks of the signed draft: the will, family members, rules, the named heir.
+      const { intervalSecs } = await import("../agent/schemas");
+      const before = withPrivateNames(await freshEstate(estate), guardianExtras(namesKeeper.view(estate, await getMeta(estate)), {}).names);
+      const willHash = await hashJson(rec.draft);
+      const plan = planSetup({
+        draft: rec.draft, before, ruleCount: before.ruleCount, practice: !!rec.options.practice, now: Math.floor(Date.now() / 1000), intervalSecs, newWallet: () => me,
+      });
+      const lacks = before.estate.willHash !== willHash || plan.beneficiaries.length > 0 || plan.rules.length > 0;
+      if (!lacks) { signing.done(estate); return null; }
+      return { draft: rec.draft, options: rec.options };
     },
 
     async deposit(estate, amountUsdt) { const o = requireOwnerOf(estate); return send([ix.deposit(chainCtx(), o, toBase(amountUsdt))], { kind: "vault-deposit", to: estate, toLabel: "Estate vault", amount: toBase(amountUsdt).toString() }); },
-    async withdraw(estate, amountUsdt) { const o = requireOwnerOf(estate); return send([ix.withdraw(chainCtx(), o, toBase(amountUsdt))]); },
+    async withdraw(estate, amountUsdt) { const o = requireOwnerOf(estate); return send([ix.withdraw(chainCtx(), o, toBase(amountUsdt))], { kind: "program", to: o.toBase58(), toLabel: "Withdrawal", amount: toBase(amountUsdt).toString() }); },
     async heartbeat(estate) { const o = requireOwnerOf(estate); return send([ix.heartbeat(chainCtx(), o)]); },
     async vetoDeath(estate) { const o = requireOwnerOf(estate); return send([ix.vetoDeath(chainCtx(), o)]); },
 
     async registerAsset(estate, input) {
       const o = requireOwnerOf(estate);
       // Any new asset without a title token gets a fresh one (its own tx: the sponsor does not pay for mints).
+      // The registration papers are checked before the title mint is paid for.
+      const docFile = input.docFile ? await requireEvidence(input.docFile) : undefined;
       let nftMint = input.nftMint;
       if (!nftMint) {
         const fresh = await newTitleMint(o);
@@ -577,7 +681,7 @@ export function createChainService(): HeirloomService {
         await send(fresh.ixs, { kind: "program" }, { selfPay: true });
         nftMint = fresh.mint.toBase58();
       }
-      const docHash = input.docFile ? await fileHash(input.docFile) : await sha256Hex(`heirloom:asset:${nftMint}:${input.title}`);
+      const docHash = docFile ? await fileHash(docFile) : await sha256Hex(`heirloom:asset:${nftMint}:${input.title}`);
       const tx = await send([ix.registerAsset(chainCtx(), o, {
         nftMint: pk(nftMint), floorPrice: toBase(input.floorUsdt), hardshipFloor: toBase(input.hardshipFloorUsdt),
         askingPrice: toBase(input.askingUsdt), proceedsTo: pk(input.proceedsTo), docHashHex: docHash,
@@ -615,17 +719,26 @@ export function createChainService(): HeirloomService {
       return send([ix.ownerApproveClaim(chainCtx(), o, pk(claim), pk(key(raw, "rule")))]);
     },
 
-    async executeScheduled(estate, rule) {
+    async executeScheduled(estate, rule, shown) {
+      // What is paid must be what was shown: read before signing, and again after the wallet signed.
+      const check = async () => {
+        if (!shown) return;
+        const now = await mustFetch("Rule", rule);
+        must(key(now, "fixed_payee") === shown.payee && BigInt(String(now.recurring_amount ?? "0")) === shown.amount, "ScheduleChanged",
+          "This schedule changed since you looked (its place may hold a new rule). Nothing was paid.");
+      };
+      await check();
       const raw = await mustFetch("Rule", rule);
       const fixed = key(raw, "fixed_payee");
       return send([ix.executeScheduled(chainCtx(), {
         estate: pk(estate), payer: pk(getActiveSigner().address), rule: pk(rule), beneficiary: pk(key(raw, "beneficiary")), payeeWallet: pk(fixed),
       })],
-        { kind: "scheduled", to: fixed, toLabel: "Scheduled payee", amount: String(raw.recurring_amount ?? "0") });
+        { kind: "scheduled", to: fixed, toLabel: "Scheduled payee", amount: String(raw.recurring_amount ?? "0") }, { check: () => { invalidateProgramAccounts(); return check(); } });
     },
 
     // ----- Family -----
-    async submitDeathClaim(estate, certificate) {
+    async submitDeathClaim(estate, chosen) {
+      const certificate = await requireEvidence(chosen);
       const me = pk(getActiveSigner().address);
       const h = await fileHash(certificate);
       const step = deathClaimStep(await mustFetch("Estate", estate), me.toBase58(), h, Math.floor(Date.now() / 1000));
@@ -635,7 +748,8 @@ export function createChainService(): HeirloomService {
       return { tx: (tx ?? r.tx)!, report: r.report };
     },
 
-    async submitClaim(estate, input) {
+    async submitClaim(estate, chosen) {
+      const input = { ...chosen, evidence: await requireEvidence(chosen.evidence) };
       const ctx = chainCtx();
       const me = pk(getActiveSigner().address);
       const rule = await mustFetch("Rule", input.rule);
@@ -646,18 +760,36 @@ export function createChainService(): HeirloomService {
         estate: pk(estate), signer: me, ruleId, claimId, payeeWallet: pk(input.payee), amount: toBase(input.amountUsdt), evidenceHashHex: h,
       })]);
       const claim = claimPda(ctx.programId, input.rule, claimId).toBase58();
-      const r = await review(input.evidence, "claim", estate, `Claim for ${input.amountUsdt} USD₮ under rule #${ruleId}, payee wallet ${input.payee}.`, claim);
+      // Sent: a review that doesn't finish leaves the claim waiting for it, to be asked for again (H7).
+      const r = await review(input.evidence, "claim", estate, `Claim for ${input.amountUsdt} USD₮ under rule #${ruleId}, payee wallet ${input.payee}.`, claim)
+        .catch((e: unknown) => { throw reviewPending(e); });
       return { tx, claim, report: r.report };
     },
 
-    async submitHardship(estate, input) {
+    async submitHardship(estate, chosen) {
+      const input = { ...chosen, evidence: await requireEvidence(chosen.evidence) };
       const ctx = chainCtx();
       const me = pk(getActiveSigner().address);
       const h = await fileHash(input.evidence);
       const tx = await send([ix.submitHardship(ctx, pk(estate), pk(input.asset), me, h)]);
       const hardship = hardshipPda(ctx.programId, input.asset, me).toBase58();
-      const r = await review(input.evidence, "hardship", estate, "Hardship request to sell the car below the floor price.", hardship);
+      const r = await review(input.evidence, "hardship", estate, "Hardship request to sell the car below the floor price.", hardship)
+        .catch((e: unknown) => { throw reviewPending(e); });
       return { tx, report: r.report };
+    },
+
+    async requestReview(estate, { kind, subject, evidence }) {
+      const raw = await mustFetch(kind === "claim" ? "Claim" : "Hardship", subject);
+      const me = getActiveSigner().address;
+      must(key(raw, "beneficiary") === me, "forbidden", "Only the person who sent this can ask for its review.");
+      must(enumOf(raw, "agent_verdict", ["Pending", "Approved", "Rejected", "Referred"] as const) === "Pending", "already_reviewed", "The agent has already reviewed this.");
+      const file = evidence ? await requireEvidence(evidence) : kind === "claim" ? await asks.noteFileFor(estate, subject) : null;
+      must(file && await fileHash(file) === hex(raw, "evidence_hash"), "hash_mismatch", "This isn't the file that was sent. Choose that same file.");
+      const context = kind === "claim"
+        ? `Claim for ${fromBase(BigInt(String(raw.amount)))} USD₮, payee wallet ${key(raw, "payee")}. The review is asked for again after the first did not finish.`
+        : "Hardship request to sell the car below the floor price. The review is asked for again after the first did not finish.";
+      const r = await review(file, kind, estate, context, subject).finally(written);
+      return { tx: r.tx, report: r.report };
     },
 
     // ----- Verifiers -----
@@ -666,11 +798,17 @@ export function createChainService(): HeirloomService {
     async approveClaim(estate, claim) {
       const raw = await mustFetch("Claim", claim);
       const verifier = pk(getActiveSigner().address);
-      // The fee payer (Heirloom's sponsor when available) also pays the approval stamp's rent.
+      // The owner's "no" while alive is off-chain (lib/ask); a trusted person never approves past it (H9).
+      if (raw.owner_approved !== true) {
+        await ensureReadPass(getActiveSigner());
+        must(!(await asks.loadAsks(estate, { strict: true }))[claim]?.declinedAt, "Declined", "The owner said no to this request while alive.");
+      }
+      // The fee payer (Heirloom's sponsor when it pays rent) also pays the approval stamp's rent.
+      const paysRent = Boolean((await sponsorClient.status().catch(() => null))?.paysRent);
       return send((feePayer) => {
         const t = ix.approveClaim(pk(estate), verifier, pk(claim), pk(key(raw, "rule")));
         const at = t.keys.findIndex((k, i) => i > 0 && k.pubkey.equals(verifier) && k.isWritable);
-        if (at > 0 && !feePayer.equals(verifier)) t.keys[at] = { ...t.keys[at], pubkey: feePayer };
+        if (at > 0 && paysRent && !feePayer.equals(verifier)) t.keys[at] = { ...t.keys[at], pubkey: feePayer };
         return [t];
       });
     },
@@ -689,6 +827,9 @@ export function createChainService(): HeirloomService {
 
     async executeClaim(estate, claim) {
       const raw = await mustFetch("Claim", claim);
+      if (raw.owner_approved !== true) {
+        must(!(await asks.loadAsks(estate))[claim]?.declinedAt, "Declined", "The owner said no to this request while alive.");
+      }
       return send([ix.executeClaim(chainCtx(), {
         estate: pk(estate), payer: pk(getActiveSigner().address), rule: pk(key(raw, "rule")), claim: pk(claim),
         beneficiary: pk(key(raw, "beneficiary")), payeeWallet: pk(key(raw, "payee")),
@@ -696,7 +837,7 @@ export function createChainService(): HeirloomService {
     },
 
     // ----- P2P USD₮ (Tether track flow: review → approve → WDK sign → pending → confirmed) -----
-    async reviewSend({ to, toLabel, amountUsdt, bill: billInput }): Promise<PaymentReview> {
+    async reviewSend({ to, toLabel, amountUsdt, bill: billInput, selfPay = false }): Promise<PaymentReview> {
       const from = getActiveSigner().address;
       const bill = billInput ? (await billSchemas()).billDetailsSchema.parse(billInput) : undefined;
       let toKey: PublicKey;
@@ -704,6 +845,7 @@ export function createChainService(): HeirloomService {
       if (to === from) throw new Error("You cannot send to your own wallet.");
       if (!(amountUsdt > 0)) throw new Error("Enter an amount above zero.");
       const amount = toBase(amountUsdt);
+      await refuseIfStillChecking({ kind: bill ? "bill" : "p2p", to, amount: amount.toString(), from });
       const conn = getConnection();
       const mint = chainCtx().usdtMint;
       const warnings: string[] = [];
@@ -722,9 +864,12 @@ export function createChainService(): HeirloomService {
         ro.quoteTransfer({ token: mint.toBase58(), recipient: to, amount }).catch(() => null),
         conn.getAccountInfo(ata(mint, toKey), "confirmed"),
       ]);
-      const rent = recipientAta ? 0 : 2_039_280; // rent for a new token account
+      // Rent for a new token account, as the network asks for it now (M3).
+      const rent = recipientAta ? 0 : await conn.getMinimumBalanceForRentExemption(TOKEN_ACCOUNT_SIZE, "confirmed");
       const networkFee = Number(quote?.fee ?? 5000n);
-      const sponsor = await sponsorClient.status().catch(() => null);
+      // A sponsored review only when the sponsor can co-sign for this wallet; asked to, the user pays.
+      const status = selfPay || !getActiveSigner().signPartial ? null : await sponsorClient.status().catch(() => null);
+      const sponsor = status?.feePayer === from ? null : status;
       // Sponsored: two signatures (sponsor + sender) instead of one.
       const { fee, userLamports } = feeForReview({ user: from, networkFeeLamports: sponsor?.available ? 10_000 : networkFee, rentLamports: rent, sponsor });
       if (!recipientAta) {
@@ -742,7 +887,7 @@ export function createChainService(): HeirloomService {
         id: newPaymentId(), kind: bill ? "bill" : "p2p", from, to, toLabel: toLabel || bill?.payee || "", amount,
         token: { symbol: "USD₮", mint: mint.toBase58(), verified },
         network: { name: `Solana ${chainConfig.cluster}`, cluster: chainConfig.cluster === "mainnet-beta" ? "mainnet-beta" : chainConfig.cluster === "localnet" ? "localnet" : "devnet" },
-        fee,
+        fee: { ...fee, networkLamports: fee.sponsored ? (sponsor?.available ? 10_000 : networkFee) : networkFee, rentLamports: rent, ...(rent ? { rentPayer: fee.sponsored && sponsor?.paysRent ? fee.payer : from } : {}) },
         balances: { usdt, sol, sufficient },
         warnings,
         ...(bill ? { bill } : {}),
@@ -758,17 +903,50 @@ export function createChainService(): HeirloomService {
       const mint = chainCtx().usdtMint;
       const from = pk(review.from), to = pk(review.to);
       const needsAta = !(await getConnection().getAccountInfo(ata(mint, to), "confirmed"));
-      const sponsorPaysRent = Boolean((await sponsorClient.status().catch(() => null))?.paysRent);
+      // An account to create that the review didn't show: the cost changed, so it is shown again first.
+      if (needsAta && review.fee.rentLamports === 0) throw new ChainServiceError("FeeChanged", "The recipient's USD₮ account was closed since you looked, so it costs rent again. Nothing was signed.");
+      const sponsorPaysRent = review.fee.sponsored && Boolean((await sponsorClient.status().catch(() => null))?.paysRent);
       // The rent payer for a new recipient account is the sponsor when it is the fee payer and covers rent.
       const ixs = (feePayer: PublicKey) => [
         ...(needsAta ? [createAssociatedTokenAccountIdempotentInstruction(!feePayer.equals(from) && sponsorPaysRent ? feePayer : from, ata(mint, to), to, mint)] : []),
         createTransferCheckedInstruction(ata(mint, from), mint, ata(mint, to), from, review.amount, 6),
       ];
       const bill = review.bill ? (await billSchemas()).billDetailsSchema.parse(review.bill) : undefined;
-      return pay(review.id, ixs, { kind: bill ? "bill" : "p2p", from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount.toString(), ...(bill ? { bill } : {}) });
+      return withFee(review.fee, () => pay(review.id, ixs, { kind: bill ? "bill" : "p2p", from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount.toString(), ...(bill ? { bill } : {}) }, !review.fee.sponsored));
     },
 
     getReceipt: (id): Promise<PaymentReceipt | null> => recheck(receipts, chainOps(), id),
+
+    withShownFee: (fee, work) => withFee(fee, work),
+
+    async quoteFee(estate, q) {
+      const me = getActiveSigner().address;
+      const conn = getConnection();
+      const ctx = chainCtx();
+      const status = q.selfPay || !getActiveSigner().signPartial ? null : await sponsorClient.status().catch(() => null);
+      const sponsored = !!status?.available && !!status.feePayer && status.feePayer !== me;
+      const txs = 1 + (q.approve ? 1 : 0);
+      const exists = async (k: PublicKey) => !!(await conn.getAccountInfo(k, "confirmed"));
+      const rentOf = (bytes: number) => conn.getMinimumBalanceForRentExemption(bytes, "confirmed");
+      let userRent = 0;
+      let sponsorRent = 0;
+      // Accounts this payment creates, and who pays their rent (the program's payer, or the sponsor where it may).
+      if ((q.kind === "claim-payout" || q.kind === "scheduled") && !(await exists(ata(ctx.usdtMint, pk(q.to))))) userRent += await rentOf(TOKEN_ACCOUNT_SIZE);
+      if (q.kind === "offer" && !(await exists(offerPda(ctx.programId, q.to, me)))) userRent += (await rentOf(OFFER_SIZE)) + (await rentOf(TOKEN_ACCOUNT_SIZE));
+      if (q.approve === "verifier" && q.claim && !(await exists(stampPda(ctx.programId, q.claim)))) {
+        const stamp = await rentOf(STAMP_SIZE);
+        if (sponsored && status?.paysRent) sponsorRent += stamp; else userRent += stamp;
+      }
+      const network = sponsored ? 10_000 * txs : 5_000 * txs;
+      const payer = sponsored ? status!.feePayer! : me;
+      const lamports = network + (sponsored ? sponsorRent : userRent);
+      const rent = userRent + sponsorRent;
+      return {
+        fee: { lamports, sol: lamports / 1e9, payer, sponsored, networkLamports: network, rentLamports: rent, ...(rent ? { rentPayer: userRent ? me : payer } : {}) },
+        userLamports: (sponsored ? 0 : network) + userRent,
+        solBalance: (await conn.getBalance(pk(me), "confirmed")) / 1e9,
+      };
+    },
 
     async listPendingReceipts() {
       const out: PaymentReceipt[] = [];
@@ -789,7 +967,8 @@ export function createChainService(): HeirloomService {
     // ----- Pay a bill once: same WDK transfer as a send, with the bill's details on the receipt -----
     async billPayees() { return (await billBook()).list(getActiveSigner().address); },
     async saveBillPayee(input) { return (await billBook()).save(getActiveSigner().address, input); },
-    async readInvoice(file): Promise<InvoiceRead> {
+    async readInvoice(chosen): Promise<InvoiceRead> {
+      const file = await requireEvidence(chosen);
       const form = new FormData();
       form.set("file", file);
       const { invoiceReadSchema } = await import("../bills/invoice");
@@ -812,7 +991,15 @@ export function createChainService(): HeirloomService {
     },
 
     async placeOffer(estate, asset, amountUsdt, buyerName) {
-      const tx = await send([ix.placeOffer(chainCtx(), pk(estate), pk(asset), pk(getActiveSigner().address), toBase(amountUsdt))],
+      const me = pk(getActiveSigner().address);
+      const ctx = chainCtx();
+      // Changing an offer: place_offer creates the Offer account, so the old one is withdrawn first, in the same
+      // transaction (H13). Both or neither: the escrow never sits empty between them.
+      const existing = await getConnection().getAccountInfo(offerPda(ctx.programId, asset, me.toBase58()), "confirmed");
+      const tx = await send([
+        ...(existing ? [ix.withdrawOffer(ctx, pk(estate), pk(asset), me)] : []),
+        ix.placeOffer(ctx, pk(estate), pk(asset), me, toBase(amountUsdt)),
+      ],
         { kind: "offer", to: asset, toLabel: "Offer escrow", amount: toBase(amountUsdt).toString() });
       // The buyer's own name beside the offer and on the sale (off-chain; never replaces a name the owner gave).
       const name = buyerName?.trim().slice(0, 64);

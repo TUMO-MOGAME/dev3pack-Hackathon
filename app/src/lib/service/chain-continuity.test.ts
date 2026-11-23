@@ -297,3 +297,15 @@ describe("removeMember", () => {
     await refused(svc().removeMember(estate, { beneficiary: kid }), "BadStatus");
   });
 });
+
+describe("restoreMember", () => {
+  it("adds back a removed family member under a role, never a name", async () => {
+    snap.beneficiaries = [{ wallet: kid, active: false, label: "Family member 1" } as never];
+    await svc().restoreMember(estate, kid);
+    expect(names()).toEqual(["add_beneficiary"]);
+    expect(args().label).toBe("Family member 1");
+  });
+  it("refuses someone still in the plan", async () => {
+    await refused(svc().restoreMember(estate, kid), "BadStatus");
+  });
+});

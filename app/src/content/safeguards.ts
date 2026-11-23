@@ -20,6 +20,8 @@ export const safeguards = {
     PayeeRequired: "A scheduled payment needs an approved payee.",
     AccountNotInitialized: "Something this needs was removed or isn't there any more, for example a payee that was taken off the plan.",
     NotConfirmed: "The network hasn't confirmed this yet, so don't count on it. Reload and look before you try again.",
+    Declined: "The owner said no to this request while they were alive, so it can't be approved or paid.",
+    DeclineUnknown: "Heirloom couldn't check whether the owner said no to this request. Nothing was signed. Try again in a moment.",
     sale_changed: "The sale or its offers changed, so nothing was sold. Read the offer again before you sign.",
     stale_sale: "The signed sale waited too long, so nothing was sold. Read the offer again and sign again.",
     agent_limit: "The agent has reached its limit for now. Try again later.",
@@ -37,6 +39,19 @@ export const safeguards = {
     already_reviewed: "The agent has already reviewed this.",
     recurring_payee: "A scheduled payment has no approved payee, so nothing was signed. Sign the plan without that schedule, add the payee under People, then add the scheduled rule with \"Add a bill\" under Plan.",
     residual: "This person receives what is left. Choose someone else for that first.",
+    ScheduleChanged: "This schedule changed since you looked (its place may now hold a new rule). Nothing was paid. Check it again.",
+    StaleApp: "Heirloom was updated while this page was open. Reload the page, then try again. Nothing was signed.",
+    ProgramMismatch: "The program on the network isn't the one this app was built for, so nothing was signed. Reload the page; if it stays, try later.",
+    program_mismatch: "The program on the network isn't the one this app was built for, so nothing was sent. Reload the page; if it stays, try later.",
+    has_usdt_account: "This wallet already has test USD₮, so it gets no starter funds.",
+    unneeded_signer: "The transaction asked for a signature it doesn't need, so it was refused. Reload and try again.",
+    members_only: "Only the people in this estate's plan can see or do this.",
+    full: "There is no room for more of these in this estate. Remove one first.",
+    storage_full: "Heirloom can't store more just now. Try again later.",
+    decided: "This has already been decided, so it can't change now.",
+    daily_limit: "Today's limit for this is reached. Try again tomorrow.",
+    unconfirmed: "That isn't confirmed on the network yet. Wait a moment and try again.",
+    ReviewPending: "It was sent, but the agent's review didn't finish. Ask for the review again from the request, with the same file.",
   } as Record<string, string>,
 
   tally: {
@@ -55,6 +70,7 @@ export const safeguards = {
     stale: "Approvals from before the passing don't count. They need to be given again.",
     stands: "Another hardship request was approved first. This one can't be approved unless that one is overturned.",
     pay: "Enough people approved. Anyone can make the payment.",
+    declined: "The owner said no to this request while they were alive, so it can't be approved or paid.",
   },
 
   blocked: {
@@ -81,6 +97,16 @@ export const safeguards = {
     cta: "Report again",
     deathTitle: "Replace the report",
     deathBody: "The earlier report and its confirmations are cleared. The agent reads your certificate first.",
+  },
+
+  review: {
+    title: "The agent's review didn't finish",
+    body: "It was sent, but the agent hasn't read the document yet. Ask for the review again with the same file you sent.",
+    bodyNote: "It was sent, but the agent hasn't read it yet. Ask for the review again: Heirloom writes the same request note.",
+    file: "The file you sent",
+    needFile: "Choose the same file you sent.",
+    cta: "Ask for the review again",
+    done: "The agent has reviewed it",
   },
 
   death: {
@@ -216,7 +242,13 @@ export const safeguards = {
     staysBackup: "They stay a backup for {names} until you change it.",
     toAssets: "Open your assets",
     toSeats: "Change backups and monitors",
-    noUndoPerson: "This app can't add them back to the plan.",
+    noUndoPerson: "You can add them back later, but rules that end now stay ended.",
+    restore: "Add back",
+    restoreSr: "Add {name} back to the plan",
+    restoreTitle: "Add {name} back to the plan?",
+    restoreBody: "They can claim, ask for money and report a passing again. Rules that ended when they were removed stay ended: add new rules for them. Their own wallet isn't an approved payee again until you add it under Payees.",
+    restoreConfirm: "Add {name} back",
+    restored: "Back in the plan",
     cancels: "This cancels the reported passing.",
     residual: "Who receives what is left instead",
     choose: "Choose a person",

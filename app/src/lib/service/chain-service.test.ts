@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   signed: [] as unknown[],
   status: "confirmed",
   posts: [] as string[],
+  existing: new Set<string>(),
 }));
 
 // The version gate (plan §18.9 C1) has its own tests: lib/chain/release.test.ts.
@@ -48,8 +49,9 @@ vi.mock("../chain/tx", async (original: () => Promise<object>) => ({
   ...(await original()),
   getConnection: () => ({
     getLatestBlockhash: async () => ({ blockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi", lastValidBlockHeight: 1 }),
-    getAccountInfo: async () => null,
+    getAccountInfo: async (address: { toBase58(): string }) => (h.existing.has(address.toBase58()) ? { owner: null, data: new Uint8Array(0) } : null),
     getBalance: async () => 0,
+    getMinimumBalanceForRentExemption: async (bytes: number) => (bytes + 128) * 6960,
   }),
 }));
 vi.mock("../chain/reads", async (original: () => Promise<object>) => ({
@@ -63,7 +65,7 @@ vi.mock("../chain/reads", async (original: () => Promise<object>) => ({
 }));
 
 const { getCoder, getIdl } = await import("../chain/idl");
-const { beneficiaryPda, estatePda, payeePda, rulePda } = await import("../chain/pda");
+const { beneficiaryPda, estatePda, offerPda, payeePda, rulePda } = await import("../chain/pda");
 const { sha256Hex } = await import("../agent/hash");
 const { createChainService } = await import("./chain");
 
@@ -90,7 +92,7 @@ const draft = {
 beforeEach(() => {
   h.me = owner;
   h.accounts.clear();
-  Object.assign(h, { signed: [], status: "confirmed", posts: [], scanned: [], estate: null });
+  Object.assign(h, { signed: [], status: "confirmed", posts: [], scanned: [], estate: null, existing: new Set<string>() });
   vi.stubGlobal("fetch", async (url: string) => {
     h.posts.push(String(url));
     const body = String(url) === "/api/agent" ? { agentAddress: agent }
@@ -110,6 +112,11 @@ describe("U1: I'm still here", () => {
   it.each(["pending", "submitted"])("%s: no success is reported", async (status) => {
     h.status = status;
     await expect(createChainService().heartbeat(estate)).rejects.toThrow(/^NotConfirmed: /);
+  });
+
+  it("H8: signed and sent is 'still checking' on its payment id, never a failure", async () => {
+    h.status = "submitted";
+    await expect(createChainService().heartbeat(estate)).rejects.toMatchObject({ code: "NotConfirmed", signature: "sig", paymentId: expect.stringMatching(/^pay_/) });
   });
 });
 
@@ -144,6 +151,13 @@ describe("payouts pass the accounts they re-check (R16)", () => {
     expect([passes(beneficiaryPda(programId, estate, kid)), passes(payeePda(programId, estate, res))]).toEqual([true, true]);
   });
 
+  it("executeScheduled: a rule that now pays something else than was shown signs nothing", async () => {
+    const rule = rulePda(programId, estate, 0).toBase58();
+    h.accounts.set(rule, { beneficiary: kid, fixed_payee: res, recurring_amount: 5 });
+    await expect(createChainService().executeScheduled(estate, rule, { amount: 6n, payee: res })).rejects.toMatchObject({ code: "ScheduleChanged" });
+    expect(h.signed).toEqual([]);
+  });
+
   it("executeScheduled: the rule's", async () => {
     const rule = rulePda(programId, estate, 0).toBase58();
     h.accounts.set(rule, { beneficiary: kid, fixed_payee: res, recurring_amount: 5 });
@@ -153,7 +167,7 @@ describe("payouts pass the accounts they re-check (R16)", () => {
 });
 
 describe("submitDeathClaim", () => {
-  const cert = () => new File(["certificate"], "c.pdf", { type: "application/pdf" });
+  const cert = () => new File(["%PDF-1.4 certificate"], "c.pdf", { type: "application/pdf" });
   const standing = (by: string, hash: number[], since: number) => h.accounts.set(estate, {
     status: { Active: {} }, waiting_period_secs: 120, verifiers: [v1, v2, v3], death_cert_hash: hash,
     death_verdict: { Pending: {} }, death_submitted_by: by, death_pending_since: since,
@@ -179,6 +193,115 @@ describe("submitDeathClaim", () => {
     standing(kid, [...Buffer.from(await sha256Hex(new Uint8Array(await cert().arrayBuffer())), "hex")], nowSecs());
     expect((await createChainService().submitDeathClaim(estate, cert())).tx.signature).toBe("review");
     expect(h.signed).toEqual([]);
+  });
+});
+
+describe("C2: a file the review would refuse signs nothing", () => {
+  it.each(["submitClaim", "submitHardship", "submitDeathClaim"] as const)("%s", async (method) => {
+    h.me = kid;
+    const fake = new File(["Heirloom demo document: x.pdf"], "x.pdf", { type: "application/pdf" });
+    const svc = createChainService();
+    const work = method === "submitDeathClaim" ? svc.submitDeathClaim(estate, fake)
+      : method === "submitClaim" ? svc.submitClaim(estate, { rule: key(), payee: res, amountUsdt: 5, evidence: fake })
+        : svc.submitHardship(estate, { asset: key(), evidence: fake });
+    await expect(work).rejects.toMatchObject({ code: "FileType" });
+    expect([h.signed.length, h.posts.includes("/api/review")]).toEqual([0, false]);
+  });
+});
+
+describe("H9: the owner's no stands after the death", () => {
+  it("approveClaim signs nothing for a declined request, and nothing when the notes can't be read", async () => {
+    const claim = key();
+    h.accounts.set(claim, { rule: rulePda(programId, estate, 0), beneficiary: kid, payee: res, amount: 5, owner_approved: false });
+    h.me = v1;
+    const stub = (body: unknown, status = 200) => vi.stubGlobal("fetch", async () => new Response(JSON.stringify(body), { status }));
+    stub([{ claim, purpose: "trip", currency: "USDT", typed: 5, createdAt: 1, attachment: false, declinedAt: 9 }]);
+    await expect(createChainService().approveClaim(estate, claim)).rejects.toMatchObject({ code: "Declined" });
+    stub({ error: "down" }, 503);
+    await expect(createChainService().approveClaim(estate, claim)).rejects.toMatchObject({ code: "DeclineUnknown" });
+    expect(h.signed).toEqual([]);
+    stub([]);
+    await createChainService().approveClaim(estate, claim);
+    expect(names()).toEqual(["approve_claim"]);
+  });
+});
+
+describe("H13: changing an offer", () => {
+  it("withdraws the old one and places the new one in one transaction", async () => {
+    h.me = res;
+    const asset = key();
+    h.existing.add(offerPda(programId, asset, res).toBase58());
+    await createChainService().placeOffer(estate, asset, 12);
+    expect(h.signed).toHaveLength(1);
+    expect(names()).toEqual(["withdraw_offer", "place_offer"]);
+  });
+  it("a first offer only places", async () => {
+    h.me = res;
+    await createChainService().placeOffer(estate, key(), 12);
+    expect(names()).toEqual(["place_offer"]);
+  });
+});
+
+describe("H7: a review that didn't finish", () => {
+  it("submitClaim says the claim was sent and waits for its review", async () => {
+    h.me = kid;
+    const rule = rulePda(programId, estate, 0).toBase58();
+    h.accounts.set(rule, { id: 0, claim_count: 0 });
+    vi.stubGlobal("fetch", async (url: string) => new Response(JSON.stringify(String(url) === "/api/review" ? { error: "busy" } : {}), { status: String(url) === "/api/review" ? 503 : 200 }));
+    const file = new File(["%PDF-1.4 fees"], "f.pdf", { type: "application/pdf" });
+    await expect(createChainService().submitClaim(estate, { rule, payee: res, amountUsdt: 5, evidence: file })).rejects.toMatchObject({ code: "ReviewPending" });
+    expect(names()).toEqual(["submit_claim"]);
+  });
+
+  it("requestReview: only the sender, only while pending, only the same file; nothing is signed", async () => {
+    const claim = key();
+    const file = new File(["%PDF-1.4 fees"], "f.pdf", { type: "application/pdf" });
+    const hash = [...Buffer.from(await sha256Hex(new Uint8Array(await file.arrayBuffer())), "hex")];
+    h.accounts.set(claim, { beneficiary: kid, payee: res, amount: 5, agent_verdict: { Pending: {} }, evidence_hash: hash });
+    h.me = kid;
+    await expect(createChainService().requestReview(estate, { kind: "claim", subject: claim, evidence: new File(["%PDF-1.4 other"], "o.pdf", { type: "application/pdf" }) }))
+      .rejects.toMatchObject({ code: "hash_mismatch" });
+    h.me = res;
+    await expect(createChainService().requestReview(estate, { kind: "claim", subject: claim, evidence: file })).rejects.toMatchObject({ code: "forbidden" });
+    expect(h.posts).not.toContain("/api/review");
+    h.me = kid;
+    expect((await createChainService().requestReview(estate, { kind: "claim", subject: claim, evidence: file })).report).toEqual({ verdict: "approve" });
+    expect([h.signed.length, h.posts.filter((p) => p === "/api/review").length]).toEqual([0, 1]);
+  });
+});
+
+describe("H6: an interrupted signing is finished, and nothing is lost", () => {
+  it("interrupt, reload, resume", async () => {
+    const mem = new Map<string, string>();
+    vi.stubGlobal("localStorage", { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) });
+    const rules = Array.from({ length: 5 }, (_, i) => ({ ...draft.rules[0], recurring: undefined, category: "Books" as const, allowedPayeeKind: "School" as const, maxPerClaimUsdt: 10 + i, lifetimeCapUsdt: 100 }));
+    const plan = { ...draft, rules };
+    let sends = 0;
+    Object.defineProperty(h, "status", { configurable: true, get: () => (++sends === 2 ? "failed" : "confirmed"), set: () => undefined });
+    await expect(createChainService().createEstateFromWill(plan, { practice: true })).rejects.toThrow();
+    // The names went to the server as soon as the estate existed, not at the end.
+    expect(h.posts).toContain("/api/estate-meta");
+    // A reload: a new service on the same device offers to finish the same plan.
+    const after = createChainService();
+    const left = await after.unfinishedSigning();
+    expect([left?.draft.rules.length, left?.draft.ownerName, left?.options.practice]).toEqual([5, "Owner", true]);
+    await after.createEstateFromWill(plan, { practice: true });
+    expect(await createChainService().unfinishedSigning()).toBeNull();
+    Object.defineProperty(h, "status", { configurable: true, writable: true, value: "confirmed" });
+  });
+});
+
+describe("M3: the cost is read before approval", () => {
+  it("a payout to a new account, a trusted person's approval and a first offer count their rent, read from the network", async () => {
+    h.me = v1;
+    const svc = createChainService();
+    const payout = await svc.quoteFee(estate, { kind: "claim-payout", to: res, amount: 5n, approve: "verifier", claim: key() });
+    // No sponsor in this test: the user pays two network fees, the payee's token account and the approval stamp.
+    expect(payout.fee.sponsored).toBe(false);
+    expect(payout.userLamports).toBe(2 * 5_000 + (165 + 128) * 6960 + (82 + 128) * 6960);
+    const offer = await svc.quoteFee(estate, { kind: "offer", to: key(), amount: 5n });
+    expect(offer.fee.rentLamports).toBe((89 + 128) * 6960 + (165 + 128) * 6960);
+    expect((await svc.quoteFee(estate, { kind: "vault-deposit", to: estate, amount: 5n })).fee.rentLamports).toBe(0);
   });
 });
 

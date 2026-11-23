@@ -61,3 +61,17 @@ describe("mock agent reports carry plain names (no role labels in document data)
     expect(bad.report.summary).toMatch(/clear copy/);
   });
 });
+
+describe("M8: two confirms of one payment pay once", () => {
+  it("the demo moves the balance once", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("funded");
+    const thabo = DEMO_PERSONAS.find((p) => p.key === "thabo")!;
+    const lerato = DEMO_PERSONAS.find((p) => p.key === "lerato")!;
+    svc.setActor({ address: thabo.address, role: thabo.role, label: thabo.label });
+    const before = svc.balanceOf(thabo.address)!;
+    const review = await svc.reviewSend({ to: lerato.address, toLabel: "Lerato", amountUsdt: 5 });
+    await Promise.all([svc.confirmSend(review), svc.confirmSend(review)]);
+    expect(before - svc.balanceOf(thabo.address)!).toBe(5_000_000n);
+  });
+});

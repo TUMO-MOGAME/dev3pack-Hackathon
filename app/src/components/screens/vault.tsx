@@ -7,7 +7,8 @@ import { ArrowDownToLine, ArrowUpFromLine, HeartPulse, Landmark, Lock, ShieldChe
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
-import { formatUsdt, formatZar, fromBase, toBase } from "@/lib/format";
+import { formatUsdt, formatUsdtExact, formatZar, fromBase, toBase } from "@/lib/format";
+import { amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Button, ButtonLink, Card, ExplorerLink, Field, inputClass, Meter, Money, Notice, PageHeader } from "@/components/ui/primitives";
@@ -44,7 +45,7 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<string | null>(null);
   const active = e.status === "Active";
-  const n = Number(amount.replace(/[\s,]/g, ""));
+  const n = parseAmount(amount) ?? Number.NaN;
   const valid = Number.isFinite(n) && n > 0;
   const limit = tab === "deposit" ? walletUsdt : e.vaultBalance;
   // What live rules can still pay: an ended one promises nothing.
@@ -53,7 +54,7 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
 
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();
-    if (!valid) { setError(copy.amountError); return; }
+    if (!valid) { setError(amount.trim() && Number.isNaN(n) ? common.amountUnclear : copy.amountError); return; }
     if (toBase(n) > limit) { setError(tab === "deposit" ? copy.tooMuchWallet : copy.tooMuchVault); return; }
     setError(null);
     const res = tab === "deposit"
@@ -114,11 +115,11 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
           </div>
           <div id="vault-panel" role="tabpanel" aria-labelledby={`vault-tab-${tab}`}>
           <form onSubmit={submit} noValidate className="mt-4 flex flex-col gap-3">
-            <Field label={copy.amount} htmlFor="vault-amount" error={error} hint={valid && rate ? fmt(copy.amountHint, { zar: formatZar(toBase(n), rate) }) : copy.onlyUsdt}>
+            <Field label={copy.amount} htmlFor="vault-amount" error={error} hint={valid ? `= ${formatUsdtExact(toBase(n))}${rate ? ` · ${fmt(copy.amountHint, { zar: formatZar(toBase(n), rate) })}` : ""}` : copy.onlyUsdt}>
               <div className="relative">
                 <input
                   id="vault-amount" inputMode="decimal" autoComplete="off" placeholder="0" value={amount}
-                  onChange={(ev) => { setAmount(ev.target.value.replace(/[^\d.,\s]/g, "")); setError(null); }}
+                  onChange={(ev) => { setAmount(ev.target.value); setError(null); }}
                   aria-invalid={!!error} aria-describedby={error ? "vault-amount-error" : "vault-amount-hint"}
                   className={`${inputClass} min-h-16 pr-20 font-display text-h2 tabular-nums`}
                 />
@@ -131,7 +132,7 @@ function Vault({ copy, snap }: { copy: Copy; snap: EstateSnapshot }) {
                   {q.toLocaleString("en-ZA")}
                 </button>
               ))}
-              <button type="button" onClick={() => { setAmount(String(fromBase(limit))); setError(null); }} className="min-h-11 rounded-full border border-line-strong/70 px-4 text-small font-medium hover:bg-surface-2">{copy.max}</button>
+              <button type="button" onClick={() => { setAmount(amountText(fromBase(limit))); setError(null); }} className="min-h-11 rounded-full border border-line-strong/70 px-4 text-small font-medium hover:bg-surface-2">{copy.max}</button>
             </div>
             <Button type="submit" disabled={!!busy} className="mt-1 min-h-13!">{tab === "deposit" ? copy.deposit : copy.withdraw}</Button>
             {last && (

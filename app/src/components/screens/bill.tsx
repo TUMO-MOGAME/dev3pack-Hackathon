@@ -12,7 +12,9 @@ import {
 } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
-import { formatUsdt, shortAddress, toBase } from "@/lib/format";
+import { formatUsdt, formatUsdtExact, shortAddress, toBase } from "@/lib/format";
+import { amountText, parseAmount } from "@/lib/amount";
+import { checkEvidence, EVIDENCE_ACCEPT } from "@/lib/evidence";
 import { useEstate } from "@/lib/hooks/estate";
 import { BILL_KINDS, type BillDetails, type BillKind, type BillPayee, type PaidBill } from "@/lib/bills/types";
 import { compareInvoice, zarToUsdt, type InvoiceComparison, type InvoiceIssue, type InvoiceRead } from "@/lib/bills/invoice";
@@ -23,7 +25,6 @@ import { fmt, useCopy } from "@/components/shell/copy";
 import { Gate, HeaderFrame } from "@/components/shell/gate";
 
 type Copy = ScreensCopy["bill"];
-const MAX_FILE = 10 * 1024 * 1024;
 const KIND_ICON: Record<BillKind, ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" }>> = {
   lawyer: Scale, plumber: House, school: GraduationCap, doctor: Stethoscope, builder: Building2, other: Store,
 };
@@ -46,7 +47,7 @@ interface InvoiceState { file: File; status: "reading" | "done" | "error"; resul
 function Bill({ copy }: { copy: Copy }) {
   const { service, fx, walletUsdt, session, explain } = useEstate();
   const { pay, online } = usePay();
-  const payCopy = useCopy().pay;
+  const { pay: payCopy, common } = useCopy();
   const ui = payCopy.review;
   const rate = fx?.usdtZar ?? null;
   const person = session?.address;
@@ -100,7 +101,7 @@ function Bill({ copy }: { copy: Copy }) {
   const payee = chosen && chosen !== "new" ? payees?.find((p) => p.id === chosen) ?? null : null;
   const isNew = chosen === "new";
   const payeeName = payee?.name ?? name.trim();
-  const n = Number(amount.replace(/[\s,]/g, ""));
+  const n = parseAmount(amount) ?? Number.NaN;
   const valid = Number.isFinite(n) && n > 0;
   const amountUsdt = !valid ? null : currency === "usdt" ? n : rate ? zarToUsdt(n, rate) : null;
   const comparison: InvoiceComparison | null = invoice?.result && amountUsdt !== null
@@ -120,15 +121,16 @@ function Bill({ copy }: { copy: Copy }) {
     e.target.value = ""; // so the same file can be picked again
     if (!f || !service) return;
     reset();
-    if (!["application/pdf", "image/jpeg", "image/png"].includes(f.type) && !/\.(pdf|png|jpe?g)$/i.test(f.name)) { setProblem({ code: "file", message: c.fileType }); return; }
-    if (f.size > MAX_FILE) { setProblem({ code: "file", message: c.fileTooBig }); return; }
+    const checked = await checkEvidence(f);
+    if ("problem" in checked) { setProblem({ code: "file", message: checked.problem === "FileSize" ? c.fileTooBig : c.fileType }); return; }
+    const file = checked.file;
     const ticket = ++reading.current;
-    setInvoice({ file: f, status: "reading" });
+    setInvoice({ file, status: "reading" });
     try {
-      const result = await service.readInvoice(f);
-      if (ticket === reading.current) setInvoice({ file: f, status: "done", result });
+      const result = await service.readInvoice(file);
+      if (ticket === reading.current) setInvoice({ file, status: "done", result });
     } catch {
-      if (ticket === reading.current) setInvoice({ file: f, status: "error" });
+      if (ticket === reading.current) setInvoice({ file, status: "error" });
     }
   };
 
@@ -136,8 +138,8 @@ function Bill({ copy }: { copy: Copy }) {
   const applyInvoice = () => {
     const r = invoice?.result?.reading;
     if (!r) return;
-    if (r.amount !== null && (r.currency === "ZAR" || r.currency === null)) { setCurrency("zar"); setAmount(String(r.amount)); }
-    else if (r.amount !== null && (r.currency === "USD" || r.currency === "USDT")) { setCurrency("usdt"); setAmount(String(r.amount)); }
+    if (r.amount !== null && (r.currency === "ZAR" || r.currency === null)) { setCurrency("zar"); setAmount(amountText(r.amount)); }
+    else if (r.amount !== null && (r.currency === "USD" || r.currency === "USDT")) { setCurrency("usdt"); setAmount(amountText(r.amount)); }
     if (r.reference) setReference(r.reference);
     if (isNew && r.payeeName && !name.trim()) setName(r.payeeName);
     setErrors({});
@@ -150,7 +152,7 @@ function Bill({ copy }: { copy: Copy }) {
     const errs: typeof errors = {
       name: payeeName ? undefined : copy.nameError,
       wallet: dest ? undefined : copy.addressError,
-      amount: !valid ? copy.amountError : amountUsdt === null ? copy.noRate : undefined,
+      amount: !valid ? (amount.trim() && Number.isNaN(n) ? common.amountUnclear : copy.amountError) : amountUsdt === null ? copy.noRate : undefined,
     };
     setErrors(errs);
     if (errs.name || errs.wallet || errs.amount || amountUsdt === null) return;
@@ -260,10 +262,10 @@ function Bill({ copy }: { copy: Copy }) {
               ))}
             </div>
           </fieldset>
-          <Field label={copy.amount} htmlFor="bill-amount" error={errors.amount} hint={valid && amountUsdt !== null ? fmt(copy.converted, { other: currency === "zar" ? formatUsdt(toBase(amountUsdt)) : rate ? `R${(n * rate).toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : "" }) : undefined}>
+          <Field label={copy.amount} htmlFor="bill-amount" error={errors.amount} hint={valid && amountUsdt !== null ? `= ${currency === "zar" ? `R ${n.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : formatUsdtExact(toBase(n))} · ${fmt(copy.converted, { other: currency === "zar" ? formatUsdtExact(toBase(amountUsdt)) : rate ? `R${(n * rate).toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : "" })}` : undefined}>
             <div className="relative">
               <span className="pointer-events-none absolute inset-y-0 left-3.5 grid place-items-center font-semibold text-ink-2" aria-hidden="true">{currency === "zar" ? "R" : "₮"}</span>
-              <input id="bill-amount" value={amount} onChange={(e) => { setAmount(e.target.value.replace(/[^\d.,\s]/g, "").slice(0, 12)); setErrors({}); reset(); }} inputMode="decimal" autoComplete="off" placeholder="0" aria-invalid={!!errors.amount} aria-describedby={errors.amount ? "bill-amount-error" : valid ? "bill-amount-hint" : undefined} className={`${inputClass} pl-9 font-display text-h3 tabular-nums`} />
+              <input id="bill-amount" value={amount} onChange={(e) => { setAmount(e.target.value); setErrors({}); reset(); }} inputMode="decimal" autoComplete="off" placeholder="0" aria-invalid={!!errors.amount} aria-describedby={errors.amount ? "bill-amount-error" : valid ? "bill-amount-hint" : undefined} className={`${inputClass} pl-9 font-display text-h3 tabular-nums`} />
             </div>
           </Field>
           <Field label={copy.reference} htmlFor="bill-ref" hint={copy.referenceHint}>
@@ -278,7 +280,7 @@ function Bill({ copy }: { copy: Copy }) {
       <Card className="mt-4">
         <h2 className="font-semibold">{c.title}</h2>
         <p className="mt-1 text-small text-ink-2">{c.body}</p>
-        <input ref={picker} type="file" accept="application/pdf,image/jpeg,image/png" tabIndex={-1} aria-hidden="true" className="sr-only" onChange={pickFile} />
+        <input ref={picker} type="file" accept={EVIDENCE_ACCEPT} tabIndex={-1} aria-hidden="true" className="sr-only" onChange={pickFile} />
         {!invoice ? (
           <Button variant="secondary" className="mt-3" onClick={() => picker.current?.click()}><FileText className="size-4" aria-hidden="true" />{c.choose}</Button>
         ) : (

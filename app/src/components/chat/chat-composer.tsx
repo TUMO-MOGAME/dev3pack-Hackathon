@@ -13,10 +13,10 @@ import { wasRemoved } from "@/lib/guardians/decisions";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { ask as askEnglish } from "@/content/ask";
 import { useLocalized } from "@/lib/i18n/client";
+import { checkEvidence, EVIDENCE_ACCEPT } from "@/lib/evidence";
 
 type Purpose = NonNullable<ChatAttachment["purpose"]>;
 const PURPOSES: Purpose[] = ["general", "death", "claim", "hardship"];
-const MAX_FILE = 8 * 1024 * 1024;
 
 /* Speech recognition is not in TypeScript's DOM types yet; this is the part we use. */
 interface Recognition {
@@ -65,13 +65,14 @@ export function ChatComposer({ onSend, disabled }: { onSend: (text: string, opts
     field.current?.focus();
   };
 
-  const choose = (e: ChangeEvent<HTMLInputElement>) => {
+  const choose = async (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null;
     e.target.value = ""; // so the same file can be picked again
     if (!f) return;
-    if (f.type !== "application/pdf" && !f.type.startsWith("image/") && !/\.(pdf|png|jpe?g|webp|heic)$/i.test(f.name)) { notify("error", c.fileType); return; }
-    if (f.size > MAX_FILE) { notify("error", c.fileTooBig); return; }
-    setFile(f);
+    // The agent reads what /api/review takes: a PDF, JPG or PNG up to 4 MB (lib/evidence.ts).
+    const r = await checkEvidence(f);
+    if ("problem" in r) { notify("error", r.problem === "FileSize" ? c.fileTooBig : c.fileType); return; }
+    setFile(r.file);
     field.current?.focus();
   };
 
@@ -156,7 +157,7 @@ export function ChatComposer({ onSend, disabled }: { onSend: (text: string, opts
         <button type="button" onClick={draftPayment} className={clsx(tool, "px-3.5 max-[399px]:hidden")}>
           <Send className="size-4" aria-hidden="true" />{c.sendMoney}
         </button>
-        <input ref={picker} type="file" accept="application/pdf,image/*" tabIndex={-1} aria-hidden="true" className="sr-only" onChange={choose} />
+        <input ref={picker} type="file" accept={EVIDENCE_ACCEPT} tabIndex={-1} aria-hidden="true" className="sr-only" onChange={(e) => void choose(e)} />
         <span className="sr-only" role="status">{listening ? c.dictating : ""}</span>
       </div>
     </form>

@@ -18,15 +18,22 @@ import { guardiansOf, guardianTodo, isMonitor } from "@/components/guardians/der
 import { PausedNotice } from "@/components/guardians/parts";
 import { GuardiansInbox } from "@/components/guardians/section";
 import { ClaimWindow } from "@/components/guardians/claim-window";
-import { DisputeList, DisputePanel } from "@/components/disputes/disputes";
+import { DisputeList, DisputePanel, disputesToDecide } from "@/components/disputes/disputes";
+import { pendingFor } from "@/components/shell/app-shell";
 import { disputesVotedBy, effectiveStatus, openDisputeOn } from "@/lib/disputes/types";
 import { useNow } from "@/lib/hooks/use-now";
 import { openToPeople } from "@/lib/verdict";
-import { canSign, claimPayable, claimTally, claimVote, deathTally, deathVote, hardshipStands, hardshipTally, hardshipVote, type Tally, type Vote } from "@/lib/guardians/decisions";
+import { canSign, claimPayable, claimTally, claimVote, declinedByOwner, hasInbox, deathTally, deathVote, hardshipStands, hardshipTally, hardshipVote, type Tally, type Vote } from "@/lib/guardians/decisions";
 import { ClaimState, useWho, VoteNote, VoteTally } from "@/components/guardians/decision";
 import { ReferredNote } from "@/components/continuity/continuity";
 
 type Copy = ScreensCopy["inbox"];
+
+/** What this person can act on in the inbox: approvals, guardians' votes and confirmations, disputes. */
+export function inboxTodo(snap: EstateSnapshot, address: string): number {
+  const now = Math.floor(Date.now() / 1000);
+  return pendingFor(snap, address) + guardianTodo(guardiansOf(snap), snap, address, now) + disputesToDecide(snap, address, now);
+}
 
 interface Item {
   key: string;
@@ -59,7 +66,7 @@ export function InboxScreen(props: Parameters<typeof InboxScreenBody>[0]) {
 
 function InboxScreenBody({ copy: english }: { copy: Copy }) {
   const copy = useLocalized(english, (t) => t.screens.inbox);
-  return <Gate roles={["verifier", "monitor"]} frame={<HeaderFrame width="max-w-2xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, session }) => <Inbox copy={copy} snap={snap!} session={session} />}</Gate>;
+  return <Gate roles={["verifier", "monitor"]} allow={(snap, session) => hasInbox(snap, session.address, session.role, snap ? inboxTodo(snap, session.address) : 0)} frame={<HeaderFrame width="max-w-2xl" eyebrow={copy.eyebrow} title={copy.title} body={copy.body} />}>{({ snap, session }) => <Inbox copy={copy} snap={snap!} session={session} />}</Gate>;
 }
 
 function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; session: WalletSession }) {
@@ -109,6 +116,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       amountZar: rate ? formatZar(c.amount, rate) : undefined,
       report: c.agentReport, claim: c, tally: claimTally(e, c), verdict: c.agentVerdict, vote,
       approveLabel: finishes(c) && !g?.enabled ? copy.claim.approve : copy.claim.approveOnly,
+      note: declinedByOwner(snap, c) ? gc.rules.vote.declined : undefined,
       payable: claimPayable(snap, c, now) ? { payee: c.payee, payeeName: payee, amount: c.amount, successText: fmt(copy.claim.done, { payee }) } : undefined,
       act: async () => {
         // Approve, and if that completes the quorum, release the payment in the same breath. With watchers (a Guard),
@@ -117,8 +125,13 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
           // "Try again" in the payment sheet re-runs execute: don't approve a second time (the program rejects that).
           let approved = !canSign(vote);
           await pay({
-            kind: "claim-payout", source: "vault", to: c.payee, toLabel: payee, amount: c.amount,
-            execute: async (s, est) => {
+            kind: "claim-payout", source: "vault", to: c.payee, toLabel: payee, amount: c.amount, ...(approved ? {} : { approve: "verifier" as const, claim: c.address }),
+            execute: async (s, est, again) => {
+              if (!approved && again) {
+                const fresh = await s.getEstate(est);
+                const now = fresh.claims.find((x) => x.address === c.address);
+                approved = !now || !canSign(claimVote(fresh, now, session.address, Math.floor(Date.now() / 1000)));
+              }
               if (!approved) { await s.approveClaim(est, c.address); approved = true; }
               return s.executeClaim(est, c.address);
             },

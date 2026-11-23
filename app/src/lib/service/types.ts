@@ -8,7 +8,7 @@
 import type {
   ActivityItem, AgentReport, Asset, Base58, CarValuation, Category, Claim, Estate, FxRate,
   Hardship, Offer, OfferRanking, PayeeKind, Payee, Rule, Beneficiary, WillChatMessage, WillDraft,
-  PaymentReview, PaymentReceipt, SavedRecipient,
+  PaymentReview, PaymentReceipt, SavedRecipient, Recurrence, FeeQuote, FeeQuoteInput,
 } from "../types";
 import type { Locale } from "../i18n/locales";
 import type { LegacyBook, LegacySpeech, LegacyStatus, LegacyVoiceInfo } from "../legacy/schema";
@@ -24,8 +24,11 @@ import type { AgentVoteInfo, ContinuityService, CreateEstateOptions } from "../c
 
 export interface TxResult { signature: string; explorerUrl: string }
 
-/** The offer and exact amount on screen when a trusted person co-signs a sale (R19). */
-export interface SeenOffer { offer: Base58; amount: bigint }
+/**
+ * The offer, the exact amount and who gets the money, as on screen when a trusted person co-signs a sale (R19, H11):
+ * an approved hardship changes the recipient, and a signature is never given on the old reading.
+ */
+export interface SeenOffer { offer: Base58; amount: bigint; recipient: Base58 }
 
 export interface EstateSnapshot {
   estate: Estate;
@@ -53,6 +56,8 @@ export interface EstateSnapshot {
   residual?: Base58 | null;
   /** Open votes to replace the agent. Absent on older snapshots. */
   agentVotes?: AgentVoteInfo[];
+  /** The owner's device (or the demo): the assets the signed plan describes, which signing doesn't register (M4). */
+  plannedAssets?: WillDraft["assets"];
 }
 
 export interface HeirloomService extends GuardiansService, DisputesService, AskService, TreeService, LettersService, ContinuityService {
@@ -72,23 +77,39 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   rankOffers(asset: Base58): Promise<OfferRanking>;
 
   // Owner
-  createEstateFromWill(draft: WillDraft, opts?: CreateEstateOptions): Promise<{ estate: Base58; txs: TxResult[] }>;
+  /** `topUpFailed`: the plan is signed, but the practice SOL for its people didn't go through (they can ask for starter funds). */
+  createEstateFromWill(draft: WillDraft, opts?: CreateEstateOptions): Promise<{ estate: Base58; txs: TxResult[]; topUpFailed?: boolean }>;
+  /**
+   * The plan this wallet started signing and the chain doesn't have all of yet (H6), to finish with createEstateFromWill
+   * (which skips what is there). Null when there is none.
+   */
+  unfinishedSigning(): Promise<{ draft: WillDraft; options: CreateEstateOptions } | null>;
   deposit(estate: Base58, amountUsdt: number): Promise<TxResult>;
   withdraw(estate: Base58, amountUsdt: number): Promise<TxResult>;
   heartbeat(estate: Base58): Promise<TxResult>;
   registerAsset(estate: Base58, input: { nftMint: Base58; title: string; floorUsdt: number; hardshipFloorUsdt: number; askingUsdt: number; proceedsTo: Base58; docFile?: File }): Promise<TxResult>;
   addPayee(estate: Base58, input: { wallet: Base58; kind: PayeeKind; name: string }): Promise<TxResult>;
-  addRule(estate: Base58, input: { beneficiary: Base58; category: Category; allowedPayeeKind: PayeeKind; maxPerClaimUsdt: number; lifetimeCapUsdt: number; validUntil: number; startsNow: boolean; recurring?: { amountUsdt: number; intervalSecs: number; firstDue: number; payee: Base58 }; /** An ended rule whose slot to reuse. */ reuse?: Base58 }): Promise<TxResult>;
+  addRule(estate: Base58, input: { beneficiary: Base58; category: Category; allowedPayeeKind: PayeeKind; maxPerClaimUsdt: number; lifetimeCapUsdt: number; validUntil: number; startsNow: boolean; recurring?: { amountUsdt: number; intervalSecs: number; firstDue: number; payee: Base58; /** What the owner chose ("month"), kept to say it beside a fast clock. */ every?: Recurrence }; /** An ended rule whose slot to reuse. */ reuse?: Base58 }): Promise<TxResult>;
   /** Living plan: owner approves a claim on a startsNow rule while alive (counts as full approval). */
   ownerApproveClaim(estate: Base58, claim: Base58): Promise<TxResult>;
   /** Scheduled payment: anyone (UI button, agent, cron) triggers a due recurring payout. */
-  executeScheduled(estate: Base58, rule: Base58): Promise<TxResult>;
+  /**
+   * `shown`: the amount and payee on screen. A rule whose slot was reused since pays someone or something else, so it
+   * is refused (code "ScheduleChanged") instead of paying what wasn't shown.
+   */
+  executeScheduled(estate: Base58, rule: Base58, shown?: { amount: bigint; payee: Base58 }): Promise<TxResult>;
   vetoDeath(estate: Base58): Promise<TxResult>;
 
   // Family
   submitDeathClaim(estate: Base58, certificate: File): Promise<{ tx: TxResult; report: AgentReport }>;
   submitClaim(estate: Base58, input: { rule: Base58; payee: Base58; amountUsdt: number; evidence: File }): Promise<{ tx: TxResult; claim: Base58; report: AgentReport }>;
   submitHardship(estate: Base58, input: { asset: Base58; evidence: File }): Promise<{ tx: TxResult; report: AgentReport }>;
+  /**
+   * The person who submitted a claim or hardship request asks for the agent's review again, after it did not finish
+   * (H7). Only with the same file: its SHA-256 must be the one on-chain. A request sent without a letter needs none
+   * (the app writes the same request note again). Nothing new is submitted.
+   */
+  requestReview(estate: Base58, input: { kind: "claim" | "hardship"; subject: Base58; evidence?: File | null }): Promise<{ tx: TxResult | null; report: AgentReport }>;
 
   // Verifiers
   attestDeath(estate: Base58): Promise<TxResult>;
@@ -101,7 +122,14 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
 
   // Tether track payment flow (review → approve → WDK sign → pending → confirmed)
   /** Validates address/network/token, reads balances, quotes the fee. Nothing is signed. */
-  reviewSend(input: { to: Base58; toLabel: string; amountUsdt: number; bill?: BillDetails }): Promise<PaymentReview>;
+  /** `selfPay`: review what it costs when the user pays the fee (after the sponsor refused: code "FeeChanged"). */
+  reviewSend(input: { to: Base58; toLabel: string; amountUsdt: number; bill?: BillDetails; selfPay?: boolean }): Promise<PaymentReview>;
+  /**
+   * The cost of a payment the contract makes (claims, schedules, offers, deposits), before it is approved (M3). The
+   * payment then runs inside `withShownFee`, which never lets the user pay a fee the review said Heirloom pays.
+   */
+  quoteFee(estate: Base58, input: FeeQuoteInput): Promise<FeeQuote>;
+  withShownFee<T>(fee: Pick<PaymentReview["fee"], "sponsored">, work: () => Promise<T>): Promise<T>;
   /** Signs + submits with WDK after the user approved `review`. Idempotent on review.id. */
   confirmSend(review: PaymentReview): Promise<PaymentReceipt>;
   /** Re-checks a payment by id (after reconnect / reload). Never re-sends if a signature exists. */
@@ -124,8 +152,11 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   /** `buyerName`: the name the family sees beside the offer and on the sale (off-chain; the owner's names win). */
   placeOffer(estate: Base58, asset: Base58, amountUsdt: number, buyerName?: string): Promise<TxResult>;
   withdrawOffer(estate: Base58, asset: Base58): Promise<TxResult>;
-  /** The trusted person signed in co-signs this exact offer and amount; the agent signs and pays. */
-  acceptBestOffer(estate: Base58, asset: Base58, seen?: SeenOffer): Promise<{ tx: TxResult; ranking: OfferRanking }>;
+  /**
+   * The trusted person signed in co-signs this exact offer, amount and recipient; the agent signs and pays. `null`: they
+   * saw no acceptable offer (to read the contract's refusal), so one that has arrived since is never signed unread.
+   */
+  acceptBestOffer(estate: Base58, asset: Base58, seen?: SeenOffer | null): Promise<{ tx: TxResult; ranking: OfferRanking }>;
 
   // Legacy voice (lib/legacy/*): the owner's consented voice clone + Legacy Book; after unlock a child who opts in
   // hears the owner's own messages for moments in that voice.

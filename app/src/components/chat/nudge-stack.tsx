@@ -56,7 +56,7 @@ export function NudgeStack({ className }: { className?: string }) {
     const payee = snap.payees.find((p) => p.wallet === rule.fixedPayee)?.name ?? "";
     void pay({
       kind: "scheduled", source: "vault", to: rule.fixedPayee ?? "", toLabel: payee, amount: rule.recurringAmount,
-      execute: (svc, est) => svc.executeScheduled(est, rule.address), successText: fmt(c.paid, { payee }),
+      execute: (svc, est) => svc.executeScheduled(est, rule.address, { amount: rule.recurringAmount, payee: rule.fixedPayee ?? "" }), successText: fmt(c.paid, { payee }),
     });
   };
 

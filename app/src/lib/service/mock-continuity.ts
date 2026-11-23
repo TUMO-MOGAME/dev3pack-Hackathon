@@ -157,5 +157,16 @@ export function createMockContinuity(d: ContinuityDeps) {
     return txs;
   }
 
-  return { setAgent, voteAgent, agentVotes, releaseAsset, removeMember };
+  /** add_beneficiary on one who was removed: in the plan again; ended rules stay ended. */
+  function restoreMember(wallet: Base58): TxResult {
+    needOwnerActive("People can only be added back while the estate is active.");
+    const b = d.snap().beneficiaries.find((x) => x.wallet === wallet);
+    need(!!b && !b.active, "BadStatus", "They aren't someone who was removed from this plan.");
+    b!.active = true;
+    const t = d.tx();
+    d.log("BeneficiaryAdded", `${first(wallet)} is in the plan again`, t);
+    return t;
+  }
+
+  return { setAgent, voteAgent, agentVotes, releaseAsset, removeMember, restoreMember };
 }

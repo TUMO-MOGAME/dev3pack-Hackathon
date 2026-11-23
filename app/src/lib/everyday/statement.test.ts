@@ -163,3 +163,19 @@ describe("statement from the demo (mock mode)", () => {
     expect(s.complete).toBe(true);
   });
 });
+
+describe("a reused rule slot", () => {
+  it("a scheduled payment before the slot was reused is not read as the new rule's", async () => {
+    const { buildStatement, monthKey } = await import("./statement");
+    const rule = { address: "R", id: 0, beneficiary: "KID", category: "Medical", allowedPayeeKind: "Other", maxPerClaim: 5n, lifetimeCap: 50n, spentTotal: 0n, validUntil: 9e9, startsNow: true, recurringAmount: 5n, intervalSecs: 60, nextDue: 1, fixedPayee: "P", claimCount: 65_536 } as const;
+    const ts = 1_800_000_000;
+    const snap = {
+      estate: { status: "Active" }, rules: [rule], claims: [], payees: [], beneficiaries: [],
+      activity: [
+        { ts: ts + 5, kind: "RuleReused", text: "", reusedRule: "R" },
+        { ts, kind: "ScheduledPaid", text: "", amount: 5n, payment: { payee: "OLD", rule: "R" } },
+      ],
+    } as never;
+    expect(buildStatement(snap, monthKey(ts)).lines[0].purpose).toBe("Unknown");
+  });
+});

@@ -26,8 +26,10 @@ export function useAskActions() {
     // here too, because "Try again" re-runs this before the snapshot refreshes.
     let approved = claim.ownerApproved;
     void pay({
-      kind: "claim-payout", source: "vault", to: claim.payee, toLabel: payee, amount: claim.amount, warnings: low,
-      execute: async (svc, est) => {
+      kind: "claim-payout", source: "vault", to: claim.payee, toLabel: payee, amount: claim.amount, warnings: low, ...(claim.ownerApproved ? {} : { approve: "owner" as const, claim: claim.address }),
+      execute: async (svc, est, again) => {
+        // A first try that was still being checked may have approved it: read it again rather than approve twice.
+        if (!approved && again) approved = !!(await svc.getEstate(est)).claims.find((x) => x.address === claim.address)?.ownerApproved;
         if (!approved) { await svc.ownerApproveClaim(est, claim.address); approved = true; }
         return svc.executeClaim(est, claim.address);
       },

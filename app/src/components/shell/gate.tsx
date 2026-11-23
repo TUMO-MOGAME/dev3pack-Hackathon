@@ -15,6 +15,8 @@ import { canStartOwnPlan } from "@/lib/wallet/roles";
 interface GateProps {
   /** Roles allowed on this screen. Omit for everyone. */
   roles?: Role[];
+  /** Also lets in a wallet of another role once its estate shows it belongs here (the inbox: M10). */
+  allow?: (snap: EstateSnapshot | null, session: WalletSession) => boolean;
   /** Render even when no estate exists yet (the will writer does). */
   allowEmpty?: boolean;
   children: (ctx: { snap: EstateSnapshot | null; session: WalletSession; role: Role }) => ReactNode;
@@ -32,7 +34,7 @@ interface GateProps {
 }
 
 /** Handles the states every screen shares: wallet loading, no wallet, wrong person, loading, error, no estate. */
-export function Gate({ roles, allowEmpty = false, children, frame, fresh }: GateProps) {
+export function Gate({ roles, allow, allowEmpty = false, children, frame, fresh }: GateProps) {
   const { common } = useCopy();
   const g = common.gate;
   const wallet = useWallet();
@@ -67,7 +69,9 @@ export function Gate({ roles, allowEmpty = false, children, frame, fresh }: Gate
   if (!session) {
     return <EmptyState level={1} icon={<UserRound className="size-6" aria-hidden="true" />} title={g.noWalletTitle} body={g.noWalletBody} action={<ButtonLink href="/start">{g.noWalletCta}</ButtonLink>} />;
   }
-  if (roles && !roles.includes(session.role)) {
+  // Another role that this estate shows belongs here: let it in once the estate has loaded.
+  if (roles && !roles.includes(session.role) && allow && phase === "loading") return pending(g.loading);
+  if (roles && !roles.includes(session.role) && !(allow && phase === "ready" && allow(snap, session))) {
     const other = wallet.sessions.find((s) => roles.includes(s.role));
     return (
       <EmptyState level={1}

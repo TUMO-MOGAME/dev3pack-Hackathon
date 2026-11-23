@@ -7,7 +7,7 @@ import type { FallbackRecipient, GuardiansSnapshot, Seat } from "./types";
 import {
   agentVoteFor, agentVotesNeeded, canConfirmRecipient, canConfirmSeat, canReportRecipient, canReportSeat, canSign, canSubmitDeath,
   claimBlock, claimPayable, claimTally, claimVote, deathOpen, deathReplace, deathSince, deathTally, deathVote, hardshipStands,
-  hardshipTally, hardshipVote, interestedIn, mayList, NO_WALLET, ownerMayApprove, payoutHeldUntil, reportsAbout, seatReplace, successionOutcome, sweepHeldUntil, wasRemoved,
+  hardshipTally, hardshipVote, hasInbox, interestedIn, mayList, NO_WALLET, ownerMayApprove, payoutHeldUntil, reportsAbout, seatReplace, successionOutcome, sweepHeldUntil, wasRemoved,
 } from "./decisions";
 
 const [A, B, C, KID, SIB, MON, BK1, BK2, AGENT, OWNER] = ["A", "B", "C", "KID", "SIB", "MON", "BK1", "BK2", "AGENT", "OWNER"];
@@ -303,5 +303,26 @@ describe("mayList is lib/agent/sale.ts's mayAskToList", () => {
       expect(mayList(s, asset, me, 1000), JSON.stringify(c, (_k, v) => (typeof v === "bigint" ? String(v) : v)))
         .toBe(mayAskToList(s.estate.verifiers, s.beneficiaries, me, asset, offers, 1000));
     }
+  });
+});
+
+describe("H9: the owner's no stands after the death", () => {
+  const note = { claim: "CL", purpose: "trip", currency: "USDT" as const, typed: 5, createdAt: 1, attachment: false, declinedAt: 10 };
+  it("no approval is offered and it can't be paid", () => {
+    const c = claim();
+    const s = snap({ claims: [c], asks: { CL: note } });
+    expect(claimVote(s, c, A)).toBeNull();
+    expect(claimPayable(s, { ...c, approvals: [true, false, false] }, 50)).toBe(false);
+    expect(claimVote(snap({ claims: [c] }), c, A)).toBe("approve");
+  });
+});
+
+describe("M10: everyone with something to decide has the inbox", () => {
+  it("family who watch, back up or are on the fallback list", () => {
+    const seat = { address: "s", index: 0, holder: A, holderName: "A", backups: [{ wallet: SIB, name: "Sib" }], monitors: [{ wallet: KID, name: "Kid" }], generation: 0, vacant: false, succession: null };
+    const s = snap({ guardians: { seats: [seat], fallback: { recipients: [{ wallet: MON, name: "M", kind: "family", dead: false }], startedAt: null, readyAt: null, done: false, canStart: false } } });
+    expect([hasInbox(s, KID, "beneficiary"), hasInbox(s, SIB, "beneficiary"), hasInbox(s, MON, "beneficiary"), hasInbox(s, A, "owner")]).toEqual([true, true, true, true]);
+    expect(hasInbox(s, OWNER, "owner")).toBe(false);
+    expect(hasInbox(s, OWNER, "owner", 1)).toBe(true);
   });
 });

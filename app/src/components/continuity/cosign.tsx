@@ -11,14 +11,14 @@ import type { SeenOffer } from "@/lib/service/types";
 import type { Asset, Offer, OfferRanking } from "@/lib/types";
 import { hasLivingSeat, isHeld } from "@/lib/guardians/decisions";
 import { useEstate } from "@/lib/hooks/estate";
-import { fromBase } from "@/lib/format";
+import { formatUsdtExact } from "@/lib/format";
 import { Button } from "@/components/ui/primitives";
 import { Blocked } from "@/components/shell/blocked";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { useWho } from "@/components/guardians/decision";
 
 /** Every decimal there is: what is signed is what is read. */
-export const exactUsdt = (base: bigint) => `${fromBase(base).toLocaleString("en-ZA", { maximumFractionDigits: 6 })} USD₮`;
+export const exactUsdt = (base: bigint) => formatUsdtExact(base);
 
 const changed = () => Object.assign(new Error("OfferChanged: the offer changed after it was shown."), { code: "OfferChanged" });
 
@@ -47,18 +47,21 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
   const holder = isHeld(me) && e.verifiers.includes(me);
   const ownOffer = holder && !!best && best.buyer === me;
 
-  if (seen && (seen.offer !== best?.address || seen.amount !== best.amount)) {
-    // A change is shown and has to be read again.
-    setSeen(best ? { offer: best.address, amount: best.amount } : null);
+  const to = asset.hardshipBeneficiary ?? asset.proceedsTo;
+  if (seen && (seen.offer !== best?.address || seen.amount !== best.amount || seen.recipient !== to)) {
+    // A change is shown and has to be read again: the offer, the amount or who gets the money (H11).
+    setSeen(best ? { offer: best.address, amount: best.amount, recipient: to } : null);
     setMoved(true);
   }
 
   const sign = async (agreed: SeenOffer | null) => {
     setBlocked(null);
     const res = await run("settle", async (s, est) => {
-      if (!agreed) return s.acceptBestOffer(est, asset.address);
+      if (!agreed) return s.acceptBestOffer(est, asset.address, null);
       const [latest, now] = await Promise.all([s.rankOffers(asset.address), s.getEstate(est)]);
-      if (latest.bestOffer !== agreed.offer || now.offers.find((o) => o.address === agreed.offer)?.amount !== agreed.amount) throw changed();
+      const fresh = now.assets.find((x) => x.address === asset.address);
+      if (latest.bestOffer !== agreed.offer || now.offers.find((o) => o.address === agreed.offer)?.amount !== agreed.amount
+        || (fresh?.hardshipBeneficiary ?? fresh?.proceedsTo) !== agreed.recipient) throw changed();
       return s.acceptBestOffer(est, asset.address, agreed);
     }, done, true);
     if (res.ok) { setSeen(null); setMoved(false); return; }
@@ -68,7 +71,6 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
 
   if (ownOffer) return <p className="mt-2 text-small font-semibold">{t.ownOffer}</p>;
 
-  const to = asset.hardshipBeneficiary ?? asset.proceedsTo;
   return (
     <>
       <p className="mt-1 text-ink-2">{staffed ? body : t.noSeats}</p>
@@ -89,6 +91,7 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
             <div className="min-w-0">
               <dt className="text-ink-2">{t.to}</dt>
               <dd className="font-semibold">{to === e.address ? t.vault : who(to)}</dd>
+              {to !== e.address && <dd className="break-all font-mono text-[0.75rem] text-ink-2">{to}</dd>}
             </div>
           </dl>
           <p className="mt-2 text-small text-ink-2">{staffed ? t.body : t.noSeats}</p>
@@ -106,7 +109,7 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
           // With no offer that can win there is nothing to read: asking shows the contract's refusal and why.
           onClick={() => {
             setMoved(false);
-            if (best) { setBlocked(null); setSeen({ offer: best.address, amount: best.amount }); } else void sign(null);
+            if (best) { setBlocked(null); setSeen({ offer: best.address, amount: best.amount, recipient: to }); } else void sign(null);
           }}
         >
           <Gavel className="size-5" aria-hidden="true" />{busy === "settle" ? working : best ? t.review : cta}

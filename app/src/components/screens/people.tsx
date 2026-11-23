@@ -14,7 +14,7 @@ import { Gate, HeaderFrame } from "@/components/shell/gate";
 import { GuardiansPeople } from "@/components/guardians/section";
 import { NamesNotice } from "@/components/continuity/names-notice";
 import { AgentControl } from "@/components/continuity/agent";
-import { RemoveMember } from "@/components/continuity/membership";
+import { RemoveMember, RestoreMember } from "@/components/continuity/membership";
 import { eligibleSeats } from "@/lib/death-rules";
 import { useNow } from "@/lib/hooks/use-now";
 
@@ -97,7 +97,7 @@ function People({ copy, snap, session, role }: { copy: Copy; snap: EstateSnapsho
                     <p className="font-mono text-[0.75rem] text-ink-2">{shortAddress(b.wallet)}</p>
                     {b.active && <p className="text-small text-ink-2">{count === 1 ? copy.family.oneRule : fmt(copy.family.rules, { n: count })}</p>}
                   </div>
-                  {b.active ? <RemoveMember snap={snap} kind="beneficiary" wallet={b.wallet} name={b.label} /> : <Badge>{gc.rules.remove.removed}</Badge>}
+                  {b.active ? <RemoveMember snap={snap} kind="beneficiary" wallet={b.wallet} name={b.label} /> : <><Badge>{gc.rules.remove.removed}</Badge><RestoreMember snap={snap} wallet={b.wallet} name={b.label} /></>}
                 </li>
               );
             })}

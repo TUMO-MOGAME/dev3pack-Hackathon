@@ -7,6 +7,8 @@
  * demo to a later stage. The UI only uses them when `mode === "mock"`.
  */
 import { explorerTx, fromBase, toBase } from "../format";
+import { amountsInText } from "../amount";
+import { requireEvidence } from "../evidence";
 import type {
   AgentReport, Asset, Base58, Claim, Hardship, OfferRanking, PayeeKind, PaymentReceipt, PaymentRef, PaymentReview, Role, Rule, SavedRecipient, WillChatMessage, WillDraft,
 } from "../types";
@@ -17,7 +19,7 @@ import { fail } from "./mock-errors";
 import { blankGuard, createMockGuardians, VACANT_KEY, type FallbackInput, type MockGuardState, type Named } from "./mock-guardians";
 import { createMockDisputes } from "./mock-disputes";
 import { DEMO_PAYEES } from "./mock-payees";
-import { createMockAsk } from "./mock-ask";
+import { createMockAsk, mockAskReport } from "./mock-ask";
 import type { MockTreeState } from "./mock-tree";
 import type { TreeService } from "../tree/types";
 import type { MockLettersState } from "./mock-letters";
@@ -151,6 +153,10 @@ interface State {
   agentVotes?: MockAgentVotes;
   /** Assets taken back, title -> the address a fresh registration gets again (second review; created on first use). */
   released?: Record<Base58, Base58>;
+  /** A plan being signed (H6): set before, cleared after. */
+  signing?: { draft: WillDraft; options: import("../continuity/types").CreateEstateOptions };
+  /** The assets the signed plan describes (M4). */
+  planned?: WillDraft["assets"];
 }
 
 const SLOT_CLAIMS = 65_536;
@@ -217,10 +223,10 @@ const usd = (b: bigint) => `${fromBase(b).toLocaleString("en-ZA", { maximumFract
 
 /** The car's minimum price from the owner's words: the latest USD₮ amount wins ("change it to 13,000 USDT"), else a large rand amount. */
 export function floorFromText(text: string, fallback = 12500): number {
-  const num = (x: string) => Number(x.replace(/[\s,]/g, ""));
-  const usdt = [...text.matchAll(/(\d[\d\s,.]*)\s*(?:usd₮|usdt)/gi)].map((m) => num(m[1])).filter((n) => n > 0);
+  const found = amountsInText(text);
+  const usdt = found.filter((a) => a.unit === "usd" && a.value !== null && a.value > 0).map((a) => a.value!);
   if (usdt.length) return usdt[usdt.length - 1];
-  const zar = [...text.matchAll(/R\s?(\d[\d\s,]*)/g)].map((m) => num(m[1])).filter((z) => z > 20000);
+  const zar = found.filter((a) => a.unit === "zar" && a.value !== null && a.value > 20000).map((a) => a.value!);
   return zar.length ? Math.round(zar[zar.length - 1] / DEMO_FX / 50) * 50 : fallback;
 }
 
@@ -343,7 +349,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
   const A = createMockAsk({
     snap: () => s.snap, notes: () => (s.asks ??= {}), me, first, payeeName: (w) => s.snap.payees.find((p) => p.wallet === w)?.name ?? name(w),
     submit: (input, hash, r, reviewed) => submitClaim(input, hash, r, reviewed),
-    hashFile: (f) => hashFile(f), suspicious: (f) => suspicious(f), fakeHash, zar: (u) => zar(u), now: nowSecs, wait: async (ms) => { await wait(ms); }, save,
+    hashFile: (f) => hashFile(f), suspicious: (f) => suspicious(f), fakeHash, unreviewed: () => unreviewed(), zar: (u) => zar(u), now: nowSecs, wait: async (ms) => { await wait(ms); }, save,
   });
 
   // Trust Tree: the Mokoena family story around this demo estate (mock-tree.ts), loaded on first use so the tree's
@@ -421,14 +427,6 @@ export function createMockService(opts: MockOptions = {}): MockService {
       s.names[p.wallet] = p.name;
       return p;
     };
-    // "Everyday needs" (General, paid to an "Other" payee): the child's own wallet is an approved payee too.
-    for (const r of draft.rules.filter((x) => x.category === "General" && x.allowedPayeeKind === "Other")) {
-      const ben = s.snap.beneficiaries.find((b) => b.label.toLowerCase().startsWith(r.beneficiaryLabel.toLowerCase().split(" ")[0]));
-      if (ben && !s.snap.payees.some((p) => p.wallet === ben.wallet)) {
-        s.snap.payees.push({ address: fakeAddr(), wallet: ben.wallet, kind: "Other", name: `${ben.label.split(" ")[0]}'s own wallet` });
-        s.names[ben.wallet] = s.names[ben.wallet] ?? ben.label;
-      }
-    }
     draft.rules.forEach((r, i) => {
       const ben = s.snap.beneficiaries.find((b) => b.label.toLowerCase().startsWith(r.beneficiaryLabel.toLowerCase().split(" ")[0])) ?? s.snap.beneficiaries[0];
       // A payee the demo doesn't know yet (a bill template's "Funeral cover insurer") gets a made-up wallet of its own.
@@ -443,7 +441,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
         // The demo clock pays every 60 s; the signed plan still reads the interval the owner chose.
         ...(r.recurring && fixed ? { every: r.recurring.every } : {}),
         // Living schedules are due straight away; legacy schedules start when the estate unlocks.
-        nextDue: r.recurring && fixed && r.startsNow ? nowSecs() : null,
+        // As on-chain: a living schedule is first due one interval after signing.
+        nextDue: r.recurring && fixed && r.startsNow ? nowSecs() + DEMO_INTERVAL_SECS : null,
         fixedPayee: r.recurring && fixed ? fixed.wallet : null,
       });
     });
@@ -452,6 +451,21 @@ export function createMockService(opts: MockOptions = {}): MockService {
     t = tx(); txs.push(t);
     log("WillSet", `Plan signed and locked: ${draft.rules.filter((r) => r.startsNow).length} rules start now, ${draft.rules.filter((r) => !r.startsNow).length} after a passing`, t);
     return txs;
+  }
+
+  /**
+   * The demo story's own step after signing: Thabo adds Lerato's own wallet as an approved payee for her everyday needs
+   * (as an owner would under People). Signing itself adds no payee the plan didn't name, as on-chain.
+   */
+  function addOwnWallets(draft: WillDraft) {
+    // "Everyday needs" (General, paid to an "Other" payee): the child's own wallet is an approved payee too.
+    for (const r of draft.rules.filter((x) => x.category === "General" && x.allowedPayeeKind === "Other")) {
+      const ben = s.snap.beneficiaries.find((b) => b.label.toLowerCase().startsWith(r.beneficiaryLabel.toLowerCase().split(" ")[0]));
+      if (ben && !s.snap.payees.some((p) => p.wallet === ben.wallet)) {
+        s.snap.payees.push({ address: fakeAddr(), wallet: ben.wallet, kind: "Other", name: `${ben.label.split(" ")[0]}'s own wallet` });
+        s.names[ben.wallet] = s.names[ben.wallet] ?? ben.label;
+      }
+    }
   }
 
   function addPayee(input: { wallet: Base58; kind: PayeeKind; name: string }): TxResult {
@@ -494,6 +508,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
       claimCount: slot ? (Math.floor((slot.claimCount ?? 0) / SLOT_CLAIMS) + 1) * SLOT_CLAIMS : 0,
       recurringAmount: every ? toBase(every.amountUsdt) : 0n,
       intervalSecs: every?.intervalSecs ?? 0,
+      ...(every?.every ? { every: every.every } : {}),
       // A living schedule is first due when the owner said (firstDue), not straight away.
       nextDue: every && input.startsNow ? every.firstDue : null,
       fixedPayee: every?.payee ?? null,
@@ -503,6 +518,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
       // A fresh account in effect: nothing spent, and the ended rule's yearly cap is closed.
       s.snap.rules = s.snap.rules.map((r) => (r === slot ? rule : r));
       log("RuleReused", `An ended rule's place was used for a new ${input.category.toLowerCase()} rule for ${first(input.beneficiary)}`, t);
+      s.snap.activity[0].reusedRule = rule.address;
     } else {
       s.snap.rules.push(rule);
       log("RuleAdded", `New ${input.category.toLowerCase()} rule added for ${first(input.beneficiary)}`, t);
@@ -735,7 +751,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     return t;
   }
 
-  function submitClaim(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport, reviewed?: string): { t: TxResult; claim: Claim } {
+  function submitClaim(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport | null, reviewed?: string): { t: TxResult; claim: Claim } {
     needCreated(); needBeneficiary();
     const rule = s.snap.rules.find((r) => r.address === input.rule) ?? fail("BadStatus", "That rule does not exist.");
     need(est().status === "Unlocked" || (rule.startsNow && est().status === "Active"), "BadStatus", rule.startsNow ? "Claims are paused while a passing is being confirmed." : "This rule only starts after the estate is unlocked.");
@@ -750,20 +766,27 @@ export function createMockService(opts: MockOptions = {}): MockService {
     D.checkYearly(rule, amt, false);
     const id = rule.claimCount ?? 0;
     need(isCurrentClaim(id, id + 1), "MathOverflow", "This rule can't take any more claims.");
-    // As on-chain (/api/review): only "reject" blocks; an unsure agent refers, it never approves.
-    const outcome = outcomeOf(report.verdict);
-    const approved = outcome !== "Reject";
     const claim: Claim = {
       address: fakeAddr(), rule: rule.address, id, beneficiary: me(), payee: payee.wallet, amount: amt,
-      evidenceHash, agentVerdict: outcome === "Approve" ? "Approved" : outcome === "Refer" ? "Referred" : "Rejected", agentReport: report,
-      approvals: [false, false, false], ownerApproved: false, status: approved ? "Open" : "Rejected", createdAt: nowSecs(),
+      evidenceHash, agentVerdict: "Pending", approvals: [false, false, false], ownerApproved: false, status: "Open", createdAt: nowSecs(),
     };
     s.snap.claims.unshift(claim);
     rule.claimCount = id + 1;
     const t = tx();
     log("ClaimSubmitted", `${first(me())} asked for ${usd(amt)} to be paid to ${payee.name}`, t, amt);
-    log("ClaimReviewed", reviewed ?? (outcome === "Refer" ? "The agent was not sure, so it referred the claim to people" : approved ? `The agent checked the ${rule.category.toLowerCase()} statement: it matches the claim` : "The agent could not accept the document. The claim was declined"), tx());
+    // No report: the agent's review didn't finish, and the claim waits for it (H7).
+    if (report) reviewClaim(claim, report, reviewed);
     return { t, claim };
+  }
+
+  /** review_claim: as on-chain (/api/review), only "reject" blocks; an unsure agent refers, it never approves. */
+  function reviewClaim(claim: Claim, report: AgentReport, reviewed?: string) {
+    const rule = s.snap.rules.find((r) => r.address === claim.rule);
+    const outcome = outcomeOf(report.verdict);
+    claim.agentVerdict = outcome === "Approve" ? "Approved" : outcome === "Refer" ? "Referred" : "Rejected";
+    claim.agentReport = report;
+    if (outcome === "Reject") claim.status = "Rejected";
+    log("ClaimReviewed", reviewed ?? (outcome === "Refer" ? "The agent was not sure, so it referred the claim to people" : outcome !== "Reject" ? `The agent checked the ${rule?.category.toLowerCase() ?? "claim's"} statement: it matches the claim` : "The agent could not accept the document. The claim was declined"), tx());
   }
 
   function approveClaim(address: Base58): TxResult {
@@ -776,6 +799,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(c.status === "Open", "BadStatus", "This claim is already closed.");
     need(openToPeople(c.agentVerdict), "AgentNotApproved", "The agent has not cleared this claim.");
     notInterested(c.beneficiary);
+    need(!s.asks?.[c.address]?.declinedAt, "Declined", "The owner said no to this request while alive.");
     // Approvals from before this death neither pay nor stand in the way of a fresh quorum.
     const counts = G.countsFor(c);
     const given = counts ? c.approvals : [false, false, false];
@@ -810,9 +834,10 @@ export function createMockService(opts: MockOptions = {}): MockService {
     return t;
   }
 
-  function executeScheduled(address: Base58, force = false): TxResult {
+  function executeScheduled(address: Base58, force = false, shown?: { amount: bigint; payee: Base58 }): TxResult {
     needCreated();
     const r = s.snap.rules.find((x) => x.address === address) ?? fail("BadStatus", "That rule does not exist.");
+    need(!shown || (r.fixedPayee === shown.payee && r.recurringAmount === shown.amount), "ScheduleChanged", "This schedule changed since you looked. Nothing was paid.");
     need(r.recurringAmount > 0n && !!r.fixedPayee, "BadStatus", "This rule has no schedule.");
     const st = est().status;
     need(st === "Unlocked" || (r.startsNow && st === "Active"), "BadStatus", r.startsNow ? "Scheduled payments pause while a passing is being confirmed." : "This schedule starts after the estate is unlocked.");
@@ -841,6 +866,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(isCurrent(c, rule), "ClaimFromEndedRule", "This claim belongs to a rule that was ended and replaced.");
     checkParties(rule, c.beneficiary, c.payee);
     need(openToPeople(c.agentVerdict), "AgentNotApproved", "The agent has not cleared this claim.");
+    need(c.ownerApproved || !s.asks?.[c.address]?.declinedAt, "Declined", "The owner said no to this request while alive.");
     // As on-chain: while the owner is alive only his approval counts; after unlock his approval, or a quorum given after the death.
     const approvedToPay = c.ownerApproved || (est().status === "Unlocked" && G.countsFor(c) && claimTally(est(), { ...c, approvalsCount: true }).met);
     need(approvedToPay, "InsufficientApprovals", est().status === "Active" ? "The owner still needs to approve this." : "A trusted person still needs to approve this.");
@@ -919,7 +945,11 @@ export function createMockService(opts: MockOptions = {}): MockService {
     const a = s.snap.assets.find((x) => x.address === assetAddr) ?? fail("BadStatus", "That listing does not exist.");
     const hardship = !!a.hardshipBeneficiary;
     const min = hardship ? a.hardshipFloor : a.floorPrice;
-    const offers = s.snap.offers.filter((o) => o.asset === a.address).sort((x, y) => (y.amount > x.amount ? 1 : y.amount < x.amount ? -1 : x.createdAt - y.createdAt));
+    const all = s.snap.offers.filter((o) => o.asset === a.address).sort((x, y) => (y.amount > x.amount ? 1 : y.amount < x.amount ? -1 : x.createdAt - y.createdAt));
+    // As the chain's ranking (lib/agent/offers.ts): an offer nobody could co-sign never ranks, so it can't block the others.
+    const held = est().verifiers.filter(isHeld);
+    const unsignable = (buyer: Base58) => buyer === est().agent || (held.length > 0 && held.every((v) => v === buyer || v === est().agent));
+    const offers = all.filter((o) => !unsignable(o.buyer));
     const eligible = offers.filter((o) => o.amount >= min).map((o, i) => ({
       offer: o.address, amount: o.amount,
       reason: i === 0 ? (hardship ? "Highest offer at or above the hardship floor" : "Highest offer at or above the minimum price") : "Meets the minimum, but a higher offer exists",
@@ -928,18 +958,24 @@ export function createMockService(opts: MockOptions = {}): MockService {
       offer: o.address, amount: o.amount,
       reason: hardship ? `Below the hardship floor of ${usd(a.hardshipFloor)}. The contract will never accept this` : `Below the minimum price of ${usd(a.floorPrice)}. Blocked unless a hardship request is approved`,
     }));
-    return { a, ranking: { bestOffer: eligible[0]?.offer ?? null, eligible, ineligible }, min, hardship };
+    const blocked = all.filter((o) => unsignable(o.buyer)).map((o) => ({
+      offer: o.address, amount: o.amount,
+      reason: o.buyer === est().agent ? "The agent can't buy from a plan it serves." : "No trusted person other than the buyer is left to co-sign this sale.",
+    }));
+    return { a, ranking: { bestOffer: eligible[0]?.offer ?? null, eligible, ineligible: [...ineligible, ...blocked] }, min, hardship };
   }
 
   /** accept_offer(expected_amount): the agent signs and pays, the trusted person co-signs (R12, R19). */
-  function acceptBest(assetAddr: Base58, seen?: { offer: Base58; amount: bigint }): { t: TxResult; ranking: OfferRanking } {
+  function acceptBest(assetAddr: Base58, seen?: { offer: Base58; amount: bigint; recipient: Base58 } | null): { t: TxResult; ranking: OfferRanking } {
     needCreated();
     const { a, ranking, hardship } = rank(assetAddr);
     const e = est();
     need(a.status === "Listed", "BadStatus", "This car is not listed for sale.");
+    need(seen !== null || !ranking.bestOffer, "OfferChanged", "An offer arrived after you looked. Check it before you sign.");
     if (seen) {
       const now = s.snap.offers.find((x) => x.address === ranking.bestOffer);
-      need(now?.address === seen.offer && now.amount === seen.amount, "OfferChanged", "The offer changed after you read it. Check the new one before you sign.");
+      need(now?.address === seen.offer && now.amount === seen.amount && (a.hardshipBeneficiary ?? a.proceedsTo) === seen.recipient, "OfferChanged",
+        "The offer or who gets the money changed after you read it. Check the new one before you sign.");
     }
     G.checkNotObjected(a.address);
     if (hardship) for (const h of s.snap.hardships.filter((x) => x.asset === a.address && x.status === "Approved")) G.checkNotObjected(h.address);
@@ -967,24 +1003,30 @@ export function createMockService(opts: MockOptions = {}): MockService {
     return { t, ranking };
   }
 
-  function submitHardship(assetAddr: Base58, evidenceHash: string, report: AgentReport): TxResult {
+  function submitHardship(assetAddr: Base58, evidenceHash: string, report: AgentReport | null): TxResult {
     needCreated(); needBeneficiary();
     need(est().status === "Unlocked", "BadStatus", "Hardship requests open once the estate is unlocked.");
     const a = s.snap.assets.find((x) => x.address === assetAddr) ?? fail("BadStatus", "That asset does not exist.");
     need(a.status !== "Sold", "BadStatus", "The car has already been sold.");
     // Like the contract: one request per family member per car (the account is created once and never reused).
     need(!s.snap.hardships.some((h) => h.beneficiary === me() && h.asset === assetAddr), "BadStatus", "You have already asked once for this car.");
-    const outcome = outcomeOf(report.verdict);
-    const ok = outcome !== "Reject";
     const h: Hardship = {
-      address: fakeAddr(), asset: a.address, beneficiary: me(), evidenceHash, agentVerdict: outcome === "Approve" ? "Approved" : ok ? "Referred" : "Rejected",
-      agentReport: report, approvals: [false, false, false], status: ok ? "Open" : "Rejected",
+      address: fakeAddr(), asset: a.address, beneficiary: me(), evidenceHash, agentVerdict: "Pending", approvals: [false, false, false], status: "Open",
     };
     s.snap.hardships.unshift(h);
     const t = tx();
     log("HardshipSubmitted", `${first(me())} asked for the car to be sold below the minimum price because of hardship`, t);
-    log("HardshipReviewed", ok ? "The agent checked the affidavit: commissioned, stamped and dated" : "The agent could not accept the affidavit", tx());
+    if (report) reviewHardship(h, report);
     return t;
+  }
+
+  function reviewHardship(h: Hardship, report: AgentReport) {
+    const outcome = outcomeOf(report.verdict);
+    const ok = outcome !== "Reject";
+    h.agentVerdict = outcome === "Approve" ? "Approved" : ok ? "Referred" : "Rejected";
+    h.agentReport = report;
+    h.status = ok ? "Open" : "Rejected";
+    log("HardshipReviewed", ok ? "The agent checked the affidavit: commissioned, stamped and dated" : "The agent could not accept the affidavit", tx());
   }
 
   function approveHardship(address: Base58): TxResult {
@@ -1201,6 +1243,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     draft.ownerName = "Thabo Mokoena";
     as("thabo", () => {
       createEstate(draft);
+      addOwnWallets(draft);
       deposit(24000);
       // Naledi's school fees: at most 3,000 USD₮ a year (yearly cap), on top of 1,500 per claim and 9,000 in total.
       const school = s.snap.rules.find((r) => r.category === "Tuition" && r.allowedPayeeKind === "School");
@@ -1248,6 +1291,24 @@ export function createMockService(opts: MockOptions = {}): MockService {
   });
   const { resetLegacy, ...legacyMethods } = legacy;
 
+  /** confirmSend's one run per payment id (see M8 above). */
+  const confirming = new Map<string, Promise<PaymentReceipt>>();
+  async function confirmOnce(review: PaymentReview): Promise<PaymentReceipt> {
+      const existing = s.sends[review.id];
+      if (existing) return { ...existing.receipt }; // idempotent: a retry never pays twice
+      await wait(1200); // signing with the WDK wallet
+      // Checked before the balance moves, so nothing waits between paying and recording the payment.
+      const bill = review.bill ? (await billSchemas()).billDetailsSchema.parse(review.bill) : undefined;
+      need(me() === review.from, "NotOwner", "This payment was prepared by a different wallet.");
+      need((s.balances[review.from] ?? 0n) >= review.amount, "InsufficientFunds", "Your wallet does not hold that much USD₮.");
+      s.balances[review.from] -= review.amount;
+      const t = tx();
+      const receipt: PaymentReceipt = { id: review.id, status: "pending", signature: t.signature, explorerUrl: t.explorerUrl, confirmations: 0, updatedAt: nowSecs() };
+      s.sends[review.id] = { receipt, from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount, confirmAt: Date.now() + 2000 + Math.floor(Math.random() * 2000), ts: nowSecs(), ...(bill ? { bill } : {}) };
+      save();
+      return { ...receipt };
+  }
+
   return {
     mode: "mock",
     ...legacyMethods,
@@ -1289,20 +1350,28 @@ export function createMockService(opts: MockOptions = {}): MockService {
       };
       return review;
     },
-    async confirmSend(review) {
-      const existing = s.sends[review.id];
-      if (existing) return { ...existing.receipt }; // idempotent: a retry never pays twice
-      await wait(1200); // signing with the WDK wallet
-      // Checked before the balance moves, so nothing waits between paying and recording the payment.
-      const bill = review.bill ? (await billSchemas()).billDetailsSchema.parse(review.bill) : undefined;
-      need(me() === review.from, "NotOwner", "This payment was prepared by a different wallet.");
-      need((s.balances[review.from] ?? 0n) >= review.amount, "InsufficientFunds", "Your wallet does not hold that much USD₮.");
-      s.balances[review.from] -= review.amount;
-      const t = tx();
-      const receipt: PaymentReceipt = { id: review.id, status: "pending", signature: t.signature, explorerUrl: t.explorerUrl, confirmations: 0, updatedAt: nowSecs() };
-      s.sends[review.id] = { receipt, from: review.from, to: review.to, toLabel: review.toLabel, amount: review.amount, confirmAt: Date.now() + 2000 + Math.floor(Math.random() * 2000), ts: nowSecs(), ...(bill ? { bill } : {}) };
-      save();
-      return { ...receipt };
+    async quoteFee(_e, q) {
+      await wait(150);
+      // As on a network with Heirloom's sponsor on: it pays the fee, accounts a payment creates cost rent.
+      const rent = (bytes: number) => (bytes + 128) * 6960;
+      let userRent = 0;
+      if ((q.kind === "claim-payout" || q.kind === "scheduled") && !(q.to in s.balances)) userRent += rent(165);
+      if (q.kind === "offer" && !s.snap.offers.some((o) => o.asset === q.to && o.buyer === me())) userRent += rent(89) + rent(165);
+      const network = q.selfPay ? 5_000 : 10_000 * (1 + (q.approve ? 1 : 0));
+      const lamports = network + (q.selfPay ? userRent : 0);
+      return {
+        fee: { lamports, sol: lamports / 1e9, payer: q.selfPay ? me() : AGENT, sponsored: !q.selfPay, networkLamports: network, rentLamports: userRent, ...(userRent ? { rentPayer: me() } : {}) },
+        userLamports: (q.selfPay ? network : 0) + userRent, solBalance: 0.5,
+      };
+    },
+    withShownFee: (_fee, work) => work(),
+    confirmSend(review) {
+      // Two confirms of one id share the first (M8): the balance moves once.
+      const running = confirming.get(review.id);
+      if (running) return running;
+      const run = confirmOnce(review).finally(() => confirming.delete(review.id));
+      confirming.set(review.id, run);
+      return run;
     },
     async getReceipt(id) {
       await wait(350);
@@ -1339,7 +1408,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
       save();
       return { ...payee };
     },
-    async readInvoice(file) {
+    async readInvoice(chosen) {
+      const file = await requireEvidence(chosen);
       await wait(1400); // "the AI is reading it"
       // Scripted by file name (lib/bills/demo.ts) and labelled as a demo on screen. Only the hash is kept, never the file.
       return { reading: demoInvoiceReading(file.name), sha256: await hashFile(file), engine: "demo" as const };
@@ -1456,6 +1526,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
         names: { ...s.names },
         guardians: G.snapshot(),
         asks: structuredClone(s.asks ?? {}),
+        ...(s.planned?.length ? { plannedAssets: structuredClone(s.planned) } : {}),
       };
     },
     async listEstatesFor(wallet) {
@@ -1484,7 +1555,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
           : `Understood. The Corolla can sell only at or above ${draft.assets[0]?.floorPriceUsdt.toLocaleString("en-ZA")} USD₮: the agent ranks the offers and a trusted person co-signs the one that's accepted. Below that, only if one of your children proves hardship with a sworn affidavit and two trusted people agree, and never below ${draft.assets[0]?.hardshipFloorUsdt.toLocaleString("en-ZA")} USD₮. The money goes into the family vault.\n\nYour rules are ready. Please read them in plain language before you sign.`;
       return { reply, draft };
     },
-    async reviewDocument({ file, purpose, context }) {
+    async reviewDocument({ file: chosen, purpose, context }) {
+      const file = await requireEvidence(chosen);
       await wait(1600);
       return report(purpose, file, { payee: context });
     },
@@ -1499,20 +1571,30 @@ export function createMockService(opts: MockOptions = {}): MockService {
     },
 
     async createEstateFromWill(draft, opts) {
+      // Kept before the wait (H6): a reload while "signing" offers to finish it, as on-chain.
+      s.signing = { draft: structuredClone(draft), options: { ...opts } };
+      save();
       const txs = await mutate(1500, () => createEstate(draft, opts?.residualLabel, opts?.practice));
+      s.planned = draft.assets.length ? structuredClone(draft.assets) : undefined;
+      delete s.signing;
+      save();
       return { estate: est().address, txs };
+    },
+    async unfinishedSigning() {
+      await wait(60);
+      return s.signing && !s.created ? structuredClone(s.signing) : null;
     },
     deposit: (_e, amountUsdt) => mutate(900, () => deposit(amountUsdt)),
     withdraw: (_e, amountUsdt) => mutate(900, () => withdraw(amountUsdt)),
     heartbeat: () => mutate(600, heartbeat),
     async registerAsset(_e, input) {
-      const docHash = input.docFile ? await hashFile(input.docFile) : fakeHash();
+      const docHash = input.docFile ? await hashFile(await requireEvidence(input.docFile)) : fakeHash();
       return mutate(1000, () => registerAsset(input, docHash));
     },
     addPayee: (_e, input) => mutate(700, () => addPayee(input)),
     addRule: (_e, input) => mutate(700, () => addRule(input)),
     ownerApproveClaim: (_e, claim) => mutate(900, () => ownerApproveClaim(claim)),
-    executeScheduled: (_e, rule) => mutate(1000, () => executeScheduled(rule)),
+    executeScheduled: (_e, rule, shown) => mutate(1000, () => executeScheduled(rule, false, shown)),
     vetoDeath: () => mutate(800, vetoDeath),
     askForMoney: (e, input) => A.askForMoney(e, input),
     getTree: async (e) => (await Tr()).getTree(e),
@@ -1529,7 +1611,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
     suggestLetter: async (e, input, locale) => (await Lt()).suggestLetter(e, input, locale),
     letterCounts: async (e) => (await Lt()).letterCounts(e),
 
-    async submitDeathClaim(_e, certificate) {
+    async submitDeathClaim(_e, chosen) {
+      const certificate = await requireEvidence(chosen);
       checkDeathSubmission();
       const hash = await hashFile(certificate);
       await wait(1900);
@@ -1538,22 +1621,54 @@ export function createMockService(opts: MockOptions = {}): MockService {
       save();
       return { tx: t, report: r };
     },
-    async submitClaim(_e, input) {
+    async submitClaim(_e, chosen) {
+      const input = { ...chosen, evidence: await requireEvidence(chosen.evidence) };
       const hash = await hashFile(input.evidence);
       await wait(1900);
       const payee = s.snap.payees.find((p) => p.wallet === input.payee);
       const r = report("claim", input.evidence, { amountUsdt: input.amountUsdt, payee: payee?.name });
-      const { t, claim } = submitClaim(input, hash, r);
+      const { t, claim } = submitClaim(input, hash, unreviewed() ? null : r);
       save();
+      if (unreviewed()) fail("ReviewPending", "It was sent, but the agent's review didn't finish. Ask for the review again from the request, with the same file.");
       return { tx: t, claim: claim.address, report: r };
     },
-    async submitHardship(_e, input) {
+    async submitHardship(_e, chosen) {
+      const input = { ...chosen, evidence: await requireEvidence(chosen.evidence) };
       const hash = await hashFile(input.evidence);
       await wait(1900);
       const r = report("hardship", input.evidence, {});
-      const t = submitHardship(input.asset, hash, r);
+      const t = submitHardship(input.asset, hash, unreviewed() ? null : r);
       save();
+      if (unreviewed()) fail("ReviewPending", "It was sent, but the agent's review didn't finish. Ask for the review again from the request, with the same file.");
       return { tx: t, report: r };
+    },
+
+    async requestReview(_e, { kind, subject, evidence }) {
+      const file = evidence ? await requireEvidence(evidence) : null;
+      const hash = file ? await hashFile(file) : null;
+      await wait(1600);
+      const item = kind === "claim" ? s.snap.claims.find((c) => c.address === subject) : s.snap.hardships.find((h) => h.address === subject);
+      if (!item) fail("BadStatus", "That request does not exist.");
+      need(item!.beneficiary === me(), "forbidden", "Only the person who sent this can ask for its review.");
+      need(item!.agentVerdict === "Pending", "already_reviewed", "The agent has already reviewed this.");
+      // A request sent without a letter: the app's own note is the document, so nothing is chosen.
+      const noLetter = kind === "claim" && s.asks?.[subject]?.attachment === false;
+      need(noLetter || hash === item!.evidenceHash, "hash_mismatch", "This isn't the file that was sent. Choose that same file.");
+      need(!unreviewed(), "agent_limit", "The agent can't review this just now. Try again later.");
+      const doc = file ?? new File(["request"], "request-note.pdf");
+      let r: AgentReport;
+      if (kind === "claim") {
+        const c = item as Claim;
+        r = noLetter
+          ? mockAskReport({ purpose: s.asks![subject].purpose, amountUsdt: fromBase(c.amount), zar: zar(fromBase(c.amount)), who: first(c.beneficiary), payee: name(c.payee), file: null, suspicious: false, hash: fakeHash() })
+          : report("claim", doc, { amountUsdt: fromBase(c.amount), payee: name(c.payee) });
+        reviewClaim(c, r);
+      } else {
+        r = report("hardship", doc, {});
+        reviewHardship(item as Hardship, r);
+      }
+      save();
+      return { tx: tx(), report: r };
     },
 
     attestDeath: () => mutate(900, attestDeath),
@@ -1569,6 +1684,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     voteAgent: (_e, candidate) => mutate(900, () => C.voteAgent(candidate)),
     releaseAsset: (_e, asset) => mutate(900, () => C.releaseAsset(asset)),
     removeMember: (_e, input) => mutate(1100, () => C.removeMember(input)),
+    restoreMember: (_e, wallet) => mutate(900, () => C.restoreMember(wallet)),
     requestStarter: async () => fail("BadStatus", "The demo family already has simulated money."),
     listAsset: (_e, asset, durationSecs) => mutate(900, () => listAsset(asset, durationSecs)),
     placeOffer: (_e, asset, amountUsdt, buyerName) => mutate(1000, () => placeOffer(asset, amountUsdt, buyerName)),
@@ -1596,7 +1712,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
     setFallback: (_e, recipients) => mutate(800, () => G.setFallback(recipients)),
     ownerReplaceSeat: (_e, index, newHolder) => mutate(900, () => G.replaceSeat(index, newHolder)),
 
-    async reportSeatDeath(_e, index, certificate) {
+    async reportSeatDeath(_e, index, chosen) {
+      const certificate = await requireEvidence(chosen);
       needCreated();
       const holder = G.seat(index).holder ?? fail("SeatVacant", "This seat is already empty.");
       const hash = await hashFile(certificate);
@@ -1625,7 +1742,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
     setYearlyCap: (_e, rule, input) => mutate(700, () => D.setYearlyCap(rule, toBase(input.capUsdt), input.periodStart)),
     voteObjection: (_e, objection, uphold) => mutate(900, () => G.voteObjection(objection, uphold)),
 
-    async reportFallbackDeath(_e, i, certificate) {
+    async reportFallbackDeath(_e, i, chosen) {
+      const certificate = await requireEvidence(chosen);
       needCreated();
       const person = s.guard?.fallback[i]?.name ?? fail("NoFallbackRecipient", "That fallback recipient does not exist.");
       const hash = await hashFile(certificate);

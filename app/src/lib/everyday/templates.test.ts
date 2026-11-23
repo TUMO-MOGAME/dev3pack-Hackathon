@@ -79,7 +79,7 @@ describe("bill templates: as rules", () => {
   it("becomes addRule input: per payment within the total, first payment one interval away, end of that day in SA", () => {
     const f = templateForm("school", { now: NOW, beneficiary: "WALLET", payee: "SCHOOL" });
     const input = toAddRule(f, { now: NOW, demo: false });
-    expect(input.recurring).toEqual({ amountUsdt: 500, intervalSecs: 91 * 86_400, firstDue: NOW / 1000 + 91 * 86_400, payee: "SCHOOL" });
+    expect(input.recurring).toEqual({ amountUsdt: 500, intervalSecs: 91 * 86_400, firstDue: NOW / 1000 + 91 * 86_400, payee: "SCHOOL", every: "term" });
     expect(input.maxPerClaimUsdt).toBeLessThanOrEqual(input.lifetimeCapUsdt);
     expect(new Date(input.validUntil * 1000).toISOString()).toBe("2030-11-15T21:59:59.000Z");
     expect(intervalOf("month", true)).toBe(60);

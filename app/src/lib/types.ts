@@ -234,6 +234,8 @@ export interface ActivityItem {
    * claim (from the event's fields). The monthly statement (lib/everyday/statement.ts) joins these to the rules.
    */
   payment?: PaymentRef;
+  /** For RuleReused: the slot's rule address, which a new rule now holds (payments before it were the old rule's). */
+  reusedRule?: Base58;
 }
 
 /** A vault payment's payee and, when the event names them, its rule and claim. */
@@ -267,12 +269,38 @@ export interface PaymentReview {
   amount: bigint; // USD₮ base units
   token: { symbol: "USD₮"; mint: Base58; verified: boolean }; // verified = matches the configured USD₮ mint
   network: { name: string; cluster: "devnet" | "mainnet-beta" | "localnet" };
-  fee: { lamports: number; sol: number; payer: Base58; sponsored: boolean };
+  /**
+   * What it costs in SOL and who pays. `lamports` is everything the payer pays (network fee and, when it pays it, rent).
+   * `networkLamports` and `rentLamports` split it when known; rent for a new account may be paid by someone else
+   * (`rentPayer`) than the network fee.
+   */
+  fee: { lamports: number; sol: number; payer: Base58; sponsored: boolean; networkLamports?: number; rentLamports?: number; rentPayer?: Base58 };
   balances: { usdt: bigint; sol: number; sufficient: boolean };
   warnings: string[]; // e.g. "Recipient has no USD₮ account yet — it will be created (small SOL fee)"
   simulated?: boolean; // label on screen when any part is simulated
   /** kind "bill": who it pays, the reference and how the invoice compared (lib/bills). */
   bill?: BillDetails;
+}
+
+/** What a payment the estate's contract makes (or a program action) will cost, quoted before it is approved (M3). */
+export interface FeeQuote {
+  fee: PaymentReview["fee"];
+  /** Lamports the user's wallet pays. */
+  userLamports: number;
+  /** The user's SOL now. */
+  solBalance: number;
+}
+
+export interface FeeQuoteInput {
+  kind: PaymentReview["kind"];
+  /** The payee (claim, schedule), the asset (offer), the estate (deposit). */
+  to: Base58;
+  amount: bigint;
+  /** A claim approved in the same go: by the living owner, or by a trusted person (whose approval may write a stamp). */
+  approve?: "owner" | "verifier";
+  claim?: Base58;
+  /** Quote what the user pays when Heirloom can't (after "FeeChanged"). */
+  selfPay?: boolean;
 }
 
 export type PaymentStatus = "draft" | "awaiting-approval" | "signing" | "submitted" | "pending" | "confirmed" | "failed" | "cancelled";
@@ -284,6 +312,8 @@ export interface PaymentReceipt {
   explorerUrl?: string;
   confirmations?: number;
   error?: string; // human-readable, with a recovery hint
+  /** Why it was not signed, when the app knows: "FeeChanged" (the fee shown can't be kept, so it is shown again). */
+  code?: string;
   updatedAt: number;
 }
 

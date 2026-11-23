@@ -7,6 +7,7 @@ import type { EstateSnapshot } from "../service/types";
 import type { Base58, Claim, Estate, Payee, Rule } from "../types";
 import { yearlyLeft } from "../disputes/types";
 import { toBase } from "../format";
+import { parseAmount as parseStrict } from "../amount";
 import type { AskCurrency, AskNote } from "./types";
 import { openToPeople } from "@/lib/verdict";
 import { quorum as quorumOf } from "../death-rules";
@@ -87,15 +88,9 @@ export function amountUsdt(typed: number, currency: AskCurrency, usdtZar: number
   return Math.round((typed / usdtZar) * 100) / 100;
 }
 
-/** "1 234,50" / "1,234.50" / "300" → a number (NaN when it is not one). */
+/** "1 234,50" / "1,234.50" / "9,50" / "R 300" → a number; NaN when it is not one clear amount (lib/amount.ts). */
 export function parseAmount(text: string): number {
-  const t = text.replace(/[\sR]/g, "");
-  if (!t) return NaN;
-  // A single comma or dot followed by 1-2 digits at the end is the decimal mark; other commas group thousands.
-  const m = t.match(/^(\d[\d,.]*?)(?:[.,](\d{1,2}))?$/);
-  if (!m) return NaN;
-  const whole = m[1].replace(/[,.]/g, "");
-  return Number(m[2] ? `${whole}.${m[2]}` : whole);
+  return parseStrict(text.trim().replace(/^R\s*/i, "")) ?? NaN;
 }
 
 /** Base units for a USD₮ amount (a thin alias, so callers need not import format.ts). */
@@ -122,6 +117,8 @@ export function askStatus(claim: Claim, estate: Pick<Estate, "status" | "claimTh
   if (claim.status === "Paid") return "paid";
   if (claim.status === "Rejected") return "refused";
   if (claim.agentVerdict === "Pending") return "checking";
+  // The owner's "no" stands after the death too (H9).
+  if (note?.declinedAt && !claim.ownerApproved) return "declined";
   // Only votes given after the death, by seats still held, not by the claimant (R3, R8, R11).
   const quorum = estate.status === "Unlocked" && quorumOf({
     verifiers: estate.verifiers ?? ["seat 1", "seat 2", "seat 3"], votes: claim.approvalsCount === false ? [] : claim.approvals,

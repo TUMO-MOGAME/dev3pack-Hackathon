@@ -27,6 +27,8 @@ import { sha256Hex } from "../agent/hash";
 import { cleanSpec, foreignSpecKeys, mediaRootHex } from "../assets/spec";
 import { MAX_PHOTOS } from "../media/webp";
 import { photosApi } from "../media/client";
+import { requireEvidence } from "../evidence";
+import { saveReason } from "../disputes/reasons-client";
 
 export const DISABLED_GUARDIANS: GuardiansSnapshot = disabledGuardians();
 
@@ -47,11 +49,11 @@ export interface ChainGuardianDeps {
 }
 
 /** Off-chain extras for the guardians view: names from the estate meta and this device, reasons and kinds from this device. */
-export function guardianExtras(meta: EstateMeta | null, reports: Record<string, AgentReport>): GuardianExtras {
+export function guardianExtras(meta: EstateMeta | null, reports: Record<string, AgentReport>, shared: Record<string, string> = {}): GuardianExtras {
   const l = local();
   // The seeded devnet demo estate's fallback kinds (children, then a charity); this device's choices win.
   const demoKinds = meta?.estate === DEVNET_DEMO_ESTATE && chainConfig.cluster !== "mainnet-beta" ? DEVNET_DEMO_FALLBACK_KINDS : {};
-  return { names: { ...l.names, ...(meta?.buyerNames ?? {}) }, reasons: l.reasons, fallbackKinds: { ...demoKinds, ...l.fallbackKinds }, reports };
+  return { names: { ...l.names, ...(meta?.buyerNames ?? {}) }, reasons: { ...shared, ...l.reasons }, fallbackKinds: { ...demoKinds, ...l.fallbackKinds }, reports };
 }
 
 /** The guardians view of an estate from its already-loaded pieces (used by chain.ts getEstate). */
@@ -209,7 +211,8 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       return d.send([ix.setFallback(chainCtx(), owner, recipients.map((r) => pk(r.wallet)))]);
     },
 
-    async reportSeatDeath(estate, index, certificate) {
+    async reportSeatDeath(estate, index, chosen) {
+      const certificate = await requireEvidence(chosen);
       const seat = await seatRaw(estate, index);
       if (!seat) throw new Error("This trusted person's seat is not set up.");
       const holder = key(seat, "holder");
@@ -227,7 +230,7 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       const person = await nameOf(estate, holder);
       const r = await d.review(certificate, "seat-death", estate,
         `Trusted person whose death is reported: ${person} (seat ${index + 1}, wallet ${holder}). This is not the estate owner.`, index);
-      return { tx: (tx ?? r.tx)!, report: r.report };
+      return { tx: tx ?? r.tx ?? null, report: r.report };
     },
     async ownerReplaceSeat(estate, index, newHolder) {
       const owner = d.requireOwnerOf(estate);
@@ -271,10 +274,13 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
         if (!h) throw new Error("That request was not found.");
         hardshipAsset = pk(key(h, "asset"));
       }
-      return d.send([ix.raiseObjection(chainCtx(), {
+      const tx = await d.send([ix.raiseObjection(chainCtx(), {
         objector, estate: pk(estate), kind: input.kind, target: pk(input.target), seatIndex: seatSpecific ? input.seatIndex : null,
         reasonHashHex, monitorSeat, beneficiary: input.kind === "Fallback" && monitorSeat === null, hardshipAsset,
       })]);
+      // Once it is on-chain, the words go where the people who vote can read them (M9); this device keeps its copy.
+      await saveReason(getActiveSigner(), estate, input.target, reason).catch((e: unknown) => console.warn(`The reason was kept on this device only: ${(e as Error).message}`));
+      return tx;
     },
 
     async voteObjection(estate, objection, uphold) {
@@ -291,7 +297,8 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       return d.send([ix.voteObjection(chainCtx(), { voter, estate: pk(estate), kind, target: pk(target), uphold, hardshipAsset })]);
     },
 
-    async reportFallbackDeath(estate, recipientIndex, certificate) {
+    async reportFallbackDeath(estate, recipientIndex, chosen) {
+      const certificate = await requireEvidence(chosen);
       const g = await guardRaw(estate);
       if (!g) throw new Error("This estate has no fallback plan.");
       // The screens' position is not the slot when the list has a gap.
@@ -313,7 +320,7 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
       const person = await nameOf(estate, wallet);
       const r = await d.review(certificate, "fallback-death", estate,
         `Fallback recipient whose death is reported: ${person} (wallet ${wallet}). This is not the estate owner.`, slot);
-      return { tx: (tx ?? r.tx)!, report: r.report };
+      return { tx: tx ?? r.tx ?? null, report: r.report };
     },
 
     async resolveFallbackDeath(estate, recipientIndex, dead) {

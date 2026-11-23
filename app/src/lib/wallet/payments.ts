@@ -52,13 +52,21 @@ export function newPaymentId(): string {
 const KEY = "heirloom.payments.v1";
 
 export function localReceiptStore(): ReceiptStore {
+  // What storage refused to keep (full, or blocked mid-visit): a stored signature must never be forgotten in this tab.
+  const unsaved = new Map<string, StoredPayment>();
   const read = (): Record<string, StoredPayment> => {
-    try { return JSON.parse(localStorage.getItem(KEY) ?? "{}") as Record<string, StoredPayment>; } catch { return {}; }
+    let all: Record<string, StoredPayment> = {};
+    try { all = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Record<string, StoredPayment>; } catch { /* unreadable */ }
+    for (const [id, p] of unsaved) if (!all[id] || all[id].updatedAt < p.updatedAt) all[id] = p;
+    return all;
   };
   const write = (all: Record<string, StoredPayment>) => {
-    // keep the newest 100 receipts
-    const entries = Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 100);
-    try { localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(entries.map((e) => [e.id, e])))); } catch { /* storage unavailable */ }
+    // Keep the newest 100 receipts, and every one still open.
+    const entries = Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt).filter((e, i) => i < 100 || OPEN.includes(e.status));
+    try {
+      localStorage.setItem(KEY, JSON.stringify(Object.fromEntries(entries.map((e) => [e.id, e]))));
+      unsaved.clear();
+    } catch { for (const e of entries) unsaved.set(e.id, e); }
   };
   return {
     get: (id) => read()[id] ?? null,
@@ -80,7 +88,14 @@ export function defaultReceiptStore(): ReceiptStore {
 // ---------- pipeline ----------
 const publicReceipt = (p: StoredPayment): PaymentReceipt => ({
   id: p.id, status: p.status, signature: p.signature, explorerUrl: p.explorerUrl, confirmations: p.confirmations, error: p.error, updatedAt: p.updatedAt,
+  ...(p.code ? { code: p.code } : {}),
 });
+
+/** Open payments of this kind, to this address, for this amount: the same payment, still being checked. */
+export function sameOpen(store: ReceiptStore, meta: Pick<StoredPayment, "kind" | "to" | "amount" | "from">): StoredPayment[] {
+  return store.list().filter((p) => OPEN.includes(p.status) && !!p.signature && p.kind === meta.kind && p.to === meta.to
+    && p.amount === meta.amount && (!meta.from || !p.from || p.from === meta.from));
+}
 
 function save(store: ReceiptStore, p: StoredPayment, patch: Partial<StoredPayment>): StoredPayment {
   const next = { ...p, ...patch, updatedAt: Date.now() };
@@ -88,11 +103,22 @@ function save(store: ReceiptStore, p: StoredPayment, patch: Partial<StoredPaymen
   return next;
 }
 
-/** True when an RPC error means the tx was rejected before it could ever land (preflight/simulation). */
+/**
+ * True when an RPC error means the tx was rejected before it could ever land (preflight/simulation). Never when the
+ * network says it has the transaction already, or did not know the blockhash yet: those bytes may still land.
+ */
 export function isDefinitiveRejection(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
+  if (/already (?:been )?processed|AlreadyProcessed|blockhash not found|BlockhashNotFound|timed? ?out|fetch failed|network/i.test(msg)) return false;
   return /simulation failed|preflight|custom program error|insufficient|Error Code:|InstructionError|0x1\b/i.test(msg);
 }
+
+/** Signs in progress in this tab, by store and payment id (M8: two confirms of one id never sign twice). */
+const inFlight = new WeakMap<ReceiptStore, Map<string, Promise<PaymentReceipt>>>();
+const flights = (store: ReceiptStore) => { let m = inFlight.get(store); if (!m) inFlight.set(store, (m = new Map())); return m; };
+
+/** Confirmed or finalized: the network's last word. A failure seen only at "processed" can still be forked away. */
+const settled = (st: { confirmationStatus?: string | null }) => st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized";
 
 /**
  * Re-checks a stored payment. Never signs. May re-broadcast the SAME signed bytes while the blockhash is valid.
@@ -100,6 +126,8 @@ export function isDefinitiveRejection(e: unknown): boolean {
 export async function recheck(store: ReceiptStore, ops: ChainOps, id: string): Promise<PaymentReceipt | null> {
   const p = store.get(id);
   if (!p) return null;
+  // Still signing in this tab: not interrupted, just waiting for the wallet.
+  if (p.status === "signing" && !p.signature && flights(store).has(id)) return publicReceipt(p);
   if (!p.signature || !OPEN.includes(p.status)) {
     // "signing" without a signature = the app closed before WDK produced one: nothing was broadcast.
     if (p.status === "signing" && !p.signature) {
@@ -107,18 +135,22 @@ export async function recheck(store: ReceiptStore, ops: ChainOps, id: string): P
     }
     return publicReceipt(p);
   }
-  const st = await ops.status(p.signature);
-  if (st?.err) {
-    return publicReceipt(save(store, p, { status: "failed", error: `The network rejected this payment (${JSON.stringify(st.err)}). Nothing was paid.` }));
+  // Once a signature is stored this never throws: an RPC error means "still checking", never "nothing was paid" (H8).
+  // The height is read before the status, so "expired" is only said of a transaction that was still unknown after
+  // its blockhash had run out.
+  const height = await ops.blockHeight().catch(() => null);
+  let st: Awaited<ReturnType<ChainOps["status"]>>;
+  try { st = await ops.status(p.signature); } catch { return publicReceipt(p); }
+  if (st?.err && (settled(st) || !st.confirmationStatus)) {
+    return publicReceipt(save(store, p, { status: "failed", error: `The network rejected this payment (${JSON.stringify(st.err)}). Its USD₮ did not move.` }));
   }
-  if (st && (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) {
+  if (st && settled(st)) {
     return publicReceipt(save(store, p, { status: "confirmed", confirmations: st.confirmations ?? undefined, error: undefined }));
   }
   if (st) return publicReceipt(save(store, p, { status: "pending", confirmations: st.confirmations ?? 0 }));
 
   // Unknown to the cluster: still landable while the blockhash is valid → re-broadcast the same bytes.
-  const height = await ops.blockHeight();
-  if (p.lastValidBlockHeight !== undefined && height > p.lastValidBlockHeight) {
+  if (height !== null && p.lastValidBlockHeight !== undefined && height > p.lastValidBlockHeight) {
     return publicReceipt(save(store, p, { status: "failed", error: "This payment expired before it reached the network. Nothing was paid; it is safe to try again." }));
   }
   if (p.wireBase64) await ops.broadcast(p.wireBase64).catch(() => undefined);
@@ -132,16 +164,30 @@ export async function runPayment(
   store: ReceiptStore, ops: ChainOps, id: string, sign: () => Promise<SignedTx>,
   meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill"> = {},
 ): Promise<PaymentReceipt> {
+  const running = flights(store).get(id);
+  if (running) return running;
+  const run = runOnce(store, ops, id, sign, meta);
+  flights(store).set(id, run);
+  try { return await run; } finally { flights(store).delete(id); }
+}
+
+async function runOnce(
+  store: ReceiptStore, ops: ChainOps, id: string, sign: () => Promise<SignedTx>,
+  meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill">,
+): Promise<PaymentReceipt> {
   const existing = store.get(id);
   if (existing?.signature) return (await recheck(store, ops, id))!;
   if (existing && (existing.status === "confirmed" || existing.status === "cancelled")) return publicReceipt(existing);
 
-  let p = save(store, existing ?? { id, status: "signing", updatedAt: Date.now() }, { ...meta, status: "signing", error: undefined });
+  let p = save(store, existing ?? { id, status: "signing", updatedAt: Date.now() }, { ...meta, status: "signing", error: undefined, code: undefined });
   let signed: SignedTx;
   try {
     signed = await sign();
   } catch (e) {
-    return publicReceipt(save(store, p, { status: "failed", error: `Not signed: ${e instanceof Error ? e.message : String(e)}. Nothing was paid.` }));
+    const code = (e as { code?: unknown } | null)?.code;
+    return publicReceipt(save(store, p, {
+      status: "failed", error: `Not signed: ${e instanceof Error ? e.message : String(e)}. Nothing was paid.`, ...(typeof code === "string" ? { code } : {}),
+    }));
   }
   // Persist BEFORE broadcasting: from here on, this id is bound to this signature.
   p = save(store, p, {
@@ -158,7 +204,7 @@ export async function runPayment(
     // Network trouble: keep "submitted"; recheck() on reconnect decides.
     return publicReceipt(save(store, p, { error: "Connection problem while sending. We will re-check this payment automatically; do not pay again." }));
   }
-  return (await recheck(store, ops, id))!;
+  return (await recheck(store, ops, id)) ?? publicReceipt(p);
 }
 
 export function cancelPayment(store: ReceiptStore, id: string): PaymentReceipt | null {
@@ -225,6 +271,11 @@ export interface SponsoredSignDeps {
   signOnly(base64: string): Promise<{ signature: string; wireBase64: string }>;
   sponsor?: SponsorClient | null;
   onFallback?: (reason: string) => void;
+  /**
+   * The review said Heirloom pays the fee (M3): if the sponsor can't now, nothing is signed for the user to pay
+   * silently. It fails with code "FeeChanged", and the screen shows the cost again before the user pays it.
+   */
+  requireSponsor?: boolean;
 }
 
 /**
@@ -242,12 +293,16 @@ export async function signSponsoredOrSelf(d: SponsoredSignDeps): Promise<SignedT
       return { signature: full.signature, wireBase64: full.wireBase64, lastValidBlockHeight, feePayer: st.feePayer, sponsored: true };
     } catch (e) {
       if (e instanceof SponsorError && e.fatal) throw e;
+      if (d.requireSponsor) throw feeChanged(e instanceof Error ? e.message : String(e));
       d.onFallback?.(e instanceof Error ? e.message : String(e));
     }
   }
+  if (d.requireSponsor) throw feeChanged("the fee sponsor is not available");
   const { base64, lastValidBlockHeight } = await d.build(d.user);
   return { ...(await d.signOnly(base64)), lastValidBlockHeight, feePayer: d.user, sponsored: false };
 }
+
+const feeChanged = (why: string) => Object.assign(new SponsorError("FeeChanged", `FeeChanged: Heirloom can't pay this fee now (${why}). Nothing was signed.`), { code: "FeeChanged" });
 
 /** Fee shown on the review screen: sponsored → the sponsor pays fee (and rent when it covers rent). */
 export function feeForReview(opts: { user: string; networkFeeLamports: number; rentLamports: number; sponsor: SponsorStatus | null }) {

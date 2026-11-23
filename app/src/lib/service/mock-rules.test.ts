@@ -622,7 +622,10 @@ describe("R12 a trusted person co-signs the sale", () => {
     t.act("nomsa"); await t.svc.listAsset(t.estate, car, 7 * 86_400);
     t.act("zanele"); await t.svc.placeOffer(t.estate, car, 13_400);
     t.act("nomsa");
-    await expect(t.svc.acceptBestOffer(t.estate, car)).rejects.toThrow(/^BadAgent/);
+    // As the chain ranks it: the agent's offer never ranks, so another buyer's wins (or nothing sells).
+    expect((await t.svc.rankOffers(car)).ineligible.map((x) => x.reason)).toContain("The agent can't buy from a plan it serves.");
+    await t.svc.acceptBestOffer(t.estate, car);
+    expect((await t.snap()).activity.find((a) => a.kind === "AssetSold")?.sale?.buyer).not.toBe(who("zanele"));
   });
 
   it("with nobody left, only after the listing ends", async () => {
@@ -919,7 +922,15 @@ describe("R19 the co-signature is for an exact amount", () => {
     const car = (await t.snap()).assets[0].address;
     const best = (await t.svc.rankOffers(car)).eligible[0];
     t.act("nomsa");
-    await t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount });
+    await t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount, recipient: t.estate });
+  });
+
+  it("H11: refuses when who gets the money changed after it was shown", async () => {
+    const t = await start("listed");
+    const car = (await t.snap()).assets[0].address;
+    const best = (await t.svc.rankOffers(car)).eligible[0];
+    t.act("nomsa");
+    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount, recipient: who("lerato") })).rejects.toThrow(/^OfferChanged/);
   });
 
   it("refuses when the offer changed after it was shown", async () => {
@@ -927,10 +938,10 @@ describe("R19 the co-signature is for an exact amount", () => {
     const car = (await t.snap()).assets[0].address;
     const best = (await t.svc.rankOffers(car)).eligible[0];
     t.act("nomsa");
-    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount + 1n })).rejects.toThrow(/^OfferChanged/);
+    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount + 1n, recipient: t.estate })).rejects.toThrow(/^OfferChanged/);
     t.act("zanele"); await t.svc.placeOffer(t.estate, car, 13_400);
     t.act("nomsa");
-    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount })).rejects.toThrow(/^OfferChanged/);
+    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount, recipient: t.estate })).rejects.toThrow(/^OfferChanged/);
     expect((await t.snap()).assets[0].status).toBe("Listed");
   });
 });
@@ -1194,5 +1205,139 @@ describe("the same as the chain service", () => {
     const t = await start("guardians");
     for (const w of [who("zodwa"), kagiso.wallet, DEMO_GUARDIANS.charity.wallet]) expect((await t.svc.listEstatesFor(w))[0].role).toBe("monitor");
     expect((await t.svc.listEstatesFor(NEW.wallet))[0].role).toBe("buyer");
+  });
+});
+
+describe("C2: a document the review would refuse is refused before anything changes", () => {
+  it("the old text stand-in is refused and no claim is made", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("unlocked");
+    svc.setActor({ address: who("lerato"), role: "beneficiary", label: P("lerato").label });
+    const [{ estate }] = await svc.listEstatesFor(who("lerato"));
+    const snap = await svc.getEstate(estate);
+    const rule = snap.rules.find((r) => r.category === "Tuition" && r.beneficiary === who("lerato"))!;
+    const payee = snap.payees.find((p) => p.kind === rule.allowedPayeeKind)!;
+    const fake = new File(["Heirloom demo document: fee-statement-2027.pdf"], "fee-statement-2027.pdf", { type: "application/pdf" });
+    await expect(svc.submitClaim(estate, { rule: rule.address, payee: payee.wallet, amountUsdt: 10, evidence: fake })).rejects.toMatchObject({ code: "FileType" });
+    expect((await svc.getEstate(estate)).claims).toHaveLength(snap.claims.length);
+  });
+});
+
+describe("H9: a request the owner declined is never approved after the death", () => {
+  it("refuses the trusted person's approval", async () => {
+    const svc = createMockService({ instant: true });
+    svc.resetDemo("funded");
+    const [{ estate }] = await svc.listEstatesFor(who("thabo"));
+    svc.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const ask = (await svc.getEstate(estate)).claims.find((c) => c.status === "Open")!;
+    await svc.declineAsk(estate, ask.address);
+    svc.simulatePassing();
+    svc.skipWait();
+    svc.setActor({ address: who("nomsa"), role: "verifier", label: P("nomsa").label });
+    await expect(svc.approveClaim(estate, ask.address)).rejects.toMatchObject({ code: "Declined" });
+  });
+});
+
+describe("H7: a review that didn't finish is asked for again, with the same file", () => {
+  it("a claim waits for its review, and only its own file brings it", async () => {
+    let down = true;
+    const t = await start("unlocked", { opts: { agent: () => (down ? "down" : null) } });
+    t.act("lerato");
+    const s = await t.snap();
+    const rule = s.rules.find((r) => r.category === "Tuition" && r.beneficiary === who("lerato"))!;
+    const payee = s.payees.find((p) => p.kind === rule.allowedPayeeKind)!;
+    const file = pdf("fees.pdf");
+    await expect(t.svc.submitClaim(t.estate, { rule: rule.address, payee: payee.wallet, amountUsdt: 10, evidence: file })).rejects.toMatchObject({ code: "ReviewPending" });
+    const claim = (await t.snap()).claims.find((c) => c.agentVerdict === "Pending")!;
+    expect(claim.status).toBe("Open");
+    down = false;
+    await expect(t.svc.requestReview(t.estate, { kind: "claim", subject: claim.address, evidence: new File(["%PDF-1.4 other"], "other.pdf", { type: "application/pdf" }) }))
+      .rejects.toMatchObject({ code: "hash_mismatch" });
+    t.act("sipho");
+    await expect(t.svc.requestReview(t.estate, { kind: "claim", subject: claim.address, evidence: file })).rejects.toMatchObject({ code: "forbidden" });
+    t.act("lerato");
+    await t.svc.requestReview(t.estate, { kind: "claim", subject: claim.address, evidence: file });
+    expect((await t.snap()).claims.find((c) => c.address === claim.address)!.agentVerdict).toBe("Approved");
+  });
+
+  it("a hardship request too: it can be made only once, so it must never be stranded", async () => {
+    let down = true;
+    const t = await start("unlocked", { opts: { agent: () => (down ? "down" : null) } });
+    t.act("lerato");
+    const asset = (await t.snap()).assets[0].address;
+    const file = pdf("affidavit.pdf");
+    await expect(t.svc.submitHardship(t.estate, { asset, evidence: file })).rejects.toMatchObject({ code: "ReviewPending" });
+    const h = (await t.snap()).hardships[0];
+    expect(h.agentVerdict).toBe("Pending");
+    down = false;
+    await t.svc.requestReview(t.estate, { kind: "hardship", subject: h.address, evidence: file });
+    expect((await t.snap()).hardships[0].agentVerdict).toBe("Approved");
+  });
+});
+
+describe("H6: a plan whose signing was interrupted is finished", () => {
+  it("interrupt (a reload while signing), reload, resume", async () => {
+    storage();
+    const first = createMockService();
+    first.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const { draft } = await first.willChat([{ role: "user", text: "a" }, { role: "user", text: "b" }, { role: "user", text: "c" }]);
+    // The page closes while the plan is being signed: the signing never finishes.
+    void first.createEstateFromWill(draft!);
+    await Promise.resolve();
+    const reloaded = createMockService({ instant: true });
+    reloaded.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const left = await reloaded.unfinishedSigning();
+    expect(left?.draft.ownerName).toBe(draft!.ownerName);
+    await reloaded.createEstateFromWill(left!.draft, left!.options);
+    expect(await reloaded.unfinishedSigning()).toBeNull();
+    expect((await reloaded.listEstatesFor(who("thabo")))).toHaveLength(1);
+  });
+});
+
+describe("M4: the plan's asset terms reach the asset", () => {
+  it("the demo keeps the signed plan's asset to fill in, until it is added", async () => {
+    storage();
+    const svc = createMockService({ instant: true });
+    svc.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const { draft } = await svc.willChat([{ role: "user", text: "a" }, { role: "user", text: "b" }, { role: "user", text: "c" }]);
+    const { estate } = await svc.createEstateFromWill(draft!);
+    expect((await svc.getEstate(estate)).plannedAssets?.[0].title).toBe(draft!.assets[0].title);
+  });
+});
+
+describe("Low: a schedule pays what was shown or nothing", () => {
+  it("refuses when the rule now pays another amount or payee", async () => {
+    const t = await start("funded");
+    const r = (await t.snap()).rules.find((x) => x.recurringAmount > 0n && x.startsNow)!;
+    t.svc.makeDue();
+    await expect(t.svc.executeScheduled(t.estate, r.address, { amount: r.recurringAmount + 1n, payee: r.fixedPayee! })).rejects.toMatchObject({ code: "ScheduleChanged" });
+    await t.svc.executeScheduled(t.estate, r.address, { amount: r.recurringAmount, payee: r.fixedPayee! });
+  });
+});
+
+describe("Low: the demo signs a plan as the chain does", () => {
+  it("adds no payee the plan didn't name, and a living schedule is first due one interval later", async () => {
+    storage();
+    const svc = createMockService({ instant: true });
+    svc.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const { draft } = await svc.willChat([{ role: "user", text: "a" }, { role: "user", text: "b" }, { role: "user", text: "c" }]);
+    const { estate } = await svc.createEstateFromWill(draft!);
+    const s = await svc.getEstate(estate);
+    expect(s.payees.some((p) => p.wallet === who("lerato"))).toBe(false);
+    const living = s.rules.find((r) => r.startsNow && r.recurringAmount > 0n)!;
+    expect(living.nextDue).toBe(now() + 60);
+  });
+});
+
+describe("A removed family member can be added back", () => {
+  it("in the plan again; the rules that ended stay ended", async () => {
+    const t = await start("funded");
+    const rulesBefore = (await t.snap()).rules.filter((r) => r.beneficiary === who("sipho"));
+    await t.svc.removeMember(t.estate, { beneficiary: who("sipho") });
+    await t.svc.restoreMember(t.estate, who("sipho"));
+    const s = await t.snap();
+    expect(s.beneficiaries.find((b) => b.wallet === who("sipho"))?.active).toBe(true);
+    for (const r of rulesBefore) expect(s.rules.find((x) => x.address === r.address)!.validUntil).toBeLessThan(now());
+    await expect(t.svc.restoreMember(t.estate, who("sipho"))).rejects.toThrow(/^BadStatus/);
   });
 });

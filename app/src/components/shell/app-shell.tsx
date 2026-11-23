@@ -31,7 +31,7 @@ import { useLocalized } from "@/lib/i18n/client";
 import { useNow } from "@/lib/hooks/use-now";
 import { guardiansOf, guardianTodo } from "@/components/guardians/derive";
 import { AliveBanner } from "@/components/guardians/recipient";
-import { canSign, claimVote, deathVote, hardshipVote, ownerMayApprove } from "@/lib/guardians/decisions";
+import { canSign, claimVote, deathVote, hardshipVote, hasInbox, ownerMayApprove } from "@/lib/guardians/decisions";
 import { disputesToDecide } from "@/components/disputes/disputes";
 import { StarterBanner } from "@/components/continuity/continuity";
 
@@ -115,9 +115,11 @@ function Chrome({ children }: { children: ReactNode }) {
   const settled = useSettled(!wallet.ready || (!!session && phase === "loading"));
   const isChat = pathname === "/chat";
   const guardNow = useNow(15000);
-  const hasInbox = role === "verifier" || role === "monitor";
-  // Trusted people: their approvals plus objections to decide and passings to confirm; watchers: approvals they can still object to.
-  const inboxCount = hasInbox && snap ? pendingFor(snap, session?.address ?? "") + guardianTodo(guardiansOf(snap), snap, session?.address, guardNow) + disputesToDecide(snap, session?.address, guardNow) : 0;
+  // Trusted people: their approvals plus objections to decide and passings to confirm; watchers: approvals they can still
+  // object to. Anyone with something to decide here has the inbox, whatever role the wallet is signed in as (M10).
+  const todo = snap ? pendingFor(snap, session?.address ?? "") + guardianTodo(guardiansOf(snap), snap, session?.address, guardNow) + disputesToDecide(snap, session?.address, guardNow) : 0;
+  const inboxHere = hasInbox(snap, session?.address, role, todo);
+  const inboxCount = inboxHere ? todo : 0;
   const ownerCount = role === "owner" && snap ? ownerPending(snap) : 0;
 
   // Apply the saved appearance choice (system is the default and needs no attribute).
@@ -169,13 +171,13 @@ function Chrome({ children }: { children: ReactNode }) {
           {/* Wide screens: the full panel, collapsible to an icon rail. */}
           <aside aria-label={s.sidebarLabel} className="fixed inset-y-0 left-0 z-30 hidden w-[var(--sidebar-w)] py-3 pl-3 xl:block">
             <div className="h-full overflow-hidden rounded-xl border border-line bg-surface">
-              <Sidebar rail={collapsed} badges={badges} onPersona={openPersona} />
+              <Sidebar rail={collapsed} badges={badges} inbox={inboxHere} onPersona={openPersona} />
             </div>
           </aside>
           {/* Small laptops and tablets: always the rail, so pages keep their width; the menu button opens the full list. */}
           <aside aria-label={s.sidebarLabel} className="fixed inset-y-0 left-0 z-30 hidden w-[5.25rem] py-3 pl-3 lg:block xl:hidden">
             <div className="h-full overflow-hidden rounded-xl border border-line bg-surface">
-              <Sidebar rail badges={badges} onPersona={openPersona} />
+              <Sidebar rail badges={badges} inbox={inboxHere} onPersona={openPersona} />
             </div>
           </aside>
         </>
@@ -228,7 +230,7 @@ function Chrome({ children }: { children: ReactNode }) {
                   <button type="button" onClick={() => setProofOpen(true)} aria-label={common.proof.openLabel} title={common.proof.open} className={clsx(roundBtn, "hidden min-[400px]:grid")}>
                     <FileCheck2 className="size-5" aria-hidden="true" />
                   </button>
-                  {hasInbox && (
+                  {inboxHere && (
                     <Link href="/inbox" aria-label={inboxCount ? fmt(s.top.inboxCount, { n: inboxCount }) : s.top.inbox} title={s.top.inbox} className={roundBtn}>
                       <Inbox className="size-5" aria-hidden="true" /><CountDot n={inboxCount} />
                     </Link>
@@ -282,7 +284,7 @@ function Chrome({ children }: { children: ReactNode }) {
             onCancel={(e) => { e.preventDefault(); closeDrawer(); }}
             onClick={(e) => { if (e.target === drawer.current) closeDrawer(); }}
           >
-            {drawerOpen && <Sidebar badges={badges} onPersona={openPersona} onNavigate={closeDrawer} onClose={closeDrawer} />}
+            {drawerOpen && <Sidebar badges={badges} inbox={inboxHere} onPersona={openPersona} onNavigate={closeDrawer} onClose={closeDrawer} />}
           </dialog>
         </>
       )}

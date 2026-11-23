@@ -105,9 +105,17 @@ export function claimBlock(snap: EstateSnapshot, c: Claim, now?: number | null):
 /** With guardians a payment needs the window that started when the quorum was reached. */
 const windowStarted = (snap: EstateSnapshot, c: Claim) => !snap.guardians?.enabled || snap.guardians.claimPayableAt?.[c.address] !== undefined;
 
+/**
+ * The owner said no to this request while alive (an off-chain note, lib/ask): nobody approves or pays it after the
+ * death either (H9). The program doesn't know about the "no", so the screens and both services hold it back.
+ */
+export const declinedByOwner = (snap: Pick<EstateSnapshot, "asks">, c: Pick<Claim, "address" | "ownerApproved">) =>
+  !c.ownerApproved && !!snap.asks?.[c.address]?.declinedAt;
+
 export function claimVote(snap: EstateSnapshot, c: Claim, me: Base58 | null | undefined, now?: number | null): Vote | null {
   const e = snap.estate;
   if (!isHeld(me) || e.status !== "Unlocked" || c.status !== "Open" || c.ownerApproved || !openToPeople(c.agentVerdict) || claimBlock(snap, c, now)) return null;
+  if (declinedByOwner(snap, c)) return null;
   const i = e.verifiers.indexOf(me);
   if (i < 0) return null;
   if (me === c.beneficiary) return "own";
@@ -118,7 +126,7 @@ export function claimVote(snap: EstateSnapshot, c: Claim, me: Base58 | null | un
 
 /** Approved by enough people: anyone may pay it, once any window has passed. */
 export function claimPayable(snap: EstateSnapshot, c: Claim, now?: number | null): boolean {
-  if (c.status !== "Open" || !openToPeople(c.agentVerdict) || claimBlock(snap, c, now)) return false;
+  if (c.status !== "Open" || !openToPeople(c.agentVerdict) || claimBlock(snap, c, now) || declinedByOwner(snap, c)) return false;
   const e = snap.estate;
   if (c.ownerApproved) return e.status === "Unlocked" || (e.status === "Active" && !!snap.rules.find((r) => r.address === c.rule)?.startsNow);
   return e.status === "Unlocked" && claimTally(e, c).met && windowStarted(snap, c);
@@ -301,6 +309,22 @@ export function sweepHeldUntil(snap: EstateSnapshot, now: number | null): number
   if (!g || !next || !r || now === null || r.verdict !== "Approved" || snap.residual !== next.wallet) return null;
   const until = r.reportedAt + 2 * refuteWait(g.fallbackWaitSecs);
   return now < until ? until : null;
+}
+
+/* ----- who has an inbox ----- */
+
+/**
+ * The inbox is for everyone with something to decide or watch in this estate (M10), whatever role their wallet is
+ * signed in as: the trusted people, and the monitors, backups and fallback recipients, who may be family too.
+ * `todo`: what the screens already count for this person (approvals, votes, confirmations).
+ */
+export function hasInbox(snap: EstateSnapshot | null | undefined, me: Base58 | null | undefined, role: string | null | undefined, todo = 0): boolean {
+  if (role === "verifier" || role === "monitor") return true;
+  if (!snap || !isHeld(me)) return false;
+  if (todo > 0 || snap.estate.verifiers.includes(me)) return true;
+  const g = snap.guardians;
+  return !!g?.seats.some((s) => s.monitors.some((m) => m.wallet === me) || s.backups.some((b) => b.wallet === me))
+    || !!g?.fallback.recipients.some((r) => r.wallet === me && !r.dead);
 }
 
 /* ----- replacing the agent ----- */

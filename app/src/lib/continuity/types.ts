@@ -19,6 +19,11 @@ export interface ContinuityService {
    * `newResidual` is required when the beneficiary being removed is who receives what is left (code "residual").
    */
   removeMember(estate: Base58, input: RemoveMemberInput): Promise<TxResult[]>;
+  /**
+   * Owner, estate Active: a family member who was removed is in the plan again (add_beneficiary allows it). Rules that
+   * ended with the removal stay ended, and their own wallet is not an approved payee again until it is added back.
+   */
+  restoreMember(estate: Base58, wallet: Base58): Promise<TxResult>;
   /** Test network only: starter SOL and test USD₮ for the active wallet, once. */
   requestStarter(): Promise<TxResult>;
 }

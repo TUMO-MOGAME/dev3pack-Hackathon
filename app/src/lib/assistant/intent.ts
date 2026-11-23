@@ -7,6 +7,7 @@
  * and the payment still goes through reviewSend → the review sheet → the person approves → WDK signs.
  */
 import { z } from "zod";
+import { amountsInText } from "../amount";
 
 export const walletIntentSchema = z.object({
   action: z.enum(["send", "unknown"]),
@@ -39,32 +40,25 @@ const EMPTY: WalletIntent = { action: "unknown", recipient: null, amountUsdt: nu
 const HONORIFIC = /^(adv\.?|ms\.?|mr\.?|mrs\.?|dr\.?|uncle|aunt|auntie|gogo|mkhulu)$/i;
 const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-const NUM = String.raw`(\d+(?:[ ,]\d{3})*(?:\.\d{1,2})?)(\s?k\b)?`;
-const ZAR_PATTERNS = [new RegExp(String.raw`\bR\s?${NUM}`, "i"), new RegExp(String.raw`${NUM}\s?(?:zar|rands?)\b`, "i")];
-const USDT_PATTERNS = [
-  new RegExp(String.raw`\$\s?${NUM}`, "i"),
-  new RegExp(String.raw`\b(?:usdt|usd₮|usd)\s?${NUM}`, "i"),
-  new RegExp(String.raw`${NUM}\s?(?:usdt|usd₮|usd|dollars?|tether)(?![\w₮])`, "i"),
-];
-const BARE = new RegExp(String.raw`(?:^|\s)${NUM}(?=\s|$|[.,!?])`, "i");
-
-function toNumber(digits: string, k?: string): number {
-  const n = Number(digits.replace(/[ ,]/g, ""));
-  return Math.round((k ? n * 1000 : n) * 100) / 100;
+/** The first amount for each currency the text names, read strictly (lib/amount.ts). Null when it is not one clear amount. */
+function amountsOf(text: string): { zar: number | null; usd: number | null; bare: number | null; unclear: boolean } {
+  const found = amountsInText(text);
+  const pick = (unit: "zar" | "usd" | null) => found.find((f) => f.unit === unit);
+  const zar = pick("zar"), usd = pick("usd"), bare = pick(null);
+  // The first amount that names a currency decides; one that could mean two things is never read in part.
+  const chosen = zar ?? usd ?? bare;
+  return {
+    zar: zar?.value ?? null, usd: zar ? null : usd?.value ?? null, bare: zar || usd ? null : bare?.value ?? null,
+    unclear: !!chosen && chosen.value === null,
+  };
 }
 
-function firstMatch(text: string, patterns: RegExp[]): number | null {
-  for (const re of patterns) {
-    const m = text.match(re);
-    if (m) return toNumber(m[1], m[2]);
-  }
-  return null;
-}
-
-/** Every number written in the text, for checking a model's amount is grounded in what the person typed. */
+/** Every number written in the text that is one clear amount, for checking a model's amount is grounded in it. */
 export function numbersIn(text: string): number[] {
-  return Array.from(text.matchAll(new RegExp(NUM, "gi")), (m) => toNumber(m[1], m[2]));
+  return amountsInText(text).flatMap((f) => (f.value === null ? [] : [f.value]));
 }
+
+const positive = (n: number | null) => (n !== null && n > 0 ? n : null);
 
 const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}\s'-]/gu, " ").replace(/\s+/g, " ").trim();
 
@@ -105,8 +99,9 @@ const SEND_VERB = /\b(send|pay|give|transfer|e-?wallet|sendi|thumela)\b/i;
 export function parseIntentFallback(text: string, recipients: RecipientLike[] = []): WalletIntent {
   const t = text.trim().slice(0, 500);
   if (!t) return EMPTY;
-  const amountZar = firstMatch(t, ZAR_PATTERNS);
-  const amountUsdt = amountZar === null ? firstMatch(t, USDT_PATTERNS) ?? firstMatch(t, [BARE]) : null;
+  const a = amountsOf(t);
+  const amountZar = a.unclear ? null : positive(a.zar);
+  const amountUsdt = a.unclear || amountZar !== null ? null : positive(a.usd ?? a.bare);
 
   let recipient: string | null = null;
   const address = t.split(/\s+/).find((w) => SOLANA_ADDRESS.test(w));
@@ -127,7 +122,7 @@ export function parseIntentFallback(text: string, recipients: RecipientLike[] = 
   // "for Lerato" / "for my son" names the person, not the reason.
   const personWords = new Set(recipients.flatMap((r) => [...nameTokens(r.label), ...relationWords(r)]).concat("my", "me"));
   if (memo && (norm(memo) === norm(recipient ?? "") || norm(memo).split(" ").every((w) => personWords.has(w)))) memo = null;
-  if (memo) memo = memo.replace(new RegExp(String.raw`\s*(?:\bR\s?)?${NUM}\s*(?:zar|rands?|usdt|usd₮|usd|dollars?)?\s*$`, "i"), "").trim() || null;
+  if (memo) memo = memo.replace(/\s*(?:\bR\s?|\$\s?)?\d[\d\s.,]*k?\s*(?:zar|rands?|usdt|usd₮|usd|dollars?)?\s*$/i, "").trim() || null;
 
   const action = SEND_VERB.test(t) || (recipient && (amountZar ?? amountUsdt)) ? "send" : "unknown";
   return walletIntentSchema.parse({ action, recipient, amountUsdt, amountZar, memo: memo?.slice(0, 120) ?? null });
@@ -140,7 +135,8 @@ export function parseIntentFallback(text: string, recipients: RecipientLike[] = 
 export function groundIntent(model: WalletIntent, text: string, recipients: RecipientLike[] = []): WalletIntent {
   const fb = parseIntentFallback(text, recipients);
   const nums = numbersIn(text);
-  const grounded = (n: number | null) => n === null || nums.length === 0 || nums.includes(n);
+  // With digits in the text the model's amount must be one of them; a number that could mean two things grounds nothing.
+  const grounded = (n: number | null) => n === null || (!/\d/.test(text) ? true : nums.includes(n));
   const out = { ...model };
   if (!grounded(out.amountUsdt) || !grounded(out.amountZar) || (out.amountUsdt === null && out.amountZar === null)) {
     out.amountUsdt = fb.amountUsdt; out.amountZar = fb.amountZar;
@@ -184,5 +180,5 @@ export function planSend(intent: WalletIntent, recipients: RecipientLike[], usdt
 
 /** Cheap check the chat uses to decide whether a message is a payment request worth parsing. */
 export function looksLikeSend(text: string): boolean {
-  return SEND_VERB.test(text) && (numbersIn(text).length > 0 || /\bto\b/i.test(text));
+  return SEND_VERB.test(text) && (/\d/.test(text) || /\bto\b/i.test(text));
 }

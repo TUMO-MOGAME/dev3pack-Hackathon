@@ -144,7 +144,7 @@ export interface GuardiansService {
   ownerReplaceSeat(estate: Base58, index: number, newHolder: { wallet: Base58; name: string }): Promise<TxResult>;
   setFallback(estate: Base58, recipients: { wallet: Base58; name: string; kind: FallbackRecipient["kind"] }[]): Promise<TxResult>;
   // succession
-  reportSeatDeath(estate: Base58, index: number, certificate: File): Promise<{ tx: TxResult; report: AgentReport }>;
+  reportSeatDeath(estate: Base58, index: number, certificate: File): Promise<{ /** Null when nothing was signed: a resumed report whose review the agent did not sign (an unnamed person). */ tx: TxResult | null; report: AgentReport }>;
   confirmSeatDeath(estate: Base58, index: number): Promise<TxResult>;
   vetoSeatDeath(estate: Base58, index: number): Promise<TxResult>;
   finalizeSuccession(estate: Base58, index: number): Promise<TxResult>;
@@ -152,7 +152,7 @@ export interface GuardiansService {
   raiseObjection(estate: Base58, input: { kind: TargetKind; target: Base58; seatIndex: number | null; reason: string }): Promise<TxResult>;
   voteObjection(estate: Base58, objection: Base58, uphold: boolean): Promise<TxResult>;
   // fallback
-  reportFallbackDeath(estate: Base58, recipientIndex: number, certificate: File): Promise<{ tx: TxResult; report: AgentReport }>;
+  reportFallbackDeath(estate: Base58, recipientIndex: number, certificate: File): Promise<{ /** Null when nothing was signed: a resumed report whose review the agent did not sign (an unnamed person). */ tx: TxResult | null; report: AgentReport }>;
   /** dead: a second participant confirms. Otherwise the reported recipient says "I'm alive". */
   resolveFallbackDeath(estate: Base58, recipientIndex: number, dead: boolean): Promise<TxResult>;
   startFallback(estate: Base58): Promise<TxResult>;

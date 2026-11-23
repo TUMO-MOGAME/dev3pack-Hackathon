@@ -16,11 +16,13 @@ import { askNote } from "../../content/ask";
 import { chainCtx } from "../chain/client";
 import * as ix from "../chain/instructions";
 import { beneficiaryPda, claimPda, payeePda } from "../chain/pda";
-import { key, num, str, type Raw } from "../chain/decoders";
+import { big, hex, key, num, str, type Raw } from "../chain/decoders";
 import { getActiveSigner } from "../wallet/signer";
 import { sha256Hex } from "../agent/hash";
 import { formatUsdt, toBase } from "../format";
 import { readHeaders } from "../access/client";
+import { requireEvidence } from "../evidence";
+import { ChainServiceError, reviewPending } from "./chain-errors";
 
 export interface ChainAskDeps {
   send(ixs: TransactionInstruction[]): Promise<TxResult>;
@@ -79,7 +81,22 @@ export function askReviewContext(input: { purpose: string; amountUsdt: number; p
   ].join("\n");
 }
 
-export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate: Base58): Promise<Record<Base58, AskNote>> } {
+/** The one-page note written for a request with nothing attached. The same words give the same bytes, so the same hash. */
+export function requestNote(p: { who: string; purpose: string; amount: bigint; currency: AskNote["currency"]; typed: number; payeeName: string; dateMs: number }): File {
+  const n = askNote;
+  const bytes = requestNotePdf(n.title, [
+    `${n.from}: ${p.who}`, `${n.for}: ${p.purpose}`,
+    `${n.amount}: ${formatUsdt(p.amount)}${p.currency === "ZAR" ? ` (${n.typed} R ${p.typed.toLocaleString("en-ZA")})` : ""}`,
+    `${n.to}: ${p.payeeName}`, `${n.date}: ${new Date(p.dateMs).toISOString().slice(0, 10)}`, "", n.footer,
+  ]);
+  return new File([bytes as BlobPart], "request-note.pdf", { type: "application/pdf" });
+}
+
+export function createChainAsk(d: ChainAskDeps): AskService & {
+  loadAsks(estate: Base58, opts?: { strict?: boolean }): Promise<Record<Base58, AskNote>>;
+  /** The request note of a claim sent without a letter, written again, if its hash is the one on-chain; else null. */
+  noteFileFor(estate: Base58, claim: Base58): Promise<File | null>;
+} {
   const f = d.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
   const storage = d.storage === undefined ? browserStorage() : d.storage;
   const now = d.now ?? (() => Date.now());
@@ -98,10 +115,15 @@ export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate:
   }
 
   return {
-    async loadAsks(estate) {
+    async loadAsks(estate, opts = {}) {
+      // `strict`: a decision rests on it (H9), so "couldn't read" is never taken for "nobody said no".
       const server = await f(`/api/asks?estate=${estate}`, { cache: "no-store", headers: readHeaders() })
-        .then((r) => (r.ok ? (r.json() as Promise<AskNote[]>) : []))
-        .catch(() => [] as AskNote[]);
+        .then((r) => {
+          if (r.ok) return r.json() as Promise<AskNote[]>;
+          if (opts.strict) throw new ChainServiceError("DeclineUnknown", `The request notes could not be read (${r.status}).`);
+          return [];
+        })
+        .catch((e: unknown) => { if (opts.strict) throw e instanceof ChainServiceError ? e : new ChainServiceError("DeclineUnknown", "The request notes could not be read."); return [] as AskNote[]; });
       return mergeAsks(Array.isArray(server) ? server : [], readLocalAsks(storage, estate));
     },
 
@@ -110,6 +132,7 @@ export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate:
       const me = getActiveSigner().address;
       const purpose = cleanPurpose(input.purpose);
       if (!purpose) throw Object.assign(new Error("Say what the money is for."), { code: "InvalidAmount" });
+      const evidence = input.evidence ? await requireEvidence(input.evidence) : null;
       const rule = await d.fetchRaw("Rule", input.rule);
       if (!rule) throw new Error("That rule was not found on-chain.");
       const ruleId = num(rule, "id");
@@ -122,15 +145,7 @@ export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate:
       const who = benRaw ? str(benRaw, "label") : me;
       const amount = toBase(input.amountUsdt);
 
-      const file = input.evidence ?? (() => {
-        const n = askNote;
-        const bytes = requestNotePdf(n.title, [
-          `${n.from}: ${who}`, `${n.for}: ${purpose}`,
-          `${n.amount}: ${formatUsdt(amount)}${input.currency === "ZAR" ? ` (${n.typed} R ${input.typed.toLocaleString("en-ZA")})` : ""}`,
-          `${n.to}: ${payeeName}`, `${n.date}: ${new Date(now()).toISOString().slice(0, 10)}`, "", n.footer,
-        ]);
-        return new File([bytes as BlobPart], "request-note.pdf", { type: "application/pdf" });
-      })();
+      const file = evidence ?? requestNote({ who, purpose, amount, currency: input.currency, typed: input.typed, payeeName, dateMs: now() });
       const h = await sha256Hex(new Uint8Array(await file.arrayBuffer()));
 
       const tx = await d.send([ix.submitClaim(ctx, {
@@ -140,11 +155,34 @@ export function createChainAsk(d: ChainAskDeps): AskService & { loadAsks(estate:
       const note: AskNote = { claim, purpose, currency: input.currency, typed: input.typed, createdAt: Math.floor(now() / 1000), attachment: !!input.evidence, declinedAt: null };
       writeLocalAsk(storage, estate, note);
 
-      const r = await d.review(file, estate, askReviewContext({ purpose, amountUsdt: input.amountUsdt, payeeName, payeeWallet: input.payee, ruleId, attachment: !!input.evidence }), claim);
-      // The note is a courtesy for the people who decide; the request stands without it.
+      // The note is a courtesy for the people who decide; the request stands without it. Saved before the review, so a
+      // review that doesn't finish can be asked for again from it (H7).
       await post("note", estate, claim, { purpose, currency: input.currency, typed: input.typed, attachment: note.attachment }, await sha256Hex(noteBody(note)))
         .catch((e) => console.warn(`Could not save the request's purpose: ${(e as Error).message}`));
+      let r: { report: AgentReport };
+      try {
+        r = await d.review(file, estate, askReviewContext({ purpose, amountUsdt: input.amountUsdt, payeeName, payeeWallet: input.payee, ruleId, attachment: !!input.evidence }), claim);
+      } catch (e) { throw reviewPending(e); }
       return { tx, claim, report: r.report };
+    },
+
+    async noteFileFor(estate, claim) {
+      const note = (await this.loadAsks(estate))[claim];
+      const raw = await d.fetchRaw("Claim", claim);
+      if (!note || note.attachment || !raw) return null;
+      const ctx = chainCtx();
+      const [payeeRaw, benRaw] = await Promise.all([
+        d.fetchRaw("Payee", payeePda(ctx.programId, estate, key(raw, "payee")).toBase58()),
+        d.fetchRaw("Beneficiary", beneficiaryPda(ctx.programId, estate, key(raw, "beneficiary")).toBase58()),
+      ]);
+      const want = hex(raw, "evidence_hash");
+      const base = { who: benRaw ? str(benRaw, "label") : key(raw, "beneficiary"), purpose: note.purpose, amount: big(raw, "amount"), currency: note.currency, typed: note.typed, payeeName: payeeRaw ? str(payeeRaw, "name") : key(raw, "payee") };
+      // The note carries the day it was written: the claim's own time, or a day either side of it (time zones).
+      for (const day of [0, -1, 1]) {
+        const file = requestNote({ ...base, dateMs: (num(raw, "created_at") + day * 86_400) * 1000 });
+        if (await sha256Hex(new Uint8Array(await file.arrayBuffer())) === want) return file;
+      }
+      return null;
     },
 
     async declineAsk(estate, claim) {

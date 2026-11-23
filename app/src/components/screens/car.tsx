@@ -8,7 +8,8 @@ import type { AssetsCopy } from "@/content/assets";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
 import type { Asset, OfferRanking, Role, WalletSession } from "@/lib/types";
-import { formatUsdt, formatZar, fromBase, shortAddress, toBase } from "@/lib/format";
+import { formatUsdt, formatUsdtExact, formatZar, fromBase, shortAddress, toBase } from "@/lib/format";
+import { amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Badge, Button, ButtonLink, Card, Consent, EmptyState, Eyebrow, ExplorerLink, Field, inputClass, Money, Notice, TickDisc } from "@/components/ui/primitives";
@@ -36,7 +37,7 @@ import { CoSign } from "@/components/continuity/cosign";
 import { ReleaseAsset } from "@/components/continuity/membership";
 
 type Copy = ScreensCopy["car"];
-const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
+const num = (s: string) => parseAmount(s) ?? Number.NaN;
 
 /**
  * Assets (route /car, kept so the demo guide and links still work): the estate's assets, "Add an asset" for the
@@ -348,7 +349,7 @@ function Protect({ copy, car, offers, owner, rate, hardshipName }: {
           </div>
           {[{ v: h, label: p.hardshipFloor }, { v: f, label: p.floor }, { v: a, label: p.asking }].map((m, i) => (
             <span key={m.label} className="absolute -bottom-1.5 -top-1.5 w-0.5 bg-ink" style={{ left: pos(m.v) }}>
-              <span className={clsx("absolute top-full mt-1 whitespace-nowrap text-[0.7rem] font-semibold leading-tight", i === 0 ? "left-0 -translate-x-1/4" : i === 2 ? "right-0 translate-x-1/4 text-right" : "left-1/2 -translate-x-1/2 text-center")}>
+              <span className={clsx("absolute top-full mt-1 w-max max-w-[5.5rem] hyphens-auto break-words text-[0.7rem] font-semibold leading-tight", i === 0 ? "left-0 -translate-x-1/4" : i === 2 ? "right-0 translate-x-1/4 text-right" : "left-1/2 -translate-x-1/2 text-center")}>
                 {m.label}<br /><span className="font-normal tabular-nums text-ink-2">{m.v.toLocaleString("en-ZA")}</span>
               </span>
             </span>
@@ -420,7 +421,7 @@ function OfferForm({ copy, car, mine }: { copy: Copy; car: Asset; mine: bigint |
 
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();
-    if (!valid || toBase(n) > spendable) { setError(o.error); return; }
+    if (!valid || toBase(n) > spendable) { setError(amount.trim() && Number.isNaN(n) ? common.amountUnclear : o.error); return; }
     if (!consent) { setError(common.consentRequired); return; }
     setError(null);
     const res = await pay({
@@ -443,11 +444,11 @@ function OfferForm({ copy, car, mine }: { copy: Copy; car: Asset; mine: bigint |
         </div>
       )}
       <form onSubmit={submit} noValidate className="mt-3 flex flex-col gap-3">
-        <Field label={o.amount} htmlFor="offer-amount" error={error} hint={`${valid && rate ? `${fmt(o.zar, { zar: formatZar(toBase(n), rate) })} · ` : ""}${fmt(o.wallet, { amount: formatUsdt(walletUsdt, { decimals: 0 }) })}`}>
+        <Field label={o.amount} htmlFor="offer-amount" error={error} hint={`${valid ? `= ${formatUsdtExact(toBase(n))} · ` : ""}${valid && rate ? `${fmt(o.zar, { zar: formatZar(toBase(n), rate) })} · ` : ""}${fmt(o.wallet, { amount: formatUsdt(walletUsdt, { decimals: 0 }) })}`}>
           <div className="relative">
             <input
-              id="offer-amount" inputMode="decimal" autoComplete="off" placeholder={String(fromBase(car.askingPrice))} value={amount}
-              onChange={(e) => { setAmount(e.target.value.replace(/[^\d.,\s]/g, "")); setError(null); }}
+              id="offer-amount" inputMode="decimal" autoComplete="off" placeholder={amountText(fromBase(car.askingPrice))} value={amount}
+              onChange={(e) => { setAmount(e.target.value); setError(null); }}
               aria-invalid={!!error} aria-describedby={error ? "offer-amount-error" : "offer-amount-hint"}
               className={`${inputClass} min-h-16 pr-20 font-display text-h2 tabular-nums`}
             />

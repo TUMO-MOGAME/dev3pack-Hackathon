@@ -16,7 +16,7 @@ import type { EstateSnapshot } from "./types";
 import { letters as copy } from "@/content/letters";
 import { canonicalLetter, cleanInput } from "../letters/canonical";
 import { sha256Hex } from "../agent/hash";
-import { canWrite, checkLetter, letterState, liveLetters, sastYear, visibleCounts } from "../letters/rules";
+import { canWrite, checkLetter, letterState, linkBaseline, liveLetters, readBaseline, sastYear, visibleCounts } from "../letters/rules";
 import { reviewDraft } from "../letters/review";
 import { fillTemplate } from "../letters/template";
 import { demoLetters, DEMO_LETTER_IDS, NALEDI_BIRTHDAY } from "../letters/demo";
@@ -78,7 +78,7 @@ export function createMockLetters(d: MockLettersDeps): LettersService & { stored
     const seeded = await demoLetters({
       estate: snap.estate.address, owner: snap.estate.owner, lerato: d.cast.lerato, naledi: d.cast.naledi,
       corolla: snap.assets.find((a) => /corolla/i.test(a.title))?.address,
-      giftRule: gift, giftBaseline: gift ? snap.rules.find((r) => r.address === gift)!.spentTotal.toString() : undefined,
+      giftRule: gift, giftBaseline: gift ? linkBaseline(snap.rules.find((r) => r.address === gift)) : undefined,
     });
     for (const l of seeded) if (!st.byId[l.id]) st.byId[l.id] = l;
     st.seeded = snap.estate.address;
@@ -139,7 +139,8 @@ export function createMockLetters(d: MockLettersDeps): LettersService & { stored
       const live = existing && !existing.deleted ? existing : null;
       const o = input.opens;
       const baseline = o.kind === "payment"
-        ? (live?.opens.kind === "payment" && live.opens.rule === o.rule && live.baseline ? live.baseline : (snap.rules.find((r) => r.address === o.rule)?.spentTotal ?? BigInt(0)).toString())
+        ? (live?.opens.kind === "payment" && live.opens.rule === o.rule && live.baseline && readBaseline(live.baseline).generation === ((snap.rules.find((r) => r.address === o.rule)?.claimCount ?? 0) >>> 16)
+          ? live.baseline : linkBaseline(snap.rules.find((r) => r.address === o.rule)))
         : undefined;
       const nowS = d.now();
       const letter: Letter = {

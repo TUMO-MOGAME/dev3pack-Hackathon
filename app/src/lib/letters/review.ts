@@ -9,6 +9,7 @@
  * a long run of short lowercase words (`reviewDraft`).
  */
 import type { Base58 } from "../types";
+import { amountsInText } from "../amount";
 import type { LetterWarning, LetterWarningCode } from "./types";
 
 export interface ReviewAsset {
@@ -102,11 +103,11 @@ function seedRun(text: string, words: Set<string>): boolean {
 /* ---------- amounts ---------- */
 
 function amountsIn(text: string, usdtZar: number): number[] {
-  const num = (x: string) => Number(x.replace(/[\s,]/g, "").replace(/\.(?=\d{3}\b)/g, ""));
-  const out: number[] = [];
-  for (const m of text.matchAll(/(\d[\d\s,.]*\d|\d)\s*(?:usd₮|usdt|usd|dollars?)/gi)) out.push(num(m[1]));
-  for (const m of text.matchAll(/\bR\s?(\d[\d\s,.]*\d|\d)/g)) out.push(Math.round((num(m[1]) / usdtZar) * 100) / 100);
-  return out.filter((n) => Number.isFinite(n) && n > 0);
+  // One strict reading (lib/amount.ts): "R9,50" is nine rand fifty; an amount that could mean two things is left out.
+  return amountsInText(text).flatMap((a) => {
+    if (a.value === null || a.value <= 0 || !a.unit) return [];
+    return [a.unit === "zar" ? Math.round((a.value / usdtZar) * 100) / 100 : a.value];
+  });
 }
 
 /* ---------- the review ---------- */

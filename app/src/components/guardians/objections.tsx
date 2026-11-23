@@ -134,7 +134,7 @@ function FeedItem({ item, now, timeLabel }: { item: SeatApprovalItem; now: numbe
 
 /** One objection: who, why, its fingerprint, the votes, and Uphold / Dismiss for those who may decide. */
 export function ObjectionCard({ objection: o, compact = false, what, className }: { objection: Objection; compact?: boolean; what?: string; className?: string }) {
-  const { guardians: c } = useCopy();
+  const { guardians: c, disputes } = useCopy();
   const { session, snap } = useEstate();
   const g = useGuardians();
   const { act, busy, receipt, refusal } = useAction();
@@ -159,7 +159,9 @@ export function ObjectionCard({ objection: o, compact = false, what, className }
       {!compact && <p className="mt-1 text-small">{fmt(t.about, { what: subject })}{watched ? ` · ${watched.holderName}` : ""}</p>}
       <div className="mt-2">
         <p className="text-small font-semibold">{t.reason}</p>
-        <blockquote className="mt-0.5 border-l-4 border-line-strong pl-3 text-small">{o.reason}</blockquote>
+        {o.reason
+          ? <blockquote className="mt-0.5 break-words border-l-4 border-line-strong pl-3 text-small">{o.reason}</blockquote>
+          : <p className="mt-0.5 text-small text-ink-2">{disputes.card.noReason}</p>}
         <p className="mt-1 text-[0.75rem] text-ink-2">{t.fingerprint}: <span className="font-mono">{shortAddress(o.reasonHash, 6)}</span></p>
       </div>
       {o.status === "Open" ? (

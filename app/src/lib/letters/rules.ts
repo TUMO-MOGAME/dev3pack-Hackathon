@@ -35,8 +35,24 @@ export interface OpenCtx {
   nowMs: number;
   /** The rule's live spent_total, or null when it could not be read (then the letter stays locked). */
   ruleSpent(rule: Base58): bigint | null;
+  /** Which rule holds the slot now (its claim ids' high 16 bits): a slot reused by a new rule is another rule. */
+  ruleGeneration?(rule: Base58): number;
   /** True when the send-to-family transfer is confirmed. */
   sendConfirmed(signature: string): boolean;
+}
+
+/**
+ * A payment link's baseline: the rule's spent_total when linked, with the slot's rule generation above 64 bits. A
+ * first rule (generation 0) gives the plain spent_total, as before; numeric, so it stores as it always did.
+ */
+export function linkBaseline(rule: { spentTotal: bigint; claimCount?: number } | undefined): string {
+  const generation = BigInt(((rule?.claimCount ?? 0) >>> 16));
+  return ((generation << 64n) + (rule?.spentTotal ?? 0n)).toString();
+}
+
+export function readBaseline(baseline: string): { generation: number; spent: bigint } {
+  const b = BigInt(baseline);
+  return { generation: Number(b >> 64n), spent: b & ((1n << 64n) - 1n) };
 }
 
 /** Open or locked. Once seen open it stays open (openedAt is sticky); a deleted letter is locked. */
@@ -50,7 +66,12 @@ export function letterState(l: Pick<Letter, "opens" | "openedAt" | "deleted" | "
     case "payment": {
       if (l.baseline === undefined) return "locked";
       const spent = ctx.ruleSpent(o.rule);
-      try { return spent !== null && spent > BigInt(l.baseline) ? "open" : "locked"; } catch { return "locked"; }
+      try {
+        const { generation, spent: base } = readBaseline(l.baseline);
+        // A gift linked to a rule whose place a new rule took never opens with the new rule's payments.
+        if (generation !== (ctx.ruleGeneration?.(o.rule) ?? 0)) return "locked";
+        return spent !== null && spent > base ? "open" : "locked";
+      } catch { return "locked"; }
     }
     case "send": return ctx.sendConfirmed(o.signature) ? "open" : "locked";
   }

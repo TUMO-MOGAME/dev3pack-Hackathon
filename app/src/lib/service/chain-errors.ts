@@ -18,6 +18,23 @@ export class ChainServiceError extends Error {
   }
 }
 
+/**
+ * A transaction was signed and sent, and the network has not given its last word yet (H8). It is never "nothing was
+ * paid": the screens show "submitted, checking" on this payment id until it confirms, fails or expires.
+ */
+export class PaymentPending extends ChainServiceError {
+  constructor(public paymentId: string, public signature: string, public kind: string | undefined, words?: string) {
+    super("NotConfirmed", words ?? "The network has not confirmed this yet, so don't count on it. It is being checked; don't send it again.");
+    this.name = "PaymentPending";
+  }
+}
+
+/** Sent, and the agent's review did not finish: the request stands, and its sender asks for the review again (H7). */
+export function reviewPending(cause: unknown): ChainServiceError {
+  const why = cause instanceof Error ? cause.message : String(cause);
+  return new ChainServiceError("ReviewPending", `It was sent, but the agent's review didn't finish (${why}). Ask for the review again from the request, with the same file.`);
+}
+
 export function must(ok: unknown, code: string, words: string): asserts ok {
   if (!ok) throw new ChainServiceError(code, words);
 }

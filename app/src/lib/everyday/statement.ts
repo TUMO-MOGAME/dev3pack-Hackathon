@@ -8,6 +8,7 @@
  */
 import type { EstateSnapshot } from "../service/types";
 import type { ActivityItem, Base58, Category, Rule } from "../types";
+import { isCurrentClaim } from "../death-rules";
 
 export const STATEMENT_TZ = "Africa/Johannesburg";
 const SAST_OFFSET_SECS = 2 * 3600;
@@ -116,6 +117,14 @@ function ruleOf(snap: EstateSnapshot, a: ActivityItem): { rule: Rule | null; per
     || (a.txSignature ? snap.claims.find((c) => c.txSignature === a.txSignature) : undefined);
   const ruleAddr = ref?.rule ?? claim?.rule;
   let rule = ruleAddr ? snap.rules.find((r) => r.address === ruleAddr) ?? null : null;
+  // A reused slot keeps its address: a payment under the rule that held it before is not the new rule's. A claim
+  // says which by its id; a scheduled payment by coming before the slot's RuleReused line (the feed is newest first).
+  if (rule && claim && rule.claimCount !== undefined && !isCurrentClaim(claim.id, rule.claimCount)) return { rule: null, person: claim.beneficiary };
+  if (rule && !claim) {
+    const at = snap.activity.indexOf(a);
+    const reused = snap.activity.findIndex((x) => x.kind === "RuleReused" && x.reusedRule === rule!.address);
+    if (reused >= 0 && at > reused) return { rule: null, person: null };
+  }
   // An older demo line without a reference: a schedule paying exactly this amount, when only one does.
   if (!rule && a.kind === "ScheduledPaid") {
     const same = snap.rules.filter((r) => r.recurringAmount > BigInt(0) && r.recurringAmount === a.amount

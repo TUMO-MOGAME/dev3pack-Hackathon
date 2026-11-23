@@ -6,7 +6,8 @@
 import { useId, useState, type FormEvent } from "react";
 import type { Rule } from "@/lib/types";
 import { currentPeriod } from "@/lib/disputes/types";
-import { formatUsdt, fromBase } from "@/lib/format";
+import { formatUsdt, formatUsdtExact, fromBase, toBase } from "@/lib/format";
+import { amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Button, Field, inputClass, Meter } from "@/components/ui/primitives";
@@ -52,7 +53,7 @@ export function YearlyCapEditor({ rule, category }: { rule: Rule; category: stri
   if (!open) {
     return (
       <>
-        <Button variant="quiet" small className="mt-2" onClick={() => { setValue(rule.yearlyCap ? String(fromBase(rule.yearlyCap.cap)) : ""); setOpen(true); }}>
+        <Button variant="quiet" small className="mt-2" onClick={() => { setValue(rule.yearlyCap ? amountText(fromBase(rule.yearlyCap.cap)) : ""); setOpen(true); }}>
           {rule.yearlyCap ? y.change : y.set}
         </Button>
         <ActionResult receipt={receipt} refusal={refusal} />
@@ -62,7 +63,7 @@ export function YearlyCapEditor({ rule, category }: { rule: Rule; category: stri
 
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();
-    const n = Number(value.replace(/[\s,]/g, ""));
+    const n = parseAmount(value) ?? Number.NaN;
     if (!Number.isFinite(n) || n < min || n > max) { setError(fmt(y.invalid, bounds)); return; }
     setError(null);
     const res = await act(key, (s, est) => s.setYearlyCap(est, rule.address, { capUsdt: n }), y.done);
@@ -75,7 +76,7 @@ export function YearlyCapEditor({ rule, category }: { rule: Rule; category: stri
         <p className="font-semibold">{fmt(y.formTitle, { category })}</p>
         <p className="text-small text-ink-2">{y.formBody}</p>
       </div>
-      <Field label={y.label} htmlFor={`${id}-cap`} hint={fmt(y.hint, bounds)} error={error}>
+      <Field label={y.label} htmlFor={`${id}-cap`} hint={`${(parseAmount(value) ?? 0) > 0 ? `= ${formatUsdtExact(toBase(parseAmount(value)!))} · ` : ""}${fmt(y.hint, bounds)}`} error={error}>
         <input id={`${id}-cap`} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => { setValue(e.target.value); setError(null); }}
           aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-cap-error` : `${id}-cap-hint`} className={inputClass} />
       </Field>
