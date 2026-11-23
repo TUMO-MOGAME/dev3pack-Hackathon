@@ -10,7 +10,7 @@ import { explorerTx, fromBase, toBase } from "../format";
 import { amountsInText } from "../amount";
 import { requireEvidence } from "../evidence";
 import type {
-  AgentReport, Asset, Base58, Claim, Hardship, OfferRanking, PayeeKind, PaymentReceipt, PaymentRef, PaymentReview, Role, Rule, SavedRecipient, WillChatMessage, WillDraft,
+  AgentReport, Asset, Base58, Claim, Hardship, Offer, OfferRanking, PayeeKind, PaymentReceipt, PaymentRef, PaymentReview, Role, Rule, SavedRecipient, WillChatMessage, WillDraft,
 } from "../types";
 import type { EstateSnapshot, HeirloomService, TxResult } from "./types";
 import { DEMO_PERSONAS as WALLET_PERSONAS } from "../wallet/personas";
@@ -76,7 +76,7 @@ export { isMockService } from "./is-mock";
 import { MOCK_STORE_KEY } from "./is-mock";
 import { MAX_RULES, MIN_LISTING_SECS, listingEnded, nextDueAfter, ruleEnded, surplusOf } from "../continuity/logic";
 import { openToPeople, outcomeOf } from "../verdict";
-import { isCurrentClaim, replaceableAt, reviewedHold } from "../death-rules";
+import { MIN_WAIT_SECS, decidesAlone, isCurrentClaim, replaceableAt, reviewedHold, unlockWaitSecs } from "../death-rules";
 import { claimTally, deathTally, hardshipTally, hasLivingSeat, isHeld, mayList } from "../guardians/decisions";
 import { clearDeath, proofOfLife } from "./mock-rules";
 import { createMockContinuity, type MockAgentVotes } from "./mock-continuity";
@@ -343,6 +343,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
   const C = createMockContinuity({
     snap: () => s.snap, names: () => s.names, created: () => s.created, me, now: nowSecs, tx, log,
     votes: () => (s.agentVotes ??= {}), released: () => (s.released ??= {}), residual: residualNow,
+    clearAgentReviews: () => G.clearAgentReviews(), isBackup: (w) => G.isBackup(w),
   });
 
   // "Ask for money": a living claim plus its off-chain note (mock-ask.ts).
@@ -405,7 +406,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     e.verifiers = verifiers as [Base58, Base58, Base58];
     e.verifierNames = [0, 1, 2].map((i) => draft.verifiers[i]?.name ?? name(e.verifiers[i])) as [string, string, string];
     e.verifiers.forEach((v, i) => { s.names[v] = e.verifierNames[i]; });
-    e.waitingPeriodSecs = waitingSecsFor(draft.waitingPeriodDays, "mock");
+    e.waitingPeriodSecs = Math.max(MIN_WAIT_SECS, waitingSecsFor(draft.waitingPeriodDays, "mock")); // the program reads at least 60 s
     e.status = "Active";
     e.lastHeartbeat = nowSecs();
     e.willHash = fakeHash();
@@ -644,9 +645,14 @@ export function createMockService(opts: MockOptions = {}): MockService {
     return t;
   }
 
+  /** An active beneficiary, a living trusted person or a living listed fallback recipient reports the owner's death; never the agent. */
   function checkDeathSubmission() {
-    needCreated(); needBeneficiary();
+    needCreated();
     const e = est();
+    const who = me();
+    need(who !== e.agent, "NotParticipant", "The agent never reports the owner's passing.");
+    need(s.snap.beneficiaries.some((b) => b.wallet === who && b.active) || (isHeld(who) && e.verifiers.includes(who)) || G.livingListed(who),
+      "NotBeneficiary", "Only the family in this plan, a trusted person or someone on the fallback list can report the owner's passing.");
     need(e.status === "Active", "BadStatus", "A passing has already been reported for this estate.");
     const d = e.death;
     if (!d.certHash) return;
@@ -690,7 +696,9 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(!!d.certHash, "NoDeathClaim", "No passing has been reported.");
     need(e.status === "Active" || e.status === "DeathPending", "BadStatus", "The estate has already unlocked.");
     need(openToPeople(d.verdict), "AgentNotApproved", "The agent has not cleared the certificate.");
-    notInterested(d.submittedBy);
+    // Whoever reported it confirms only as the only trusted person left, and only when the agent approved.
+    const alone = me() === d.submittedBy;
+    need(!alone || decidesAlone(e.verifiers, me(), d.verdict), "OwnApproval", "You cannot approve in your own favour.");
     const firstTime = !d.attestations[i];
     const votes = d.attestations.map((v, j) => v || j === i);
     const q = deathTally({ ...e, death: { ...d, attestations: votes } });
@@ -703,10 +711,12 @@ export function createMockService(opts: MockOptions = {}): MockService {
     if (starts) {
       e.status = "DeathPending";
       d.pendingSince = nowSecs();
+      // Decided alone: the unlock waits twice the waiting period.
+      if (alone) d.decidedAlone = true;
     }
     G.recordApproval({
       kind: "Unlock", seatIndex: i, target: e.address, t, summary: `Confirmed ${first(e.owner)}'s passing`,
-      deadline: e.status === "DeathPending" && d.pendingSince !== null ? d.pendingSince + e.waitingPeriodSecs : null,
+      deadline: e.status === "DeathPending" && d.pendingSince !== null ? d.pendingSince + unlockWaitSecs(e) : null,
     });
     return t;
   }
@@ -741,7 +751,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     needCreated();
     const e = est();
     need(e.status === "DeathPending", "BadStatus", "The estate is not waiting to unlock.");
-    need(force || nowSecs() >= (e.death.pendingSince ?? 0) + e.waitingPeriodSecs, "WaitingPeriodNotOver", "The waiting period has not ended yet.");
+    need(force || nowSecs() >= (e.death.pendingSince ?? 0) + unlockWaitSecs(e), "WaitingPeriodNotOver", "The waiting period has not ended yet.");
     G.checkNotObjected(e.address);
     D.checkNotDisputed(e.address);
     e.status = "Unlocked";
@@ -798,7 +808,9 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(e.status === "Unlocked", "BadStatus", "Trusted people approve claims only after the estate unlocks.");
     need(c.status === "Open", "BadStatus", "This claim is already closed.");
     need(openToPeople(c.agentVerdict), "AgentNotApproved", "The agent has not cleared this claim.");
-    notInterested(c.beneficiary);
+    // The claimant approves only as the only trusted person left, and only when the agent approved.
+    const alone = me() === c.beneficiary;
+    need(!alone || decidesAlone(e.verifiers, me(), c.agentVerdict), "OwnApproval", "You cannot approve in your own favour.");
     need(!s.asks?.[c.address]?.declinedAt, "Declined", "The owner said no to this request while alive.");
     // Approvals from before this death neither pay nor stand in the way of a fresh quorum.
     const counts = G.countsFor(c);
@@ -811,6 +823,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
     need(firstTime || starts, "AlreadyApproved", "You have already approved this.");
     if (!counts) delete s.guard?.stamps[c.address];
     c.approvals = votes;
+    // Decided alone: twice the objection window (DECIDED_ALONE). It goes with approvals that no longer count.
+    c.decidedAlone = (counts && !!c.decidedAlone) || alone;
     const t = tx();
     log("ClaimApproved", `${first(me())} approved ${first(c.beneficiary)}'s claim`, t);
     const deadline = G.recordStamp(c, i, starts);
@@ -949,15 +963,30 @@ export function createMockService(opts: MockOptions = {}): MockService {
     // As the chain's ranking (lib/agent/offers.ts): an offer nobody could co-sign never ranks, so it can't block the others.
     const held = est().verifiers.filter(isHeld);
     const unsignable = (buyer: Base58) => buyer === est().agent || (held.length > 0 && held.every((v) => v === buyer || v === est().agent));
+    // As accept_offer against the clock (lib/agent/offers.ts): an offer from before an upheld objection to the sale is
+    // never accepted; with guardians an offer, and a hardship's approval, wait out the objection window.
+    const timing = G.saleTiming(a);
+    const tooOld = (o: Offer) => timing.saleObjectionUpheldAt !== null && o.createdAt <= timing.saleObjectionUpheldAt;
+    const window = timing.objectionWindowSecs;
+    const hardshipUntil = window !== null && hardship && timing.hardshipQuorumAt ? timing.hardshipQuorumAt + window : 0;
+    const readyAt = (o: Offer) => { const at = Math.max(hardshipUntil, window !== null ? o.createdAt + window : 0); return at > timing.now ? at : null; };
     const offers = all.filter((o) => !unsignable(o.buyer));
-    const eligible = offers.filter((o) => o.amount >= min).map((o, i) => ({
+    const eligible = offers.filter((o) => o.amount >= min && !tooOld(o) && !readyAt(o)).map((o, i) => ({
       offer: o.address, amount: o.amount,
       reason: i === 0 ? (hardship ? "Highest offer at or above the hardship floor" : "Highest offer at or above the minimum price") : "Meets the minimum, but a higher offer exists",
     }));
-    const ineligible = offers.filter((o) => o.amount < min).map((o) => ({
+    const ineligible: OfferRanking["ineligible"] = offers.filter((o) => o.amount < min && !tooOld(o)).map((o) => ({
       offer: o.address, amount: o.amount,
       reason: hardship ? `Below the hardship floor of ${usd(a.hardshipFloor)}. The contract will never accept this` : `Below the minimum price of ${usd(a.floorPrice)}. Blocked unless a hardship request is approved`,
     }));
+    for (const o of offers.filter(tooOld)) {
+      ineligible.push({ offer: o.address, amount: o.amount, reason: "Made before an objection to the sale was upheld, so it can't be accepted. The buyer has to make a new offer" });
+    }
+    for (const o of offers.filter((x) => x.amount >= min && !tooOld(x) && readyAt(x))) {
+      ineligible.push({ offer: o.address, amount: o.amount, readyAt: readyAt(o)!, reason: hardshipUntil > timing.now
+        ? "Monitors can still object to the hardship approval. The sale can be signed after that"
+        : "Monitors can still object to this offer. It can be accepted after that" });
+    }
     const blocked = all.filter((o) => unsignable(o.buyer)).map((o) => ({
       offer: o.address, amount: o.amount,
       reason: o.buyer === est().agent ? "The agent can't buy from a plan it serves." : "No trusted person other than the buyer is left to co-sign this sale.",
@@ -990,6 +1019,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
       need(a.listingEnds !== null && nowSecs() >= a.listingEnds, "ListingStillOpen", "With no trusted people left, the sale waits until the listing ends.");
     }
     if (!o) {
+      const ready = ranking.ineligible.flatMap((r) => (r.readyAt ? [r.readyAt] : []));
+      if (ready.length) fail("ObjectionWindowOpen", "Monitors can still object, so no offer can be accepted yet. Try again once the window closes.");
       if (hardship) fail("BelowHardshipFloor", `No offer reaches the hardship floor of ${usd(a.hardshipFloor)}.`);
       return fail("BelowFloor", `No offer reaches the minimum price of ${usd(a.floorPrice)}.`);
     }
@@ -1050,6 +1081,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
     if (q.met) {
       h.status = "Approved";
       a.hardshipBeneficiary = h.beneficiary;
+      // Its ["stamp", hardship]: with a Guard the sale waits out the objection window from now.
+      G.recordHardshipStamp(h.address, i);
     }
     return t;
   }
@@ -1499,7 +1532,17 @@ export function createMockService(opts: MockOptions = {}): MockService {
       }
       save();
     },
-    endObjectionWindow() { G.endObjectionWindow(); save(); },
+    endObjectionWindow() {
+      G.endObjectionWindow();
+      // Offers wait out the same window; never back past an upheld objection to their sale.
+      const back = s.guard?.objectionWindowSecs ?? 0;
+      for (const o of s.snap.offers) {
+        const a = s.snap.assets.find((x) => x.address === o.asset);
+        const upheld = a ? G.saleTiming(a).saleObjectionUpheldAt : null;
+        o.createdAt = Math.max(o.createdAt - back, upheld === null ? -Infinity : upheld + 1);
+      }
+      save();
+    },
     endSuccessionWait() { G.endSuccessionWait(); save(); },
     endFallbackWait() { G.endFallbackWait(); save(); },
     simulateAllSeatsVacant() {
@@ -1757,6 +1800,9 @@ export function createMockService(opts: MockOptions = {}): MockService {
     startFallback: () => mutate(900, () => G.startFallback()),
     lapseObjection: () => mutate(800, () => G.lapseObjection()),
     executeFallback: () => mutate(1200, () => {
+      // An open challenge to the unlock (a monitors' objection or a dispute: the estate's one challenge account) blocks it.
+      G.checkNotObjected(est().address);
+      D.checkNotDisputed(est().address);
       const t = G.executeFallback();
       startSchedules();
       return t;

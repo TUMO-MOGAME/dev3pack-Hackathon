@@ -145,6 +145,9 @@ export function createMockDisputes(d: DisputeDeps) {
     if (up < 2 && down < 2) return t;
     const upheld = up >= 2;
     x.status = upheld ? "Upheld" : "Dismissed";
+    // As on-chain: once decided, raised_at is when it was decided (a claim's objection window runs from there).
+    x.raisedAt = d.now();
+    x.lapsesAt = disputeLapsesAt(x.raisedAt, est().waitingPeriodSecs);
     if (upheld && x.kind === "Claim") {
       const c = d.snap().claims.find((y) => y.address === x.target);
       if (c && c.status === "Open") c.status = "Rejected";

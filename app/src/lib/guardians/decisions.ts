@@ -5,7 +5,8 @@
 import type { EstateSnapshot } from "../service/types";
 import type { Asset, Base58, Claim, Estate, Hardship, Verdict } from "../types";
 import {
-  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, quorum, refuteWait, replaceableAt, reviewedHold, seatReviewedHold,
+  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, quorum, recoveryTimeout, refuteWait, replaceableAt, reportGrace,
+  reviewedHold, seatReviewedHold,
 } from "../death-rules";
 import { openToPeople } from "../verdict";
 import type { FallbackDeathReport, Seat, TargetKind } from "./types";
@@ -204,9 +205,16 @@ export function fallbackReplace(e: Estate, fallbackWaitSecs: number, r: Fallback
 /** When `who` may replace it. */
 export const replaceFor = (t: ReplaceTimes, reporter: Base58 | null, who: Base58) => (who === reporter ? t.reporter : t.others);
 
+/** Who may report the owner's death: an active beneficiary, a living trusted person or a living listed fallback recipient; never the agent. */
+export function deathReporter(snap: EstateSnapshot, me: Base58 | null | undefined): boolean {
+  const e = snap.estate;
+  if (!isHeld(me) || me === e.agent) return false;
+  return isFamily(snap, me) || e.verifiers.includes(me) || !!snap.guardians?.fallback.recipients.some((r) => r.wallet === me && !r.dead);
+}
+
 export function canSubmitDeath(snap: EstateSnapshot, me: Base58 | null | undefined, now: number | null): boolean {
   const e = snap.estate;
-  if (!me || e.status !== "Active" || !isFamily(snap, me)) return false;
+  if (!me || e.status !== "Active" || !deathReporter(snap, me)) return false;
   if (!e.death.certHash) return true;
   const t = deathReplace(e);
   return !!t && now !== null && now >= replaceFor(t, e.death.submittedBy, me);
@@ -334,9 +342,18 @@ export function hasInbox(snap: EstateSnapshot | null | undefined, me: Base58 | n
 /* ----- replacing the agent ----- */
 
 /** While Active every trusted person, at least two. Afterwards two, or the only one left. */
-export function agentVotesNeeded(e: Pick<Estate, "status" | "verifiers">): number {
+/**
+ * Votes to replace the agent: every held seat (at least two) before the unlock, two or the only one left after it. Also
+ * two (or the only one) before the unlock once a death claim that the owner hasn't disproved has stood one grace and
+ * the owner has shown no life for the recovery timeout.
+ */
+export function agentVotesNeeded(e: Pick<Estate, "status" | "verifiers"> & Partial<Pick<Estate, "death" | "lastHeartbeat" | "waitingPeriodSecs">>, now = Math.floor(Date.now() / 1000)): number {
   const seats = eligibleSeats(e.verifiers).length;
-  return e.status === "Active" ? Math.max(seats, 2) : Math.min(seats, 2);
+  const since = e.death ? deathSince({ status: e.status, death: e.death }) : 0;
+  const claimOpen = !!e.death?.certHash && (e.lastHeartbeat ?? 0) <= since;
+  const w = e.waitingPeriodSecs ?? 0;
+  const recovery = claimOpen && now >= (e.lastHeartbeat ?? 0) + recoveryTimeout(w) && now >= since + reportGrace(w);
+  return e.status === "Unlocked" || recovery ? Math.min(seats, 2) : Math.max(seats, 2);
 }
 
 export function agentVoteFor(snap: EstateSnapshot, candidate: Base58): { got: number; needed: number; voters: Base58[] } {

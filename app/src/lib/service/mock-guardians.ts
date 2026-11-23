@@ -6,7 +6,8 @@
  * Synchronous "instructions" only; mock.ts wraps them in the async GuardiansService methods (hashing, the agent's
  * review, latency) and calls the hooks (recordApproval, check*) from its existing instructions.
  */
-import type { AgentReport, Base58, Claim, PaymentRef } from "../types";
+import type { AgentReport, Asset, Base58, Claim, PaymentRef } from "../types";
+import type { SaleTiming } from "../agent/offers";
 import type { EstateSnapshot, TxResult } from "./types";
 import type {
   AssetKind, AssetMediaInfo, AssetPhoto, FallbackRecipient, GuardiansSnapshot, ObjectionStatus, Seat, SeatApprovalItem, TargetKind,
@@ -15,7 +16,7 @@ import { fail, need } from "./mock-errors";
 import { shortName } from "../names";
 import { cleanSpec, foreignSpecKeys, isPhotoLabel, type AssetSpec } from "../assets/spec";
 import { objectionLapsesAt } from "../disputes/types";
-import { eligibleSeats, refuteWait, replaceableAt, reviewedHold } from "../death-rules";
+import { eligibleSeats, fallbackGrace, refuteWait, replaceableAt, reviewedHold, seatReviewedHold } from "../death-rules";
 import { openToPeople } from "../verdict";
 import { confirmRoute, deathSince, interestedIn, NO_WALLET, successionOutcome } from "../guardians/decisions";
 import { clearDeath, COLLECTING, proofOfLife, votesCount, type MockStamp } from "./mock-rules";
@@ -117,8 +118,8 @@ export interface GuardDeps {
   names(): Record<Base58, string>;
   created(): boolean;
   me(): Base58;
-  /** The latest dispute on a target: it shares the objection's place. */
-  dispute(target: Base58): { raisedAt: number; lapsesAt: number } | null;
+  /** The latest dispute on a target: it shares the objection's place. Once decided, raisedAt is when it was decided. */
+  dispute(target: Base58): { raisedAt: number; lapsesAt: number; status: string } | null;
   tx(): TxResult;
   log(kind: string, text: string, t: TxResult, amount?: bigint, payment?: PaymentRef): void;
   credit(wallet: Base58, amount: bigint): void;
@@ -303,6 +304,7 @@ export function createMockGuardians(d: GuardDeps) {
     g().fallback = list.map((r) => ({ ...r }));
     g().fallbackDead = list.map(() => false);
     g().fallbackStartedAt = null; // the owner is alive and changing the plan: a started countdown is void
+    g().fallbackReports = {}; // and every open report about a recipient is void
     const t = d.tx();
     d.log("FallbackSet", `Fallback order set: ${list.map((r) => r.name).join(", then ")}`, t);
     return t;
@@ -368,13 +370,59 @@ export function createMockGuardians(d: GuardDeps) {
   function payableAt(claim: Base58): number | null {
     const st = g().stamps[claim];
     if (!g().enabled || !st?.approvedAt) return null;
-    let at = st.approvedAt + g().objectionWindowSecs;
+    // Approved alone by the claimant (the only trusted person left): twice the window.
+    const window = g().objectionWindowSecs * (d.snap().claims.find((c) => c.address === claim)?.decidedAlone ? 2 : 1);
+    let at = st.approvedAt + window;
     const dispute = d.dispute(claim);
     if (dispute && !st.windowEnded && !g().objections.some((o) => o.target === claim && o.raisedAt > dispute.raisedAt)) {
-      at = Math.max(at, dispute.lapsesAt + g().objectionWindowSecs);
+      // After it lapsed, or after it was decided.
+      at = Math.max(at, (dispute.status === "Upheld" || dispute.status === "Dismissed" ? dispute.raisedAt : dispute.lapsesAt) + window);
     }
     return at;
   }
+
+  /** approve_hardship's ["stamp", hardship]: when the quorum was reached (with a Guard, the sale waits out the window). */
+  function recordHardshipStamp(hardship: Base58, seatIndex: number) {
+    g().stamps[hardship] = { seatIndex, approver: d.me(), approvedAt: nowSecs(), givenAt: nowSecs() };
+  }
+
+  /** What accept_offer checks against the clock (lib/agent/offers.ts SaleTiming), from this estate's state. */
+  function saleTiming(asset: Asset): SaleTiming {
+    const upheld = g().objections.find((o) => o.kind === "Sale" && o.target === asset.address && o.status === "Upheld");
+    const hardship = asset.hardshipBeneficiary
+      ? d.snap().hardships.find((h) => h.asset === asset.address && h.beneficiary === asset.hardshipBeneficiary)
+      : undefined;
+    const quorumAt = hardship ? g().stamps[hardship.address]?.approvedAt ?? 0 : 0;
+    return {
+      now: nowSecs(), objectionWindowSecs: g().enabled ? g().objectionWindowSecs : null,
+      saleObjectionUpheldAt: upheld ? upheld.raisedAt : null, hardshipQuorumAt: quorumAt > 0 ? quorumAt : null,
+    };
+  }
+
+  /** A living listed fallback recipient (they may report the owner's death). */
+  const livingListed = (w: Base58) => g().enabled && g().fallback.some((r, i) => r.wallet === w && !g().fallbackDead[i]);
+
+  /**
+   * A new agent: what the old one reviewed is set back for the new one to review (AgentReviewCleared), a seat's report
+   * with its confirmation, a fallback recipient's report with its time.
+   */
+  function clearAgentReviews() {
+    const now = nowSecs();
+    for (const s of g().seats) {
+      const sc = s.succession;
+      if (!sc || sc.verdict === "Pending") continue;
+      Object.assign(sc, { verdict: "Pending", report: undefined, confirmedBy: null, confirmedAt: undefined, reportedAt: now, pendingSince: now });
+      d.log("AgentReviewCleared", `The new agent will review again the reported passing of ${first(s.holder ?? "")}`, d.tx());
+    }
+    for (const r of Object.values(reports())) {
+      if (r.verdict === "Pending") continue;
+      Object.assign(r, { verdict: "Pending", report: undefined, reportedAt: now });
+      d.log("AgentReviewCleared", `The new agent will review again the reported passing of ${first(r.recipient)}`, d.tx());
+    }
+  }
+
+  /** A candidate agent is nobody's backup: the seat would lose that backup. */
+  const isBackup = (w: Base58) => g().seats.some((s) => s.backups.includes(w));
 
   /** execute_claim with a Guard: the stamp must exist, the window must have passed, and no objection may be open. */
   function checkClaimExecutable(claim: Base58, byQuorum: boolean) {
@@ -401,8 +449,9 @@ export function createMockGuardians(d: GuardDeps) {
 
   function reportStale(sc: MockSuccession, who: Base58): boolean {
     const w = est().waitingPeriodSecs;
+    // A reviewed report stands long enough for the recovery route to open and be used (RT + 2W).
     return !sc.confirmedBy && nowSecs() >= replaceableAt({
-      verdict: sc.verdict, reportedAt: sc.reportedAt ?? 0, reporter: sc.reportedBy, who, waitingSecs: w, hold: reviewedHold(w),
+      verdict: sc.verdict, reportedAt: sc.reportedAt ?? 0, reporter: sc.reportedBy, who, waitingSecs: w, hold: seatReviewedHold(w),
     });
   }
 
@@ -611,6 +660,7 @@ export function createMockGuardians(d: GuardDeps) {
 
   function resolve(o: MockObjection, upheld: boolean) {
     o.status = upheld ? "Upheld" : "Dismissed";
+    o.raisedAt = nowSecs(); // as on-chain: once decided, raised_at is when it was decided
     if (!upheld) return;
     const sn = d.snap();
     const e = est();
@@ -711,6 +761,7 @@ export function createMockGuardians(d: GuardDeps) {
       need(nowSecs() >= replaceableAt({
         verdict: prev.verdict, reportedAt: prev.reportedAt, reporter: prev.reporter, who,
         waitingSecs: est().waitingPeriodSecs, hold: 2 * refuteWait(g().fallbackWaitSecs),
+        grace: fallbackGrace(est().waitingPeriodSecs, g().fallbackWaitSecs),
       }), "BadStatus", "A report about this person is already open.");
     }
     const t = d.tx();
@@ -968,7 +1019,8 @@ export function createMockGuardians(d: GuardDeps) {
 
   return {
     setup, setBackups, setMonitors, setFallback, replaceSeat,
-    recordApproval, recordStamp, countsFor, checkClaimExecutable, checkNotObjected, objectionBinds,
+    recordApproval, recordStamp, recordHardshipStamp, saleTiming, livingListed, clearAgentReviews, isBackup,
+    countsFor, checkClaimExecutable, checkNotObjected, objectionBinds,
     reportSeatDeath, confirmSeatDeath, vetoSeatDeath, finalizeSuccession,
     raiseObjection, voteObjection,
     reportFallbackDeath, resolveFallbackDeath, sweepRecipient, startFallback, executeFallback, lapseObjection,

@@ -6,7 +6,7 @@ import type { Base58 } from "../types";
 import type { EstateSnapshot, TxResult } from "./types";
 import type { AgentVoteInfo, RemoveMemberInput } from "../continuity/types";
 import { rulesEndedByRemoval } from "../continuity/logic";
-import { agentVotesNeeded, isHeld } from "../guardians/decisions";
+import { agentVotesNeeded, deathSince, isHeld } from "../guardians/decisions";
 import { eligibleSeats } from "../death-rules";
 import { fail, need } from "./mock-errors";
 import { proofOfLife } from "./mock-rules";
@@ -28,6 +28,10 @@ export interface ContinuityDeps {
   now(): number;
   tx(): TxResult;
   log(kind: string, text: string, t: TxResult): void;
+  /** Seats and fallback reports the old agent reviewed go back to Pending for the new one (mock-guardians.ts). */
+  clearAgentReviews(): void;
+  /** A candidate agent can't be anyone's backup. */
+  isBackup(w: Base58): boolean;
 }
 
 export function createMockContinuity(d: ContinuityDeps) {
@@ -42,13 +46,15 @@ export function createMockContinuity(d: ContinuityDeps) {
 
   function checkCandidate(w: Base58) {
     const e = est();
-    need(isHeld(w) && w !== e.agent && w !== e.owner && !e.verifiers.includes(w), "BadAgent",
-      "The new agent must be another wallet that is neither the owner nor a trusted person.");
+    need(isHeld(w) && w !== e.agent && w !== e.owner && !e.verifiers.includes(w) && !d.isBackup(w), "BadAgent",
+      "The new agent must be another wallet that is neither the owner, a trusted person nor anyone's backup.");
   }
 
+  /** What the old agent reviewed is the new one's to review again; then the agent changes. */
   function changeAgent(w: Base58) {
     est().agent = w;
     d.names()[w] ??= "Replacement agent";
+    d.clearAgentReviews();
     d.log("AgentChanged", "The agent was replaced. The old one can no longer review, list or sign sales", d.tx());
   }
 
@@ -77,13 +83,20 @@ export function createMockContinuity(d: ContinuityDeps) {
     const firstTime = voters[i] !== me;
     voters[i] = me;
     const got = eligibleSeats(e.verifiers).filter((j) => voters[j] === e.verifiers[j]).length;
-    const needed = agentVotesNeeded(e);
+    const needed = agentVotesNeeded(e, d.now());
     need(firstTime || got >= needed, "AlreadyApproved", "You have already voted for this agent.");
     const t = d.tx();
     d.votes()[w] = { replaces: e.agent, voters };
     d.log("AgentVoted", `${first(me)} voted to replace the agent (${got} of ${needed})`, t);
     if (got >= needed) {
       d.votes()[w].voters = [null, null, null];
+      // The death claim's review was the old agent's: the new one reviews it again, and the wait starts over.
+      const death = e.death;
+      if (death.certHash && e.lastHeartbeat <= deathSince(e) && e.status !== "Unlocked" && death.verdict !== "Pending") {
+        Object.assign(death, { verdict: "Pending", attestations: [false, false, false], agentReport: undefined, decidedAlone: false, pendingSince: null, submittedAt: d.now() });
+        e.status = "Active";
+        d.log("AgentReviewCleared", "The new agent will review the reported passing again, and the wait starts over", d.tx());
+      }
       changeAgent(w);
     }
     return t;

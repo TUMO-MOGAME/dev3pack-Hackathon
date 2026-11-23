@@ -369,7 +369,9 @@ describe("R6 only participants report a trusted person's death", () => {
     t.act("sipho"); await t.svc.reportSeatDeath(t.estate, 2, pdf());
     t.act("lerato");
     await expect(t.svc.reportSeatDeath(t.estate, 2, pdf())).rejects.toThrow(/^SuccessionPending/);
-    advance(120);
+    advance(359); // reviewed: it stands for the recovery timeout and two waits (6 x 60 s)
+    await expect(t.svc.reportSeatDeath(t.estate, 2, pdf())).rejects.toThrow(/^SuccessionPending/);
+    advance(1);
     await t.svc.reportSeatDeath(t.estate, 2, pdf());
     t.act("nomsa"); await t.svc.confirmSeatDeath(t.estate, 2);
     advance(10_000);
@@ -382,7 +384,7 @@ describe("R6 only participants report a trusted person's death", () => {
     t.act("sipho"); await t.svc.reportSeatDeath(t.estate, 2, pdf());
     t.act("thabo");
     await expect(t.svc.setSeatBackups(t.estate, 2, [priya])).rejects.toThrow(/^SuccessionPending/);
-    advance(120);
+    advance(360);
     await t.svc.setSeatBackups(t.estate, 2, [priya]);
     expect((await t.snap()).guardians!.seats[2].succession).toBeNull();
   });
@@ -611,6 +613,7 @@ describe("R12 a trusted person co-signs the sale", () => {
     const car = (await t.snap()).assets[0].address;
     t.act("nomsa"); await t.svc.listAsset(t.estate, car, 7 * 86_400);
     t.act("zanele"); await t.svc.placeOffer(t.estate, car, 13_400);
+    advance(60); // past the offer's objection window
     await expect(t.svc.acceptBestOffer(t.estate, car)).rejects.toThrow(/^CoSignerRequired/);
   });
 
@@ -1339,5 +1342,133 @@ describe("A removed family member can be added back", () => {
     expect(s.beneficiaries.find((b) => b.wallet === who("sipho"))?.active).toBe(true);
     for (const r of rulesBefore) expect(s.rules.find((x) => x.address === r.address)!.validUntil).toBeLessThan(now());
     await expect(t.svc.restoreMember(t.estate, who("sipho"))).rejects.toThrow(/^BadStatus/);
+  });
+});
+
+describe("review wave (plan 18.10): the mock as the program", () => {
+  const { charity } = DEMO_GUARDIANS;
+
+  it("a trusted person and a living listed fallback recipient may report the owner's death, the agent never", async () => {
+    const t = await start("funded", { guarded: true });
+    await t.death("nomsa");
+    expect((await t.snap()).estate.death.submittedBy).toBe(who("nomsa"));
+
+    const f = await start("funded", { guarded: true });
+    f.be(charity.wallet, "Charity"); await f.svc.submitDeathClaim(f.estate, pdf());
+    expect((await f.snap()).estate.death.submittedBy).toBe(charity.wallet);
+
+    const a = await start("funded", { guarded: true });
+    a.be((await a.snap()).estate.agent, "Agent");
+    await expect(a.svc.submitDeathClaim(a.estate, pdf())).rejects.toThrow(/^NotParticipant/);
+    a.act("zanele");
+    await expect(a.svc.submitDeathClaim(a.estate, pdf())).rejects.toThrow(/^NotBeneficiary/);
+  });
+
+  it("the only trusted person left, who gains, decides alone: the unlock waits twice, the claim's window too", async () => {
+    const t = await start("funded", { guarded: true });
+    t.act("thabo"); await t.svc.ownerReplaceSeat(t.estate, 0, { wallet: who("lerato"), name: "Lerato" });
+    await t.vacate(1); await t.vacate(2);
+    expect((await t.snap()).estate.verifiers.filter((v) => v !== NO_WALLET)).toEqual([who("lerato")]);
+    await t.death("lerato");
+    t.act("lerato"); await t.svc.attestDeath(t.estate);
+    expect((await t.snap()).estate.death).toMatchObject({ decidedAlone: true, attestations: [true, false, false] });
+    advance(60);
+    await expect(t.svc.finalizeUnlock(t.estate)).rejects.toThrow(/^WaitingPeriodNotOver/);
+    advance(60);
+    await t.svc.finalizeUnlock(t.estate);
+
+    const c = await t.claim("lerato");
+    t.act("lerato"); await t.svc.approveClaim(t.estate, c);
+    expect((await t.theClaim(c)).decidedAlone).toBe(true);
+    expect((await t.snap()).guardians!.claimPayableAt?.[c]).toBe(now() + 120);
+    advance(60);
+    await expect(t.svc.executeClaim(t.estate, c)).rejects.toThrow(/^ObjectionWindowOpen/);
+    advance(60);
+    await t.svc.executeClaim(t.estate, c);
+  });
+
+  it("not when the agent referred it", async () => {
+    let agent: "unsure" | null = null;
+    const t = await start("funded", { guarded: true, opts: { agent: () => agent } });
+    t.act("thabo"); await t.svc.ownerReplaceSeat(t.estate, 0, { wallet: who("lerato"), name: "Lerato" });
+    await t.vacate(1); await t.vacate(2);
+    agent = "unsure";
+    await t.death("lerato");
+    expect((await t.snap()).estate.death.verdict).toBe("Referred");
+    t.act("lerato");
+    await expect(t.svc.attestDeath(t.estate)).rejects.toThrow(/^OwnApproval/);
+  });
+
+  it("with guardians an offer waits out the objection window before it is accepted", async () => {
+    const t = await start("guardians");
+    const car = (await t.snap()).assets[0].address;
+    t.act("nomsa"); await t.svc.listAsset(t.estate, car, 7 * 86_400);
+    t.act("david");
+    const r = await t.svc.rankOffers(car);
+    expect(r.bestOffer).toBeNull();
+    expect(r.ineligible.filter((x) => x.readyAt).map((x) => x.readyAt)).toContain(now() + 60);
+    await expect(t.svc.acceptBestOffer(t.estate, car)).rejects.toThrow(/^ObjectionWindowOpen/);
+    advance(60);
+    await t.svc.acceptBestOffer(t.estate, car);
+    expect((await t.snap()).assets[0].status).toBe("Sold");
+  });
+
+  it("an offer made before an upheld objection to the sale is never accepted (OfferTooOld); a decided objection reads its decision time", async () => {
+    const t = await start("guardians");
+    const car = (await t.snap()).assets[0].address;
+    t.act("nomsa"); await t.svc.listAsset(t.estate, car, 7 * 86_400);
+    const old = (await t.snap()).offers.map((o) => o.address);
+    advance(10);
+    t.act("zodwa"); await t.svc.raiseObjection(t.estate, { kind: "Sale", target: car, seatIndex: 2, reason: "Too cheap." });
+    advance(5);
+    for (const k of ["nomsa", "david"]) { t.act(k); await t.svc.voteObjection(t.estate, (await t.snap()).guardians!.objections[0].address, true).catch(() => undefined); }
+    const objection = (await t.snap()).guardians!.objections.find((o) => o.target === car)!;
+    expect(objection).toMatchObject({ status: "Upheld", raisedAt: now() });
+    advance(1);
+    t.act("nomsa"); await t.svc.listAsset(t.estate, car, 7 * 86_400);
+    advance(60);
+    t.act("david");
+    const r = await t.svc.rankOffers(car);
+    for (const o of old) expect(r.ineligible.find((x) => x.offer === o)?.reason).toMatch(/objection to the sale was upheld/);
+    expect(old).not.toContain(r.bestOffer);
+  });
+
+  it("a hardship's approval waits out the objection window before the sale", async () => {
+    const t = await start("guardians");
+    const car = (await t.snap()).assets[0].address;
+    t.act("nomsa"); await t.svc.listAsset(t.estate, car, 7 * 86_400);
+    advance(60);
+    t.act("lerato"); await t.svc.submitHardship(t.estate, { asset: car, evidence: pdf("affidavit.pdf") });
+    const h = (await t.snap()).hardships[0].address;
+    for (const k of ["nomsa", "david"]) { t.act(k); await t.svc.approveHardship(t.estate, h).catch(() => undefined); }
+    expect((await t.snap()).hardships[0].status).toBe("Approved");
+    t.act("david");
+    await expect(t.svc.acceptBestOffer(t.estate, car)).rejects.toThrow(/^ObjectionWindowOpen/);
+    advance(60);
+    await t.svc.acceptBestOffer(t.estate, car);
+    expect((await t.snap()).assets[0].status).toBe("Sold");
+  });
+
+  it("a new agent reviews again what the old one reviewed, and can't be anyone's backup", async () => {
+    const t = await start("funded", { guarded: true });
+    t.act("zodwa"); await t.svc.reportSeatDeath(t.estate, 2, pdf());
+    expect((await t.snap()).guardians!.seats[2].succession?.verdict).toBe("Approved");
+    t.act("thabo");
+    await expect(t.svc.setAgent(t.estate, DEMO_GUARDIANS.kagiso.wallet)).rejects.toThrow(/^BadAgent/);
+    await t.svc.setAgent(t.estate, NEW_AGENT);
+    const s = await t.snap();
+    expect(s.guardians!.seats[2].succession).toMatchObject({ verdict: "Pending", confirmedBy: null });
+    expect(s.activity.map((a) => a.kind)).toContain("AgentReviewCleared");
+  });
+
+  it("a new fallback list voids every open report about a recipient", async () => {
+    const t = await start("guardians");
+    t.act("nomsa"); await t.svc.reportFallbackDeath(t.estate, 0, pdf());
+    expect((await t.snap()).guardians!.fallback.recipients[0].report).toBeTruthy();
+    const list = (await t.snap()).guardians!.fallback.recipients.map((r) => ({ wallet: r.wallet, name: r.name, kind: r.kind }));
+    const f = await start("funded", { guarded: true });
+    f.act("nomsa"); await f.svc.reportFallbackDeath(f.estate, 0, pdf());
+    f.act("thabo"); await f.svc.setFallback(f.estate, list);
+    expect((await f.snap()).guardians!.fallback.recipients[0].report ?? null).toBeNull();
   });
 });
