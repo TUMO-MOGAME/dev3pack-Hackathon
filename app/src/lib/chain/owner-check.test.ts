@@ -41,7 +41,7 @@ vi.mock("@/lib/agent/review", () => ({
   reviewDocument: async () => { h.reviews++; return { verdict: "approve", reportHash: "11".repeat(32), documentType: "x", extracted: {}, redFlags: [], confidence: 1, summary: "" }; },
 }));
 vi.mock("@/lib/db", () => ({
-  recordEvidence: async () => undefined, saveReport: async () => true, getEstateMeta: async () => null,
+  recordEvidence: async () => undefined, saveReport: async () => true, getEstateMeta: async () => null, trustedNames: () => ({}),
 }));
 vi.mock("@/lib/storage", async (original: () => Promise<object>) => ({
   ...(await original()),

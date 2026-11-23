@@ -25,7 +25,21 @@ export interface EstateMeta {
   buyerNames: Record<string, string>;
   /** Milliseconds: when the owner saved these names. A save names the one it was built on (lib/estate-meta). */
   updatedAt?: number;
+  /**
+   * Names in `buyerNames` that a buyer gave themselves (/api/estate-meta buyer-name), by wallet. Shown like the others,
+   * but never trusted as who someone is: not by the reviewer, not to match a Legacy Book's child (plan §18.9).
+   */
+  selfNamed?: Record<string, string>;
 }
+
+/** The names the owner gave (or kept): `buyerNames` without the ones buyers gave themselves. */
+export function trustedNames(m: Pick<EstateMeta, "buyerNames" | "selfNamed"> | null | undefined): Record<string, string> {
+  if (!m) return {};
+  return Object.fromEntries(Object.entries(m.buyerNames).filter(([w, n]) => m.selfNamed?.[w] !== n));
+}
+
+/** In the table the self-given names ride in buyer_names under this prefix, so no migration is needed. */
+const SELF = "self:";
 
 export interface ReportRow {
   reportHash: string;
@@ -78,7 +92,9 @@ export async function saveEstateMeta(m: EstateMeta, prev: EstateMeta | null): Pr
   }
   const row = {
     estate: m.estate, owner_wallet: m.ownerWallet, owner_name: m.ownerName, verifier_names: m.verifierNames,
-    asset_titles: m.assetTitles, buyer_names: m.buyerNames, updated_at: new Date(m.updatedAt ?? Date.now()).toISOString(),
+    asset_titles: m.assetTitles,
+    buyer_names: { ...m.buyerNames, ...Object.fromEntries(Object.entries(m.selfNamed ?? {}).map(([w, n]) => [`${SELF}${w}`, n])) },
+    updated_at: new Date(m.updatedAt ?? Date.now()).toISOString(),
   };
   const table = sb.from("estate_meta");
   const at = prev?.updatedAt ?? 0;
@@ -100,7 +116,13 @@ export async function getEstateMeta(estate: string, opts: { strict?: boolean } =
   if (!data) return null;
   return {
     estate: data.estate, ownerWallet: data.owner_wallet, ownerName: data.owner_name, verifierNames: data.verifier_names,
-    assetTitles: data.asset_titles ?? {}, buyerNames: data.buyer_names ?? {},
+    assetTitles: data.asset_titles ?? {},
+    ...(() => {
+      const all = (data.buyer_names ?? {}) as Record<string, string>;
+      const own = Object.entries(all).filter(([k]) => !k.startsWith(SELF));
+      const self = Object.entries(all).filter(([k]) => k.startsWith(SELF)).map(([k, n]) => [k.slice(SELF.length), n]);
+      return { buyerNames: Object.fromEntries(own), ...(self.length ? { selfNamed: Object.fromEntries(self) } : {}) };
+    })(),
     updatedAt: data.updated_at ? Date.parse(data.updated_at) : 0,
   };
 }

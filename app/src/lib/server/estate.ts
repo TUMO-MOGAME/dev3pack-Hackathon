@@ -3,7 +3,7 @@ import "server-only";
 import type { EstateSnapshot } from "../service/types";
 import { fetchActivity, fetchEstateRaw } from "../chain/reads";
 import { assembleSnapshot } from "../chain/snapshot";
-import { getEstateMeta, getReports } from "../db";
+import { getEstateMeta, getReports, trustedNames } from "../db";
 import { withPrivateNames } from "../chain/public-names";
 
 /**
@@ -26,5 +26,6 @@ export async function loadSnapshot(estate: string): Promise<EstateSnapshot> {
     fetchActivity(estate).catch(() => []),
     getReports(Object.values(raw.reportHashes)),
   ]);
-  return withPrivateNames(assembleSnapshot(raw, activity, reports), meta?.buyerNames ?? {});
+  // Family labels come only from names the owner gave, so a self-named buyer can't pass as a child (Legacy matching).
+  return withPrivateNames(assembleSnapshot(raw, activity, reports), trustedNames(meta));
 }

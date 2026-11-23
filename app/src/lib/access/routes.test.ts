@@ -81,6 +81,7 @@ vi.mock("@/lib/db", () => ({
   saveReport: async (r: { txSignature: string | null }) => { h.order.push(r.txSignature ? "save signed" : "save"); return !h.saveFails; },
   getEstateMeta: async () => ({ ownerName: "Thabo Mokoena", verifierNames: ["A", "B", "C"], assetTitles: {}, buyerNames: {} }),
   getReports: async () => { h.reports++; return { x: { summary: "private" } }; },
+  trustedNames: (m: { buyerNames: Record<string, string> } | null) => m?.buyerNames ?? {},
 }));
 vi.mock("@/lib/chain/reads", () => ({
   fetchAccountRaw: async (type: string, address: string) => h.accounts[`${type}:${address}`] ?? null,

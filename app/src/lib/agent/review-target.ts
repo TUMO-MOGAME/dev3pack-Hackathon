@@ -10,7 +10,7 @@ import { fetchAccountRaw } from "../chain/reads";
 import { beneficiaryPda, fallbackReportPda, guardPda, payeePda, seatPda } from "../chain/pda";
 import { reviewClaim, reviewDeath, reviewFallbackDeath, reviewHardship, reviewSeatDeath } from "../chain/instructions";
 import { getIdl } from "../chain/idl";
-import { getEstateMeta } from "../db";
+import { getEstateMeta, trustedNames } from "../db";
 import { fromBase } from "../format";
 import type { ReviewOutcome } from "../verdict";
 import type { ReviewPurpose } from "./review";
@@ -58,7 +58,9 @@ export async function loadReviewTarget(p: TargetInput): Promise<ReviewTarget> {
   const estate = { agent: key(raw, "agent"), usdtMint: key(raw, "usdt_mint") };
   const programId = new PublicKey(getIdl().address);
   const meta = await getEstateMeta(p.estate);
-  const named = (wallet: string): string | null => meta?.buyerNames[wallet] ?? null;
+  // Only names the owner gave: a buyer's name for themselves says nothing about who they are.
+  const trusted = trustedNames(meta);
+  const named = (wallet: string): string | null => trusted[wallet] ?? null;
   // The ledger holds roles, not names (chain/public-names.ts): without the off-chain name nobody can be matched.
   const personOf = (wallet: string, label: string): string =>
     named(wallet) ?? (isRoleOnly(label) ? `${label} (their name is not on record, so a name on the document cannot be checked: use needs_human)` : label);

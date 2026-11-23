@@ -97,6 +97,15 @@ const defaults: EstateMetaRouteDeps = {
 
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
 
+/**
+ * A buyer's own name stays marked as theirs through the owner's saves, which send the whole map back: only a name the
+ * owner changed (or removed) loses the mark.
+ */
+function stillSelfNamed(held: EstateMeta | null, buyerNames: Record<string, string>): Pick<EstateMeta, "selfNamed"> {
+  const kept = Object.entries(held?.selfNamed ?? {}).filter(([w, n]) => buyerNames[w] === n);
+  return kept.length ? { selfNamed: Object.fromEntries(kept) } : {};
+}
+
 export function estateMetaRoutes(deps: EstateMetaRouteDeps = defaults) {
   const firstUse = createNonces("estate-meta", META_MAX_SKEW_MS * 2);
   /** The newest save this instance stored, by estate (ms). */
@@ -146,7 +155,11 @@ export function estateMetaRoutes(deps: EstateMetaRouteDeps = defaults) {
       // No names saved for this estate (yet): nothing to add the buyer to; the family sees the short address.
       if (!meta) return json({ ok: true, saved: false });
       if (meta.buyerNames[b.wallet]) return json({ ok: true, saved: false });
-      const next = { ...meta, buyerNames: { ...meta.buyerNames, [b.wallet]: b.name }, updatedAt: (meta.updatedAt ?? 0) + 1 };
+      // Shown beside the offer, never trusted as who this wallet is (selfNamed).
+      const next = {
+        ...meta, buyerNames: { ...meta.buyerNames, [b.wallet]: b.name }, selfNamed: { ...meta.selfNamed, [b.wallet]: b.name },
+        updatedAt: (meta.updatedAt ?? 0) + 1,
+      };
       return json({ ok: true, saved: await deps.save(next, meta) });
     }
 
@@ -159,7 +172,7 @@ export function estateMetaRoutes(deps: EstateMetaRouteDeps = defaults) {
       const filled = fillGaps(held ? namesOf(held) : null, names);
       if (!filled.changed) return json({ ok: true, saved: false });
       const updatedAt = held ? (held.updatedAt ?? 0) + 1 : Math.min(restoredFrom, b.ts);
-      const saved = await deps.save({ estate: b.estate, ownerWallet: b.wallet, ...filled.names, updatedAt }, held);
+      const saved = await deps.save({ estate: b.estate, ownerWallet: b.wallet, ...filled.names, ...stillSelfNamed(held, filled.names.buyerNames), updatedAt }, held);
       return json({ ok: true, saved, updatedAt });
     }
     if ((lastSave.get(b.estate) ?? 0) > b.ts) throw new HttpError(409, "Newer names were already saved. Reload and try again.", "stale");
@@ -173,7 +186,7 @@ export function estateMetaRoutes(deps: EstateMetaRouteDeps = defaults) {
       throw new HttpError(409, "Unlock your wallet and reload before changing names.", "redacted");
     }
     const updatedAt = Math.max(b.ts, (stored?.updatedAt ?? 0) + 1, (basedOn ?? 0) + 1);
-    if (!(await deps.save({ estate: b.estate, ownerWallet: b.wallet, ...names, updatedAt }, stored))) {
+    if (!(await deps.save({ estate: b.estate, ownerWallet: b.wallet, ...names, ...stillSelfNamed(stored, names.buyerNames), updatedAt }, stored))) {
       throw new HttpError(409, "Newer names were already saved. Reload and try again.", "stale");
     }
     lastSave.set(b.estate, b.ts);
