@@ -131,4 +131,9 @@ pub enum HeirloomError {
     ClaimFromEndedRule,
     #[msg("The offer is no longer the amount that was agreed")]
     OfferChanged,
+    // ---- independent review (added 2026-11-23; append only, never reorder)
+    #[msg("The owner showed life after this death claim was made")]
+    DeathDisproved,
+    #[msg("This offer was made before an objection to the sale was upheld")]
+    OfferTooOld,
 }

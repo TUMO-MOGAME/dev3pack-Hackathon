@@ -249,6 +249,12 @@ struct Env {
 }
 
 impl Env {
+    /// `who`'s Beneficiary PDA when there is one (a removed beneficiary's still exists), otherwise None.
+    fn member_account(&self, who: &Pubkey) -> Option<Pubkey> {
+        let address = beneficiary_pda(&self.estate, who);
+        self.svm.get_account(&address).filter(|a| !a.data.is_empty()).map(|_| address)
+    }
+
     /// Program loaded, wallets funded with SOL, USD₮ mint created, owner holds 100k USD₮.
     fn new() -> Self {
         let mut svm = LiteSVM::new();
@@ -391,7 +397,7 @@ impl Env {
                 system_program: system_program(),
                 year_cap: year_cap_pda(&rule_pda(&self.estate, id)),
             },
-            heirloom::instruction::AddRule {
+            heirloom::instruction::AddRuleV2 {
                 rule_id: id,
                 category: Category::Tuition,
                 allowed_payee_kind: kind,
@@ -457,7 +463,9 @@ impl Env {
             heirloom::accounts::SubmitDeathClaim {
                 beneficiary: kid.pubkey(),
                 estate: self.estate,
-                beneficiary_account: beneficiary_pda(&self.estate, &kid.pubkey()),
+                beneficiary_account: self.member_account(&kid.pubkey()),
+                guard: None,
+                objection: objection_pda(&self.estate),
             },
             heirloom::instruction::SubmitDeathClaim { cert_hash: [7u8; 32] },
         );
@@ -2495,6 +2503,7 @@ impl Env {
                 target_account,
                 objection: objection_pda(&target),
                 system_program: system_program(),
+                guard: guard_pda(&self.estate),
             },
             heirloom::instruction::RaiseDispute { kind, target, reason_hash: reason },
         );
@@ -3700,7 +3709,9 @@ impl Env {
             heirloom::accounts::SubmitDeathClaim {
                 beneficiary: who.pubkey(),
                 estate: self.estate,
-                beneficiary_account: beneficiary_pda(&self.estate, &who.pubkey()),
+                beneficiary_account: self.member_account(&who.pubkey()),
+                guard: None,
+                objection: objection_pda(&self.estate),
             },
             heirloom::instruction::SubmitDeathClaim { cert_hash: [7u8; 32] },
         );
@@ -3987,7 +3998,7 @@ fn r08_zero_eligible_seats_never_pass() {
     env.add_beneficiary(v2.pubkey(), "Trusted child");
     env.leave_one_survivor();
     env.submit_death_claim_by(&v2).unwrap();
-    env.review_death(true).unwrap();
+    env.refer_death().unwrap();
     expect_err(env.attest_death(2), HeirloomError::OwnApproval);
     assert!(!env.estate_state().quorum_met(0b111, &v2.pubkey(), 1));
     assert_eq!(env.estate_state().status, EstateStatus::Active);
@@ -4270,7 +4281,8 @@ fn r04_a_stale_report_is_replaceable_and_its_rent_cannot_be_taken() {
     let report = fallback_report_pda(&env.estate, 0);
     let rent = env.svm.get_account(&report).unwrap().lamports;
     expect_err(env.report_fallback_death(0), HeirloomError::BadStatus);
-    warp(&mut env.svm, WAITING);
+    // An unreviewed fallback report keeps its place for half the refute wait (L12).
+    warp(&mut env.svm, FALLBACK_WAIT / 2);
     expect_err(env.report_fallback_death_by(&v0, 0, None, [7u8; 32]), HeirloomError::BadStatus);
     env.report_fallback_death(0).unwrap();
     let r: FallbackReport = fetch(&env.svm, &report);
@@ -4411,12 +4423,13 @@ fn r06_an_unreviewed_report_can_be_replaced_after_a_grace() {
 }
 
 #[test]
-fn r06_a_reviewed_report_is_replaceable_after_two_waiting_periods_until_confirmed() {
+fn r06_a_reviewed_report_is_replaceable_after_the_recovery_route_had_its_time_until_confirmed() {
     let (mut env, _people) = guardian_env();
     let (v1, v2, kid) = (env.v(1), env.v(2), env.kid1.insecure_clone());
     env.report_seat_death(&v1, 0).unwrap();
     env.review_seat_death(0, true).unwrap();
-    warp(&mut env.svm, 2 * WAITING - 1);
+    // The recovery timeout (4 waiting periods) and then two more (H3): replacing sooner would restart the route.
+    warp(&mut env.svm, 6 * WAITING - 1);
     expect_err(env.report_seat_death(&kid, 0), HeirloomError::SuccessionPending);
     warp(&mut env.svm, 1);
     env.report_seat_death(&kid, 0).unwrap();
@@ -5518,7 +5531,7 @@ fn r08_zero_eligible_never_pays_a_claim() {
     warp(&mut env.svm, WAITING);
     env.finalize_unlock().unwrap();
     let claim = env.submit_claim_by(&v2, rule, uni, 100 * USDT).unwrap();
-    env.review_claim(claim, true).unwrap();
+    env.refer_claim(claim).unwrap();
     expect_err(env.approve_claim(claim, 2), HeirloomError::OwnApproval);
     let t = now(&env.svm);
     env.plant_approvals(claim, 0b111, 2, t);

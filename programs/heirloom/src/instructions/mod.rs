@@ -23,6 +23,20 @@ use crate::errors::HeirloomError;
 use crate::events::DeathVetoed;
 use crate::state::{Estate, EstateStatus, Objection};
 
+/// A new report takes the place of the one a challenge was raised against (M7): the challenge, and any votes on
+/// it, read as lapsed from now on. `info` is the `["objection", target]` PDA (address checked by the caller).
+pub(crate) fn void_objection(info: &AccountInfo) -> Result<()> {
+    if !account_exists(info) {
+        return Ok(());
+    }
+    let mut o: Objection = read_account(info)?;
+    if o.raised_at != 0 {
+        o.raised_at = 0;
+        write_account(info, &o)?;
+    }
+    Ok(())
+}
+
 pub(crate) fn now() -> Result<i64> {
     Ok(Clock::get()?.unix_timestamp)
 }

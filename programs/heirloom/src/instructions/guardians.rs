@@ -1334,7 +1334,17 @@ pub fn report_fallback_death_handler(
     } else if report.recipient == recipient {
         let hold = guard.refute_wait().saturating_mul(2);
         require!(
-            estate.report_replaceable(report.verdict, report.reported_at, &report.reporter, &reporter, hold, ts),
+            // An unreviewed report keeps its place for at most half the refute wait, so a junk one can't outlast a
+            // countdown (L12).
+            estate.report_replaceable(
+                report.verdict,
+                report.reported_at,
+                &report.reporter,
+                &reporter,
+                estate.report_grace().min(guard.refute_wait() / 2),
+                hold,
+                ts
+            ),
             HeirloomError::BadStatus
         );
     }

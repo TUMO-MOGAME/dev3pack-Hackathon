@@ -10,7 +10,7 @@
 use anchor_lang::prelude::*;
 
 use super::guardians::{uphold_on_claim, uphold_on_unlock};
-use super::{count_bits, now, read_account};
+use super::{account_exists, count_bits, now, read_account, record_proof_of_life, write_account};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -43,6 +43,11 @@ pub struct RaiseDispute<'info> {
     pub objection: Box<Account<'info, Objection>>,
 
     pub system_program: Program<'info, System>,
+
+    /// CHECK: the ["guard", estate] PDA; may not exist. Its open-objection count drops when a dispute takes the
+    /// place of a monitors' objection that lapsed (L13).
+    #[account(mut, seeds = [GUARD_SEED, estate.key().as_ref()], bump)]
+    pub guard: UncheckedAccount<'info>,
 }
 
 pub fn raise_dispute_handler(
@@ -108,6 +113,15 @@ pub fn raise_dispute_handler(
         }
     }
 
+    if objection.status == ObjectionStatus::Open && !objection.is_dispute() && objection.target != Pubkey::default() {
+        let info = ctx.accounts.guard.to_account_info();
+        if account_exists(&info) {
+            let mut guard: Guard = read_account(&info)?;
+            guard.open_objections = guard.open_objections.saturating_sub(1);
+            write_account(&info, &guard)?;
+        }
+    }
+
     let bump = ctx.bumps.objection;
     objection.set_inner(Objection {
         estate: estate_key,
@@ -141,7 +155,7 @@ pub fn raise_dispute_handler(
 
 #[derive(Accounts)]
 pub struct ResolveDispute<'info> {
-    /// A verifier other than the one who raised the dispute.
+    /// The owner while alive, who decides alone; otherwise a verifier other than the one who raised the dispute.
     pub verifier: Signer<'info>,
 
     #[account(mut)]
@@ -160,7 +174,8 @@ pub struct ResolveDispute<'info> {
     pub target_account: Option<UncheckedAccount<'info>>,
 }
 
-/// One vote per verifier; 2 uphold → Upheld (claim Rejected / death claim cleared, estate Active),
+/// The living owner (estate Active or DeathPending) decides alone, and that is proof of life (M5). Otherwise
+/// one vote per verifier; 2 uphold → Upheld (claim Rejected / death claim cleared, estate Active),
 /// 2 dismiss → Dismissed (the action continues). Fails with DisputeLapsed once the dispute has lapsed.
 pub fn resolve_dispute_handler(ctx: Context<ResolveDispute>, uphold: bool) -> Result<()> {
     let verifier = ctx.accounts.verifier.key();
@@ -172,31 +187,45 @@ pub fn resolve_dispute_handler(ctx: Context<ResolveDispute>, uphold: bool) -> Re
         objection.is_effectively_open(&ctx.accounts.estate, ts),
         HeirloomError::DisputeLapsed
     );
-    let idx = ctx
-        .accounts
-        .estate
-        .verifier_index(&verifier)
-        .ok_or(HeirloomError::NotVerifier)?;
-    require!(verifier != objection.monitor, HeirloomError::NotVerifier);
-
-    let bit = 1u8 << idx;
-    require!(
-        (objection.votes_uphold | objection.votes_dismiss) & bit == 0,
-        HeirloomError::AlreadyApproved
-    );
-    if uphold {
-        objection.votes_uphold |= bit;
+    let estate = &ctx.accounts.estate;
+    let owner_decides = verifier == estate.owner && estate.status != EstateStatus::Unlocked;
+    let decision = if owner_decides {
+        Some(uphold)
     } else {
-        let claimant = if objection.kind == TargetKind::Claim {
-            let info = ctx.accounts.target_account.as_ref().ok_or(HeirloomError::BadStatus)?.to_account_info();
-            read_account::<Claim>(&info)?.beneficiary
+        // While the owner lives, trusted people do not decide disputes on claims (only the owner pays them then).
+        require!(
+            objection.kind != TargetKind::Claim || estate.status == EstateStatus::Unlocked,
+            HeirloomError::NotOwner
+        );
+        let idx = estate.verifier_index(&verifier).ok_or(HeirloomError::NotVerifier)?;
+        require!(verifier != objection.monitor, HeirloomError::NotVerifier);
+
+        let bit = 1u8 << idx;
+        require!(
+            (objection.votes_uphold | objection.votes_dismiss) & bit == 0,
+            HeirloomError::AlreadyApproved
+        );
+        if uphold {
+            objection.votes_uphold |= bit;
         } else {
-            ctx.accounts.estate.death_submitted_by
-        };
-        require!(verifier != claimant, HeirloomError::OwnApproval);
-        objection.votes_dismiss |= bit;
-    }
-    let voting = ctx.accounts.estate.living_seats_except(&Pubkey::default());
+            let claimant = if objection.kind == TargetKind::Claim {
+                let info = ctx.accounts.target_account.as_ref().ok_or(HeirloomError::BadStatus)?.to_account_info();
+                read_account::<Claim>(&info)?.beneficiary
+            } else {
+                estate.death_submitted_by
+            };
+            require!(verifier != claimant, HeirloomError::OwnApproval);
+            objection.votes_dismiss |= bit;
+        }
+        let voting = estate.living_seats_except(&Pubkey::default());
+        if count_bits(objection.votes_uphold & voting) >= 2 {
+            Some(true)
+        } else if count_bits(objection.votes_dismiss & voting) >= 2 {
+            Some(false)
+        } else {
+            None
+        }
+    };
     let objection_key = objection.key();
     emit!(DisputeVoted {
         objection: objection_key,
@@ -205,11 +234,7 @@ pub fn resolve_dispute_handler(ctx: Context<ResolveDispute>, uphold: bool) -> Re
         ts,
     });
 
-    let upheld = if count_bits(objection.votes_uphold & voting) >= 2 {
-        true
-    } else if count_bits(objection.votes_dismiss & voting) >= 2 {
-        false
-    } else {
+    let Some(upheld) = decision else {
         return Ok(());
     };
     objection.status = if upheld {
@@ -217,6 +242,8 @@ pub fn resolve_dispute_handler(ctx: Context<ResolveDispute>, uphold: bool) -> Re
     } else {
         ObjectionStatus::Dismissed
     };
+    // From now on raised_at is when it was resolved: a claim's objection window runs from here (H5).
+    objection.raised_at = ts;
     let kind = objection.kind;
     let target = objection.target;
 
@@ -234,6 +261,10 @@ pub fn resolve_dispute_handler(ctx: Context<ResolveDispute>, uphold: bool) -> Re
             TargetKind::Unlock => uphold_on_unlock(&mut ctx.accounts.estate),
             _ => return err!(HeirloomError::BadStatus),
         }
+    }
+    if owner_decides {
+        let key = ctx.accounts.estate.key();
+        record_proof_of_life(key, &mut ctx.accounts.estate, ts);
     }
 
     emit!(DisputeResolved {

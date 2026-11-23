@@ -500,3 +500,14 @@ pub struct RuleReused {
     pub first_claim_id: u32,
     pub ts: i64,
 }
+
+// ---- independent review (2026-11-23)
+
+/// A review by an agent that has since been replaced was set back to Pending: the new agent reviews it again.
+/// `target` is the estate (its death claim), a Seat or a FallbackReport.
+#[event]
+pub struct AgentReviewCleared {
+    pub estate: Pubkey,
+    pub target: Pubkey,
+    pub ts: i64,
+}

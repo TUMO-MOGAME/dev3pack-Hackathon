@@ -55,7 +55,8 @@ pub mod heirloom {
         instructions::setup::add_payee_handler(ctx, kind, name)
     }
 
-    pub fn add_rule(
+    /// Renamed from add_rule when rule_id became the first argument, so old clients and old programs fail closed.
+    pub fn add_rule_v2(
         ctx: Context<AddRule>,
         rule_id: u16,
         category: Category,
