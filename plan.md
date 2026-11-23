@@ -1199,3 +1199,42 @@ theft by an outsider. Each probe becomes a regression test of the corrected beha
 
 Exit rule: after this wave a reviewer re-checks the diff only. Release when no critical or high is open; anything
 lower that remains is written in the README's limits.
+
+## 19. Toggle Wars: one real A/B test with Flagsmith (planned 23 Nov 2026; hacking 26-29 Nov)
+WeMakeDevs x Flagsmith hackathon, Track 01 "Test Something Real": run a real A/B test with Flagsmith Experimentation.
+Judged on use of Flagsmith, impact, creativity, demo video. Submit by 29 Nov 20:00 IST (16:30 SAST): public repo,
+README (setup and how Flagsmith is used), short demo video. Prework is allowed. Same weekend as Dev3pack; Tumo runs both.
+
+### 19.1 The experiment
+- **Question:** in the plan builder (`/will`), do worked examples help people finish a plan?
+- **Hypothesis:** showing the suggested replies (examples of what to say) raises the share of new owners who reach
+  "review my plan" by at least 15% over a blank chat, because most people don't know what to tell an estate agent.
+- **Flag:** `plan_builder_examples`, multivariate. `control` = the flag's own value (today's screen, examples shown);
+  variant `blank` (key `blank`) = no suggested replies, the same greeting. 50/50, bucketed on the identity.
+- **Primary metric:** `plan_reviewed` (occurrence, up). **Secondary:** `plan_signed` (occurrence, up),
+  `plan_builder_message` (count; should not increase much: guards against "more typing, same result").
+- **Exposure:** recorded only when the plan builder is shown (`trackExposureEvent` at display time), not on page load.
+- **End:** refresh results, read the credible interval and chance to beat control, end the experiment, ship the winner
+  through the same flag, and show the result in the README and an in-app note.
+
+### 19.2 Rules
+- UI only. The flag never touches money rules, caps, quorums or signing; the program enforces those as before.
+- Identity = a random anonymous id made on the device (no name, wallet, email or IP sent). Events carry no free text.
+- Without a Flagsmith key (or if Flagsmith is down) the app shows `control` and sends nothing. The app never waits on it.
+- Both sites carry the code (two-sites rule); the experiment runs on the demo (mock) site, where the agent is canned.
+- Privacy policy: add Flagsmith as an operator (what is sent, why, where hosted, the cross-border transfer).
+- Simulated traffic is allowed by the rules: a script drives real browser sessions on the demo site through both
+  variants, with visitor types stated up front. Results are labelled "simulated" everywhere; real visits are added.
+- Keys: client-side environment key in Vercel env and the git-ignored root `.env.local`; any admin key never in the repo.
+
+### 19.3 Build
+1. `@flagsmith/flagsmith` (>= 12.4, `enableEvents: true`) in a small `lib/experiments` module: init lazily after first
+   paint, `identify(anonId)`, `getValue`, `trackExposureEvent`, `trackEvent`, `flushEvents` on page hide. Copy in content.
+2. Wire `/will`: variant decides whether the suggested replies show; events at review and sign.
+3. Tests: fallback to control without a key, no personal data in any event, exposure only when shown.
+4. Flagsmith setup by CLI/API: flag, variant, metrics, experiment (warehouse first). Start only when the code is live.
+5. Simulator (Playwright, N identities, two visitor types), results write-up, README section, demo video script.
+
+### 19.4 Open (ask at the 23 Nov webinar or in Discord)
+- Does the free Cloud plan include Experimentation with the managed warehouse? (Docs: beta; own warehouse needs Scale-Up.)
+- Data region of the managed warehouse (for the privacy policy).
