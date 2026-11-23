@@ -142,11 +142,14 @@ export async function getReports(hashes: string[], estate?: string): Promise<Rec
     for (const h of hashes) { const r = mem.reports.get(h); if (r && (!estate || r.estate === estate)) out[h] = r.report; }
     return out;
   }
-  let query = sb.from("agent_reports").select("report_hash, report").in("report_hash", hashes);
-  if (estate) query = query.eq("estate", estate);
-  const { data, error } = await query;
-  warn("getReports", error);
-  for (const row of data ?? []) out[row.report_hash as string] = row.report as AgentReport;
+  // In lists of 100, so a long list stays a short query string.
+  for (let i = 0; i < hashes.length; i += 100) {
+    let query = sb.from("agent_reports").select("report_hash, report").in("report_hash", hashes.slice(i, i + 100));
+    if (estate) query = query.eq("estate", estate);
+    const { data, error } = await query;
+    warn("getReports", error);
+    for (const row of data ?? []) out[row.report_hash as string] = row.report as AgentReport;
+  }
   return out;
 }
 

@@ -395,6 +395,12 @@ describe("/api/list-asset and /api/accept-offer (S1)", () => {
     if (status === 200) expect(getCoder().instruction.decode(Buffer.from(h.signed[0].data))!.name).toBe("list_asset");
   });
 
+  it("a refusal by the program is the caller's news (409 with its name), not a server error", async () => {
+    h.refuse = "Rejected by the Heirloom program: ListingClosed: The listing is closed";
+    const res = await listing(trusted);
+    expect([res.status, ((await res.json()) as { code: string }).code]).toEqual([409, "ListingClosed"]);
+  });
+
   it("a trusted person can list", async () => {
     expect((await listing(trusted)).status).toBe(200);
     expect(h.signed).toHaveLength(1);
@@ -472,6 +478,13 @@ describe("/api/reports (S5)", () => {
 
   it("answers the owner, a beneficiary and a trusted person", async () => {
     for (const who of [owner, claimant, trusted]) expect((await read(who)).status).toBe(200);
+  });
+
+  it("a list of more than 100 hashes is answered, not refused whole", async () => {
+    const exp = Date.now() + 3_600_000;
+    const headers = { [READ_HEADER]: JSON.stringify({ wallet: owner.address, exp, sig: await owner.signMessage(readPassMessage(owner.address, exp)) }) };
+    const many = Array.from({ length: 150 }, (_, i) => i.toString(16).padStart(64, "0")).join(",");
+    expect((await reports.GET(new Request(`http://t/api/reports?estate=${estate}&hashes=${many}`, { headers }))).status).toBe(200);
   });
 });
 

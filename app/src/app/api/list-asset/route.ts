@@ -9,6 +9,7 @@ import { invalidateProgramAccounts } from "@/lib/chain/reads";
 import { assertServedEstate, verifyAction } from "@/lib/access/server";
 import { actionBody } from "@/lib/access/messages";
 import { loadPublicSnapshot } from "@/lib/server/estate";
+import { refusedByProgram } from "@/lib/agent/refusal";
 import { assertProgram } from "@/lib/server/program";
 
 export const maxDuration = 60;
@@ -36,6 +37,7 @@ export const POST = handler(async (req) => {
   const agent = await agentAddress();
   assertServedEstate(snap.estate, agent);
   await spendAgentAllowance("list-asset", wallet, b.estate);
-  const tx = await agentSignAndSend([listAsset(new PublicKey(b.estate), new PublicKey(agent!), new PublicKey(b.asset), b.durationSecs)]);
+  const tx = await agentSignAndSend([listAsset(new PublicKey(b.estate), new PublicKey(agent!), new PublicKey(b.asset), b.durationSecs)])
+    .catch(refusedByProgram);
   return json(tx);
 });
