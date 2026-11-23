@@ -37,3 +37,10 @@ describe("spec sheet form model", () => {
     expect(draftToSpec(specToDraft(spec), "Jewellery")).toEqual({ spec, invalid: [] });
   });
 });
+
+describe("H1: one strict reading of numbers", () => {
+  it("a whole-number field refuses a decimal comma instead of reading 9,50 as 950", () => {
+    expect(draftToSpec({ mileageKm: "9,50" }).invalid).toEqual(["mileageKm"]);
+    expect(draftToSpec({ mileageKm: "124,455" }).spec?.mileageKm).toBe(124455);
+  });
+});

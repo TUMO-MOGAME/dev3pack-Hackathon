@@ -12,7 +12,7 @@ import { ask as askEnglish, type AskCopy } from "@/content/ask";
 import { useLocalized } from "@/lib/i18n/client";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
-import { formatUsdt, formatZar, toBase } from "@/lib/format";
+import { formatUsdt, formatUsdtExact, formatZar, toBase } from "@/lib/format";
 import { amountUsdt, askOptions, checkAsk, decider, optionKey, parseAmount, type AskOption } from "@/lib/ask/logic";
 import { cleanPurpose, PURPOSE_MAX, type AskCurrency } from "@/lib/ask/types";
 import type { AgentReport } from "@/lib/types";
@@ -165,14 +165,14 @@ function AskForm({ c, preset, onClose }: { c: AskCopy; preset?: string; onClose:
             {currency === "ZAR" && <span aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-display text-h2 text-ink-2">R</span>}
             <input
               id={amountId} inputMode="decimal" autoComplete="off" placeholder="0" value={text}
-              onChange={(ev) => { setText(ev.target.value.replace(/[^\d.,\s]/g, "")); setBlocked(null); if (error?.field === "amount") setError(null); }}
+              onChange={(ev) => { setText(ev.target.value); setBlocked(null); if (error?.field === "amount") setError(null); }}
               aria-invalid={error?.field === "amount" || !!problem} aria-describedby={`${amountId}-about${error?.field === "amount" ? ` ${amountId}-error` : ""}${problem ? ` ${amountId}-problem` : ""}`}
               className={clsx(inputClass, "min-h-16 font-display text-h2 tabular-nums", currency === "ZAR" ? "pl-10" : "pr-20")}
             />
             {currency === "USDT" && <span aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-semibold text-ink-2">USD₮</span>}
           </div>
         </Field>
-        <p id={`${amountId}-about`} className="text-small text-ink-2" aria-live="polite">{other ? fmt(s.about, { amount: other }) : " "}</p>
+        <p id={`${amountId}-about`} className="text-small text-ink-2" aria-live="polite">{other ? `= ${currency === "ZAR" ? `R ${typed.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : formatUsdtExact(base)} · ${fmt(s.about, { amount: other })}` : text.trim() && Number.isNaN(typed) ? common.amountUnclear : " "}</p>
       </div>
 
       <fieldset>

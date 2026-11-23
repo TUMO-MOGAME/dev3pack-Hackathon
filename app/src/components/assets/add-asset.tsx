@@ -19,7 +19,8 @@ import type { ScreensCopy } from "@/content/screens";
 import type { EstateSnapshot } from "@/lib/service";
 import type { AssetKind } from "@/lib/guardians/types";
 import type { CarValuation, Role, WalletSession } from "@/lib/types";
-import { formatUsdt, formatZar, toBase } from "@/lib/format";
+import { formatUsdt, formatUsdtExact, formatZar, toBase } from "@/lib/format";
+import { amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { ASSET_KINDS, MAX_DESCRIPTION, VALUED_KINDS } from "@/lib/media/api";
 import { PhotoUploader, type DraftPhoto } from "./photo-uploader";
@@ -28,7 +29,7 @@ import type { SpecKey } from "@/lib/assets/spec";
 import { draftFromVehicle, draftToSpec, specToDraft, type SpecDraft } from "@/lib/assets/spec-form";
 import { savePhotos } from "./media";
 
-const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
+const num = (s: string) => parseAmount(s) ?? Number.NaN;
 
 /** Animated with motion, so it brings its own <MotionScope> (the first pages never load the library). */
 export function AddAsset(props: Parameters<typeof AddAssetBody>[0]) {
@@ -90,9 +91,9 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
     try {
       const v = await service.valueCar({ make, model, year: Number(year), mileageKm: num(mileage), condition, kind });
       setValuation(v);
-      setAsking(String(v.suggestedAskingUsdt));
-      setFloor(String(v.lowUsdt));
-      setHardship(String(Math.round(v.lowUsdt * 0.84 / 50) * 50));
+      setAsking(amountText(v.suggestedAskingUsdt));
+      setFloor(amountText(v.lowUsdt));
+      setHardship(amountText(Math.round(v.lowUsdt * 0.84 / 50) * 50));
     } catch {
       // A timeout or a busy agent: the owner can try again or type the prices.
       setValuationError(r.valuationFailed);
@@ -105,6 +106,7 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
     ev.preventDefault();
     const ask = num(asking), f = num(floor), h = num(hardship);
     if (!name) { setError(a.titleError); return; }
+    if ([asking, floor, hardship].some((t) => t.trim() && Number.isNaN(num(t)))) { setError(common.amountUnclear); return; }
     if (!(h > 0 && f >= h && ask >= f)) { setError(r.orderError); return; }
     // The spec sheet counts once the owner has typed in it, and only with this kind's fields.
     const sheet = specTouched ? draftToSpec(specDraft, kind) : { spec: undefined, invalid: [] as SpecKey[] };
@@ -145,7 +147,7 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
     if (res.value) onAdded?.(res.value);
   };
 
-  const zar = (s: string) => (rate && num(s) > 0 ? fmt(r.zar, { zar: formatZar(toBase(num(s)), rate) }) : undefined);
+  const zar = (s: string) => (num(s) > 0 ? `= ${formatUsdtExact(toBase(num(s)))}${rate ? ` · ${fmt(r.zar, { zar: formatZar(toBase(num(s)), rate) })}` : ""}` : s.trim() ? common.amountUnclear : undefined);
   const working = busy === "register";
 
   return (
@@ -176,7 +178,7 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
               <Field label={r.make} htmlFor="car-make"><input id="car-make" required value={make} onChange={(e) => setMake(e.target.value)} className={inputClass} /></Field>
               <Field label={r.model} htmlFor="car-model"><input id="car-model" required value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} /></Field>
               <Field label={r.year} htmlFor="car-year"><input id="car-year" required inputMode="numeric" pattern="\d{4}" value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))} className={inputClass} /></Field>
-              <Field label={r.mileage} htmlFor="car-km"><input id="car-km" required inputMode="numeric" value={mileage} onChange={(e) => setMileage(e.target.value.replace(/[^\d\s]/g, ""))} className={inputClass} /></Field>
+              <Field label={r.mileage} htmlFor="car-km"><input id="car-km" required inputMode="numeric" value={mileage} onChange={(e) => setMileage(e.target.value)} className={inputClass} /></Field>
               <Field label={r.condition} htmlFor="car-cond" className="sm:col-span-2">
                 <select id="car-cond" value={condition} onChange={(e) => setCondition(e.target.value)} className={inputClass}>
                   {r.conditions.map((c) => <option key={c}>{c}</option>)}
@@ -226,9 +228,9 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
 
             <h2 className="text-h3">{a.pricesTitle}</h2>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label={r.asking} htmlFor="car-asking" hint={zar(asking)}><input id="car-asking" inputMode="numeric" value={asking} onChange={(e) => setAsking(e.target.value.replace(/[^\d\s]/g, ""))} className={`${inputClass} tabular-nums`} /></Field>
-              <Field label={r.floor} htmlFor="car-floor" hint={zar(floor) ?? r.floorHint}><input id="car-floor" inputMode="numeric" value={floor} onChange={(e) => setFloor(e.target.value.replace(/[^\d\s]/g, ""))} className={`${inputClass} tabular-nums`} /></Field>
-              <Field label={r.hardship} htmlFor="car-hard" hint={zar(hardship) ?? r.hardshipHint}><input id="car-hard" inputMode="numeric" value={hardship} onChange={(e) => setHardship(e.target.value.replace(/[^\d\s]/g, ""))} className={`${inputClass} tabular-nums`} /></Field>
+              <Field label={r.asking} htmlFor="car-asking" hint={zar(asking)}><input id="car-asking" inputMode="numeric" value={asking} onChange={(e) => setAsking(e.target.value)} className={`${inputClass} tabular-nums`} /></Field>
+              <Field label={r.floor} htmlFor="car-floor" hint={zar(floor) ?? r.floorHint}><input id="car-floor" inputMode="numeric" value={floor} onChange={(e) => setFloor(e.target.value)} className={`${inputClass} tabular-nums`} /></Field>
+              <Field label={r.hardship} htmlFor="car-hard" hint={zar(hardship) ?? r.hardshipHint}><input id="car-hard" inputMode="numeric" value={hardship} onChange={(e) => setHardship(e.target.value)} className={`${inputClass} tabular-nums`} /></Field>
             </div>
             {(zar(floor) || zar(hardship)) && <p className="text-small text-ink-2">{r.floorHint} {r.hardshipHint}</p>}
             {vehicle && <FilePicker id="car-doc" label={r.doc} hint={r.docHint} file={doc} onFile={setDoc} samples={r.docSamples} copy={common.file} />}

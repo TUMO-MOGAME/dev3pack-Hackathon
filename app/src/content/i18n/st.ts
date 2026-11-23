@@ -430,6 +430,7 @@ export const st: Bundle = {
     },
     consent: { before: "Ke dumela hore Heirloom e sebetse tlhahisoleseding ena kamoo ho hlalositsweng kateng ho", link: "leano la lekunutu", after: "." },
     consentRequired: "Ka kopo tshwaya lebokose ho tswela pele.",
+    amountUnclear: "Palo eo e ka balwa ka mekgwa e mmedi. E ngole jwalo ka 1 234,50 kapa 1234.50.",
     file: { choose: "Kgetha foto kapa PDF", change: "Tobetsa ho kgetha faele e nngwe", samplesLabel: "Ha o na dipampiri haufi? Sebedisa mohlala:", chosen: "Faele e kgethilweng:" },
     pin: {
       unlockTitle: "Kenya PIN ya hao",

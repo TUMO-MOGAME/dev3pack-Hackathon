@@ -29,6 +29,12 @@ export function formatUsdt(base: bigint, opts: { decimals?: number } = {}): stri
   return `${numberFormat(d, d).format(fromBase(base))} USD₮`;
 }
 
+/** Every decimal there is, at least two when there are any: what is signed is what is read ("9,50 USD₮", "13 500 USD₮"). */
+export function formatUsdtExact(base: bigint): string {
+  const whole = base % UNIT === 0n;
+  return `${numberFormat(whole ? 0 : 2, USDT_DECIMALS).format(fromBase(base))} USD₮`;
+}
+
 export function formatZar(base: bigint, usdtZar: number): string {
   return `R ${numberFormat(undefined, 0).format(fromBase(base) * usdtZar)}`;
 }

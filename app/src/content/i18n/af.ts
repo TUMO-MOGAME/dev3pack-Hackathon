@@ -430,6 +430,7 @@ export const af: Bundle = {
     },
     consent: { before: "Ek stem in dat Heirloom hierdie inligting verwerk soos beskryf in die", link: "privaatheidsbeleid", after: "." },
     consentRequired: "Merk asseblief die blokkie om voort te gaan.",
+    amountUnclear: "Daardie bedrag kan op twee maniere gelees word. Skryf dit soos 1 234,50 of 1234.50.",
     file: { choose: "Kies 'n foto of PDF", change: "Tik om 'n ander lêer te kies", samplesLabel: "Geen papiere byderhand nie? Gebruik 'n voorbeeld:", chosen: "Gekose lêer:" },
     pin: {
       unlockTitle: "Tik jou PIN in",

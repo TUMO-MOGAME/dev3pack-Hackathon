@@ -8,7 +8,8 @@ import type { AssetsCopy } from "@/content/assets";
 import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
 import type { Asset, OfferRanking, Role, WalletSession } from "@/lib/types";
-import { formatUsdt, formatZar, fromBase, shortAddress, toBase } from "@/lib/format";
+import { formatUsdt, formatUsdtExact, formatZar, fromBase, shortAddress, toBase } from "@/lib/format";
+import { amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { Badge, Button, ButtonLink, Card, Consent, EmptyState, Eyebrow, ExplorerLink, Field, inputClass, Money, Notice, TickDisc } from "@/components/ui/primitives";
@@ -36,7 +37,7 @@ import { CoSign } from "@/components/continuity/cosign";
 import { ReleaseAsset } from "@/components/continuity/membership";
 
 type Copy = ScreensCopy["car"];
-const num = (s: string) => Number(s.replace(/[\s,]/g, ""));
+const num = (s: string) => parseAmount(s) ?? Number.NaN;
 
 /**
  * Assets (route /car, kept so the demo guide and links still work): the estate's assets, "Add an asset" for the
@@ -420,7 +421,7 @@ function OfferForm({ copy, car, mine }: { copy: Copy; car: Asset; mine: bigint |
 
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();
-    if (!valid || toBase(n) > spendable) { setError(o.error); return; }
+    if (!valid || toBase(n) > spendable) { setError(amount.trim() && Number.isNaN(n) ? common.amountUnclear : o.error); return; }
     if (!consent) { setError(common.consentRequired); return; }
     setError(null);
     const res = await pay({
@@ -443,11 +444,11 @@ function OfferForm({ copy, car, mine }: { copy: Copy; car: Asset; mine: bigint |
         </div>
       )}
       <form onSubmit={submit} noValidate className="mt-3 flex flex-col gap-3">
-        <Field label={o.amount} htmlFor="offer-amount" error={error} hint={`${valid && rate ? `${fmt(o.zar, { zar: formatZar(toBase(n), rate) })} · ` : ""}${fmt(o.wallet, { amount: formatUsdt(walletUsdt, { decimals: 0 }) })}`}>
+        <Field label={o.amount} htmlFor="offer-amount" error={error} hint={`${valid ? `= ${formatUsdtExact(toBase(n))} · ` : ""}${valid && rate ? `${fmt(o.zar, { zar: formatZar(toBase(n), rate) })} · ` : ""}${fmt(o.wallet, { amount: formatUsdt(walletUsdt, { decimals: 0 }) })}`}>
           <div className="relative">
             <input
-              id="offer-amount" inputMode="decimal" autoComplete="off" placeholder={String(fromBase(car.askingPrice))} value={amount}
-              onChange={(e) => { setAmount(e.target.value.replace(/[^\d.,\s]/g, "")); setError(null); }}
+              id="offer-amount" inputMode="decimal" autoComplete="off" placeholder={amountText(fromBase(car.askingPrice))} value={amount}
+              onChange={(e) => { setAmount(e.target.value); setError(null); }}
               aria-invalid={!!error} aria-describedby={error ? "offer-amount-error" : "offer-amount-hint"}
               className={`${inputClass} min-h-16 pr-20 font-display text-h2 tabular-nums`}
             />

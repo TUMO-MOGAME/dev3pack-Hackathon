@@ -8,6 +8,7 @@ import {
   type AssetSpec, type SpecKey,
 } from "./spec";
 import { specInputSchema, specSchema } from "./spec-schema";
+import { parseAmount } from "../amount";
 import type { AssetKind } from "../guardians/types";
 
 export type SpecDraft = Record<SpecKey, string>;
@@ -46,10 +47,11 @@ export function draftToSpec(draft: Partial<SpecDraft>, kind?: AssetKind): { spec
     const t = (draft[k] ?? "").trim();
     if (!t) continue;
     if (INT_FIELDS.includes(k)) {
-      const n = /^\d[\d\s,]*$/.test(t) ? Number(t.replace(/[\s,]/g, "")) : Number.NaN;
+      const p = parseAmount(t);
+      const n = p !== null && Number.isInteger(p) ? p : Number.NaN;
       if (Number.isFinite(n)) raw[k] = n; else invalid.add(k);
     } else if (DECIMAL_FIELDS.includes(k)) {
-      const n = /^\d+([.,]\d+)?$/.test(t) ? Number(t.replace(",", ".")) : Number.NaN;
+      const n = parseAmount(t) ?? Number.NaN;
       if (Number.isFinite(n)) raw[k] = n; else invalid.add(k);
     } else if (BOOLEAN_FIELDS.includes(k)) {
       raw[k] = t === "yes";

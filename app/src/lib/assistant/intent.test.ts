@@ -117,3 +117,21 @@ describe("looksLikeSend", () => {
     expect(looksLikeSend("can I claim fees for books?")).toBe(false);
   });
 });
+
+describe("H1: amounts with a decimal comma", () => {
+  it.each([
+    ["send R9,50 to Sipho", { amountUsdt: null, amountZar: 9.5 }],
+    ["pay Sipho $49,50", { amountUsdt: 49.5, amountZar: null }],
+    ["send R1 234,50 to Sipho", { amountUsdt: null, amountZar: 1234.5 }],
+    ["send 12.345,60 rand to Sipho", { amountUsdt: null, amountZar: 12345.6 }],
+  ])("%s", (text, amounts) => {
+    const i = parseIntentFallback(text, PEOPLE);
+    expect({ amountUsdt: i.amountUsdt, amountZar: i.amountZar }).toEqual(amounts);
+  });
+
+  it("refuses an amount that could mean two things, and a model can't fill it in", () => {
+    expect(parseIntentFallback("send 1.000 USDT to Sipho", PEOPLE)).toMatchObject({ amountUsdt: null, amountZar: null });
+    const model = { action: "send" as const, recipient: "Sipho", amountUsdt: 1000, amountZar: null, memo: null };
+    expect(groundIntent(model, "send 1.000 USDT to Sipho", PEOPLE)).toMatchObject({ amountUsdt: null, amountZar: null });
+  });
+});

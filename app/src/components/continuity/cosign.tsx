@@ -11,14 +11,14 @@ import type { SeenOffer } from "@/lib/service/types";
 import type { Asset, Offer, OfferRanking } from "@/lib/types";
 import { hasLivingSeat, isHeld } from "@/lib/guardians/decisions";
 import { useEstate } from "@/lib/hooks/estate";
-import { fromBase } from "@/lib/format";
+import { formatUsdtExact } from "@/lib/format";
 import { Button } from "@/components/ui/primitives";
 import { Blocked } from "@/components/shell/blocked";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { useWho } from "@/components/guardians/decision";
 
 /** Every decimal there is: what is signed is what is read. */
-export const exactUsdt = (base: bigint) => `${fromBase(base).toLocaleString("en-ZA", { maximumFractionDigits: 6 })} USD₮`;
+export const exactUsdt = (base: bigint) => formatUsdtExact(base);
 
 const changed = () => Object.assign(new Error("OfferChanged: the offer changed after it was shown."), { code: "OfferChanged" });
 

@@ -7,6 +7,7 @@
  * demo to a later stage. The UI only uses them when `mode === "mock"`.
  */
 import { explorerTx, fromBase, toBase } from "../format";
+import { amountsInText } from "../amount";
 import type {
   AgentReport, Asset, Base58, Claim, Hardship, OfferRanking, PayeeKind, PaymentReceipt, PaymentRef, PaymentReview, Role, Rule, SavedRecipient, WillChatMessage, WillDraft,
 } from "../types";
@@ -217,10 +218,10 @@ const usd = (b: bigint) => `${fromBase(b).toLocaleString("en-ZA", { maximumFract
 
 /** The car's minimum price from the owner's words: the latest USD₮ amount wins ("change it to 13,000 USDT"), else a large rand amount. */
 export function floorFromText(text: string, fallback = 12500): number {
-  const num = (x: string) => Number(x.replace(/[\s,]/g, ""));
-  const usdt = [...text.matchAll(/(\d[\d\s,.]*)\s*(?:usd₮|usdt)/gi)].map((m) => num(m[1])).filter((n) => n > 0);
+  const found = amountsInText(text);
+  const usdt = found.filter((a) => a.unit === "usd" && a.value !== null && a.value > 0).map((a) => a.value!);
   if (usdt.length) return usdt[usdt.length - 1];
-  const zar = [...text.matchAll(/R\s?(\d[\d\s,]*)/g)].map((m) => num(m[1])).filter((z) => z > 20000);
+  const zar = found.filter((a) => a.unit === "zar" && a.value !== null && a.value > 20000).map((a) => a.value!);
   return zar.length ? Math.round(zar[zar.length - 1] / DEMO_FX / 50) * 50 : fallback;
 }
 

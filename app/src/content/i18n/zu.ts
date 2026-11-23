@@ -430,6 +430,7 @@ export const zu: Bundle = {
     },
     consent: { before: "Ngiyavuma ukuthi i-Heirloom isebenzise lolu lwazi njengoba kuchaziwe", link: "kunqubomgomo yobumfihlo", after: "." },
     consentRequired: "Sicela umake ibhokisi ukuze uqhubeke.",
+    amountUnclear: "Leli nani lingafundwa ngezindlela ezimbili. Libhale kanje: 1 234,50 noma 1234.50.",
     file: { choose: "Khetha isithombe noma i-PDF", change: "Thinta ukuze ukhethe elinye ifayela", samplesLabel: "Awunawo amaphepha? Sebenzisa isibonelo:", chosen: "Ifayela elikhethiwe:" },
     pin: {
       unlockTitle: "Faka i-PIN yakho",

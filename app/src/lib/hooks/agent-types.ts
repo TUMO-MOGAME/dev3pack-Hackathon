@@ -1,5 +1,6 @@
 import type { SpecialistName } from "../voice/types";
 import type { BillDetails } from "../bills/types";
+import { parseAmount } from "../amount";
 
 /** UI actions the orchestrator may attach to a reply. Rendered as buttons under the message. */
 export type AgentAction =
@@ -49,7 +50,7 @@ export function normaliseReply(raw: unknown): OrchestratorReply | null {
       const to = str(p.to) ?? str(p.path) ?? str(p.href) ?? str(p.route);
       if (to && to.startsWith("/")) actions.push({ type, to: mapAgentPath(to) });
     } else if (type === "openClaimForm") {
-      const amount = typeof p.amount === "number" ? p.amount : typeof p.amountUsdt === "number" ? p.amountUsdt : Number(p.amount) || undefined;
+      const amount = typeof p.amount === "number" ? p.amount : typeof p.amountUsdt === "number" ? p.amountUsdt : typeof p.amount === "string" ? parseAmount(p.amount) ?? undefined : undefined;
       actions.push({ type, rule: str(p.rule), payee: str(p.payee), amount });
     } else if (type === "showRule") {
       const rule = str(p.rule) ?? str(p.address);
