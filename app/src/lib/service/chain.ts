@@ -64,6 +64,7 @@ import { clampWaiting } from "../continuity/logic";
 import { pack } from "../chain/pack";
 import { requireEvidence } from "../evidence";
 import { createSigningStore, withChosenEvery } from "./signing-store";
+import { loadReasons } from "../disputes/reasons-client";
 import { publicBeneficiaryLabel, publicPayeeName, withPrivateNames } from "../chain/public-names";
 
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
@@ -482,7 +483,9 @@ export function createChainService(): HeirloomService {
       const seatReports = seatHashes.length
         ? await api<Record<string, AgentReport>>(`/api/reports?estate=${estate}&hashes=${[...new Set(seatHashes)].join(",")}`).catch(() => ({} as Record<string, AgentReport>))
         : {};
-      const extras = guardianExtras(meta, { ...reports, ...seatReports });
+      // The written reasons of disputes and objections, for members (M9); each one checked against its hash.
+      const shared = await cached(`reasons:${estate}:${readerKey()}`, 20_000, () => loadReasons(estate));
+      const extras = guardianExtras(meta, { ...reports, ...seatReports }, shared);
       const guardians = await loadGuardians(estate, { estate: out.estate, claims: out.claims, events }, extras).catch(() => disabledGuardians());
       // A successor's display name (the estate meta still holds the original three names).
       const verifierNames = out.estate.verifierNames.map((n, i) => {
@@ -491,7 +494,7 @@ export function createChainService(): HeirloomService {
       }) as [string, string, string];
       // Disputes (U9) and each rule's yearly cap: new accounts, read from the same program scan.
       const [extra, askNotes, residual] = await Promise.all([
-        loadDisputes(estate, { estate: out.estate, rules: out.rules }, extras.names).catch(() => ({ disputes: [], rules: out.rules })),
+        loadDisputes(estate, { estate: out.estate, rules: out.rules }, extras.names, shared).catch(() => ({ disputes: [], rules: out.rules })),
         cached(`asks:${estate}:${readerKey()}`, 15_000, () => asks.loadAsks(estate)).catch(() => ({})),
         residualOf(estate).catch(() => null),
       ]);

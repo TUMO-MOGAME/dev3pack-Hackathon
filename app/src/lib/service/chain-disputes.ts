@@ -15,6 +15,7 @@ import { enumOf, key } from "../chain/decoders";
 import { getActiveSigner } from "../wallet/signer";
 import { sha256Hex } from "../agent/hash";
 import { toBase } from "../format";
+import { saveReason } from "../disputes/reasons-client";
 
 type Ixs = TransactionInstruction[] | ((feePayer: PublicKey) => TransactionInstruction[]);
 
@@ -39,9 +40,10 @@ function remember(hash: string, text: string) {
 }
 
 /** The estate's disputes and its rules with their yearly caps (used by chain.ts getEstate). */
-export async function loadDisputes(estate: Base58, base: { estate: Estate; rules: Rule[] }, names: Record<Base58, string>): Promise<{ disputes: Dispute[]; rules: Rule[] }> {
+export async function loadDisputes(estate: Base58, base: { estate: Estate; rules: Rule[] }, names: Record<Base58, string>, shared: Record<string, string> = {}): Promise<{ disputes: Dispute[]; rules: Rule[] }> {
   const raw = await fetchDisputesRaw(estate, base.rules.map((r) => r.address));
-  return assembleDisputes(raw, { ...base, names, reasons: reasons() });
+  // The family's saved reasons (M9, already checked against their hashes), then this device's own.
+  return assembleDisputes(raw, { ...base, names, reasons: { ...shared, ...reasons() } });
 }
 
 export function createChainDisputes(d: ChainDisputeDeps): DisputesService {
@@ -56,11 +58,14 @@ export function createChainDisputes(d: ChainDisputeDeps): DisputesService {
       const verifiers = (e.verifiers as unknown[]).map((v) => (typeof v === "string" ? v : (v as { toBase58(): string }).toBase58()));
       const reasonHashHex = await sha256Hex(reason);
       remember(reasonHashHex, reason);
-      return d.send([ix.raiseDispute(chainCtx(), {
+      const tx = await d.send([ix.raiseDispute(chainCtx(), {
         disputer, estate: pk(estate), kind: input.kind, target: pk(input.target), reasonHashHex,
         // A trusted person disputes as a verifier; anyone else as a beneficiary (the program checks either way).
         beneficiary: !verifiers.includes(disputer.toBase58()),
       })]);
+      // Once it is on-chain, the words go where the people who vote can read them (M9); this device keeps its copy.
+      await saveReason(getActiveSigner(), estate, input.target, reason).catch((e: unknown) => console.warn(`The reason was kept on this device only: ${(e as Error).message}`));
+      return tx;
     },
 
     async resolveDispute(estate, dispute, uphold) {

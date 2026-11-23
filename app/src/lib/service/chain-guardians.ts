@@ -28,6 +28,7 @@ import { cleanSpec, foreignSpecKeys, mediaRootHex } from "../assets/spec";
 import { MAX_PHOTOS } from "../media/webp";
 import { photosApi } from "../media/client";
 import { requireEvidence } from "../evidence";
+import { saveReason } from "../disputes/reasons-client";
 
 export const DISABLED_GUARDIANS: GuardiansSnapshot = disabledGuardians();
 
@@ -48,11 +49,11 @@ export interface ChainGuardianDeps {
 }
 
 /** Off-chain extras for the guardians view: names from the estate meta and this device, reasons and kinds from this device. */
-export function guardianExtras(meta: EstateMeta | null, reports: Record<string, AgentReport>): GuardianExtras {
+export function guardianExtras(meta: EstateMeta | null, reports: Record<string, AgentReport>, shared: Record<string, string> = {}): GuardianExtras {
   const l = local();
   // The seeded devnet demo estate's fallback kinds (children, then a charity); this device's choices win.
   const demoKinds = meta?.estate === DEVNET_DEMO_ESTATE && chainConfig.cluster !== "mainnet-beta" ? DEVNET_DEMO_FALLBACK_KINDS : {};
-  return { names: { ...l.names, ...(meta?.buyerNames ?? {}) }, reasons: l.reasons, fallbackKinds: { ...demoKinds, ...l.fallbackKinds }, reports };
+  return { names: { ...l.names, ...(meta?.buyerNames ?? {}) }, reasons: { ...shared, ...l.reasons }, fallbackKinds: { ...demoKinds, ...l.fallbackKinds }, reports };
 }
 
 /** The guardians view of an estate from its already-loaded pieces (used by chain.ts getEstate). */
@@ -273,10 +274,13 @@ export function createChainGuardians(d: ChainGuardianDeps): GuardiansService {
         if (!h) throw new Error("That request was not found.");
         hardshipAsset = pk(key(h, "asset"));
       }
-      return d.send([ix.raiseObjection(chainCtx(), {
+      const tx = await d.send([ix.raiseObjection(chainCtx(), {
         objector, estate: pk(estate), kind: input.kind, target: pk(input.target), seatIndex: seatSpecific ? input.seatIndex : null,
         reasonHashHex, monitorSeat, beneficiary: input.kind === "Fallback" && monitorSeat === null, hardshipAsset,
       })]);
+      // Once it is on-chain, the words go where the people who vote can read them (M9); this device keeps its copy.
+      await saveReason(getActiveSigner(), estate, input.target, reason).catch((e: unknown) => console.warn(`The reason was kept on this device only: ${(e as Error).message}`));
+      return tx;
     },
 
     async voteObjection(estate, objection, uphold) {
