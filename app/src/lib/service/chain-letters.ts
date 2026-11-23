@@ -14,7 +14,7 @@ import type { Locale } from "../i18n/locales";
 import { letters as copy } from "@/content/letters";
 import { canonicalJson, sha256Hex } from "../agent/hash";
 import { canonicalLetter, cleanInput, deleteBody, LIST_BODY, letterMessage, type LetterAction } from "../letters/canonical";
-import { canWrite, checkLetter, letterState, liveLetters } from "../letters/rules";
+import { canWrite, checkLetter, letterState, linkBaseline, liveLetters } from "../letters/rules";
 import { reviewDraft } from "../letters/review";
 import { fillTemplate } from "../letters/template";
 import { LetterError, type LetterErrorCode } from "../letters/errors";
@@ -124,7 +124,7 @@ export function createChainLetters(d: ChainLettersDeps): LettersService {
       const letter: Letter = {
         ...input, estate, from: me(), version, hash: await sha256Hex(canonicalLetter(estate, me(), input, version)), sig: null,
         signedAt: now(), createdAt: existing?.createdAt ?? nowS, updatedAt: nowS, openedAt: null,
-        ...(o.kind === "payment" ? { baseline: (snap.rules.find((x) => x.address === o.rule)?.spentTotal ?? BigInt(0)).toString() } : {}),
+        ...(o.kind === "payment" ? { baseline: linkBaseline(snap.rules.find((x) => x.address === o.rule)) } : {}),
       };
       if (!keepOnDevice(storage, letter)) throw new LetterError("unavailable", copy.errors.unavailable);
       return view(letter);

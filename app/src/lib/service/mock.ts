@@ -518,6 +518,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
       // A fresh account in effect: nothing spent, and the ended rule's yearly cap is closed.
       s.snap.rules = s.snap.rules.map((r) => (r === slot ? rule : r));
       log("RuleReused", `An ended rule's place was used for a new ${input.category.toLowerCase()} rule for ${first(input.beneficiary)}`, t);
+      s.snap.activity[0].reusedRule = rule.address;
     } else {
       s.snap.rules.push(rule);
       log("RuleAdded", `New ${input.category.toLowerCase()} rule added for ${first(input.beneficiary)}`, t);

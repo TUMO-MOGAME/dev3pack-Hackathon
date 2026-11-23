@@ -234,6 +234,8 @@ export interface ActivityItem {
    * claim (from the event's fields). The monthly statement (lib/everyday/statement.ts) joins these to the rules.
    */
   payment?: PaymentRef;
+  /** For RuleReused: the slot's rule address, which a new rule now holds (payments before it were the old rule's). */
+  reusedRule?: Base58;
 }
 
 /** A vault payment's payee and, when the event names them, its rule and claim. */

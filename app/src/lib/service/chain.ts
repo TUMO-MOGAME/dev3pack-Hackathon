@@ -465,7 +465,12 @@ export function createChainService(): HeirloomService {
         fetchEstateRaw(estate, { ...meta, ...(localOwner ? { ownerName: localOwner } : {}) }),
         cached(`activity:${estate}`, 20_000, () => fetchEvents(estate)).catch(() => []),
       ]);
-      const activity = activityFrom(events);
+      // A reused slot's line names the rule, so the statement doesn't read the old rule's payments as the new one's.
+      const activity = activityFrom(events).map((a, i) => {
+        if (a.kind !== "RuleReused") return a;
+        const rule = (() => { try { return key(events[i].data, "rule"); } catch { return undefined; } })();
+        return rule ? { ...a, reusedRule: rule } : a;
+      });
       // The death review's report hash lives in an event (the Estate account keeps only the cert hash): the review of
       // the claim that stands, never of one it replaced.
       const deathHash = deathReviewHash(events, raw.estate.death);

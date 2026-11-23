@@ -18,6 +18,7 @@ export function readCtx(snap: EstateSnapshot, nowMs: number, sendConfirmed: (sig
   return {
     status: snap.estate.status, nowMs, sendConfirmed, activeBeneficiaries: activeBeneficiaries(snap),
     ruleSpent: (rule) => snap.rules.find((r) => r.address === rule)?.spentTotal ?? null,
+    ruleGeneration: (rule) => (snap.rules.find((r) => r.address === rule)?.claimCount ?? 0) >>> 16,
   };
 }
 

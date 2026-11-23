@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { generateKeyPairSync, sign as edSign, createPublicKey, verify } from "node:crypto";
 import bs58 from "bs58";
-import { canWrite, canRead, checkLetter, letterState, opensAt, sastDay, visibleCounts, type CheckCtx, type OpenCtx, type WriteCtx } from "./rules";
+import { canWrite, canRead, checkLetter, letterState, linkBaseline, opensAt, sastDay, visibleCounts, type CheckCtx, type OpenCtx, type WriteCtx } from "./rules";
 import { canonicalLetter, cleanLetterText, cleanOccasion, deleteBody, letterHash, letterMessage, newLetterId } from "./canonical";
 import { LETTER_ID, type Letter, type LetterInput } from "./types";
 
@@ -184,5 +184,15 @@ describe("canonical form and signature", () => {
   });
   it("makes valid ids", () => {
     for (let i = 0; i < 20; i++) expect(newLetterId()).toMatch(LETTER_ID);
+  });
+});
+
+describe("a reused rule slot (claim id generation)", () => {
+  const ctx = (spent: bigint, generation: number) => ({ status: "Active" as const, nowMs: 0, sendConfirmed: () => false, ruleSpent: () => spent, ruleGeneration: () => generation });
+  const l = (baseline: string) => ({ opens: { kind: "payment" as const, rule: "R" }, openedAt: null, baseline });
+  it("a gift linked to the old rule never opens with the new rule's payments", () => {
+    expect(letterState(l(linkBaseline({ spentTotal: 300n, claimCount: 2 })), ctx(500n, 1))).toBe("locked");
+    expect(letterState(l(linkBaseline({ spentTotal: 0n, claimCount: 65_536 })), ctx(500n, 1))).toBe("open");
+    expect(letterState(l("300"), ctx(500n, 0))).toBe("open");
   });
 });
