@@ -5,7 +5,7 @@
 import type { EstateSnapshot } from "../service/types";
 import type { Asset, Base58, Claim, Estate, Hardship, Verdict } from "../types";
 import {
-  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, quorum, recoveryTimeout, refuteWait, replaceableAt,
+  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, NEVER, quorum, recoveryTimeout, refuteWait, replaceableAt,
   reviewedHold, seatReviewedHold,
 } from "../death-rules";
 import { openToPeople } from "../verdict";
@@ -404,17 +404,20 @@ export function agentVoteRule(e: AgentVoteEstate, now = Math.floor(Date.now() / 
   return { needed: Math.max(seats, 2), why: "all", ...(at !== null ? { recoveryAt: at } : {}) };
 }
 
-/** The voter's own open claim the program reads after the unlock (vote_agent's remaining account [1]): the latest. */
-export function ownOpenClaim<C extends Pick<Claim, "beneficiary" | "status" | "createdAt">>(claims: readonly C[], voter: Base58): C | null {
-  return claims.filter((c) => c.beneficiary === voter && c.status === "Open").sort((x, y) => y.createdAt - x.createdAt)[0] ?? null;
+/**
+ * The voter's own open claim the agent hasn't approved, which the program reads after the unlock (vote_agent's
+ * remaining account [1]): the earliest, whose clock ends first. Null: none.
+ */
+export function ownOpenClaim<C extends Pick<Claim, "beneficiary" | "status" | "createdAt" | "agentVerdict">>(claims: readonly C[], voter: Base58): C | null {
+  return claims.filter((c) => c.beneficiary === voter && c.status === "Open" && c.agentVerdict !== "Approved").sort((x, y) => x.createdAt - y.createdAt)[0] ?? null;
 }
 
 /**
  * From when this voter's vote counts, when that is later than for anyone else (vote_agent): the only trusted person
  * left, whose vote alone is the quorum, and who gains (the death claim's submitter or any active beneficiary) waits
  * twice RT. Before the unlock from max(last sign of life, the claim), the recovery route's own base; after it from
- * their own open claim's submission while the agent hasn't approved it (no claim: no clock; a hardship starts none).
- * Null: no extra wait.
+ * their own open claim's submission while the agent hasn't approved it; without such a claim never (NEVER: a
+ * hardship starts no clock). Null: no extra wait (vote_agent N2).
  */
 export function agentVoteFrom(snap: Pick<EstateSnapshot, "estate" | "claims" | "beneficiaries">, voter: Base58 | null | undefined): number | null {
   const e = snap.estate;
@@ -428,7 +431,7 @@ export function agentVoteFrom(snap: Pick<EstateSnapshot, "estate" | "claims" | "
   }
   if (!isFamily(snap, voter)) return null;
   const claim = ownOpenClaim(snap.claims, voter);
-  return claim && claim.agentVerdict !== "Approved" ? claim.createdAt + 2 * rt : null;
+  return claim ? claim.createdAt + 2 * rt : NEVER;
 }
 
 export function agentVoteFor(snap: EstateSnapshot, candidate: Base58, now?: number): { got: number; needed: number; voters: Base58[] } {

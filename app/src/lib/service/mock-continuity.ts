@@ -80,7 +80,7 @@ export function createMockContinuity(d: ContinuityDeps) {
     checkCandidate(w);
     // The only trusted person left who would gain waits twice the recovery timeout (lib/guardians/decisions.ts).
     const from = agentVoteFrom(d.snap(), me);
-    need(from === null || d.now() >= from, "BadStatus", "You are the only trusted person left and you would gain, so your vote can't count yet.");
+    need(from === null || d.now() >= from, "WaitingPeriodNotOver", "You are the only trusted person left and you would gain, so your vote can't count yet.");
     const stored = d.votes()[w];
     const voters = stored?.replaces === e.agent ? [...stored.voters] : [null, null, null];
     const firstTime = voters[i] !== me;

@@ -410,10 +410,12 @@ describe("the votes to replace the agent, and why", () => {
     // After the unlock: from their open claim's submission while the agent hasn't approved it.
     const after = snap({ estate: lone, claims: [claim({ agentVerdict: "Referred", createdAt: 200 })] });
     expect(agentVoteFrom(after, KID)).toBe(200 + 480);
-    expect(agentVoteFrom({ ...after, claims: [claim({ agentVerdict: "Approved" })] }, KID)).toBeNull();
-    expect(agentVoteFrom(snap({ estate: lone }), KID)).toBeNull(); // no claim: no clock
-    expect(agentVoteFrom(snap({ estate: lone, hardships: [hardship()] }), KID)).toBeNull(); // a hardship starts none
-    expect(ownOpenClaim([claim({ address: "OLD", createdAt: 100 }), claim({ address: "NEW", createdAt: 300 }), claim({ address: "PAID", createdAt: 400, status: "Paid" })], KID)?.address).toBe("NEW");
+    expect(agentVoteFrom({ ...after, claims: [claim({ agentVerdict: "Approved" })] }, KID)).toBe(Number.POSITIVE_INFINITY); // approved: no stuck claim
+    expect(agentVoteFrom(snap({ estate: lone }), KID)).toBe(Number.POSITIVE_INFINITY); // no claim: never alone
+    expect(agentVoteFrom(snap({ estate: lone, hardships: [hardship()] }), KID)).toBe(Number.POSITIVE_INFINITY); // a hardship starts no clock
+    expect(agentVoteFrom(snap({ estate: { verifiers: [NO_WALLET, NO_WALLET, A] } }), A)).toBeNull(); // not family: no wait
+    const mine = [claim({ address: "OK", createdAt: 50 }), claim({ address: "OLD", createdAt: 100, agentVerdict: "Referred" }), claim({ address: "NEW", createdAt: 300, agentVerdict: "Referred" }), claim({ address: "PAID", createdAt: 10, status: "Paid", agentVerdict: "Referred" })];
+    expect(ownOpenClaim(mine, KID)?.address).toBe("OLD"); // the earliest the agent hasn't approved
   });
 });
 

@@ -243,6 +243,7 @@ export const safeguardsAf: SafeguardsCopy = {
     needRecovery: "'n Afsterwe is aangemeld en die eienaar het lank nie ingeteken nie, so twee stemme is nou genoeg, of die enigste een wat oor is.",
     recoveryAt: "Die aangemelde afsterwe wag nog vir die agent se nagaan. As dit nie verander nie en die eienaar nie inteken nie, is twee stemme, of die enigste een wat oor is, genoeg vanaf {time}.",
     gainerAt: "Jy is die enigste vertroude persoon wat oor is en jy sou baat, so jou stem tel vanaf {time}: twee keer so lank as vir enigiemand anders.",
+    gainerNever: "Jy is die enigste vertroude persoon wat oor is en jy sou baat, so jy kan nie nou alleen die agent vervang nie. Jy kan as 'n eis van jou {time} lank sonder die agent se goedkeuring bly.",
   },
 
   remove: {
@@ -557,6 +558,7 @@ export const safeguardsSt: SafeguardsCopy = {
     needRecovery: "Lefu le tlalehilwe mme mong'a lefa ha a so bontshe hore o teng nako e telele, kahoo divoutu tse pedi di lekane hona jwale, kapa ya setseng a le mong.",
     recoveryAt: "Lefu le tlalehilweng le sa ntse le emetse hore agent e le hlahlobe. Haeba seo se sa fetohe mme mong'a lefa a sa itlhahise, divoutu tse pedi, kapa ya setseng a le mong, di lekane ho tloha ka {time}.",
     gainerAt: "O motho a le mong ya tshepahalang ya setseng mme o tla una molemo, kahoo voutu ya hao e bala ho tloha ka {time}: nako e habedi ho feta ya motho e mong.",
+    gainerNever: "O motho a le mong ya tshepahalang ya setseng mme o tla una molemo, kahoo o ke ke wa nkela agent sebaka o le mong hona jwale. O ka etsa jwalo haeba kopo ya hao e dula {time} ntle le tumello ya agent.",
   },
 
   remove: {
@@ -871,6 +873,7 @@ export const safeguardsZu: SafeguardsCopy = {
     needRecovery: "Ukudlula emhlabeni kubikiwe futhi umnikazi akakaze abonise ukuthi usaphila isikhathi eside, ngakho amavoti amabili anele manje, noma oyedwa osele.",
     recoveryAt: "Ukudlula emhlabeni okubikiwe kusalinde ukuhlolwa yi-agent. Uma lokho kungashintshi futhi umnikazi engazibonakalisi, amavoti amabili, noma oyedwa osele, anele kusukela ngo-{time}.",
     gainerAt: "Nguwe wedwa umuntu othembekile osele futhi ungazuza, ngakho ivoti lakho libalwa kusukela ngo-{time}: isikhathi esiphindwe kabili kunesanoma ubani omunye.",
+    gainerNever: "Nguwe wedwa umuntu othembekile osele futhi ungazuza, ngakho awukwazi ukushintsha i-agent wedwa manje. Ungakwenza uma isicelo sakho sihlala {time} singavunywanga yi-agent.",
   },
 
   remove: {

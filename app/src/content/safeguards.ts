@@ -243,6 +243,7 @@ export const safeguards = {
     needRecovery: "A passing is reported and the owner hasn't checked in for a long time, so two votes are enough now, or the only one left.",
     recoveryAt: "The reported passing is still waiting for the agent's review. If that doesn't change and the owner doesn't check in, two votes, or the only one left, are enough from {time}.",
     gainerAt: "You are the only trusted person left and you would gain, so your vote counts from {time}: twice as long as for anyone else.",
+    gainerNever: "You are the only trusted person left and you would gain, so you can't replace the agent alone now. You can if a claim of yours stays without the agent's approval for {time}.",
   },
 
   remove: {

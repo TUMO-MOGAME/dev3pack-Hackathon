@@ -7,7 +7,8 @@ import { agentVoteFor, agentVoteFrom, agentVoteRule, deathOpen, hasLivingSeat, i
 import { clockTime } from "@/lib/assets/sale-wait";
 import { useLocale } from "@/lib/i18n/client";
 import { useNow } from "@/lib/hooks/use-now";
-import { eligibleSeats } from "@/lib/death-rules";
+import { eligibleSeats, NEVER, recoveryTimeout } from "@/lib/death-rules";
+import { clock } from "@/components/guardians/derive";
 import { useEstate } from "@/lib/hooks/estate";
 import { shortAddress } from "@/lib/format";
 import { Button, Field, inputClass, Notice } from "@/components/ui/primitives";
@@ -48,7 +49,7 @@ export function AgentControl({ snap }: { snap: EstateSnapshot }) {
     <p className="mt-2 text-small font-semibold tabular-nums">
       {fmt(t.needNow, { need: rule.needed })}{rule.why === "recovery" && <span className="block font-normal text-ink-2">{t.needRecovery}</span>}
       {routeLine}
-      {early && <span className="block font-normal">{fmt(t.gainerAt, { time: when(from ?? 0) })}</span>}
+      {early && <span className="block font-normal">{from === NEVER ? fmt(t.gainerNever, { time: clock(2 * recoveryTimeout(e.waitingPeriodSecs)) }) : fmt(t.gainerAt, { time: when(from ?? 0) })}</span>}
     </p>
   );
 

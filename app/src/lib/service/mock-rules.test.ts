@@ -1525,7 +1525,7 @@ describe("the agent's recovery route (H7, re-review)", () => {
     t.act("lerato");
     advance(rt);
     expect(now()).toBe(since + rt);
-    await expect(t.svc.voteAgent(t.estate, NEW_AGENT)).rejects.toThrow(/^BadStatus: You are the only trusted person left/);
+    await expect(t.svc.voteAgent(t.estate, NEW_AGENT)).rejects.toThrow(/^WaitingPeriodNotOver: You are the only trusted person left/);
     advance(rt);
     await t.svc.voteAgent(t.estate, NEW_AGENT);
     expect((await t.snap()).estate.agent).toBe(NEW_AGENT);
