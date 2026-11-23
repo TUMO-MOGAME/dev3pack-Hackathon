@@ -234,8 +234,9 @@ pub mod heirloom {
         approve: bool,
         report_hash: [u8; 32],
         cert_hash: [u8; 32],
+        holder: Pubkey,
     ) -> Result<()> {
-        instructions::guardians::review_seat_death_handler(ctx, index, approve, report_hash, cert_hash)
+        instructions::guardians::review_seat_death_handler(ctx, index, approve, report_hash, cert_hash, holder)
     }
 
     pub fn confirm_seat_death(ctx: Context<ConfirmSeatDeath>, index: u8) -> Result<()> {
@@ -287,8 +288,9 @@ pub mod heirloom {
         approve: bool,
         report_hash: [u8; 32],
         cert_hash: [u8; 32],
+        recipient: Pubkey,
     ) -> Result<()> {
-        instructions::guardians::review_fallback_death_handler(ctx, index, approve, report_hash, cert_hash)
+        instructions::guardians::review_fallback_death_handler(ctx, index, approve, report_hash, cert_hash, recipient)
     }
 
     pub fn resolve_fallback_death(ctx: Context<ResolveFallbackDeath>, index: u8, dead: bool) -> Result<()> {

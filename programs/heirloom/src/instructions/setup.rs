@@ -717,6 +717,17 @@ pub struct RemoveMember<'info> {
     /// The Payee to remove (closed to the owner; add_payee brings it back), or None.
     #[account(mut, has_one = estate, close = owner)]
     pub payee_account: Option<Box<Account<'info, Payee>>>,
+
+    /// CHECK: the Seat PDA ["seat", estate, [0]]; may not exist. A seat death confirmed by the removed beneficiary
+    /// gives way.
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[0u8]], bump)]
+    pub seat0: UncheckedAccount<'info>,
+    /// CHECK: as seat0, index 1.
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[1u8]], bump)]
+    pub seat1: UncheckedAccount<'info>,
+    /// CHECK: as seat0, index 2.
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[2u8]], bump)]
+    pub seat2: UncheckedAccount<'info>,
 }
 
 /// Owner, estate Active: removes a beneficiary, a payee or both. Every payout checks both, so their open claims
@@ -733,6 +744,12 @@ pub fn remove_member_handler(ctx: Context<RemoveMember>) -> Result<()> {
         require!(beneficiary.active, HeirloomError::NotBeneficiary);
         beneficiary.active = false;
         emit!(MemberRemoved { estate: estate_key, wallet: beneficiary.wallet, payee: false, ts });
+        let seats = [
+            ctx.accounts.seat0.to_account_info(),
+            ctx.accounts.seat1.to_account_info(),
+            ctx.accounts.seat2.to_account_info(),
+        ];
+        super::guardians::release_confirmations(estate, &seats, Some(&beneficiary.wallet))?;
     }
     if let Some(payee) = ctx.accounts.payee_account.as_ref() {
         emit!(MemberRemoved { estate: estate_key, wallet: payee.wallet, payee: true, ts });

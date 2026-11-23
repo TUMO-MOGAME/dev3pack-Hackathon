@@ -249,6 +249,13 @@ struct Env {
 }
 
 impl Env {
+    /// The owner just acted (proof of life), so the death claim is made and approved again.
+    fn claim_again(&mut self) {
+        warp(&mut self.svm, 1);
+        self.submit_death_claim(1).unwrap();
+        self.review_death(true).unwrap();
+    }
+
     /// `who`'s Beneficiary PDA when there is one (a removed beneficiary's still exists), otherwise None.
     fn member_account(&self, who: &Pubkey) -> Option<Pubkey> {
         let address = beneficiary_pda(&self.estate, who);
@@ -1456,6 +1463,7 @@ impl Env {
                 estate: self.estate,
                 seat: seat_pda(&self.estate, index),
                 beneficiary_account,
+                objection: objection_pda(&seat_pda(&self.estate, index)),
             },
             heirloom::instruction::ReportSeatDeath { index, cert_hash: [8u8; 32] },
         );
@@ -1463,14 +1471,14 @@ impl Env {
     }
 
     fn review_seat_death(&mut self, index: u8, approve: bool) -> Result<(), String> {
-        let cert_hash = self.seat(index).death_cert_hash;
+        let (cert_hash, holder) = (self.seat(index).death_cert_hash, self.seat(index).holder);
         let i = ix(
             heirloom::accounts::ReviewSeatDeath {
                 agent: self.agent.pubkey(),
                 estate: self.estate,
                 seat: seat_pda(&self.estate, index),
             },
-            heirloom::instruction::ReviewSeatDeath { index, approve, report_hash: [9u8; 32], cert_hash },
+            heirloom::instruction::ReviewSeatDeath { index, approve, report_hash: [9u8; 32], cert_hash, holder },
         );
         send(&mut self.svm, i, &[&self.agent])
     }
@@ -1631,6 +1639,10 @@ impl Env {
                 owner: self.owner.pubkey(),
                 estate: self.estate,
                 guard: guard_pda(&self.estate),
+                fallback_report0: fallback_report_pda(&self.estate, 0),
+                fallback_report1: fallback_report_pda(&self.estate, 1),
+                fallback_report2: fallback_report_pda(&self.estate, 2),
+                fallback_report3: fallback_report_pda(&self.estate, 3),
             },
             heirloom::instruction::SetFallback { recipients },
         );
@@ -1662,11 +1674,9 @@ impl Env {
 
     fn review_fallback_death_as(&mut self, index: u8, approve: bool, cert_hash: [u8; 32]) -> Result<(), String> {
         let report = fallback_report_pda(&self.estate, index);
-        let rent_to = self
-            .svm
-            .get_account(&report)
-            .filter(|a| !a.data.is_empty())
-            .map_or(self.agent.pubkey(), |_| fetch::<FallbackReport>(&self.svm, &report).rent_payer);
+        let stored = self.svm.get_account(&report).filter(|a| !a.data.is_empty()).map(|_| fetch::<FallbackReport>(&self.svm, &report));
+        let rent_to = stored.as_ref().map_or(self.agent.pubkey(), |r| r.rent_payer);
+        let recipient = stored.as_ref().map_or(d(), |r| r.recipient);
         let i = ix(
             heirloom::accounts::ReviewFallbackDeath {
                 agent: self.agent.pubkey(),
@@ -1675,7 +1685,7 @@ impl Env {
                 fallback_report: report,
                 rent_to,
             },
-            heirloom::instruction::ReviewFallbackDeath { index, approve, report_hash: [9u8; 32], cert_hash },
+            heirloom::instruction::ReviewFallbackDeath { index, approve, report_hash: [9u8; 32], cert_hash, recipient },
         );
         send(&mut self.svm, i, &[&self.agent])
     }
@@ -1753,6 +1763,7 @@ impl Env {
                 token_program: token_program(),
                 associated_token_program: ata_program(),
                 system_program: system_program(),
+                unlock_objection: objection_pda(&e),
             },
             heirloom::instruction::ExecuteFallback {},
         );
@@ -2408,6 +2419,7 @@ fn fallback_objection_with_no_monitors_lapses_and_fallback_pays() {
     for i in 0..3 {
         env.set_seat_monitors(i, [d(), d()]).unwrap();
     }
+    env.claim_again();
     env.start_fallback().unwrap();
     let started = env.guard().fallback_started_at;
     let guard = guard_pda(&env.estate);
@@ -2990,7 +3002,17 @@ impl Env {
 
     fn set_agent(&mut self, signer: &Keypair, agent: Pubkey) -> Result<(), String> {
         let i = ix(
-            heirloom::accounts::SetAgent { owner: signer.pubkey(), estate: self.estate },
+            heirloom::accounts::SetAgent {
+                owner: signer.pubkey(),
+                estate: self.estate,
+                seat0: seat_pda(&self.estate, 0),
+                seat1: seat_pda(&self.estate, 1),
+                seat2: seat_pda(&self.estate, 2),
+                fallback_report0: fallback_report_pda(&self.estate, 0),
+                fallback_report1: fallback_report_pda(&self.estate, 1),
+                fallback_report2: fallback_report_pda(&self.estate, 2),
+                fallback_report3: fallback_report_pda(&self.estate, 3),
+            },
             heirloom::instruction::SetAgent { agent },
         );
         send(&mut self.svm, i, &[signer])
@@ -3004,6 +3026,13 @@ impl Env {
                 estate: self.estate,
                 agent_vote: agent_vote_pda(&self.estate, &candidate),
                 system_program: system_program(),
+                seat0: seat_pda(&self.estate, 0),
+                seat1: seat_pda(&self.estate, 1),
+                seat2: seat_pda(&self.estate, 2),
+                fallback_report0: fallback_report_pda(&self.estate, 0),
+                fallback_report1: fallback_report_pda(&self.estate, 1),
+                fallback_report2: fallback_report_pda(&self.estate, 2),
+                fallback_report3: fallback_report_pda(&self.estate, 3),
             },
             heirloom::instruction::VoteAgent { candidate },
         );
@@ -3457,7 +3486,13 @@ impl Env {
 
     fn replace_seat(&mut self, index: u8, new_holder: Pubkey) -> Result<(), String> {
         let i = ix(
-            heirloom::accounts::OwnerReplaceSeat { owner: self.owner.pubkey(), estate: self.estate, seat: seat_pda(&self.estate, index) },
+            heirloom::accounts::OwnerReplaceSeat {
+                owner: self.owner.pubkey(),
+                estate: self.estate,
+                seat: seat_pda(&self.estate, index),
+                next_seat: seat_pda(&self.estate, (index + 1) % 3),
+                last_seat: seat_pda(&self.estate, (index + 2) % 3),
+            },
             heirloom::instruction::OwnerReplaceSeat { index, new_holder },
         );
         send(&mut self.svm, i, &[&self.owner])
@@ -4470,7 +4505,7 @@ fn r06_the_agent_cannot_review_a_report_that_replaced_the_one_it_read() {
     let review = |env: &Env, cert_hash: [u8; 32]| {
         ix(
             heirloom::accounts::ReviewSeatDeath { agent: env.agent.pubkey(), estate: env.estate, seat: seat_pda(&env.estate, 0) },
-            heirloom::instruction::ReviewSeatDeath { index: 0, approve: true, report_hash: [9u8; 32], cert_hash },
+            heirloom::instruction::ReviewSeatDeath { index: 0, approve: true, report_hash: [9u8; 32], cert_hash, holder: env.seat(0).holder },
         )
     };
     let i = review(&env, [1u8; 32]);
@@ -4502,6 +4537,7 @@ fn r09_one_monitor_of_two_seats_is_one_vote() {
     let (mut env, people) = fallback_env();
     let m0 = env.kp(&people.monitors[0]);
     env.set_seat_monitors(1, [m0.pubkey(), d()]).unwrap();
+    env.claim_again();
     vacate_all(&mut env, &people);
     env.start_fallback().unwrap();
     let (guard, kid2) = (guard_pda(&env.estate), env.kid2.insecure_clone());
@@ -4523,6 +4559,7 @@ fn r09_a_vote_already_cast_from_another_position_counts_as_the_vote() {
     let (mut env, people) = fallback_env();
     let m0 = env.kp(&people.monitors[0]);
     env.set_seat_monitors(1, [m0.pubkey(), d()]).unwrap();
+    env.claim_again();
     vacate_all(&mut env, &people);
     env.start_fallback().unwrap();
     let (guard, kid2) = (guard_pda(&env.estate), env.kid2.insecure_clone());
@@ -4857,6 +4894,9 @@ impl Env {
                 estate: self.estate,
                 beneficiary_account: beneficiary.map(|w| beneficiary_pda(&self.estate, &w)),
                 payee_account: payee.map(|w| payee_pda(&self.estate, &w)),
+                seat0: seat_pda(&self.estate, 0),
+                seat1: seat_pda(&self.estate, 1),
+                seat2: seat_pda(&self.estate, 2),
             },
             heirloom::instruction::RemoveMember {},
         );
@@ -5484,6 +5524,7 @@ fn r04_membership_of_another_estate_is_no_membership() {
             estate: env.estate,
             seat: seat_pda(&env.estate, 0),
             beneficiary_account: Some(foreign_member),
+            objection: objection_pda(&seat_pda(&env.estate, 0)),
         },
         heirloom::instruction::ReportSeatDeath { index: 0, cert_hash: [8u8; 32] },
     );
@@ -5582,6 +5623,7 @@ fn r11_the_next_recipient_cannot_dismiss_the_fallback_objection() {
     let (mut env, people) = fallback_env();
     let k1 = env.kid1.insecure_clone();
     env.set_seat_monitors(0, [k1.pubkey(), d()]).unwrap();
+    env.claim_again();
     vacate_all(&mut env, &people);
     env.start_fallback().unwrap();
     let (guard, k2) = (guard_pda(&env.estate), env.kid2.insecure_clone());
@@ -5675,6 +5717,9 @@ fn r16_only_members_of_this_estate_can_be_removed() {
             estate: env.estate,
             beneficiary_account: Some(foreign),
             payee_account: None,
+            seat0: seat_pda(&env.estate, 0),
+            seat1: seat_pda(&env.estate, 1),
+            seat2: seat_pda(&env.estate, 2),
         },
         heirloom::instruction::RemoveMember {},
     );
@@ -5691,10 +5736,10 @@ fn r02_a_replaced_persons_seat_death_confirmation_does_not_count() {
     warp(&mut env.svm, 1);
     let newbie = funded(&mut env.svm);
     env.replace_seat(1, newbie.pubkey()).unwrap();
-    warp(&mut env.svm, SUCCESSION_WAIT);
-    env.finalize_succession(0).unwrap();
     let s = env.seat(0);
     assert_eq!((s.holder, s.death_cert_hash, s.generation), (env.verifiers[0].pubkey(), [0u8; 32], 0));
+    warp(&mut env.svm, SUCCESSION_WAIT);
+    expect_err(env.finalize_succession(0), HeirloomError::NoSuccessionPending);
 
     env.report_seat_death(&kid, 0).unwrap();
     env.review_seat_death(0, true).unwrap();
@@ -5756,8 +5801,6 @@ fn r02_watching_the_seat_does_not_save_a_replaced_confirmers_confirmation() {
     env.confirm_seat_death(&v1, 0).unwrap();
     warp(&mut env.svm, 1);
     env.replace_seat(1, Keypair::new().pubkey()).unwrap();
-    warp(&mut env.svm, SUCCESSION_WAIT);
-    env.finalize_succession(0).unwrap();
     assert_eq!((env.seat(0).death_cert_hash, env.seat(0).generation), ([0u8; 32], 0));
 }
 
@@ -5969,6 +6012,7 @@ fn r18_with_no_backup_at_all_the_seat_vacates_and_the_fallback_can_start() {
     env.review_death(true).unwrap();
     env.set_seat_backups(&owner, 2, [d(), d()]).unwrap();
     env.set_seat_monitors(2, [d(), d()]).unwrap();
+    env.claim_again();
     env.leave_one_survivor();
     env.report_seat_death(&k1, 2).unwrap();
     env.review_seat_death(2, true).unwrap();
@@ -5987,14 +6031,10 @@ fn r18_a_check_in_does_not_revoke_the_confirmation_while_the_route_applies() {
     warp(&mut env.svm, 1);
     env.heartbeat().unwrap();
     warp(&mut env.svm, SUCCESSION_WAIT);
-    // Leaving the account out, or passing another, can't be used to revoke it.
-    expect_err(env.finalize_succession(2), HeirloomError::NotConfirmer);
-    let other = beneficiary_pda(&env.estate, &env.kid1.pubkey());
-    expect_err(env.finalize_succession_with(2, Some(other)), HeirloomError::NotConfirmer);
     assert_eq!(env.seat(2).death_confirmed_by, k2.pubkey());
-
-    let mine = beneficiary_pda(&env.estate, &k2.pubkey());
-    env.finalize_succession_with(2, Some(mine)).unwrap();
+    // No account is needed and none can revoke it; one passed is ignored.
+    let other = beneficiary_pda(&env.estate, &env.kid1.pubkey());
+    env.finalize_succession_with(2, Some(other)).unwrap();
     assert_eq!(env.seat(2).holder, people.backups[2][0].pubkey());
 }
 
@@ -6005,9 +6045,6 @@ fn r18_removing_the_confirmer_revokes_the_confirmation() {
     env.confirm_seat_death(&k2, 2).unwrap();
     warp(&mut env.svm, 1);
     env.remove_beneficiary(k2.pubkey()).unwrap();
-    warp(&mut env.svm, SUCCESSION_WAIT);
-    let mine = beneficiary_pda(&env.estate, &k2.pubkey());
-    env.finalize_succession_with(2, Some(mine)).unwrap();
     let s = env.seat(2);
     assert_eq!((s.holder, s.death_cert_hash, s.generation), (env.verifiers[2].pubkey(), [0u8; 32], 0));
 }
@@ -6019,8 +6056,6 @@ fn r18_refilling_another_seat_revokes_the_confirmation() {
     env.confirm_seat_death(&k2, 2).unwrap();
     warp(&mut env.svm, 1);
     env.replace_seat(0, Keypair::new().pubkey()).unwrap();
-    warp(&mut env.svm, SUCCESSION_WAIT);
-    env.finalize_succession(2).unwrap();
     let s = env.seat(2);
     assert_eq!((s.holder, s.death_cert_hash), (env.verifiers[2].pubkey(), [0u8; 32]));
 }
@@ -6063,13 +6098,13 @@ fn r18_the_route_cannot_revive_a_replaced_persons_confirmation() {
     env.confirm_seat_death(&v1, 0).unwrap();
     warp(&mut env.svm, 1);
     env.replace_seat(1, Keypair::new().pubkey()).unwrap();
-    // Now the other two seats empty, so seat 0 is one a beneficiary could confirm.
-    env.succeed(1, &v0);
-    env.succeed(2, &v0);
-    let not_a_beneficiary = beneficiary_pda(&env.estate, &v1.pubkey());
-    env.finalize_succession_with(0, Some(not_a_beneficiary)).unwrap();
+    // Cleared at once, so it can't count later when the other seats empty and seat 0 is one a beneficiary
+    // could confirm.
     let s = env.seat(0);
     assert_eq!((s.holder, s.death_cert_hash), (v0.pubkey(), [0u8; 32]));
+    env.succeed(1, &v0);
+    env.succeed(2, &v0);
+    expect_err(env.finalize_succession_with(0, None), HeirloomError::NoSuccessionPending);
 }
 
 // ------------------------------------------------------------------- R19 the agreed amount

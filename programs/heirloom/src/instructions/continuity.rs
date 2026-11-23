@@ -5,7 +5,8 @@ use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use super::{account_exists, now, read_account, record_proof_of_life, transfer_checked_cpi};
+use super::guardians::{check_not_a_backup, clear_agent_reviews};
+use super::{account_exists, now, read_account, ready_token_account, record_proof_of_life, transfer_checked_cpi};
 use crate::errors::HeirloomError;
 use crate::events::*;
 use crate::state::*;
@@ -114,14 +115,9 @@ pub struct SweepResidual<'info> {
     )]
     pub vault: Box<Account<'info, TokenAccount>>,
 
-    #[account(
-        init_if_needed,
-        payer = payer,
-        associated_token::mint = usdt_mint,
-        associated_token::authority = recipient,
-        associated_token::token_program = token_program
-    )]
-    pub recipient_usdt: Box<Account<'info, TokenAccount>>,
+    /// CHECK: the recipient's USD₮ ATA (created if missing), or another token account of the mint they own.
+    #[account(mut)]
+    pub recipient_usdt: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -175,12 +171,14 @@ pub fn sweep_residual_handler<'info>(ctx: Context<'info, SweepResidual<'info>>) 
     let infos = ctx.remaining_accounts;
     require!(infos.len() == estate.rule_count as usize, HeirloomError::RulesIncomplete);
     let estate_key = estate.key();
+    // After the fallback ran no trusted person is left to approve a claim, so no rule reserves anything (M9).
+    let fallback_done = account_exists(&guard_info) && read_account::<Guard>(&guard_info)?.fallback_done;
     let mut reserved: u64 = 0;
     for (i, info) in infos.iter().enumerate() {
         let rule: Rule = read_account(info)?;
         // Only this program creates Rules, one per (estate, id), so id == position means none is missing or repeated.
         require!(rule.estate == estate_key && rule.id as usize == i, HeirloomError::RulesIncomplete);
-        if ts <= rule.valid_until {
+        if ts <= rule.valid_until && !fallback_done {
             let left = rule.lifetime_cap.saturating_sub(rule.spent_total);
             reserved = reserved.saturating_add(left);
         }
@@ -188,6 +186,15 @@ pub fn sweep_residual_handler<'info>(ctx: Context<'info, SweepResidual<'info>>) 
 
     let amount = ctx.accounts.vault.amount.saturating_sub(reserved);
     require!(amount > 0, HeirloomError::NothingToSweep);
+    ready_token_account(
+        ctx.accounts.payer.to_account_info(),
+        ctx.accounts.recipient_usdt.to_account_info(),
+        ctx.accounts.recipient.to_account_info(),
+        ctx.accounts.usdt_mint.to_account_info(),
+        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.system_program.to_account_info(),
+        ctx.accounts.associated_token_program.to_account_info(),
+    )?;
 
     let owner = estate.owner;
     let bump = [estate.bump];
@@ -208,6 +215,22 @@ pub fn sweep_residual_handler<'info>(ctx: Context<'info, SweepResidual<'info>>) 
 }
 
 // ====================================================================== set_agent / vote_agent
+
+/// The three Seat and four FallbackReport accounts of set_agent and vote_agent.
+macro_rules! agent_accounts {
+    ($ctx:ident) => {{
+        let a = &$ctx.accounts;
+        (
+            [a.seat0.to_account_info(), a.seat1.to_account_info(), a.seat2.to_account_info()],
+            [
+                a.fallback_report0.to_account_info(),
+                a.fallback_report1.to_account_info(),
+                a.fallback_report2.to_account_info(),
+                a.fallback_report3.to_account_info(),
+            ],
+        )
+    }};
+}
 
 fn check_candidate(estate: &Estate, candidate: &Pubkey) -> Result<()> {
     require!(
@@ -230,19 +253,46 @@ pub struct SetAgent<'info> {
         bump = estate.bump,
         has_one = owner @ HeirloomError::NotOwner
     )]
-    pub estate: Account<'info, Estate>,
+    pub estate: Box<Account<'info, Estate>>,
+
+    /// CHECK: the Seat PDA ["seat", estate, [0]]; may not exist. Reviews by the old agent are set back (M6), and a
+    /// candidate must not be a backup (L9).
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[0u8]], bump)]
+    pub seat0: UncheckedAccount<'info>,
+    /// CHECK: as seat0, index 1.
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[1u8]], bump)]
+    pub seat1: UncheckedAccount<'info>,
+    /// CHECK: as seat0, index 2.
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[2u8]], bump)]
+    pub seat2: UncheckedAccount<'info>,
+    /// CHECK: the ["fallbackreport", estate, [0]] PDA; may not exist. Its verdict by the old agent is set back.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[0u8]], bump)]
+    pub fallback_report0: UncheckedAccount<'info>,
+    /// CHECK: as fallback_report0, index 1.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[1u8]], bump)]
+    pub fallback_report1: UncheckedAccount<'info>,
+    /// CHECK: as fallback_report0, index 2.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[2u8]], bump)]
+    pub fallback_report2: UncheckedAccount<'info>,
+    /// CHECK: as fallback_report0, index 3.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[3u8]], bump)]
+    pub fallback_report3: UncheckedAccount<'info>,
 }
 
-/// Owner, estate Active: replaces the agent. Proof of life, which also voids the old agent's death review.
+/// Owner, estate Active: replaces the agent. Proof of life, which also voids the old agent's death review; what
+/// it reviewed of seats and fallback recipients goes back to Pending.
 pub fn set_agent_handler(ctx: Context<SetAgent>, agent: Pubkey) -> Result<()> {
+    let (seats, reports) = agent_accounts!(ctx);
     let estate = &mut ctx.accounts.estate;
     require!(estate.status == EstateStatus::Active, HeirloomError::BadStatus);
     check_candidate(estate, &agent)?;
+    check_not_a_backup(&seats, &agent)?;
     let previous = estate.agent;
     estate.agent = agent;
 
     let (key, ts) = (estate.key(), now()?);
     record_proof_of_life(key, estate, ts);
+    clear_agent_reviews(&key, &seats, &reports, ts)?;
     emit!(AgentChanged { estate: key, previous, agent, ts });
     Ok(())
 }
@@ -254,7 +304,7 @@ pub struct VoteAgent<'info> {
     pub verifier: Signer<'info>,
 
     #[account(mut)]
-    pub estate: Account<'info, Estate>,
+    pub estate: Box<Account<'info, Estate>>,
 
     #[account(
         init_if_needed,
@@ -263,18 +313,45 @@ pub struct VoteAgent<'info> {
         seeds = [AGENT_VOTE_SEED, estate.key().as_ref(), candidate.as_ref()],
         bump
     )]
-    pub agent_vote: Account<'info, AgentVote>,
+    pub agent_vote: Box<Account<'info, AgentVote>>,
 
     pub system_program: Program<'info, System>,
+
+    /// CHECK: the Seat PDA ["seat", estate, [0]]; may not exist. Reviews by the old agent are set back (M6), and a
+    /// candidate must not be a backup (L9).
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[0u8]], bump)]
+    pub seat0: UncheckedAccount<'info>,
+    /// CHECK: as seat0, index 1.
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[1u8]], bump)]
+    pub seat1: UncheckedAccount<'info>,
+    /// CHECK: as seat0, index 2.
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[2u8]], bump)]
+    pub seat2: UncheckedAccount<'info>,
+    /// CHECK: the ["fallbackreport", estate, [0]] PDA; may not exist. Its verdict by the old agent is set back.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[0u8]], bump)]
+    pub fallback_report0: UncheckedAccount<'info>,
+    /// CHECK: as fallback_report0, index 1.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[1u8]], bump)]
+    pub fallback_report1: UncheckedAccount<'info>,
+    /// CHECK: as fallback_report0, index 2.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[2u8]], bump)]
+    pub fallback_report2: UncheckedAccount<'info>,
+    /// CHECK: as fallback_report0, index 3.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[3u8]], bump)]
+    pub fallback_report3: UncheckedAccount<'info>,
 }
 
-/// Trusted people replace the agent. While Active it takes every one of them (at least two): the owner may
-/// already have died with the agent's key lost. Afterwards it takes two, or the only one left.
+/// Trusted people replace the agent. Before the unlock it takes every one of them (at least two): the owner may
+/// already have died with the agent's key lost. Afterwards it takes two, or the only one left; so it does before
+/// the unlock once a death claim has stood a grace with no sign of life from the owner for the recovery timeout
+/// (H7). The old agent's reviews go back to Pending (M6).
 pub fn vote_agent_handler(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<()> {
+    let (seat_infos, reports) = agent_accounts!(ctx);
     let verifier = ctx.accounts.verifier.key();
     let estate = &mut ctx.accounts.estate;
     let idx = estate.verifier_index(&verifier).ok_or(HeirloomError::NotVerifier)?;
     check_candidate(estate, &candidate)?;
+    check_not_a_backup(&seat_infos, &candidate)?;
 
     let vote = &mut ctx.accounts.agent_vote;
     if vote.replaces != estate.agent {
@@ -298,17 +375,31 @@ pub fn vote_agent_handler(ctx: Context<VoteAgent>, candidate: Pubkey) -> Result<
             count += 1;
         }
     }
-    let needed = if estate.status == EstateStatus::Active { seats.max(2) } else { seats.min(2) };
+    let ts = now()?;
+    let claim_open = estate.death_cert_hash != [0u8; 32] && !estate.death_disproved();
+    let recovery = claim_open
+        && ts >= estate.last_heartbeat.saturating_add(estate.recovery_timeout())
+        && ts >= estate.death_pending_since.saturating_add(estate.report_grace());
+    let needed = if estate.status == EstateStatus::Unlocked || recovery { seats.min(2) } else { seats.max(2) };
 
     // Voting again only completes a quorum that has dropped since.
     require!(first_time || count >= needed, HeirloomError::AlreadyApproved);
 
-    let (estate_key, ts) = (estate.key(), now()?);
+    let estate_key = estate.key();
     emit!(AgentVoted { estate: estate_key, candidate, verifier, count, ts });
     if count >= needed {
         let previous = estate.agent;
         estate.agent = candidate;
         vote.voters = [Pubkey::default(); VERIFIER_COUNT];
+        // The death claim's review was the old agent's: the new one reviews it again, and the wait starts over.
+        if claim_open && estate.status != EstateStatus::Unlocked && estate.death_verdict != Verdict::Pending {
+            estate.death_verdict = Verdict::Pending;
+            estate.death_attestations = 0;
+            estate.death_pending_since = ts;
+            estate.status = EstateStatus::Active;
+            emit!(AgentReviewCleared { estate: estate_key, target: estate_key, ts });
+        }
+        clear_agent_reviews(&estate_key, &seat_infos, &reports, ts)?;
         emit!(AgentChanged { estate: estate_key, previous, agent: candidate, ts });
     }
     Ok(())

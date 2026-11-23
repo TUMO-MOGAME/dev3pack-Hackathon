@@ -6,8 +6,8 @@ use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use super::{
-    account_exists, close_program_account, count_bits, now, objection_is_open, read_account, record_proof_of_life,
-    transfer_checked_cpi, write_account,
+    account_exists, close_program_account, count_bits, now, objection_is_open, read_account, ready_token_account,
+    record_proof_of_life, transfer_checked_cpi, void_objection, write_account,
 };
 use crate::errors::HeirloomError;
 use crate::events::*;
@@ -49,17 +49,65 @@ fn is_active_beneficiary(estate: &Pubkey, who: &Pubkey, beneficiary: Option<&Ben
     beneficiary.is_some_and(|b| b.estate == *estate && b.wallet == *who && b.active)
 }
 
-/// No other seat is held and this one has neither a monitor nor a second backup: only then may an active
-/// beneficiary confirm its holder's death.
-fn beneficiary_may_confirm(estate: &Estate, seat: &Seat) -> bool {
-    estate.living_seats_except(&seat.holder) == 0 && !seat.monitors.iter().any(is_set) && !is_set(&seat.backups[1])
+/// Someone other than the seat's first backup (who can't confirm their own promotion) watches the seat.
+fn watched(seat: &Seat) -> bool {
+    seat.monitors.iter().any(|m| is_set(m) && *m != seat.backups[0]) || is_set(&seat.backups[1])
 }
 
-/// Whether `who` still is an active beneficiary, from their Beneficiary PDA (which may not exist).
-fn beneficiary_still_active(infos: &[AccountInfo], estate: &Pubkey, who: &Pubkey) -> Result<bool> {
-    let (expected, _) = Pubkey::find_program_address(&[BENEFICIARY_SEED, estate.as_ref(), who.as_ref()], &crate::ID);
-    let info = infos.first().filter(|i| i.key() == expected).ok_or(HeirloomError::NotConfirmer)?;
-    Ok(account_exists(info) && is_active_beneficiary(estate, who, Some(&read_account::<Beneficiary>(info)?)))
+/// No other seat is held and nobody watches this one: only then may an active beneficiary confirm its holder's
+/// death at once (otherwise after the recovery timeout, H3).
+fn beneficiary_may_confirm(estate: &Estate, seat: &Seat) -> bool {
+    estate.living_seats_except(&seat.holder) == 0 && !watched(seat)
+}
+
+/// The owner changed who may confirm (replaced a holder, a monitor, removed a beneficiary): a confirmation by
+/// someone who holds no seat gives way, so a living trusted person confirms instead (M4, L15). With `who`, only
+/// that person's confirmations. `seats` are Seat PDAs that may not exist.
+pub(crate) fn release_confirmations(estate: &Estate, seats: &[AccountInfo], who: Option<&Pubkey>) -> Result<()> {
+    for info in seats.iter().filter(|i| account_exists(i)) {
+        let mut seat: Seat = read_account(info)?;
+        let by = seat.death_confirmed_by;
+        if seat.succession_pending() && is_set(&by) && estate.verifier_index(&by).is_none() && who.map_or(true, |w| *w == by) {
+            seat.clear_succession();
+            write_account(info, &seat)?;
+            emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts: now()? });
+        }
+    }
+    Ok(())
+}
+
+/// A new agent: what the old one reviewed is set back to Pending for the new one to review (M6). `seats` are the
+/// three Seat PDAs, `reports` the four FallbackReport PDAs; any may not exist.
+pub(crate) fn clear_agent_reviews(estate: &Pubkey, seats: &[AccountInfo], reports: &[AccountInfo], ts: i64) -> Result<()> {
+    for info in seats.iter().filter(|i| account_exists(i)) {
+        let mut seat: Seat = read_account(info)?;
+        if seat.succession_pending() && seat.death_verdict != Verdict::Pending {
+            seat.death_verdict = Verdict::Pending;
+            seat.death_confirmed_by = Pubkey::default();
+            seat.death_pending_since = ts;
+            write_account(info, &seat)?;
+            emit!(AgentReviewCleared { estate: *estate, target: info.key(), ts });
+        }
+    }
+    for info in reports.iter().filter(|i| account_exists(i)) {
+        let mut report: FallbackReport = read_account(info)?;
+        if report.verdict != Verdict::Pending {
+            report.verdict = Verdict::Pending;
+            report.reported_at = ts;
+            write_account(info, &report)?;
+            emit!(AgentReviewCleared { estate: *estate, target: info.key(), ts });
+        }
+    }
+    Ok(())
+}
+
+/// A candidate agent must not be anyone's backup (L9): the seat would otherwise lose that backup.
+pub(crate) fn check_not_a_backup(seats: &[AccountInfo], candidate: &Pubkey) -> Result<()> {
+    for info in seats.iter().filter(|i| account_exists(i)) {
+        let seat: Seat = read_account(info)?;
+        require!(!seat.backups.contains(candidate), HeirloomError::BadAgent);
+    }
+    Ok(())
 }
 
 /// A living trusted person, a monitor (of `seat`) or an active beneficiary of this estate; never the agent,
@@ -90,15 +138,28 @@ fn without(pair: [Pubkey; 2], key: &Pubkey) -> [Pubkey; 2] {
     if is_set(&p[0]) { p } else { [p[1], Pubkey::default()] }
 }
 
-/// The owner's death is established for the fallback: estate Unlocked, or the agent did not reject the claim.
+/// The owner's death is established for the fallback: estate Unlocked, or the agent did not reject the claim and
+/// the owner has shown no life since it was made.
 fn owner_death_established(estate: &Estate) -> bool {
-    estate.status == EstateStatus::Unlocked || estate.death_verdict.open_to_people()
+    estate.status == EstateStatus::Unlocked || (estate.death_verdict.open_to_people() && !estate.death_disproved())
 }
 
-/// A death the agent only referred, with no trusted people to decide it, waits twice as long.
+/// A death the agent only referred, with no trusted people to decide it, waits twice as long. Never under 60 s.
 fn fallback_delay(estate: &Estate, guard: &Guard) -> i64 {
     let times = if estate.status == EstateStatus::Active && estate.death_verdict == Verdict::Referred { 2 } else { 1 };
-    guard.fallback_wait().saturating_mul(times)
+    guard.fallback_wait().max(MIN_WAITING_SECS).saturating_mul(times)
+}
+
+/// When a started countdown may pay: after its own delay, and never before the death's own wait (H6), so the
+/// owner always has the waiting period to veto.
+fn fallback_runs_at(estate: &Estate, guard: &Guard) -> i64 {
+    let countdown = guard.fallback_started_at.saturating_add(fallback_delay(estate, guard));
+    let death = match estate.status {
+        EstateStatus::Unlocked => 0,
+        EstateStatus::DeathPending => estate.death_pending_since.saturating_add(estate.unlock_delay()),
+        _ => estate.death_pending_since.saturating_add(estate.waiting_secs()),
+    };
+    countdown.max(death)
 }
 
 /// The countdown still runs: started for this death, and the owner has shown no life since.
@@ -108,17 +169,18 @@ fn countdown_valid(estate: &Estate, guard: &Guard) -> bool {
         && estate.death_pending_since <= guard.fallback_started_at
 }
 
-/// An Open Fallback objection lapses (counts as Dismissed) once `fallback_wait_secs` have passed since it
-/// was raised without it being upheld, so a missing or tied vote can never lock the vault forever. One raised
-/// before the owner's last sign of life is void, with its votes.
-fn fallback_objection_lapsed(o: &Objection, estate: &Estate, wait: i64, ts: i64) -> Result<bool> {
+/// An Open Fallback objection lapses (counts as Dismissed) once the refute wait (the fallback wait, at least
+/// 60 s) has passed since it was raised without it being upheld, so a missing or tied vote can never lock the
+/// vault forever. One raised before the owner's last sign of life, or against an earlier countdown, is void with
+/// its votes (L11).
+fn fallback_objection_lapsed(o: &Objection, estate: &Estate, guard: &Guard, ts: i64) -> Result<bool> {
     if o.kind != TargetKind::Fallback || o.status != ObjectionStatus::Open {
         return Ok(false);
     }
-    if o.voided_by_owner(estate) {
+    if o.voided_by_owner(estate) || o.raised_at < guard.fallback_started_at {
         return Ok(true);
     }
-    let lapses_at = o.raised_at.checked_add(wait).ok_or(HeirloomError::MathOverflow)?;
+    let lapses_at = o.raised_at.checked_add(guard.refute_wait()).ok_or(HeirloomError::MathOverflow)?;
     Ok(ts >= lapses_at)
 }
 
@@ -333,6 +395,7 @@ pub struct SetSeatMonitors<'info> {
     pub owner: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [ESTATE_SEED, owner.key().as_ref()],
         bump = estate.bump,
         has_one = owner @ HeirloomError::NotOwner
@@ -353,15 +416,18 @@ pub fn set_seat_monitors_handler(ctx: Context<SetSeatMonitors>, _index: u8, moni
         ctx.accounts.estate.status == EstateStatus::Active,
         HeirloomError::BadStatus
     );
-    let estate = &ctx.accounts.estate;
+    let estate = &mut ctx.accounts.estate;
     let seat = &mut ctx.accounts.seat;
     let monitors = validate_monitors(&seat.holder, monitors)?;
-    // Someone watches this seat from now on, so a beneficiary's confirmation gives way to theirs.
-    if is_set(&seat.death_confirmed_by) && is_set(&monitors[0]) && beneficiary_may_confirm(estate, seat) {
+    let ts = now()?;
+    // Who watches changed, so a confirmation by someone who holds no seat (a monitor or a beneficiary) gives way.
+    if monitors != seat.monitors && is_set(&seat.death_confirmed_by) && estate.verifier_index(&seat.death_confirmed_by).is_none() {
         seat.clear_succession();
-        emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts: now()? });
+        emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts });
     }
     seat.monitors = monitors;
+    // Only the living owner can do this: votes on fallback objections by monitors it replaced are void (M1, M5).
+    record_proof_of_life(estate.key(), estate, ts);
     emit_seat_configured(seat)
 }
 
@@ -372,11 +438,12 @@ pub struct SetFallback<'info> {
     pub owner: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [ESTATE_SEED, owner.key().as_ref()],
         bump = estate.bump,
         has_one = owner @ HeirloomError::NotOwner
     )]
-    pub estate: Account<'info, Estate>,
+    pub estate: Box<Account<'info, Estate>>,
 
     #[account(
         mut,
@@ -384,11 +451,24 @@ pub struct SetFallback<'info> {
         bump = guard.bump,
         has_one = estate
     )]
-    pub guard: Account<'info, Guard>,
+    pub guard: Box<Account<'info, Guard>>,
+
+    /// CHECK: the ["fallbackreport", estate, [0]] PDA; may not exist. Every open report is void (L16).
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[0u8]], bump)]
+    pub fallback_report0: UncheckedAccount<'info>,
+    /// CHECK: as fallback_report0, index 1.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[1u8]], bump)]
+    pub fallback_report1: UncheckedAccount<'info>,
+    /// CHECK: as fallback_report0, index 2.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[2u8]], bump)]
+    pub fallback_report2: UncheckedAccount<'info>,
+    /// CHECK: as fallback_report0, index 3.
+    #[account(mut, seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[3u8]], bump)]
+    pub fallback_report3: UncheckedAccount<'info>,
 }
 
 pub fn set_fallback_handler(ctx: Context<SetFallback>, recipients: [Pubkey; 4]) -> Result<()> {
-    let estate = &ctx.accounts.estate;
+    let estate = &mut ctx.accounts.estate;
     require!(estate.status == EstateStatus::Active, HeirloomError::BadStatus);
     let guard = &mut ctx.accounts.guard;
     require!(!guard.fallback_done, HeirloomError::FallbackDone);
@@ -397,7 +477,7 @@ pub fn set_fallback_handler(ctx: Context<SetFallback>, recipients: [Pubkey; 4]) 
         if !is_set(&recipients[i]) {
             continue;
         }
-        require!(recipients[i] != estate.owner, HeirloomError::BadFallback);
+        require!(recipients[i] != estate.owner && recipients[i] != estate.key(), HeirloomError::BadFallback);
         for j in (i + 1)..FALLBACK_COUNT {
             require!(recipients[i] != recipients[j], HeirloomError::BadFallback);
         }
@@ -405,13 +485,29 @@ pub fn set_fallback_handler(ctx: Context<SetFallback>, recipients: [Pubkey; 4]) 
 
     guard.fallback = recipients;
     guard.fallback_dead = 0;
-    // The owner is alive and changing the plan: any started countdown is void.
+    // The owner is alive and changing the plan: any started countdown is void, and so is every open report of a
+    // recipient's death: it names nobody until someone reports again.
     guard.fallback_started_at = 0;
+    for info in [
+        &ctx.accounts.fallback_report0,
+        &ctx.accounts.fallback_report1,
+        &ctx.accounts.fallback_report2,
+        &ctx.accounts.fallback_report3,
+    ] {
+        let info = info.to_account_info();
+        if account_exists(&info) {
+            let mut report: FallbackReport = read_account(&info)?;
+            report.recipient = Pubkey::default();
+            write_account(&info, &report)?;
+        }
+    }
+    let ts = now()?;
+    record_proof_of_life(estate.key(), estate, ts);
 
     emit!(FallbackSet {
         estate: estate.key(),
         recipients,
-        ts: now()?,
+        ts,
     });
     Ok(())
 }
@@ -436,6 +532,10 @@ pub struct ReportSeatDeath<'info> {
 
     /// The reporter's Beneficiary PDA when a beneficiary reports; otherwise None.
     pub beneficiary_account: Option<Box<Account<'info, Beneficiary>>>,
+
+    /// CHECK: the ["objection", seat] PDA; may not exist. A challenge to the report this replaces is void (M7).
+    #[account(mut, seeds = [OBJECTION_SEED, seat.key().as_ref()], bump)]
+    pub objection: UncheckedAccount<'info>,
 }
 
 pub fn report_seat_death_handler(ctx: Context<ReportSeatDeath>, _index: u8, cert_hash: [u8; 32]) -> Result<()> {
@@ -453,6 +553,7 @@ pub fn report_seat_death_handler(ctx: Context<ReportSeatDeath>, _index: u8, cert
     );
     let ts = now()?;
     require!(!seat.succession_pending() || seat.report_stale(estate, &reporter, ts), HeirloomError::SuccessionPending);
+    void_objection(&ctx.accounts.objection.to_account_info())?;
 
     seat.death_cert_hash = cert_hash;
     seat.death_reported_by = reporter;
@@ -496,11 +597,14 @@ pub fn review_seat_death_handler(
     approve: bool,
     report_hash: [u8; 32],
     cert_hash: [u8; 32],
+    holder: Pubkey,
 ) -> Result<()> {
     let seat = &mut ctx.accounts.seat;
     require!(seat.succession_pending(), HeirloomError::NoSuccessionPending);
     require!(seat.death_verdict == Verdict::Pending, HeirloomError::BadStatus);
-    require!(seat.death_cert_hash == cert_hash, HeirloomError::ReportChanged);
+    // The certificate and the person it was read for (L6): the same public hash can be reported for another holder.
+    require!(seat.death_cert_hash == cert_hash && seat.holder == holder, HeirloomError::ReportChanged);
+    require!(seat.death_reported_by != ctx.accounts.estate.agent, HeirloomError::OwnApproval);
 
     if approve {
         seat.death_verdict = Verdict::Approved;
@@ -523,8 +627,9 @@ pub fn review_seat_death_handler(
 #[derive(Accounts)]
 #[instruction(index: u8)]
 pub struct ConfirmSeatDeath<'info> {
-    /// Holder of another seat; if no other seat has a living holder: backups[1] or a monitor of this seat, or,
-    /// when it has neither, an active beneficiary.
+    /// Holder of another seat (a first backup too, once they hold one). If no other seat has a living holder, or
+    /// the approved report has waited the recovery timeout: backups[1] or a monitor of this seat. An active
+    /// beneficiary when nobody watches the seat and no other is held, or after the recovery timeout.
     pub confirmer: Signer<'info>,
 
     pub estate: Account<'info, Estate>,
@@ -545,34 +650,35 @@ pub fn confirm_seat_death_handler(ctx: Context<ConfirmSeatDeath>, _index: u8) ->
     let confirmer = ctx.accounts.confirmer.key();
     let estate = &ctx.accounts.estate;
     let seat = &mut ctx.accounts.seat;
-    let idx = seat.index as usize;
 
     require!(seat.succession_pending(), HeirloomError::NoSuccessionPending);
     require!(seat.death_verdict == Verdict::Approved, HeirloomError::AgentNotApproved);
     require!(!is_set(&seat.death_confirmed_by), HeirloomError::AlreadyApproved);
-    // Nobody confirms a death they reported, their own death, or their own promotion; the agent only reviews.
+    let holds_a_seat = estate.verifier_index(&confirmer).is_some();
+    // Nobody confirms a death they reported, their own death, or their own promotion (a first backup who already
+    // holds another seat can't be promoted, H2); the agent only reviews.
     require!(
         confirmer != seat.death_reported_by
             && confirmer != seat.holder
-            && confirmer != seat.backups[0]
+            && (confirmer != seat.backups[0] || holds_a_seat)
             && confirmer != estate.agent,
         HeirloomError::NotConfirmer
     );
 
-    let other_living: Vec<usize> = (0..VERIFIER_COUNT)
-        .filter(|j| *j != idx && is_set(&estate.verifiers[*j]))
-        .collect();
-    let allowed = if other_living.is_empty() {
-        (is_set(&seat.backups[1]) && confirmer == seat.backups[1])
-            || seat.is_monitor(&confirmer)
-            || (beneficiary_may_confirm(estate, seat)
-                && is_active_beneficiary(&estate.key(), &confirmer, ctx.accounts.beneficiary_account.as_deref().map(|b| &**b)))
-    } else {
-        other_living.iter().any(|j| estate.verifiers[*j] == confirmer)
-    };
+    let ts = now()?;
+    let alone = estate.living_seats_except(&seat.holder) == 0;
+    // An approved report nobody confirmed for the recovery timeout opens the route to those who watch the seat
+    // and to beneficiaries (H3): trusted people who could have confirmed may all be dead too.
+    let timed_out = ts >= seat.death_pending_since.saturating_add(estate.recovery_timeout());
+    let watches = (is_set(&seat.backups[1]) && confirmer == seat.backups[1]) || seat.is_monitor(&confirmer);
+    let beneficiary =
+        is_active_beneficiary(&estate.key(), &confirmer, ctx.accounts.beneficiary_account.as_deref().map(|b| &**b));
+    let allowed = holds_a_seat
+        || ((alone || timed_out) && watches)
+        || (beneficiary && (timed_out || beneficiary_may_confirm(estate, seat)));
     require!(allowed, HeirloomError::NotConfirmer);
 
-    let ts = now()?;
+    seat.death_confirmed_by = confirmer;    let ts = now()?;
     seat.death_confirmed_by = confirmer;
     seat.death_pending_since = ts;
 
@@ -650,8 +756,6 @@ pub struct FinalizeSuccession<'info> {
 
     /// Anyone (any wallet). A signer, so the call can be fee-sponsored (the sponsor is only the fee payer).
     pub caller: Signer<'info>,
-    // remaining_accounts: the confirmer's Beneficiary PDA, only when the owner showed life after a confirmation
-    // that could only have been a beneficiary's.
 }
 
 pub fn finalize_succession_handler(ctx: Context<FinalizeSuccession>, _index: u8) -> Result<()> {
@@ -672,45 +776,44 @@ pub fn finalize_succession_handler(ctx: Context<FinalizeSuccession>, _index: u8)
     require!(ts >= ready_at, HeirloomError::WaitingPeriodNotOver);
     require!(!objection_open, HeirloomError::ObjectionOpen);
 
-    // The owner has since replaced or removed whoever confirmed this, which revokes the confirmation. A confirmer
-    // who died instead keeps it: their seat's successor holds that vote.
-    let by = seat.death_confirmed_by;
-    let no_other_holder = estate.living_seats_except(&seat.holder) == 0;
-    let may_still_confirm = estate.verifier_index(&by).is_some()
-        || (no_other_holder && (seat.is_monitor(&by) || by == seat.backups[1]));
-    if seat.death_pending_since <= estate.last_heartbeat && !may_still_confirm {
-        // A beneficiary's confirmation stands while that route is open and they are still in the plan. Their
-        // account has to be passed, so that leaving it out can't revoke the confirmation.
-        let stands = by != estate.agent
-            && beneficiary_may_confirm(estate, seat)
-            && beneficiary_still_active(ctx.remaining_accounts, &estate.key(), &by)?;
-        if !stands {
-            seat.clear_succession();
-            emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts });
-            return Ok(());
-        }
+    // Whoever reported or confirmed it has since become the agent: it reviewed its own report, so it is cleared.
+    // (The owner's changes that revoke a confirmation clear it when they are made, L15.)
+    if seat.death_confirmed_by == estate.agent || seat.death_reported_by == estate.agent {
+        seat.clear_succession();
+        emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts });
+        return Ok(());
     }
 
     // First backup that is still eligible: not the owner, the agent or already a holder, and not the
     // person who reported or confirmed this death (nobody promotes themselves).
-    let mut eligible_next_time = false;
+    let mut conflicted: Option<usize> = None;
     let mut chosen: Option<usize> = None;
     for (i, b) in seat.backups.iter().enumerate() {
         if !is_set(b) || *b == estate.owner || *b == estate.agent || estate.verifier_index(b).is_some() {
             continue;
         }
         if *b == seat.death_confirmed_by || *b == seat.death_reported_by {
-            eligible_next_time = true;
+            conflicted = conflicted.or(Some(i));
             continue;
         }
         chosen = Some(i);
         break;
     }
-    // Only held back by this report: clear it, so someone else can report and the backup can take the seat.
-    if chosen.is_none() && eligible_next_time {
-        seat.clear_succession();
-        emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts });
-        return Ok(());
+    if chosen.is_none() {
+        if let Some(i) = conflicted {
+            if beneficiary_may_confirm(estate, seat) {
+                // Nobody else could report or confirm (one backup, one beneficiary, nobody watching): after the
+                // recovery timeout the backup who reported takes the seat rather than the report clearing for ever.
+                let ready = seat.death_pending_since.saturating_add(estate.recovery_timeout());
+                require!(ts >= ready, HeirloomError::WaitingPeriodNotOver);
+                chosen = Some(i);
+            } else {
+                // Only held back by this report: clear it, so someone else can report and the backup can take the seat.
+                seat.clear_succession();
+                emit!(SeatDeathReportCleared { estate: seat.estate, seat_index: seat.index, ts });
+                return Ok(());
+            }
+        }
     }
 
     let previous_holder = seat.holder;
@@ -719,16 +822,13 @@ pub fn finalize_succession_handler(ctx: Context<FinalizeSuccession>, _index: u8)
         Some(i) => {
             let new_holder = seat.backups[i];
             seat.holder = new_holder;
-            seat.backups = if i == 0 {
-                [seat.backups[1], Pubkey::default()]
-            } else {
-                [Pubkey::default(); 2]
-            };
+            // The other backup stays, also one who reported this death (L10).
+            seat.backups = without(seat.backups, &new_holder);
             seat.monitors = without(seat.monitors, &new_holder);
             seat.vacant = false;
         }
         None => {
-            // No backup could ever take this seat.
+            // Every backup is the owner, the agent or the holder of another seat.
             seat.holder = Pubkey::default();
             seat.backups = [Pubkey::default(); 2];
             seat.vacant = true;
@@ -780,6 +880,15 @@ pub struct OwnerReplaceSeat<'info> {
         has_one = estate
     )]
     pub seat: Account<'info, Seat>,
+
+    /// CHECK: the Seat PDA at (index + 1) % 3; may not exist. Its confirmation by someone who holds no seat gives
+    /// way (the owner just made a living trusted person available).
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[(index + 1) % 3]], bump)]
+    pub next_seat: UncheckedAccount<'info>,
+
+    /// CHECK: the Seat PDA at (index + 2) % 3; may not exist. As next_seat.
+    #[account(mut, seeds = [SEAT_SEED, estate.key().as_ref(), &[(index + 2) % 3]], bump)]
+    pub last_seat: UncheckedAccount<'info>,
 }
 
 pub fn owner_replace_seat_handler(ctx: Context<OwnerReplaceSeat>, _index: u8, new_holder: Pubkey) -> Result<()> {
@@ -801,6 +910,11 @@ pub fn owner_replace_seat_handler(ctx: Context<OwnerReplaceSeat>, _index: u8, ne
     estate.verifiers[seat.index as usize] = new_holder;
     // Only the living owner can do this, and it revokes what the replaced person attested.
     record_proof_of_life(estate.key(), estate, now()?);
+    release_confirmations(
+        estate,
+        &[ctx.accounts.next_seat.to_account_info(), ctx.accounts.last_seat.to_account_info()],
+        None,
+    )?;
     emit_seat_configured(seat)
 }
 
@@ -950,7 +1064,15 @@ pub fn raise_objection_handler(
     let ts = now()?;
     let objection = &mut ctx.accounts.objection;
     if is_set(&objection.target) {
-        require!(!objection.is_effectively_open(estate, ts), HeirloomError::ObjectionOpen);
+        let open = if kind == TargetKind::Fallback {
+            objection.status == ObjectionStatus::Open
+                && !fallback_objection_lapsed(objection, estate, &ctx.accounts.guard, ts)?
+        } else {
+            objection.is_effectively_open(estate, ts)
+        };
+        // Monitors may take over an unlock's dispute: one trusted person's dispute must not shut them out of the
+        // whole wait (M3).
+        require!(!open || (kind == TargetKind::Unlock && objection.is_dispute()), HeirloomError::ObjectionOpen);
         // Still Open here means it lapsed, which counts as dismissed.
         let was_dispute = objection.is_dispute();
         let prev = if objection.status == ObjectionStatus::Open {
@@ -1059,7 +1181,8 @@ pub struct VoteObjection<'info> {
     #[account(mut, address = objection.target)]
     pub target_account: Option<UncheckedAccount<'info>>,
 
-    /// The hardship's Asset (Hardship objections only; its hardship floor is withdrawn if upheld).
+    /// The hardship's Asset (Hardship objections only; its hardship floor is withdrawn if upheld). Refused for
+    /// any other kind, so it can't be the target passed twice and overwrite what was written (H1).
     #[account(mut)]
     pub asset: Option<Box<Account<'info, Asset>>>,
     // remaining_accounts (Fallback votes by a monitor): the three Seat PDAs, in index order.
@@ -1092,8 +1215,9 @@ pub fn vote_objection_handler<'info>(ctx: Context<'info, VoteObjection<'info>>, 
     // Disputes are resolved by the verifiers with resolve_dispute.
     require!(!objection.is_dispute(), HeirloomError::BadStatus);
     let kind = objection.kind;
+    require!(kind == TargetKind::Hardship || ctx.accounts.asset.is_none(), HeirloomError::BadStatus);
     require!(
-        !fallback_objection_lapsed(objection, &ctx.accounts.estate, ctx.accounts.guard.fallback_wait(), now()?)?,
+        !fallback_objection_lapsed(objection, &ctx.accounts.estate, &ctx.accounts.guard, now()?)?,
         HeirloomError::ObjectionLapsed
     );
 
@@ -1102,7 +1226,8 @@ pub fn vote_objection_handler<'info>(ctx: Context<'info, VoteObjection<'info>>, 
         HeirloomError::ObjectionLapsed
     );
     let estate = &ctx.accounts.estate;
-    let owner_decides = voter == estate.owner && estate.status == EstateStatus::Active;
+    // The living owner decides alone, and that is proof of life (M1).
+    let owner_decides = voter == estate.owner && estate.status != EstateStatus::Unlocked;
     let decision: Option<bool> = if owner_decides {
         Some(uphold)
     } else {
@@ -1160,6 +1285,9 @@ pub fn vote_objection_handler<'info>(ctx: Context<'info, VoteObjection<'info>>, 
     } else {
         ObjectionStatus::Dismissed
     };
+    // From now on raised_at is when it was resolved: offers older than an upheld sale objection can't be
+    // accepted (M8), and the cooldown runs from the decision.
+    objection.raised_at = ts;
     let guard = &mut ctx.accounts.guard;
     guard.open_objections = guard.open_objections.saturating_sub(1);
 
@@ -1198,6 +1326,10 @@ pub fn vote_objection_handler<'info>(ctx: Context<'info, VoteObjection<'info>>, 
                 guard.fallback_started_at = 0;
             }
         }
+    }
+    if owner_decides {
+        let key = ctx.accounts.estate.key();
+        record_proof_of_life(key, &mut ctx.accounts.estate, ts);
     }
 
     emit!(ObjectionResolved {
@@ -1396,6 +1528,7 @@ pub fn review_fallback_death_handler(
     approve: bool,
     report_hash: [u8; 32],
     cert_hash: [u8; 32],
+    recipient: Pubkey,
 ) -> Result<()> {
     let guard = &ctx.accounts.guard;
     let i = index as usize;
@@ -1404,7 +1537,8 @@ pub fn review_fallback_death_handler(
     let report = &mut ctx.accounts.fallback_report;
     require!(report.recipient == guard.fallback[i], HeirloomError::NoFallbackRecipient);
     require!(report.verdict == Verdict::Pending, HeirloomError::BadStatus);
-    require!(report.cert_hash == cert_hash, HeirloomError::ReportChanged);
+    require!(report.cert_hash == cert_hash && report.recipient == recipient, HeirloomError::ReportChanged);
+    require!(report.reporter != ctx.accounts.estate.agent, HeirloomError::OwnApproval);
 
     if approve {
         report.verdict = Verdict::Approved;
@@ -1542,9 +1676,7 @@ pub fn start_fallback_handler(ctx: Context<StartFallback>) -> Result<()> {
 
     let ts = now()?;
     guard.fallback_started_at = ts;
-    let runs_at = ts
-        .checked_add(fallback_delay(estate, guard))
-        .ok_or(HeirloomError::MathOverflow)?;
+    let runs_at = fallback_runs_at(estate, guard);
 
     emit!(FallbackStarted {
         estate: estate.key(),
@@ -1593,14 +1725,9 @@ pub struct ExecuteFallback<'info> {
     )]
     pub vault: Box<Account<'info, TokenAccount>>,
 
-    #[account(
-        init_if_needed,
-        payer = payer,
-        associated_token::mint = usdt_mint,
-        associated_token::authority = recipient,
-        associated_token::token_program = token_program
-    )]
-    pub recipient_usdt: Box<Account<'info, TokenAccount>>,
+    /// CHECK: the recipient's USD₮ ATA (created if missing), or another token account of the mint they own.
+    #[account(mut)]
+    pub recipient_usdt: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -1610,16 +1737,19 @@ pub struct ExecuteFallback<'info> {
     /// report made during the countdown holds the payment until it can be confirmed or refuted.
     #[account(seeds = [FALLBACK_REPORT_SEED, estate.key().as_ref(), &[guard.next_fallback_index()]], bump)]
     pub fallback_report: UncheckedAccount<'info>,
+
+    /// CHECK: the ["objection", estate] PDA; may not exist. An open challenge to the owner's death blocks (H6).
+    #[account(seeds = [OBJECTION_SEED, estate.key().as_ref()], bump)]
+    pub unlock_objection: UncheckedAccount<'info>,
 }
 
 pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
     let ts = now()?;
-    let wait = ctx.accounts.guard.fallback_wait();
     let obj_info = ctx.accounts.objection.to_account_info();
     let mut lapsed: Option<Objection> = None;
     let objection_open = if account_exists(&obj_info) {
         let mut o: Objection = read_account(&obj_info)?;
-        if fallback_objection_lapsed(&o, &ctx.accounts.estate, wait, ts)? {
+        if fallback_objection_lapsed(&o, &ctx.accounts.estate, &ctx.accounts.guard, ts)? {
             o.status = ObjectionStatus::Dismissed;
             write_account(&obj_info, &o)?;
             lapsed = Some(o);
@@ -1653,12 +1783,15 @@ pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
         all_vacant([&ctx.accounts.seat0, &ctx.accounts.seat1, &ctx.accounts.seat2]),
         HeirloomError::SeatsNotVacant
     );
-    let runs_at = guard
-        .fallback_started_at
-        .checked_add(fallback_delay(estate, guard))
-        .ok_or(HeirloomError::MathOverflow)?;
+    let runs_at = fallback_runs_at(estate, guard);
     require!(ts >= runs_at, HeirloomError::WaitingPeriodNotOver);
     require!(!objection_open, HeirloomError::ObjectionOpen);
+    if estate.status != EstateStatus::Unlocked {
+        require!(
+            !objection_is_open(&ctx.accounts.unlock_objection.to_account_info(), estate)?,
+            HeirloomError::ObjectionOpen
+        );
+    }
     let recipient = guard.next_fallback_recipient();
     require!(is_set(&recipient), HeirloomError::NoFallbackRecipient);
     // Without this a death reported after the start could never be confirmed in time. Only reports from
@@ -1673,6 +1806,15 @@ pub fn execute_fallback_handler(ctx: Context<ExecuteFallback>) -> Result<()> {
     }
 
     let amount = ctx.accounts.vault.amount;
+    ready_token_account(
+        ctx.accounts.payer.to_account_info(),
+        ctx.accounts.recipient_usdt.to_account_info(),
+        ctx.accounts.recipient.to_account_info(),
+        ctx.accounts.usdt_mint.to_account_info(),
+        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.system_program.to_account_info(),
+        ctx.accounts.associated_token_program.to_account_info(),
+    )?;
     if amount > 0 {
         let owner = estate.owner;
         let bump = [estate.bump];
@@ -1735,7 +1877,7 @@ pub fn lapse_objection_handler(ctx: Context<LapseObjection>) -> Result<()> {
     require!(objection.status == ObjectionStatus::Open, HeirloomError::BadStatus);
     let ts = now()?;
     let lapsed = if objection.kind == TargetKind::Fallback {
-        fallback_objection_lapsed(objection, &ctx.accounts.estate, ctx.accounts.guard.fallback_wait(), ts)?
+        fallback_objection_lapsed(objection, &ctx.accounts.estate, &ctx.accounts.guard, ts)?
     } else {
         !objection.is_effectively_open(&ctx.accounts.estate, ts)
     };
