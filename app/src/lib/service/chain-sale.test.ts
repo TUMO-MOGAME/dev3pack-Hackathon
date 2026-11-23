@@ -46,7 +46,7 @@ beforeEach(() => {
   };
 });
 
-const settle = (seen?: { offer: string; amount: bigint }) => acceptBestOffer({
+const settle = (seen?: { offer: string; amount: bigint; recipient: string } | null) => acceptBestOffer({
   fetchEstate: async () => ({ estate: { agent, verifiers }, assets: [asset], offers }) as unknown as RawSnapshot,
   latestBlockhash: async () => "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi",
   headers: async (_estate, body) => { signedBody = body; return {}; },
@@ -58,17 +58,27 @@ const settle = (seen?: { offer: string; amount: bigint }) => acceptBestOffer({
 
 describe("acceptBestOffer", () => {
   it("signs what was read", async () => {
-    await settle({ offer: offers[1].address, amount: offers[1].amount });
+    await settle({ offer: offers[1].address, amount: offers[1].amount, recipient: estate });
     expect(posted).toHaveLength(1);
   });
 
   it("never signs another amount than was read", async () => {
-    await expect(settle({ offer: offers[1].address, amount: offers[1].amount + 1n })).rejects.toMatchObject({ code: "OfferChanged" });
+    await expect(settle({ offer: offers[1].address, amount: offers[1].amount + 1n, recipient: estate })).rejects.toMatchObject({ code: "OfferChanged" });
+    expect(posted).toEqual([]);
+  });
+
+  it("H11: never signs when who gets the money changed after it was read", async () => {
+    await expect(settle({ offer: offers[1].address, amount: offers[1].amount, recipient: lowBuyer })).rejects.toMatchObject({ code: "OfferChanged" });
+    expect(posted).toEqual([]);
+  });
+
+  it("H11: 'saw no acceptable offer' never signs one that arrived since", async () => {
+    await expect(settle(null)).rejects.toMatchObject({ code: "OfferChanged" });
     expect(posted).toEqual([]);
   });
 
   it("never signs another offer than was read", async () => {
-    await expect(settle({ offer: offers[0].address, amount: offers[1].amount })).rejects.toMatchObject({ code: "OfferChanged" });
+    await expect(settle({ offer: offers[0].address, amount: offers[1].amount, recipient: estate })).rejects.toMatchObject({ code: "OfferChanged" });
     expect(posted).toEqual([]);
   });
 

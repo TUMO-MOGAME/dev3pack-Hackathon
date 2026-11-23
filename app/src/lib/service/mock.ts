@@ -936,14 +936,16 @@ export function createMockService(opts: MockOptions = {}): MockService {
   }
 
   /** accept_offer(expected_amount): the agent signs and pays, the trusted person co-signs (R12, R19). */
-  function acceptBest(assetAddr: Base58, seen?: { offer: Base58; amount: bigint }): { t: TxResult; ranking: OfferRanking } {
+  function acceptBest(assetAddr: Base58, seen?: { offer: Base58; amount: bigint; recipient: Base58 } | null): { t: TxResult; ranking: OfferRanking } {
     needCreated();
     const { a, ranking, hardship } = rank(assetAddr);
     const e = est();
     need(a.status === "Listed", "BadStatus", "This car is not listed for sale.");
+    need(seen !== null || !ranking.bestOffer, "OfferChanged", "An offer arrived after you looked. Check it before you sign.");
     if (seen) {
       const now = s.snap.offers.find((x) => x.address === ranking.bestOffer);
-      need(now?.address === seen.offer && now.amount === seen.amount, "OfferChanged", "The offer changed after you read it. Check the new one before you sign.");
+      need(now?.address === seen.offer && now.amount === seen.amount && (a.hardshipBeneficiary ?? a.proceedsTo) === seen.recipient, "OfferChanged",
+        "The offer or who gets the money changed after you read it. Check the new one before you sign.");
     }
     G.checkNotObjected(a.address);
     if (hardship) for (const h of s.snap.hardships.filter((x) => x.asset === a.address && x.status === "Approved")) G.checkNotObjected(h.address);

@@ -24,8 +24,11 @@ import type { AgentVoteInfo, ContinuityService, CreateEstateOptions } from "../c
 
 export interface TxResult { signature: string; explorerUrl: string }
 
-/** The offer and exact amount on screen when a trusted person co-signs a sale (R19). */
-export interface SeenOffer { offer: Base58; amount: bigint }
+/**
+ * The offer, the exact amount and who gets the money, as on screen when a trusted person co-signs a sale (R19, H11):
+ * an approved hardship changes the recipient, and a signature is never given on the old reading.
+ */
+export interface SeenOffer { offer: Base58; amount: bigint; recipient: Base58 }
 
 export interface EstateSnapshot {
   estate: Estate;
@@ -124,8 +127,11 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   /** `buyerName`: the name the family sees beside the offer and on the sale (off-chain; the owner's names win). */
   placeOffer(estate: Base58, asset: Base58, amountUsdt: number, buyerName?: string): Promise<TxResult>;
   withdrawOffer(estate: Base58, asset: Base58): Promise<TxResult>;
-  /** The trusted person signed in co-signs this exact offer and amount; the agent signs and pays. */
-  acceptBestOffer(estate: Base58, asset: Base58, seen?: SeenOffer): Promise<{ tx: TxResult; ranking: OfferRanking }>;
+  /**
+   * The trusted person signed in co-signs this exact offer, amount and recipient; the agent signs and pays. `null`: they
+   * saw no acceptable offer (to read the contract's refusal), so one that has arrived since is never signed unread.
+   */
+  acceptBestOffer(estate: Base58, asset: Base58, seen?: SeenOffer | null): Promise<{ tx: TxResult; ranking: OfferRanking }>;
 
   // Legacy voice (lib/legacy/*): the owner's consented voice clone + Legacy Book; after unlock a child who opts in
   // hears the owner's own messages for moments in that voice.

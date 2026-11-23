@@ -919,7 +919,15 @@ describe("R19 the co-signature is for an exact amount", () => {
     const car = (await t.snap()).assets[0].address;
     const best = (await t.svc.rankOffers(car)).eligible[0];
     t.act("nomsa");
-    await t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount });
+    await t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount, recipient: t.estate });
+  });
+
+  it("H11: refuses when who gets the money changed after it was shown", async () => {
+    const t = await start("listed");
+    const car = (await t.snap()).assets[0].address;
+    const best = (await t.svc.rankOffers(car)).eligible[0];
+    t.act("nomsa");
+    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount, recipient: who("lerato") })).rejects.toThrow(/^OfferChanged/);
   });
 
   it("refuses when the offer changed after it was shown", async () => {
@@ -927,10 +935,10 @@ describe("R19 the co-signature is for an exact amount", () => {
     const car = (await t.snap()).assets[0].address;
     const best = (await t.svc.rankOffers(car)).eligible[0];
     t.act("nomsa");
-    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount + 1n })).rejects.toThrow(/^OfferChanged/);
+    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount + 1n, recipient: t.estate })).rejects.toThrow(/^OfferChanged/);
     t.act("zanele"); await t.svc.placeOffer(t.estate, car, 13_400);
     t.act("nomsa");
-    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount })).rejects.toThrow(/^OfferChanged/);
+    await expect(t.svc.acceptBestOffer(t.estate, car, { offer: best.offer, amount: best.amount, recipient: t.estate })).rejects.toThrow(/^OfferChanged/);
     expect((await t.snap()).assets[0].status).toBe("Listed");
   });
 });

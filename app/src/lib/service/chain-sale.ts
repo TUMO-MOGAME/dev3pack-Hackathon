@@ -35,7 +35,7 @@ export function reviveRanking(r: WireRanking): OfferRanking {
   return { bestOffer: r.bestOffer, eligible: r.eligible.map(f), ineligible: r.ineligible.map(f) };
 }
 
-export async function acceptBestOffer(d: ChainSaleDeps, estate: Base58, assetAddress: Base58, seen?: SeenOffer): Promise<{ tx: TxResult; ranking: OfferRanking }> {
+export async function acceptBestOffer(d: ChainSaleDeps, estate: Base58, assetAddress: Base58, seen?: SeenOffer | null): Promise<{ tx: TxResult; ranking: OfferRanking }> {
   const f = d.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
   const snap = await d.fetchEstate(estate);
   const { agent, verifiers } = snap.estate;
@@ -43,10 +43,14 @@ export async function acceptBestOffer(d: ChainSaleDeps, estate: Base58, assetAdd
   must(asset, "BadStatus", "That asset is not in this plan.");
   const offers = snap.offers.filter((o) => o.asset === asset.address);
   const best = offers.find((o) => o.address === rankOffers(asset, offers, { agent, verifiers }).bestOffer);
+  // Seen as "no acceptable offer": one that arrived since is shown first, never signed unread.
+  must(seen !== null || !best, "OfferChanged", "An offer arrived after you looked. Check it before you sign.");
   must(best, asset.hardshipBeneficiary ? "BelowHardshipFloor" : "BelowFloor", "No offer can be accepted yet.");
 
-  // Nobody signs for an offer or amount other than the one they read.
-  must(!seen || (seen.offer === best.address && seen.amount === best.amount), "OfferChanged", "The offer changed after you read it. Check the new one before you sign.");
+  // Nobody signs for an offer, amount or recipient other than the one they read.
+  const recipient = asset.hardshipBeneficiary ?? asset.proceedsTo;
+  must(!seen || (seen.offer === best.address && seen.amount === best.amount && seen.recipient === recipient), "OfferChanged",
+    "The offer or who gets the money changed after you read it. Check the new one before you sign.");
   const signer = getActiveSigner();
   const me = signer.address;
   const seats = eligibleSeats(verifiers);
