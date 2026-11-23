@@ -44,8 +44,8 @@ Done through the live app on 22 November 2026 by a fresh wallet, with no scripts
 |---|---|
 | **App on devnet** | https://heirloom.tumoolo.tech (also https://heirloom-devnet.vercel.app) |
 | **Simulated demo** | https://heirloom-one-iota.vercel.app |
-| **Program** | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet): 54 instructions, upgraded 22 Nov 2026 |
-| **Tests** | 89 program tests (LiteSVM) · 965 app tests (Vitest) |
+| **Program** | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet): 57 instructions, upgraded 23 Nov 2026 after two independent security reviews |
+| **Tests** | 336 program tests (LiteSVM) · 2,224 app tests (Vitest) |
 | **Why Solana** | The rules and the money must outlive the owner and the company. They live in program-owned accounts anyone can audit |
 | **Android** | A Solana Mobile WebView shell with Mobile Wallet Adapter ([build notes](docs/android-build.md)). Not yet verified with a wallet app on a physical phone |
 | **Video** | [W3Node video, 13 Nov](https://youtu.be/N67LrkpVAmw) (2:58). It predates the 22 Nov changes |
@@ -230,18 +230,18 @@ Deeper diagrams (sequence diagrams for every money path) are in [`docs/architect
 
 Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`docs/program-spec.md`](docs/program-spec.md)
 
-**54 instructions:**
+**57 instructions:**
 
 | Group | Instructions |
 |---|---|
-| Setup | `create_estate`, `set_will`, `add_beneficiary`, `add_payee`, `add_rule`, `set_yearly_cap`, `deposit`, `withdraw`, `heartbeat`, `register_asset`, `set_asset_media` |
+| Setup | `create_estate`, `set_will`, `add_beneficiary`, `add_payee`, `add_rule_v2`, `set_yearly_cap`, `deposit`, `withdraw`, `heartbeat`, `register_asset`, `set_asset_media` |
 | Death | `submit_death_claim`, `review_death`, `attest_death`, `veto_death`, `finalize_unlock` |
 | Payments | `submit_claim`, `review_claim`, `approve_claim`, `owner_approve_claim`, `execute_claim`, `execute_scheduled` |
-| Asset sale | `list_asset`, `place_offer`, `withdraw_offer`, `submit_hardship`, `review_hardship`, `approve_hardship`, `accept_offer` |
+| Asset sale | `list_asset`, `place_offer`, `withdraw_offer`, `submit_hardship`, `review_hardship`, `approve_hardship`, `accept_offer`, `release_asset` |
 | Guardians | `init_guard`, `init_seat`, `set_seat_backups`, `set_seat_monitors`, `owner_replace_seat`, `report_seat_death`, `review_seat_death`, `confirm_seat_death`, `veto_seat_death`, `finalize_succession` |
-| Fallback | `set_fallback`, `report_fallback_death`, `review_fallback_death`, `start_fallback`, `execute_fallback` |
+| Fallback | `set_fallback`, `report_fallback_death`, `review_fallback_death`, `resolve_fallback_death`, `start_fallback`, `execute_fallback` |
 | Challenges | `raise_objection`, `vote_objection`, `lapse_objection`, `raise_dispute`, `resolve_dispute` |
-| Continuity | `end_rule`, `set_residual`, `sweep_residual`, `set_agent`, `vote_agent` |
+| Continuity | `end_rule`, `set_residual`, `sweep_residual`, `set_agent`, `vote_agent`, `remove_member` |
 
 **What the program enforces:**
 - Only the estate's USD₮ mint is accepted.
@@ -258,14 +258,15 @@ Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`doc
   be listed again.
 - A lost agent key can be replaced by the owner, or by the trusted people.
 
-**Tests:** 89 LiteSVM tests in [`programs/heirloom/tests/heirloom.rs`](programs/heirloom/tests/heirloom.rs). The last
-section holds regression tests for attacks that worked on the version deployed before 22 November.
+**Tests:** 336 LiteSVM tests in [`programs/heirloom/tests/`](programs/heirloom/tests/). They include a regression
+test for every finding of two independent security reviews (22–23 November): each attack that worked on the earlier
+version is now refused. The deployed binary (sha256 `c5294fe4…`) was rebuilt independently from the source and matches.
 
 ## What's real and what's simulated
 
 | Part | Status |
 |---|---|
-| Heirloom Solana program (54 instructions) | **Real**, deployed to devnet, 89 tests. **Not audited.** |
+| Heirloom Solana program (57 instructions) | **Real**, deployed to devnet, 336 tests, two independent reviews. **Not audited.** |
 | USD₮ transfers signed by Tether WDK wallets (owner, family, verifiers, buyers, agent) | **Real** on devnet (chain mode) |
 | USD₮ token | **Test mint** on devnet (6 decimals, same as USD₮); mainnet mint is a config change |
 | Pay-once payment pipeline, reconnect re-check | **Real** (unit-tested in `payments.test.ts`) |
@@ -344,10 +345,10 @@ All names are in [`app/.env.example`](app/.env.example). Only `NEXT_PUBLIC_*` re
 ## Tests
 
 ```bash
-cd app && npm test                 # 965 Vitest tests: payments (pay-once), WDK errors, PDAs, IDL ↔ client, agent schemas,
+cd app && npm test                 # 2,224 Vitest tests: payments (pay-once), WDK errors, PDAs, IDL ↔ client, agent schemas,
                                    # offers, scheduler, hashing, fee-sponsor policy, QVAC intent parser, chat, legacy voice, i18n, icons
 cd app && npx next typegen && npx tsc --noEmit   # type check (typegen first on a clean clone)
-anchor build && cargo test -p heirloom   # 89 LiteSVM program tests (Linux / WSL, Anchor 1.2.2)
+anchor build && cargo test -p heirloom   # 336 LiteSVM program tests (Linux / WSL, Anchor 1.2.2)
 ```
 `bash scripts/build-program.sh test` does the same inside WSL: it copies the program to the Linux disk for a faster build, then runs the tests.
 
@@ -380,7 +381,19 @@ anchor build && cargo test -p heirloom   # 89 LiteSVM program tests (Linux / WSL
   server-side; `/api/legacy/speak` takes only a milestone id (or the owner's fixed sample line while alive, or Heirloom's
   disclosure) and refuses any free text; the demo's `/api/legacy/demo-voice` speaks only the demo book's fixed lines; each message is introduced in Heirloom's own voice as an AI copy; the child's page has SADAG help lines.
   See [`app/src/lib/legacy/`](app/src/lib/legacy/) and [`supabase/migrations/0002_legacy.sql`](supabase/migrations/0002_legacy.sql).
-- **Known limits:** devnet only; not audited; in-memory rate limits (per instance); no seed-recovery flow yet.
+- **Version gate:** the app is pinned to the deployed program (binary hash, IDL hash, slot) in
+  [`release.json`](app/src/lib/chain/release.json). If the chain and the app ever differ, writes and `/api/health` fail
+  closed instead of sending transactions the program would read differently.
+- **Shared limits:** on devnet, rate limits and single-use signatures live in Supabase, so they hold across server
+  instances (in memory only when Supabase isn't set, as on the simulated demo).
+- **Known limits:** devnet only; not audited; no seed-recovery flow yet. Program trade-offs we accepted and documented:
+  - If a replaced agent is later named again, its earlier votes count again.
+  - A referred claim with only one trusted person left is decided by that person.
+  - Claim and hardship reviews are not reset when the agent changes.
+  - After the recovery timeout, beneficiaries can replace a trusted person who has gone silent.
+  - A lone heir with only a hardship request has no clock to force a decision.
+  - The owner's "no" to a request is kept by Heirloom, not by the contract.
+  - On the simulated demo, the AI's offer ranking has no timing window.
 - **Secrets:** `.env*`, keypairs and demo wallet seeds are gitignored. Report issues privately to the maintainer.
 
 ## Roadmap
