@@ -59,9 +59,9 @@ describe("a seat's report", () => {
     death_cert_hash: hash(7), death_verdict: { Approved: {} }, death_pending_since: T, death_reported_by: A, death_confirmed_by: NOBODY, ...over,
   });
 
-  it("reviewed and unconfirmed: two waits", () => {
-    expect(() => seatReportStep(estate(), seat(), B, hexOf(9), T + 239)).toThrow(/^SuccessionPending/);
-    expect(seatReportStep(estate(), seat(), B, hexOf(9), T + 240)).toBe("send");
+  it("reviewed and unconfirmed: the recovery timeout and two waits (RT + 2W)", () => {
+    expect(() => seatReportStep(estate(), seat(), B, hexOf(9), T + 719)).toThrow(/^SuccessionPending/);
+    expect(seatReportStep(estate(), seat(), B, hexOf(9), T + 720)).toBe("send");
   });
 
   it("confirmed: never", () => {

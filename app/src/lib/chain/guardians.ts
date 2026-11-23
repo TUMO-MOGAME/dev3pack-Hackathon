@@ -6,7 +6,7 @@
 import { PublicKey, type Connection } from "@solana/web3.js";
 import type { AgentReport, Base58, Claim, Estate } from "../types";
 import type { AssetKind, FallbackDeathReport, FallbackRecipient, GuardiansSnapshot, Objection, ObjectionStatus, Seat, SeatApprovalItem, TargetKind } from "../guardians/types";
-import { eligibleSeats, quorum, refuteWait } from "../death-rules";
+import { eligibleSeats, quorum, refuteWait, unlockWaitSecs } from "../death-rules";
 import { openToPeople } from "../verdict";
 import { formatUsdt, shortAddress } from "../format";
 import { accountName, getCoder, getIdl } from "./idl";
@@ -176,10 +176,14 @@ export function assembleGuardians(
     const at = num(st, "approved_at");
     const c = claims.find((x) => x.address === address);
     if (!c || at <= 0 || c.approvalsCount === false) continue;
-    if (!quorum({ verifiers: estate.verifiers, votes: c.approvals, threshold: estate.claimThreshold, verdict: c.agentVerdict, interested: c.beneficiary }).met) continue;
-    // A dispute held the one challenge account, so the monitors get their window after it.
+    if (!quorum({ verifiers: estate.verifiers, votes: c.approvals, threshold: estate.claimThreshold, verdict: c.agentVerdict, interested: c.beneficiary, alone: true }).met) continue;
+    // Decided alone by the claimant: twice the window. A dispute held the one challenge account, so the monitors get
+    // their window after it: after it lapsed, or after it was decided (a decided one's raised_at is when).
+    const claimWindow = window * (c.decidedAlone ? 2 : 1);
     const dispute = raw.objections.find(({ raw: o }) => num(o, "seat_index") === DISPUTE_SEAT && key(o, "target") === address);
-    claimPayableAt[address] = Math.max(at, dispute ? disputeLapsesAt(num(dispute.raw, "raised_at"), estate.waitingPeriodSecs) : 0) + window;
+    const disputeEnded = !dispute ? 0
+      : enumOf(dispute.raw, "status", OBJECTION_STATUS) === "Open" ? disputeLapsesAt(num(dispute.raw, "raised_at"), estate.waitingPeriodSecs) : num(dispute.raw, "raised_at");
+    claimPayableAt[address] = Math.max(at, disputeEnded) + claimWindow;
   }
 
   const feed: SeatApprovalItem[] = events
@@ -196,7 +200,7 @@ export function assembleGuardians(
         : kind === "Unlock" ? `Confirmed ${estate.ownerName}'s passing`
           : kind === "Hardship" ? "Approved a request to sell below the minimum price" : "Approved";
       const deadline = kind === "Claim" ? (stampAt > 0 ? stampAt + window : null)
-        : kind === "Unlock" && estate.status === "DeathPending" && estate.death.pendingSince ? estate.death.pendingSince + estate.waitingPeriodSecs : null;
+        : kind === "Unlock" && estate.status === "DeathPending" && estate.death.pendingSince ? estate.death.pendingSince + unlockWaitSecs(estate) : null;
       return {
         seatIndex: num(e.data, "seat_index"), approver, approverName: name(approver), kind, target, summary,
         ts: num(e.data, "ts") || e.ts, txSignature: e.signature, objectionDeadline: deadline,
@@ -211,8 +215,9 @@ export function assembleGuardians(
     const kind = enumOf(o, "kind", TARGET_KIND);
     const status = enumOf(o, "status", OBJECTION_STATUS);
     const raisedAt = num(o, "raised_at");
-    // Raised before the owner's last sign of life: void, with its votes. It reads as lapsed.
-    const voided = (kind === "Unlock" || kind === "Fallback") && raisedAt < estate.lastHeartbeat;
+    // Voided by a new report (raised_at 0), or raised before the owner's last sign of life: void, with its votes. It
+    // reads as lapsed. Once decided, raised_at is when it was decided.
+    const voided = raisedAt === 0 || ((kind === "Unlock" || kind === "Fallback") && raisedAt < estate.lastHeartbeat);
     // Monitors' bits on the fallback are positions, one for each wallet; otherwise only held seats count.
     const voting = kind === "Fallback" ? 0xff : eligibleSeats(estate.verifiers).reduce((mask, i) => mask | (1 << i), 0);
     return {

@@ -143,8 +143,8 @@ describe("succession", () => {
     expect(canReport(snap(), s, BONGANI, 0)).toBe(false);
     expect(canReport(snap(), s, W("S"), 0)).toBe(false);
     const reported = { ...s, succession: { ...pending(), reportedBy: THANDI, reportedAt: 1000 } };
-    expect(canReport(snap(), reported, LERATO, 1119)).toBe(false);
-    expect(canReport(snap(), reported, LERATO, 1120)).toBe(true);
+    expect(canReport(snap(), reported, LERATO, 1359)).toBe(false); // reviewed: RT + 2W
+    expect(canReport(snap(), reported, LERATO, 1360)).toBe(true);
     expect(canReport(snap(), seat(0, null), LERATO, 0)).toBe(false);
   });
 

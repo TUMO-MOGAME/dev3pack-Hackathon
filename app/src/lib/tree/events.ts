@@ -11,7 +11,7 @@ import type { Base58, Category } from "../types";
 import type { AssetKind, TargetKind } from "../guardians/types";
 import type { EstateSnapshot } from "../service/types";
 import type { Raw } from "../chain/decoders";
-import { isCurrentClaim } from "../death-rules";
+import { isCurrentClaim, unlockWaitSecs } from "../death-rules";
 
 interface Base {
   estate: Base58;
@@ -340,7 +340,7 @@ export function snapshotFacts(snap: EstateSnapshot, history: TreeEvent[] = [], o
   if (e.status === "Unlocked" || e.status === "DeathPending") {
     const unlocked = firstAct("EstateUnlocked");
     const attested = act.filter((a) => a.kind === "DeathAttested");
-    const at = unlocked?.ts ?? (e.death.pendingSince ?? created) + e.waitingPeriodSecs;
+    const at = unlocked?.ts ?? (e.death.pendingSince ?? created) + unlockWaitSecs(e);
     const attestedAt = e.death.pendingSince ?? attested[attested.length - 1]?.ts ?? at;
     if (e.death.submittedBy) out.push({ ...b(firstAct("DeathClaimSubmitted")?.ts ?? attestedAt), kind: "DeathClaimSubmitted", by: e.death.submittedBy });
     e.death.attestations.forEach((ok, i) => { if (ok && real(e.verifiers[i])) out.push({ ...b(attestedAt), kind: "DeathAttested", verifier: e.verifiers[i] }); });

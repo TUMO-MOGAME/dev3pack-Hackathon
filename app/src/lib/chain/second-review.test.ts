@@ -11,6 +11,7 @@ import { assembleGuardians, fallbackSlot, nextFallback, type RawGuardians } from
 import { decodeDispute } from "./disputes";
 import { describeEvent } from "./events";
 import { activityFrom, deathReviewHash, standingReviewHash, type ChainEvent } from "./reads";
+import { unlockWaitSecs } from "../death-rules";
 import { assembleSnapshot } from "./snapshot";
 import type { Claim, Estate } from "../types";
 
@@ -233,13 +234,34 @@ describe("claims waiting for the objection window", () => {
     expect(await payable(claim, { ...unlocked, verifiers: [heir.toBase58(), v[1].toBase58(), v[2].toBase58()] })).toBeUndefined();
   });
 
-  it("the window runs again after a dispute", async () => {
+  it("the window runs again after a dispute: from its decision once decided (raised_at), else from when it lapses", async () => {
     const claim = await claimOf(0, { approvals: 1 });
-    const raw = await roundTrip("Objection", {
+    const dispute = (status: Record<string, object>) => roundTrip("Objection", {
       estate: estateKey, target: new PublicKey(claim.address), kind: { Claim: {} }, monitor: v[1], seat_index: 254,
-      reason_hash: bytes(1), raised_at: bn(2_010), status: { Dismissed: {} }, votes_uphold: 0, votes_dismiss: 6, bump: 1,
+      reason_hash: bytes(1), raised_at: bn(2_010), status, votes_uphold: 0, votes_dismiss: 6, bump: 1,
     });
-    expect(await payable(claim, await estateOf({ status: { Unlocked: {} } }), [{ address: "O", raw }])).toBe(2_190);
+    const unlocked = await estateOf({ status: { Unlocked: {} } });
+    expect(await payable(claim, unlocked, [{ address: "O", raw: await dispute({ Dismissed: {} }) }])).toBe(2_070);
+    expect(await payable(claim, unlocked, [{ address: "O", raw: await dispute({ Open: {} }) }])).toBe(2_190);
+  });
+
+  it("a claim its claimant approved alone (DECIDED_ALONE) waits twice the window; the bit is no seat's vote", async () => {
+    const lone = [heir.toBase58(), D.toBase58(), D.toBase58()] as [string, string, string];
+    const claim = await claimOf(0, { approvals: 0b1000_0001 });
+    expect([claim.approvals, claim.decidedAlone]).toEqual([[true, false, false], true]);
+    expect(await payable(claim, { ...(await estateOf({ status: { Unlocked: {} } })), verifiers: lone })).toBe(2_120);
+  });
+
+  it("a death decided alone: flagged, not a seat's vote, and the unlock waits twice", async () => {
+    const e = await estateOf({ status: { DeathPending: {} }, death_attestations: 0b1000_0001, death_pending_since: bn(500), death_cert_hash: bytes(3) });
+    expect([e.death.attestations, e.death.decidedAlone]).toEqual([[true, false, false], true]);
+    expect(unlockWaitSecs(e)).toBe(240);
+    expect(unlockWaitSecs({ ...e, death: { ...e.death, decidedAlone: false } })).toBe(120);
+  });
+
+  it("a stored waiting period reads as at least a minute", async () => {
+    expect((await estateOf({ waiting_period_secs: bn(0) })).waitingPeriodSecs).toBe(60);
+    expect((await estateOf({ waiting_period_secs: bn(10 * 365 * 86_400) })).waitingPeriodSecs).toBe(365 * 86_400);
   });
 });
 

@@ -224,6 +224,20 @@ async function send(ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel
   return { signature: r!.signature!, explorerUrl: explorerTx(r!.signature!) };
 }
 
+/**
+ * approve_claim and approve_hardship write an approval stamp whose rent the verifier pays, or the fee payer when that is
+ * Heirloom's sponsor and it pays rent (its `payer` slot: SPONSOR_RENT_PAYER_ACCOUNTS).
+ */
+async function sendStampPaid(verifier: PublicKey, build: () => TransactionInstruction): Promise<TxResult> {
+  const paysRent = Boolean((await sponsorClient.status().catch(() => null))?.paysRent);
+  return send((feePayer) => {
+    const t = build();
+    const at = t.keys.findIndex((k, i) => i > 0 && k.pubkey.equals(verifier) && k.isWritable);
+    if (at > 0 && paysRent && !feePayer.equals(verifier)) t.keys[at] = { ...t.keys[at], pubkey: feePayer };
+    return [t];
+  });
+}
+
 /** Something was written: the next read sees it. */
 function written(): void {
   forget("activity:"); forget("estates:"); forget("history:"); forget("tree:"); invalidateProgramAccounts();
@@ -803,14 +817,7 @@ export function createChainService(): HeirloomService {
         await ensureReadPass(getActiveSigner());
         must(!(await asks.loadAsks(estate, { strict: true }))[claim]?.declinedAt, "Declined", "The owner said no to this request while alive.");
       }
-      // The fee payer (Heirloom's sponsor when it pays rent) also pays the approval stamp's rent.
-      const paysRent = Boolean((await sponsorClient.status().catch(() => null))?.paysRent);
-      return send((feePayer) => {
-        const t = ix.approveClaim(pk(estate), verifier, pk(claim), pk(key(raw, "rule")));
-        const at = t.keys.findIndex((k, i) => i > 0 && k.pubkey.equals(verifier) && k.isWritable);
-        if (at > 0 && paysRent && !feePayer.equals(verifier)) t.keys[at] = { ...t.keys[at], pubkey: feePayer };
-        return [t];
-      });
+      return sendStampPaid(verifier, () => ix.approveClaim(pk(estate), verifier, pk(claim), pk(key(raw, "rule"))));
     },
 
     async approveHardship(estate, hardship) {
@@ -819,7 +826,8 @@ export function createChainService(): HeirloomService {
       if (standing && standing !== key(raw, "beneficiary")) {
         throw new ChainServiceError("BadStatus", "Another person's approved hardship stands on this asset. It has to be objected to, and upheld, first.");
       }
-      return send([ix.approveHardship(pk(estate), pk(getActiveSigner().address), pk(key(raw, "asset")), pk(hardship))]);
+      const verifier = pk(getActiveSigner().address);
+      return sendStampPaid(verifier, () => ix.approveHardship(pk(estate), verifier, pk(key(raw, "asset")), pk(hardship)));
     },
 
     // ----- Anyone -----

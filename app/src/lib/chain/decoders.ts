@@ -8,7 +8,7 @@ import type {
   Offer, Payee, PayeeKind, Rule, Verdict,
 } from "../types";
 import type { AgentVoteInfo } from "../continuity/types";
-import { isCurrentClaim } from "../death-rules";
+import { MIN_WAIT_SECS, isCurrentClaim } from "../death-rules";
 
 export type Raw = Record<string, unknown>;
 
@@ -71,6 +71,13 @@ export function enumOf<T extends string>(o: Raw, name: string, allowed: readonly
 }
 
 /** Bitmap (bit i = verifier i) → boolean[3]. */
+/** Bit 7 of death_attestations and Claim.approvals: the one who gains decided alone (never a seat's vote). */
+export const DECIDED_ALONE = 1 << 7;
+
+/** Estate::waiting_secs: the stored waiting period is read as 60 s to a year (a stored 0 waits 60 s). */
+export const waitingOf = (r: Raw) => Math.min(MAX_WAITING_SECS, Math.max(MIN_WAIT_SECS, num(r, "waiting_period_secs")));
+const MAX_WAITING_SECS = 365 * 86_400;
+
 export function bits(mask: number, n = 3): boolean[] {
   return Array.from({ length: n }, (_, i) => (mask & (1 << i)) !== 0);
 }
@@ -119,7 +126,7 @@ export function decodeEstate(address: string, r: Raw, vaultBalance: bigint, name
     deathThreshold: num(r, "death_threshold"),
     claimThreshold: num(r, "claim_threshold"),
     hardshipThreshold: num(r, "hardship_threshold"),
-    waitingPeriodSecs: num(r, "waiting_period_secs"),
+    waitingPeriodSecs: waitingOf(r),
     status,
     willHash: nullIfZero(hex(r, "will_hash")),
     vaultBalance,
@@ -128,6 +135,7 @@ export function decodeEstate(address: string, r: Raw, vaultBalance: bigint, name
       submittedBy: (() => { const s = key(r, "death_submitted_by"); return s === DEFAULT_KEY ? null : s; })(),
       verdict: enumOf(r, "death_verdict", VERDICT),
       attestations: bits(num(r, "death_attestations")),
+      decidedAlone: (num(r, "death_attestations") & DECIDED_ALONE) !== 0,
       pendingSince: !active && since > 0 ? since : null,
       submittedAt: active && certHash ? since : null,
     },
@@ -167,7 +175,8 @@ export const decodeRule = (address: string, r: Raw): Rule => {
 export const decodeClaim = (address: string, r: Raw): Claim => ({
   address, rule: key(r, "rule"), id: num(r, "id"), beneficiary: key(r, "beneficiary"), payee: key(r, "payee"),
   amount: big(r, "amount"), evidenceHash: hex(r, "evidence_hash"), agentVerdict: enumOf(r, "agent_verdict", VERDICT),
-  approvals: bits(num(r, "approvals")), ownerApproved: has(r, "owner_approved") ? bool(r, "owner_approved") : false,
+  approvals: bits(num(r, "approvals")), decidedAlone: (num(r, "approvals") & DECIDED_ALONE) !== 0,
+  ownerApproved: has(r, "owner_approved") ? bool(r, "owner_approved") : false,
   status: enumOf(r, "status", CLAIM_STATUS), createdAt: num(r, "created_at"),
 });
 
