@@ -9,7 +9,7 @@ import { useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot } from "@/lib/service";
 import type { AgentReport, Claim, Role, WalletSession } from "@/lib/types";
 import { formatUsdt, formatUsdtExact, formatZar, toBase } from "@/lib/format";
-import { amountText, parseAmount } from "@/lib/amount";
+import { amountHint, amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, ButtonLink, Card, Consent, EmptyState, ExplorerLink, Field, inputClass, Notice, PageHeader, TickDisc } from "@/components/ui/primitives";
 import { FilePicker } from "@/components/ui/client";
@@ -369,7 +369,7 @@ function Wizard({ copy, snap, session, preset, onClose }: { copy: Copy; snap: Es
 
         {step === 2 && rule && (
           <div className="flex flex-col gap-3">
-            <Field label={w.amount.label} htmlFor="claim-amount" error={error} hint={`${validAmount ? `= ${formatUsdtExact(toBase(n))} · ` : ""}${fmt(w.amount.hint, { zar: validAmount && rate ? formatZar(toBase(n), rate) : "R 0", max: formatUsdt(rule.maxPerClaim, { decimals: 0 }) })}`}>
+            <Field label={w.amount.label} htmlFor="claim-amount" error={error} hint={amountHint(amount, (x) => (x > 0 ? `= ${formatUsdtExact(toBase(x))}${rate ? ` · ${fmt(w.amount.hint, { zar: formatZar(toBase(x), rate), max: formatUsdt(rule.maxPerClaim, { decimals: 0 }) })}` : ""}` : undefined), { unclear: common.amountUnclear, format: common.amountFormat })}>
               <div className="relative">
                 <input
                   id="claim-amount" inputMode="decimal" autoComplete="off" placeholder="0" autoFocus value={amount}

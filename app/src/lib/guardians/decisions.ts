@@ -5,7 +5,7 @@
 import type { EstateSnapshot } from "../service/types";
 import type { Asset, Base58, Claim, Estate, Hardship, Verdict } from "../types";
 import {
-  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, quorum, recoveryTimeout, refuteWait, replaceableAt, reportGrace,
+  deciders, decidesAlone, eligibleSeats, fallbackGrace, isCurrentClaim, NEVER, quorum, recoveryTimeout, refuteWait, replaceableAt,
   reviewedHold, seatReviewedHold,
 } from "../death-rules";
 import { openToPeople } from "../verdict";
@@ -42,6 +42,18 @@ export function mayList(
 
 /** A death claim that "I'm still here" would cancel. */
 export const deathOpen = (e: Pick<Estate, "status" | "death">) => e.status === "DeathPending" || (e.status === "Active" && !!e.death.certHash);
+
+/**
+ * Estate::death_disproved: the owner showed life after the claim was made (a check-in under the older program, which
+ * didn't clear it, or a claim stored with time 0). Nobody may review, confirm or finalize it (DeathDisproved), and
+ * anyone who may report replaces it at once, also while DeathPending.
+ */
+export function deathDisproved(e: Pick<Estate, "status" | "death" | "lastHeartbeat">): boolean {
+  if (!e.death.certHash || e.status === "Unlocked") return false;
+  // The claim's time as read (0 = stored before times were); unknown when the snapshot doesn't carry it.
+  const since = e.status === "Active" ? e.death.submittedAt : e.death.pendingSince;
+  return since !== undefined && since !== null && e.lastHeartbeat > since;
+}
 
 /** The program's `death_pending_since`: the submission while Active, else when the death took effect. */
 export function deathSince(e: Pick<Estate, "status" | "death">): number {
@@ -86,8 +98,12 @@ export const hardshipTally = (e: Pick<Estate, "verifiers" | "hardshipThreshold">
 export type Vote = "approve" | "again" | "complete" | "waiting" | "own";
 export const canSign = (v: Vote | null) => v === "approve" || v === "again" || v === "complete";
 
+/** This trusted person gains from it and decides alone (DECIDED_ALONE): the death's wait, or a claim's window, doubles. */
+export const votesAlone = (e: Pick<Estate, "verifiers">, interested: Base58 | null | undefined, verdict: Verdict, me: Base58 | null | undefined) =>
+  isHeld(me) && me === interested && decidesAlone(e.verifiers, me, verdict);
+
 export function deathVote(e: Estate, me: Base58 | null | undefined): Vote | null {
-  if (!isHeld(me) || e.status !== "Active" || !e.death.certHash || !openToPeople(e.death.verdict)) return null;
+  if (!isHeld(me) || e.status !== "Active" || !e.death.certHash || !openToPeople(e.death.verdict) || deathDisproved(e)) return null;
   const i = e.verifiers.indexOf(me);
   if (i < 0) return null;
   if (me === e.death.submittedBy && !decidesAlone(e.verifiers, me, e.death.verdict)) return "own";
@@ -180,8 +196,8 @@ export interface ReplaceTimes {
   reporter: number;
 }
 
-function replaceTimes(verdict: Verdict, reportedAt: number, waitingSecs: number, hold: number, grace?: number): ReplaceTimes {
-  const at = (who: Base58) => replaceableAt({ verdict, reportedAt, reporter: "reporter", who, waitingSecs, hold, grace });
+function replaceTimes(verdict: Verdict, reportedAt: number, waitingSecs: number, hold: number, grace?: number, death = false): ReplaceTimes {
+  const at = (who: Base58) => replaceableAt({ verdict, reportedAt, reporter: "reporter", who, waitingSecs, hold, grace, death });
   return { others: at("someone else"), reporter: at("reporter") };
 }
 
@@ -189,7 +205,8 @@ function replaceTimes(verdict: Verdict, reportedAt: number, waitingSecs: number,
 export function deathReplace(e: Estate): ReplaceTimes | null {
   if (e.status !== "Active" || !e.death.certHash) return null;
   if (e.death.verdict !== "Pending" && !hasLivingSeat(e)) return null;
-  return replaceTimes(e.death.verdict, e.death.submittedAt ?? 0, e.waitingPeriodSecs, reviewedHold(e.waitingPeriodSecs));
+  // Unreviewed: never replaced (NEVER), it waits for the agent's review.
+  return replaceTimes(e.death.verdict, e.death.submittedAt ?? 0, e.waitingPeriodSecs, reviewedHold(e.waitingPeriodSecs), undefined, true);
 }
 
 export function seatReplace(e: Estate, seat: Pick<Seat, "succession">): ReplaceTimes | null {
@@ -212,9 +229,17 @@ export function deathReporter(snap: EstateSnapshot, me: Base58 | null | undefine
   return isFamily(snap, me) || e.verifiers.includes(me) || !!snap.guardians?.fallback.recipients.some((r) => r.wallet === me && !r.dead);
 }
 
+/** Why this person may report it, for the words: family, a trusted person, or someone on the fallback list. */
+export function reporterKind(snap: EstateSnapshot, me: Base58 | null | undefined): "family" | "trusted" | "listed" | null {
+  if (!isHeld(me) || !deathReporter(snap, me)) return null;
+  return isFamily(snap, me) ? "family" : snap.estate.verifiers.includes(me) ? "trusted" : "listed";
+}
+
 export function canSubmitDeath(snap: EstateSnapshot, me: Base58 | null | undefined, now: number | null): boolean {
   const e = snap.estate;
-  if (!me || e.status !== "Active" || !deathReporter(snap, me)) return false;
+  if (!me || !deathReporter(snap, me)) return false;
+  if (deathDisproved(e)) return true;
+  if (e.status !== "Active") return false;
   if (!e.death.certHash) return true;
   const t = deathReplace(e);
   return !!t && now !== null && now >= replaceFor(t, e.death.submittedBy, me);
@@ -347,18 +372,71 @@ export function hasInbox(snap: EstateSnapshot | null | undefined, me: Base58 | n
  * two (or the only one) before the unlock once a death claim that the owner hasn't disproved has stood one grace and
  * the owner has shown no life for the recovery timeout.
  */
-export function agentVotesNeeded(e: Pick<Estate, "status" | "verifiers"> & Partial<Pick<Estate, "death" | "lastHeartbeat" | "waitingPeriodSecs">>, now = Math.floor(Date.now() / 1000)): number {
-  const seats = eligibleSeats(e.verifiers).length;
-  const since = e.death ? deathSince({ status: e.status, death: e.death }) : 0;
-  const claimOpen = !!e.death?.certHash && (e.lastHeartbeat ?? 0) <= since;
-  const w = e.waitingPeriodSecs ?? 0;
-  const recovery = claimOpen && now >= (e.lastHeartbeat ?? 0) + recoveryTimeout(w) && now >= since + reportGrace(w);
-  return e.status === "Unlocked" || recovery ? Math.min(seats, 2) : Math.max(seats, 2);
+export function agentVotesNeeded(e: AgentVoteEstate, now = Math.floor(Date.now() / 1000)): number {
+  return agentVoteRule(e, now).needed;
 }
 
-export function agentVoteFor(snap: EstateSnapshot, candidate: Base58): { got: number; needed: number; voters: Base58[] } {
+type AgentVoteEstate = Pick<Estate, "status" | "verifiers"> & Partial<Pick<Estate, "death" | "lastHeartbeat" | "waitingPeriodSecs">>;
+
+/**
+ * When the recovery route (H7) opens before the unlock: a death claim open, not disproved and still unreviewed (an
+ * unreviewed claim is never replaced, so its time is this death's first claim), from max(last sign of life, the
+ * claim) + RT. Null when there is no such claim.
+ */
+export function agentRecoveryAt(e: AgentVoteEstate): number | null {
+  if (e.status === "Unlocked" || !e.death?.certHash || e.death.verdict !== "Pending") return null;
+  const since = deathSince({ status: e.status, death: e.death });
+  const heartbeat = e.lastHeartbeat ?? 0;
+  if (heartbeat > since) return null; // disproved
+  return Math.max(heartbeat, since) + recoveryTimeout(e.waitingPeriodSecs ?? 0);
+}
+
+/**
+ * The votes needed, and why: "all" before the unlock (every held seat, at least two, DeathPending included), "recovery"
+ * before the unlock once the recovery route is open (two, or the only one), "after" the unlock (the same).
+ * `recoveryAt`: when the route opens, while it hasn't yet.
+ */
+export function agentVoteRule(e: AgentVoteEstate, now = Math.floor(Date.now() / 1000)): { needed: number; why: "all" | "recovery" | "after"; recoveryAt?: number } {
+  const seats = eligibleSeats(e.verifiers).length;
+  if (e.status === "Unlocked") return { needed: Math.min(seats, 2), why: "after" };
+  const at = agentRecoveryAt(e);
+  if (at !== null && now >= at) return { needed: Math.min(seats, 2), why: "recovery" };
+  return { needed: Math.max(seats, 2), why: "all", ...(at !== null ? { recoveryAt: at } : {}) };
+}
+
+/**
+ * The voter's own open claim the agent hasn't approved, which the program reads after the unlock (vote_agent's
+ * remaining account [1]): the earliest, whose clock ends first. Null: none.
+ */
+export function ownOpenClaim<C extends Pick<Claim, "beneficiary" | "status" | "createdAt" | "agentVerdict">>(claims: readonly C[], voter: Base58): C | null {
+  return claims.filter((c) => c.beneficiary === voter && c.status === "Open" && c.agentVerdict !== "Approved").sort((x, y) => x.createdAt - y.createdAt)[0] ?? null;
+}
+
+/**
+ * From when this voter's vote counts, when that is later than for anyone else (vote_agent): the only trusted person
+ * left, whose vote alone is the quorum, and who gains (the death claim's submitter or any active beneficiary) waits
+ * twice RT. Before the unlock from max(last sign of life, the claim), the recovery route's own base; after it from
+ * their own open claim's submission while the agent hasn't approved it; without such a claim never (NEVER: a
+ * hardship starts no clock). Null: no extra wait (vote_agent N2).
+ */
+export function agentVoteFrom(snap: Pick<EstateSnapshot, "estate" | "claims" | "beneficiaries">, voter: Base58 | null | undefined): number | null {
+  const e = snap.estate;
+  const seats = eligibleSeats(e.verifiers);
+  if (!isHeld(voter) || seats.length !== 1 || e.verifiers[seats[0]] !== voter) return null;
+  const rt = recoveryTimeout(e.waitingPeriodSecs);
+  if (e.status !== "Unlocked") {
+    const gains = voter === e.death.submittedBy || isFamily(snap, voter);
+    const at = agentRecoveryAt(e);
+    return gains && at !== null ? at + rt : null; // the route's base + 2 RT
+  }
+  if (!isFamily(snap, voter)) return null;
+  const claim = ownOpenClaim(snap.claims, voter);
+  return claim ? claim.createdAt + 2 * rt : NEVER;
+}
+
+export function agentVoteFor(snap: EstateSnapshot, candidate: Base58, now?: number): { got: number; needed: number; voters: Base58[] } {
   const e = snap.estate;
   const given = snap.agentVotes?.find((v) => v.candidate === candidate)?.voters ?? [];
   const voters = e.verifiers.filter((v) => isHeld(v) && given.includes(v));
-  return { got: voters.length, needed: agentVotesNeeded(e), voters };
+  return { got: voters.length, needed: agentVotesNeeded(e, now), voters };
 }

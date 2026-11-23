@@ -92,18 +92,39 @@ const openClaimForm = tool({
   run: (a, st) => { st.actions.push(uiActionSchema.parse({ type: "openClaimForm", ...a })); return { ok: true }; },
 });
 
+/** As lib/api/http.ts isChainMode. */
+const isChainMode = () => process.env.NEXT_PUBLIC_DATA_MODE === "chain";
+
+/** The chain's own ranking (loaded only in chain mode, so the mock never reads the chain). */
+async function chainRanking(estate: string, assetAddress: string) {
+  const [{ loadPublicSnapshot }, { loadSaleTiming }] = await Promise.all([import("../server/estate"), import("../chain/sale-timing")]);
+  const snap = await loadPublicSnapshot(estate);
+  const asset = snap.assets.find((x) => x.address === assetAddress);
+  if (!asset) return null;
+  return rankOffers(asset, snap.offers.filter((o) => o.asset === asset.address), { agent: snap.estate.agent, verifiers: snap.estate.verifiers }, await loadSaleTiming(estate, asset));
+}
+
 const rankOffersTool = tool({
   name: "rank_offers", description: "Rank the car offers against the floor (or hardship floor). Deterministic, same rule as the contract.",
   params: z.object({}),
-  run: (_a, st) => {
+  run: async (_a, st) => {
     const f = st.facts;
     if (!f?.asset) return noEstate;
-    const r = rankOffers(
+    // On chain the ranking is the one accept_offer will check, as /api/rank-offers and /api/accept-offer rank it: the
+    // chain's offers and signers, and the clock (lib/chain/sale-timing.ts: objection windows, offers too old).
+    const onChain = isChainMode() ? await chainRanking(f.estate.address, f.asset.address).catch(() => null) : null;
+    const r = onChain ?? rankOffers(
       { floorPrice: toBase(f.asset.floorUsdt), hardshipFloor: toBase(f.asset.hardshipFloorUsdt), hardshipBeneficiary: f.asset.hardshipApproved ? "approved" : null, status: f.asset.status as "Held" | "Listed" | "Sold" },
       f.offers.map((o) => ({ address: o.address, buyer: o.buyer, amount: toBase(o.amountUsdt), createdAt: o.createdAt })),
     );
-    const fmt = (x: { offer: string; amount: bigint; reason: string }) => ({ offer: x.offer, amountUsdt: Number(x.amount) / 1e6, reason: x.reason });
-    return { bestOffer: r.bestOffer, eligible: r.eligible.map(fmt), ineligible: r.ineligible.map(fmt) };
+    const at = (s: number) => `${new Date(s * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+    const fmt = (x: { offer: string; amount: bigint; reason: string; readyAt?: number }) => ({
+      offer: x.offer, amountUsdt: Number(x.amount) / 1e6, reason: x.reason, ...(x.readyAt ? { acceptableFrom: at(x.readyAt) } : {}),
+    });
+    return {
+      bestOffer: r.bestOffer, eligible: r.eligible.map(fmt), ineligible: r.ineligible.map(fmt),
+      ...(isChainMode() && !onChain ? { note: "The chain could not be read just now, so objection windows were not checked. Say the screen shows what can be accepted." } : {}),
+    };
   },
 });
 

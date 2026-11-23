@@ -24,8 +24,10 @@ export function usePublicNameBook(snap: EstateSnapshot | null | undefined): Name
   return useMemo(() => nameBook(snap, { agentLabel: common.roles.agent }), [snap, common.roles.agent]);
 }
 
-export function ActivityText({ item, book }: { item: Pick<ActivityItem, "text" | "parties">; book: NameBook }) {
-  const { common } = useCopy();
+export function ActivityText({ item, book }: { item: Pick<ActivityItem, "text" | "parties"> & { kind?: string }; book: NameBook }) {
+  const { common, guardians } = useCopy();
+  // A new agent set back what the old one reviewed: said the same way in every language, on both sites.
+  if (item.kind === "AgentReviewCleared") return <>{guardians.rules.agent.reviewsCleared}</>;
   const parts = activityParts(item, book);
   return (
     <>

@@ -10,7 +10,7 @@ export const guardians = {
   errors: {
     NotMonitor: "Only someone the owner named to watch this trusted person can object.",
     ObjectionOpen: "An objection is open, so this is paused until the trusted people decide.",
-    ObjectionWindowOpen: "The review window is still open. The payment can go ahead once it closes.",
+    ObjectionWindowOpen: "Monitors can still object, so this can't go ahead yet. It can once their window closes.",
     SuccessionPending: "A passing has already been reported for this trusted person.",
     NoSuccessionPending: "No passing has been reported for this trusted person.",
     SeatVacant: "This place is empty: the trusted person and their backups have all passed away.",

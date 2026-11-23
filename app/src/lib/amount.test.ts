@@ -1,6 +1,6 @@
 /** H1: one strict amount reading. "9,50" is nine rand fifty, never 950. */
 import { describe, expect, it } from "vitest";
-import { amountsInText, amountText, parseAmount } from "./amount";
+import { amountHint, amountsInText, amountText, parseAmount } from "./amount";
 
 describe("parseAmount", () => {
   it.each([
@@ -28,5 +28,19 @@ describe("amountsInText", () => {
   });
   it("marks an amount that could mean two things", () => {
     expect(first("send 1.000 USDT to Sipho")).toMatchObject({ value: null, unit: "usd" });
+  });
+});
+
+describe("the hint under an amount field (N9)", () => {
+  const words = { unclear: "UNCLEAR", format: "FORMAT" };
+  const ok = (n: number) => (n > 0 ? `= ${n}` : undefined);
+  it("how to write it while empty; the unclear words, never a conversion, for an amount read two ways", () => {
+    expect(amountHint("", ok, words)).toBe("FORMAT");
+    expect(amountHint("  ", ok, words)).toBe("FORMAT");
+    expect(amountHint("1.000", ok, words)).toBe("UNCLEAR");
+    expect(amountHint("12,34,567", ok, words)).toBe("UNCLEAR");
+    expect(amountHint("1,000", ok, words)).toBe("= 1000");
+    expect(amountHint("9,50", ok, words)).toBe("= 9.5");
+    expect(amountHint("0", ok, words)).toBe("FORMAT");
   });
 });

@@ -23,7 +23,7 @@ import { pendingFor } from "@/components/shell/app-shell";
 import { disputesVotedBy, effectiveStatus, openDisputeOn } from "@/lib/disputes/types";
 import { useNow } from "@/lib/hooks/use-now";
 import { openToPeople } from "@/lib/verdict";
-import { canSign, claimPayable, claimTally, claimVote, declinedByOwner, hasInbox, deathTally, deathVote, hardshipStands, hardshipTally, hardshipVote, type Tally, type Vote } from "@/lib/guardians/decisions";
+import { canSign, claimPayable, claimTally, claimVote, declinedByOwner, hasInbox, deathTally, deathVote, hardshipStands, hardshipTally, hardshipVote, votesAlone, type Tally, type Vote } from "@/lib/guardians/decisions";
 import { ClaimState, useWho, VoteNote, VoteTally } from "@/components/guardians/decision";
 import { ReferredNote } from "@/components/continuity/continuity";
 
@@ -48,6 +48,8 @@ interface Item {
   verdict: Verdict;
   /** What this person can do: the program's rules (lib/guardians/decisions). */
   vote: Vote | null;
+  /** Their yes decides alone (the only trusted person left, who gains): the wait or the window doubles. */
+  alone?: boolean;
   claim?: Claim;
   /** A note in place of buttons. */
   note?: string;
@@ -98,6 +100,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
       report: d.agentReport,
       reviewTx: snap.activity.find((a) => a.kind === "DeathReviewed")?.txSignature,
       tally: deathTally(e), verdict: d.verdict, vote: deathVote(e, session.address), approveLabel: copy.death.approve,
+      alone: votesAlone(e, d.submittedBy, d.verdict, session.address),
       act: async () => { await run("death", (s, est) => s.attestDeath(est), copy.death.done); },
     });
   }
@@ -114,7 +117,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
         left: formatUsdt(current.lifetimeCap - current.spentTotal - c.amount, { decimals: 0 }),
       }) : label(c.beneficiary),
       amountZar: rate ? formatZar(c.amount, rate) : undefined,
-      report: c.agentReport, claim: c, tally: claimTally(e, c), verdict: c.agentVerdict, vote,
+      report: c.agentReport, claim: c, tally: claimTally(e, c), verdict: c.agentVerdict, vote, alone: votesAlone(e, c.beneficiary, c.agentVerdict, session.address),
       approveLabel: finishes(c) && !g?.enabled ? copy.claim.approve : copy.claim.approveOnly,
       note: declinedByOwner(snap, c) ? gc.rules.vote.declined : undefined,
       payable: claimPayable(snap, c, now) ? { payee: c.payee, payeeName: payee, amount: c.amount, successText: fmt(copy.claim.done, { payee }) } : undefined,
@@ -201,7 +204,7 @@ function Inbox({ copy, snap, session }: { copy: Copy; snap: EstateSnapshot; sess
         <div className="mt-4"><VoteTally tally={it.tally} kind={it.kind === "death" ? "confirmed" : "approved"} names={e.verifierNames} /></div>
         {it.claim && <ClaimState snap={snap} claim={it.claim} />}
         {it.note && <p className="mt-3 text-small font-semibold">{it.note}</p>}
-        <VoteNote vote={it.vote} death={it.kind === "death"} />
+        <VoteNote vote={it.vote} death={it.kind === "death"} alone={it.alone} />
         {it.payable && it.target ? (
           <ClaimWindow claim={it.target} {...it.payable} />
         ) : it.vote === "waiting" ? (

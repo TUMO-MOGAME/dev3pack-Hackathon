@@ -19,6 +19,7 @@ import type { RawSnapshot } from "../chain/reads";
 import { getActiveSigner } from "../wallet/signer";
 import { isRoleOnly, publicBeneficiaryLabel } from "../chain/public-names";
 import { ChainServiceError, must } from "./chain-errors";
+import { ownOpenClaim } from "../guardians/decisions";
 
 export interface ChainContinuityDeps {
   send(ixs: TransactionInstruction[], opts?: { selfPay?: boolean }): Promise<TxResult>;
@@ -141,7 +142,12 @@ export function createChainContinuity(d: ChainContinuityDeps): ChainContinuity {
     },
 
     async voteAgent(estate, candidate) {
-      return d.send([ix.voteAgent(chainCtx(), new PublicKey(estate), me(), walletKey(candidate, "BadAgent"))]);
+      const who = walletKey(candidate, "BadAgent");
+      const voter = me();
+      // After the unlock the program reads the voter's own open claim (the lone voter who gains waits 2 RT from it).
+      const snap = await d.fetchEstate(estate);
+      const claim = snap.estate.status === "Unlocked" ? ownOpenClaim(snap.claims, voter.toBase58()) : null;
+      return d.send([ix.voteAgent(chainCtx(), new PublicKey(estate), voter, who, claim ? new PublicKey(claim.address) : null)]);
     },
 
     async releaseAsset(estate, asset) {

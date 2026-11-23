@@ -148,6 +148,7 @@ describe("payouts pass the accounts they re-check (R16)", () => {
   it("executeClaim: the claim's beneficiary and payee", async () => {
     const claim = key();
     h.accounts.set(claim, { rule: rulePda(programId, estate, 0), beneficiary: kid, payee: res, amount: 5 });
+    vi.stubGlobal("fetch", async () => new Response("[]", { status: 200 })); // the request notes: no "no"
     await createChainService().executeClaim(estate, claim);
     expect([passes(beneficiaryPda(programId, estate, kid)), passes(payeePda(programId, estate, res))]).toEqual([true, true]);
   });
@@ -169,9 +170,10 @@ describe("payouts pass the accounts they re-check (R16)", () => {
 
 describe("submitDeathClaim", () => {
   const cert = () => new File(["%PDF-1.4 certificate"], "c.pdf", { type: "application/pdf" });
-  const standing = (by: string, hash: number[], since: number) => h.accounts.set(estate, {
+  // A reviewed claim gives way once stale; an unreviewed one never does (only the review is asked again).
+  const standing = (by: string, hash: number[], since: number, verdict: object = { Approved: {} }) => h.accounts.set(estate, {
     status: { Active: {} }, agent, waiting_period_secs: 120, verifiers: [v1, v2, v3], death_cert_hash: hash,
-    death_verdict: { Pending: {} }, death_submitted_by: by, death_pending_since: since,
+    death_verdict: verdict, death_submitted_by: by, death_pending_since: since, last_heartbeat: 0,
   });
   const nowSecs = () => Math.floor(Date.now() / 1000);
 
@@ -221,7 +223,7 @@ describe("submitDeathClaim", () => {
   });
 
   it("your own, unreviewed: only the review again", async () => {
-    standing(kid, [...Buffer.from(await sha256Hex(new Uint8Array(await cert().arrayBuffer())), "hex")], nowSecs());
+    standing(kid, [...Buffer.from(await sha256Hex(new Uint8Array(await cert().arrayBuffer())), "hex")], nowSecs(), { Pending: {} });
     expect((await createChainService().submitDeathClaim(estate, cert())).tx.signature).toBe("review");
     expect(h.signed).toEqual([]);
   });
@@ -254,6 +256,21 @@ describe("H9: the owner's no stands after the death", () => {
     stub([]);
     await createChainService().approveClaim(estate, claim);
     expect(names()).toEqual(["approve_claim"]);
+  });
+
+  it("N8: executeClaim pays nothing for a declined request, nor when the notes can't be read", async () => {
+    const claim = key();
+    h.accounts.set(claim, { rule: rulePda(programId, estate, 0), beneficiary: kid, payee: res, amount: 5, owner_approved: false });
+    h.me = v1;
+    const stub = (body: unknown, status = 200) => vi.stubGlobal("fetch", async () => new Response(JSON.stringify(body), { status }));
+    stub([{ claim, purpose: "trip", currency: "USDT", typed: 5, createdAt: 1, attachment: false, declinedAt: 9 }]);
+    await expect(createChainService().executeClaim(estate, claim)).rejects.toMatchObject({ code: "Declined" });
+    stub({ error: "down" }, 503);
+    await expect(createChainService().executeClaim(estate, claim)).rejects.toMatchObject({ code: "DeclineUnknown" });
+    expect(h.signed).toEqual([]);
+    stub([]);
+    await createChainService().executeClaim(estate, claim);
+    expect(names()).toEqual(["execute_claim"]);
   });
 });
 

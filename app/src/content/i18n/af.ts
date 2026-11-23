@@ -431,6 +431,7 @@ export const af: Bundle = {
     consent: { before: "Ek stem in dat Heirloom hierdie inligting verwerk soos beskryf in die", link: "privaatheidsbeleid", after: "." },
     consentRequired: "Merk asseblief die blokkie om voort te gaan.",
     amountUnclear: "Daardie bedrag kan op twee maniere gelees word. Skryf dit soos 1 234,50 of 1234.50.",
+    amountFormat: "“1,000” beteken een duisend. Vir sente, sit een of twee syfers ná die komma: 9,50.",
     file: {
       choose: "Kies 'n foto of PDF", change: "Tik om 'n ander lêer te kies", samplesLabel: "Geen papiere byderhand nie? Gebruik 'n voorbeeld:", chosen: "Gekose lêer:",
       rules: "'n PDF, JPG of PNG, tot 4 MB.",
@@ -1073,7 +1074,7 @@ export const af: Bundle = {
       body: "Elke stap van die getekende testament tot die ontsluite boedel, en wie moet saamstem.",
       steps: {
         signed: { title: "Plan geteken en kluis gevul", done: "Geteken deur {name}. Die kluis hou {amount}. Reëls gemerk Nou kan betaal.", todo: "Die eienaar teken die plan en vul die kluis." },
-        reported: { title: "'n Afsterwe word aangemeld", done: "Deur {name} aangemeld. Die agent het die sertifikaat gelees.", todo: "'n Familielid laai die doodsertifikaat op. Die agent lees dit eerste." },
+        reported: { title: "'n Afsterwe word aangemeld", done: "Deur {name} aangemeld. Die agent het die sertifikaat gelees.", todo: "Familie, 'n vertroude persoon of iemand op die terugvallys laai die doodsertifikaat op. Die agent lees dit eerste." },
         confirmed: { title: "Vertroude persone bevestig", done: "Bevestig deur vertroude mense: {got}.", todo: "{need} van die {total} wat kan besluit, moet bevestig.", progress: "{got} van {need} bevestig" },
         waiting: { title: "Wagtydperk", done: "Die wagtydperk is verby.", todo: "'n Veiligheidspouse van {period}. Die eienaar kan met een tik kanselleer.", running: "{time} oor", ready: "Die wagtydperk is verby." },
         unlocked: { title: "Boedel ontsluit", done: "Die hele plan geld. Gelde kan geëis word, skedules loop en die motor kan verkoop word.", todo: "Die res van die plan tree in werking." },
@@ -1101,7 +1102,6 @@ export const af: Bundle = {
         acceptedBody: "Die vertroude persone is gevra om te bevestig.",
         receipt: "Kwitansie",
         receiptSr: "Maak Solana Explorer in 'n nuwe oortjie oop",
-        onlyFamily: "Net 'n familielid wat in die testament genoem word, kan 'n afsterwe aanmeld.",
       },
       veto: { title: "Is dit 'n fout?", body: "'n Afsterwe is vir jou boedel aangemeld. As jy dit lees, kanselleer dit. Die kluis bly gesluit en niks word betaal nie.", cta: "Ek is nog hier", done: "Gekanselleer. Die kluis bly gesluit" },
       unlock: { cta: "Ontsluit die boedel", done: "Die boedel is ontsluit", hint: "Enigiemand kan hierdie stap voltooi sodra die wagtydperk verby is." },
@@ -1913,7 +1913,7 @@ export const af: Bundle = {
     errors: {
       NotMonitor: "Net iemand wat die eienaar aangewys het om hierdie vertroude persoon dop te hou, kan beswaar maak.",
       ObjectionOpen: "'n Beswaar is oop, so dit is gestop totdat die vertroude persone besluit.",
-      ObjectionWindowOpen: "Die hersieningstydperk is nog oop. Die betaling kan voortgaan sodra dit sluit.",
+      ObjectionWindowOpen: "Waarnemers kan nog beswaar maak, so dit kan nog nie voortgaan nie. Dit kan sodra hulle tydperk sluit.",
       SuccessionPending: "'n Afsterwe is reeds vir hierdie vertroude persoon aangemeld.",
       NoSuccessionPending: "Geen afsterwe is vir hierdie vertroude persoon aangemeld nie.",
       SeatVacant: "Hierdie plek is leeg: die vertroude persoon en hulle rugsteun is almal oorlede.",

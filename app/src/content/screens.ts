@@ -494,7 +494,7 @@ export const screens = {
     body: "Every step from the signed will to the unlocked estate, and who has to agree.",
     steps: {
       signed: { title: "Plan signed and vault funded", done: "Signed by {name}. The vault holds {amount}. Rules marked Now can pay.", todo: "The owner signs the plan and funds the vault." },
-      reported: { title: "A passing is reported", done: "Reported by {name}. The agent read the certificate.", todo: "A family member uploads the death certificate. The agent reads it first." },
+      reported: { title: "A passing is reported", done: "Reported by {name}. The agent read the certificate.", todo: "Family, a trusted person or someone on the fallback list uploads the death certificate. The agent reads it first." },
       confirmed: { title: "Trusted people confirm", done: "Confirmed by trusted people: {got}.", todo: "{need} of the {total} who can decide must confirm.", progress: "{got} of {need} confirmed" },
       waiting: { title: "Waiting period", done: "The waiting period has ended.", todo: "A safety pause of {period}. The owner can cancel with one tap.", running: "{time} left", ready: "The waiting period is over." },
       unlocked: { title: "Estate unlocked", done: "The whole plan is in force. Fees can be claimed, schedules run and the car can be sold.", todo: "The rest of the plan comes into force." },
@@ -520,7 +520,6 @@ export const screens = {
       acceptedBody: "The trusted people have been asked to confirm.",
       receipt: "Receipt",
       receiptSr: "Opens Solana Explorer in a new tab",
-      onlyFamily: "Only a family member named in the will can report a passing.",
     },
     veto: {
       title: "Is this a mistake?",

@@ -8,6 +8,7 @@ import {
   agentVoteFor, agentVotesNeeded, canConfirmRecipient, canConfirmSeat, canReportRecipient, canReportSeat, canSign, canSubmitDeath,
   claimBlock, claimPayable, claimTally, claimVote, deathOpen, deathReplace, deathSince, deathTally, deathVote, hardshipStands,
   hardshipTally, hardshipVote, hasInbox, interestedIn, mayList, NO_WALLET, ownerMayApprove, payoutHeldUntil, reportsAbout, seatReplace, successionOutcome, sweepHeldUntil, wasRemoved,
+  agentVoteFrom, agentVoteRule, ownOpenClaim, deathDisproved, reporterKind, votesAlone,
 } from "./decisions";
 
 const [A, B, C, KID, SIB, MON, BK1, BK2, AGENT, OWNER] = ["A", "B", "C", "KID", "SIB", "MON", "BK1", "BK2", "AGENT", "OWNER"];
@@ -289,11 +290,12 @@ describe("replacing the agent", () => {
     expect(agentVotesNeeded(snap({ estate: lastHolder }).estate)).toBe(1);
   });
 
-  it("two before the unlock once an undisproved death claim has stood one grace and the owner showed no life for RT", () => {
-    const e = snap({ estate: active() }).estate; // claim at 50, last sign of life at 1, W = 60 s: RT = 240 s
-    expect(agentVotesNeeded(e, 240)).toBe(3);
-    expect(agentVotesNeeded(e, 241)).toBe(2);
+  it("two before the unlock once an undisproved, still unreviewed death claim and the owner's last sign of life are both RT old", () => {
+    const e = snap({ estate: active({ verdict: "Pending" }) }).estate; // claim at 50, last sign of life at 1, W = 60 s: RT = 240 s
+    expect(agentVotesNeeded(e, 289)).toBe(3);
+    expect(agentVotesNeeded(e, 290)).toBe(2); // max(1, 50) + RT
     expect(agentVotesNeeded({ ...e, lastHeartbeat: 60 }, 9_999)).toBe(3); // disproved: the owner checked in after it
+    expect(agentVotesNeeded({ ...e, death: { ...e.death, verdict: "Approved" } }, 9_999)).toBe(3); // reviewed: the agent answered
     expect(agentVotesNeeded({ ...e, status: "DeathPending" }, 100)).toBe(3);
   });
 
@@ -348,5 +350,80 @@ describe("M10: everyone with something to decide has the inbox", () => {
     expect([hasInbox(s, KID, "beneficiary"), hasInbox(s, SIB, "beneficiary"), hasInbox(s, MON, "beneficiary"), hasInbox(s, A, "owner")]).toEqual([true, true, true, true]);
     expect(hasInbox(s, OWNER, "owner")).toBe(false);
     expect(hasInbox(s, OWNER, "owner", 1)).toBe(true);
+  });
+});
+
+describe("who reports the owner's passing, in which words (r4 client)", () => {
+  const listed = (s: EstateSnapshot["guardians"]) => ({ ...s!, fallback: { ...s!.fallback, recipients: [{ wallet: BK2, name: "R", kind: "heir" as const, dead: false }, { wallet: BK1, name: "D", kind: "heir" as const, dead: true }] } });
+  it("family, a trusted person or a living listed recipient; never the agent or a stranger", () => {
+    const s = snap({ estate: active({ certHash: null, submittedBy: null }) });
+    const l = { ...s, guardians: listed(s.guardians) };
+    expect([KID, A, BK2, BK1, AGENT, "STRANGER", OWNER].map((w) => reporterKind(l, w))).toEqual(["family", "trusted", "listed", null, null, null, null]);
+    expect([KID, A, BK2, BK1, AGENT, "STRANGER"].map((w) => canSubmitDeath(l, w, 0))).toEqual([true, true, true, false, false, false]);
+  });
+});
+
+describe("a disproved passing (DeathDisproved)", () => {
+  it("the owner showed life after it: nobody confirms it, and anyone who may report replaces it at once, also while DeathPending", () => {
+    const pending = snap({ estate: { status: "DeathPending", lastHeartbeat: 150 } }); // death took effect at 100
+    expect(deathDisproved(pending.estate)).toBe(true);
+    expect([canSubmitDeath(pending, SIB, 0), canSubmitDeath(pending, A, 0), canSubmitDeath(pending, AGENT, 0)]).toEqual([true, true, false]);
+    const open = snap({ estate: { ...active(), lastHeartbeat: 60 } }); // claim at 50
+    expect(deathDisproved(open.estate)).toBe(true);
+    expect(deathVote(open.estate, A)).toBeNull();
+    expect(canSubmitDeath(open, KID, 51)).toBe(true); // even the reporter, before any hold
+    expect(deathDisproved(snap({ estate: active() }).estate)).toBe(false);
+    expect(deathDisproved(snap({ estate: { lastHeartbeat: 999 } }).estate)).toBe(false); // Unlocked
+  });
+});
+
+describe("decided alone (DECIDED_ALONE)", () => {
+  it("only the only trusted person left, who gains, with the agent's approval", () => {
+    const lone = { verifiers: [NO_WALLET, NO_WALLET, KID] as [string, string, string] };
+    expect(votesAlone(lone, KID, "Approved", KID)).toBe(true);
+    expect(votesAlone(lone, KID, "Referred", KID)).toBe(false);
+    expect(votesAlone(snap().estate, A, "Approved", A)).toBe(false); // others may decide
+    expect(votesAlone(lone, SIB, "Approved", KID)).toBe(false); // doesn't gain
+  });
+});
+
+describe("the votes to replace the agent, and why", () => {
+  it("every held seat before the unlock (DeathPending too), two after it or in the recovery case", () => {
+    const e = snap({ estate: active({ verdict: "Pending" }) }).estate;
+    expect(agentVoteRule(e, 100)).toEqual({ needed: 3, why: "all", recoveryAt: 290 });
+    expect(agentVoteRule(e, 290)).toEqual({ needed: 2, why: "recovery" });
+    expect(agentVoteRule({ ...e, death: { ...e.death, verdict: "Approved" } }, 290)).toEqual({ needed: 3, why: "all" });
+    expect(agentVoteRule(snap().estate)).toEqual({ needed: 2, why: "after" });
+    expect(agentVoteFor(snap({ estate: active({ verdict: "Pending" }), agentVotes: [{ candidate: "N", voters: [A, B] }] }), "N", 290)).toMatchObject({ got: 2, needed: 2 });
+  });
+
+  it("the only trusted person left who would gain waits twice RT", () => {
+    const lone = { verifiers: [NO_WALLET, NO_WALLET, KID] as [string, string, string] };
+    // Before the unlock: Kid reported it (claim at 50, sign of life at 1): from max(1, 50) + 2 RT.
+    const pending = snap({ estate: { ...active({ verdict: "Pending" }), ...lone } });
+    expect(agentVoteFrom(pending, KID)).toBe(530);
+    expect(agentVoteFrom({ ...pending, estate: { ...pending.estate, death: { ...pending.estate.death, submittedBy: SIB } } }, KID)).toBe(530); // any active beneficiary gains
+    const outsider = snap({ estate: { ...active({ verdict: "Pending", submittedBy: SIB }), verifiers: [NO_WALLET, NO_WALLET, A] } });
+    expect(agentVoteFrom(outsider, A)).toBeNull(); // neither reported it nor is family
+    expect(agentVoteFrom({ ...outsider, estate: { ...outsider.estate, death: { ...outsider.estate.death, submittedBy: A } } }, A)).toBe(530); // reported it
+    expect(agentVoteFrom(snap({ estate: active({ verdict: "Pending" }) }), A)).toBeNull(); // others hold seats
+    // After the unlock: from their open claim's submission while the agent hasn't approved it.
+    const after = snap({ estate: lone, claims: [claim({ agentVerdict: "Referred", createdAt: 200 })] });
+    expect(agentVoteFrom(after, KID)).toBe(200 + 480);
+    expect(agentVoteFrom({ ...after, claims: [claim({ agentVerdict: "Approved" })] }, KID)).toBe(Number.POSITIVE_INFINITY); // approved: no stuck claim
+    expect(agentVoteFrom(snap({ estate: lone }), KID)).toBe(Number.POSITIVE_INFINITY); // no claim: never alone
+    expect(agentVoteFrom(snap({ estate: lone, hardships: [hardship()] }), KID)).toBe(Number.POSITIVE_INFINITY); // a hardship starts no clock
+    expect(agentVoteFrom(snap({ estate: { verifiers: [NO_WALLET, NO_WALLET, A] } }), A)).toBeNull(); // not family: no wait
+    const mine = [claim({ address: "OK", createdAt: 50 }), claim({ address: "OLD", createdAt: 100, agentVerdict: "Referred" }), claim({ address: "NEW", createdAt: 300, agentVerdict: "Referred" }), claim({ address: "PAID", createdAt: 10, status: "Paid", agentVerdict: "Referred" })];
+    expect(ownOpenClaim(mine, KID)?.address).toBe("OLD"); // the earliest the agent hasn't approved
+  });
+});
+
+describe("an unreviewed death claim is never replaced (re-review)", () => {
+  it("it waits for the agent's review; a disproved one is replaced at once", () => {
+    const s = snap({ estate: active({ verdict: "Pending" }) });
+    expect(deathReplace(s.estate)).toEqual({ others: Number.POSITIVE_INFINITY, reporter: Number.POSITIVE_INFINITY });
+    expect([canSubmitDeath(s, SIB, 9e9), canSubmitDeath(s, A, 9e9)]).toEqual([false, false]);
+    expect(canSubmitDeath({ ...s, estate: { ...s.estate, lastHeartbeat: 60 } }, SIB, 51)).toBe(true);
   });
 });

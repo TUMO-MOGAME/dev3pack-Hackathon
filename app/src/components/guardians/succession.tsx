@@ -16,6 +16,7 @@ import { ReportCard, Reviewing } from "@/components/agent/report-card";
 import { fmt, useCopy } from "@/components/shell/copy";
 import { canConfirm, canReport, clock, secondsLeft, shortName, successionStage, waitFraction } from "./derive";
 import { confirmRoute, seatReplace, successionOutcome } from "@/lib/guardians/decisions";
+import { seatReviewedHold } from "@/lib/death-rules";
 import { ReplaceWhen, useWho } from "./decision";
 import { ActionResult, CountdownRing, PausedNotice, useAction, useGuardians } from "./parts";
 
@@ -145,6 +146,7 @@ export function SuccessionStatus({ seat }: { seat: Seat }) {
       {(stage === "reviewing" || stage === "confirm") && (
         <>
           <ReplaceWhen times={seatReplace(snap.estate, seat)} who="seat" />
+          <p className="mt-1 text-small text-ink-2">{fmt(sr.stands, { time: clock(seatReviewedHold(snap.estate.waitingPeriodSecs)) })}</p>
           {canReport(snap, seat, me, now) && (replacing
             ? <div className="mt-3"><ReportPassing initialSeat={seat.index} /></div>
             : <Button variant="secondary" small className="mt-2" onClick={() => setReplacing(true)}>{c.rules.replace.cta}</Button>)}

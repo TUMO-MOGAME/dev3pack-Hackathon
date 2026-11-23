@@ -11,7 +11,7 @@ import { Hourglass, Plus, Zap } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import type { PayeeKind } from "@/lib/types";
 import { formatUsdtExact, formatZar, toBase } from "@/lib/format";
-import { amountText, parseAmount } from "@/lib/amount";
+import { amountHint, amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { Button, Field, Notice, inputClass } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/client";
@@ -73,7 +73,7 @@ function BillFormView({ copy, template, target, onDone }: { copy: Copy; template
   const walletBad = isNew && !BASE58.test(newWallet.trim());
   const show = (k: keyof typeof errors) => (tried && errors[k] ? f.errors[k] : null);
   const rate = fx?.usdtZar ?? null;
-  const zar = (n: number) => (Number.isFinite(n) && n > 0 ? `= ${formatUsdtExact(toBase(n))}${rate ? ` · ${fmt(f.rand, { zar: formatZar(toBase(n), rate) })}` : ""}` : undefined);
+  const zar = (text: string) => amountHint(text, (n) => (n > 0 ? `= ${formatUsdtExact(toBase(n))}${rate ? ` · ${fmt(f.rand, { zar: formatZar(toBase(n), rate) })}` : ""}` : undefined), { unclear: common.amountUnclear, format: common.amountFormat });
   const room = form.amountUsdt > 0 && form.capUsdt >= form.amountUsdt ? Math.floor(form.capUsdt / form.amountUsdt) : 0;
   const name = copy.templates[template].name;
   // All 16 places used: a rule that has ended gives up its place (R17).
@@ -136,8 +136,8 @@ function BillFormView({ copy, template, target, onDone }: { copy: Copy; template
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={form.scheduled ? f.amount : f.amountClaim} htmlFor={`${id}-amount`} hint={zar(form.amountUsdt)} error={show("amount")}>
-          <input id={`${id}-amount`} inputMode="decimal" autoComplete="off" value={typed.amountUsdt} onChange={num("amountUsdt")} className={clsx(inputClass, "tabular-nums")} aria-invalid={!!show("amount")} aria-describedby={described("amount", show("amount"), !!zar(form.amountUsdt))} />
+        <Field label={form.scheduled ? f.amount : f.amountClaim} htmlFor={`${id}-amount`} hint={zar(typed.amountUsdt)} error={show("amount")}>
+          <input id={`${id}-amount`} inputMode="decimal" autoComplete="off" value={typed.amountUsdt} onChange={num("amountUsdt")} className={clsx(inputClass, "tabular-nums")} aria-invalid={!!show("amount")} aria-describedby={described("amount", show("amount"), !!zar(typed.amountUsdt))} />
         </Field>
         {form.scheduled && (
           <Field label={f.every} htmlFor={`${id}-every`}>
@@ -147,7 +147,7 @@ function BillFormView({ copy, template, target, onDone }: { copy: Copy; template
             {clockText(clockOf(intervalOf(form.every, isMock), form.every), will.preview) && <p className="mt-1 text-small font-semibold">{clockText(clockOf(intervalOf(form.every, isMock), form.every), will.preview)}</p>}
           </Field>
         )}
-        <Field label={f.cap} htmlFor={`${id}-cap`} hint={form.scheduled && room > 0 ? fmt(f.capHint, { count: room }) : zar(form.capUsdt)} error={show("cap")}>
+        <Field label={f.cap} htmlFor={`${id}-cap`} hint={form.scheduled && room > 0 ? fmt(f.capHint, { count: room }) : zar(typed.capUsdt)} error={show("cap")}>
           <input id={`${id}-cap`} inputMode="decimal" autoComplete="off" value={typed.capUsdt} onChange={num("capUsdt")} className={clsx(inputClass, "tabular-nums")} aria-invalid={!!show("cap")} aria-describedby={described("cap", show("cap"), true)} />
         </Field>
         <Field label={f.until} htmlFor={`${id}-until`} error={show("until")}>

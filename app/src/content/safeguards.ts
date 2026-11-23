@@ -22,8 +22,8 @@ export const safeguards = {
     PayeeRequired: "A scheduled payment needs an approved payee.",
     AccountNotInitialized: "Something this needs was removed or isn't there any more, for example a payee that was taken off the plan.",
     NotConfirmed: "The network hasn't confirmed this yet, so don't count on it. Reload and look before you try again.",
-    Declined: "The owner said no to this request while they were alive, so it can't be approved or paid.",
-    DeclineUnknown: "Heirloom couldn't check whether the owner said no to this request. Nothing was signed. Try again in a moment.",
+    Declined: "The owner said no to this request while they were alive, so it can't be approved or paid. Heirloom keeps the owner's answer; the contract itself doesn't know it.",
+    DeclineUnknown: "Heirloom couldn't check whether the owner said no to this request. Nothing was signed. Try again in a moment. Heirloom keeps the owner's answer; the contract itself doesn't know it.",
     sale_changed: "The sale or its offers changed, so nothing was sold. Read the offer again before you sign.",
     stale_sale: "The signed sale waited too long, so nothing was sold. Read the offer again and sign again.",
     agent_limit: "The agent has reached its limit for now. Try again later.",
@@ -72,7 +72,10 @@ export const safeguards = {
     stale: "Approvals from before the passing don't count. They need to be given again.",
     stands: "Another hardship request was approved first. This one can't be approved unless that one is overturned.",
     pay: "Enough people approved. Anyone can make the payment.",
-    declined: "The owner said no to this request while they were alive, so it can't be approved or paid.",
+    declined: "The owner said no to this request while they were alive, so it can't be approved or paid. Heirloom keeps the owner's answer; the contract itself doesn't know it.",
+    aloneDeath: "You are the only trusted person left and you reported this, so you may confirm it alone. The unlock then waits twice as long.",
+    aloneClaim: "You are the only trusted person left and this is your own claim, so you may approve it alone. Monitors then get twice as long to object.",
+    aloneClaimDone: "Approved alone by the only trusted person left, whose own claim it is, so monitors get twice as long to object.",
   },
 
   blocked: {
@@ -90,7 +93,7 @@ export const safeguards = {
     in: "{who} can replace it in {time}.",
     now: "{who} can replace it now.",
     who: {
-      death: "Another family member named in the plan",
+      death: "Someone else who may report it (family, a trusted person or someone on the fallback list)",
       seat: "Someone else who may report it (trusted people, the owner, the family, or this person's backups and monitors)",
       recipient: "Someone else in the plan",
       reporter: "Whoever made the report",
@@ -99,6 +102,7 @@ export const safeguards = {
     cta: "Report again",
     deathTitle: "Replace the report",
     deathBody: "The earlier report and its confirmations are cleared. The agent reads your certificate first.",
+    untilReviewed: "Nobody can replace it before the agent has reviewed it. If the agent stays silent, the trusted people can replace the agent (see People).",
   },
 
   review: {
@@ -115,6 +119,8 @@ export const safeguards = {
     pending: "Reported by {name}. The agent hasn't reviewed the certificate yet.",
     referred: "Reported by {name}. The agent wasn't sure about the certificate, so people decide.",
     byFallback: "Established through the fallback plan: no trusted person was left to confirm.",
+    alone: "The only trusted person left reported this passing and confirmed it alone, so the wait is twice as long.",
+    whoMay: "Only family in the plan, a trusted person or someone on the fallback list can report a passing.",
   },
 
   here: {
@@ -138,6 +144,7 @@ export const safeguards = {
     clearCta: "Clear the report",
     cleared: "The report is cleared. Someone else can report it again",
     monitorClears: "A family member confirmed this person's passing because nobody watched them. Saving a monitor clears that report, so it must be made again.",
+    stands: "Once the agent has reviewed a report, it stands for six waiting periods ({time}) before anyone can replace it, so there is time to confirm it.",
   },
 
   recipient: {
@@ -180,6 +187,12 @@ export const safeguards = {
     noOffer: "There is no offer that can be accepted.",
     ownOffer: "You are the buyer, so another trusted person must co-sign.",
     noSeats: "No trusted person is left to co-sign. The sale can settle only after the listing ends, at or above the price limit.",
+    readyFrom: "Can be accepted from {time}",
+    left: "{time} left",
+    whyOffer: "Monitors can still object to this offer until then.",
+    whyHardship: "Monitors can still object to the hardship approval until then.",
+    notYet: "No offer can be accepted yet. The best one can be accepted from {time} ({left} left).",
+    tooOldBadge: "Can't be accepted",
   },
 
   release: {
@@ -206,7 +219,7 @@ export const safeguards = {
     ],
     replace: "Replace the agent",
     ownerBody: "Replace it if its key is lost or you don't trust it. It takes effect at once, and cancels any reported passing.",
-    votersBody: "If the agent's key is lost, the trusted people can replace it. While the owner is alive that takes all of them, at least two. Afterwards it takes two, or the only one left.",
+    votersBody: "If the agent's key is lost, the trusted people can replace it. Until the estate unlocks that takes all of them, at least two. Afterwards it takes two, or the only one left.",
     warn: "Whoever holds the new wallet gets every power listed here. A wrong address can hold up every review until it is replaced again.",
     wallet: "The new agent's wallet address",
     invalid: "That doesn't look like a Solana wallet address.",
@@ -225,7 +238,12 @@ export const safeguards = {
     vote: "Vote for this one",
     finish: "Sign again to finish",
     waiting: "You voted. Waiting for the others.",
-    alone: "One trusted person can't replace the agent alone while the owner is alive.",
+    alone: "One trusted person can't replace the agent alone before the estate unlocks.",
+    needNow: "Votes needed now: {need}.",
+    needRecovery: "A passing is reported and the owner hasn't checked in for a long time, so two votes are enough now, or the only one left.",
+    recoveryAt: "The reported passing is still waiting for the agent's review. If that doesn't change and the owner doesn't check in, two votes, or the only one left, are enough from {time}.",
+    gainerAt: "You are the only trusted person left and you would gain, so your vote counts from {time}: twice as long as for anyone else.",
+    gainerNever: "You are the only trusted person left and you would gain, so you can't replace the agent alone now. You can if a claim of yours stays without the agent's approval for {time}.",
   },
 
   remove: {

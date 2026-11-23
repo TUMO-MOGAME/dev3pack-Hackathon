@@ -20,7 +20,7 @@ import type { EstateSnapshot } from "@/lib/service";
 import type { AssetKind } from "@/lib/guardians/types";
 import type { CarValuation, Role, WalletSession } from "@/lib/types";
 import { formatUsdt, formatUsdtExact, formatZar, toBase } from "@/lib/format";
-import { amountText, parseAmount } from "@/lib/amount";
+import { amountHint, amountText, parseAmount } from "@/lib/amount";
 import { useEstate } from "@/lib/hooks/estate";
 import { ASSET_KINDS, MAX_DESCRIPTION, VALUED_KINDS } from "@/lib/media/api";
 import { PhotoUploader, type DraftPhoto } from "./photo-uploader";
@@ -155,7 +155,7 @@ function AddAssetBody({ car, copy, snap, session, role, onCancel, onAdded }: {
     if (res.value) onAdded?.(res.value);
   };
 
-  const zar = (s: string) => (num(s) > 0 ? `= ${formatUsdtExact(toBase(num(s)))}${rate ? ` · ${fmt(r.zar, { zar: formatZar(toBase(num(s)), rate) })}` : ""}` : s.trim() ? common.amountUnclear : undefined);
+  const zar = (s: string) => amountHint(s, (x) => (x > 0 ? `= ${formatUsdtExact(toBase(x))}${rate ? ` · ${fmt(r.zar, { zar: formatZar(toBase(x), rate) })}` : ""}` : undefined), { unclear: common.amountUnclear, format: common.amountFormat });
   const working = busy === "register";
 
   return (

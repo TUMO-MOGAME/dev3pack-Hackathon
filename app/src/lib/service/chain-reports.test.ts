@@ -11,20 +11,29 @@ const T = 1_000_000;
 
 const estate = (over: Record<string, unknown> = {}) => ({
   status: { Active: {} }, waiting_period_secs: 120, verifiers: ["v", NOBODY, NOBODY],
-  death_cert_hash: hash(7), death_verdict: { Pending: {} }, death_pending_since: T, death_submitted_by: A, ...over,
+  death_cert_hash: hash(7), death_verdict: { Pending: {} }, death_pending_since: T, death_submitted_by: A, last_heartbeat: 0, ...over,
 });
 
 describe("the owner's death claim", () => {
   it("none stands: send", () => expect(deathClaimStep(estate({ death_cert_hash: hash(0) }), B, hexOf(9), T)).toBe("send"));
 
-  it("unreviewed: someone else after one grace", () => {
-    expect(() => deathClaimStep(estate(), B, hexOf(9), T + 119)).toThrowError(expect.objectContaining({ code: "BadStatus", retryAt: T + 120 }));
-    expect(deathClaimStep(estate(), B, hexOf(9), T + 120)).toBe("send");
+  it("unreviewed: never replaced, by anyone; it waits for the agent's review", () => {
+    expect(() => deathClaimStep(estate(), B, hexOf(9), T + 999_999)).toThrowError(expect.objectContaining({ code: "BadStatus", message: expect.stringMatching(/hasn't reviewed it/) }));
+    expect(() => deathClaimStep(estate(), A, hexOf(9), T + 999_999)).toThrow(/^BadStatus/);
   });
 
-  it("the person who made it waits two", () => {
-    expect(() => deathClaimStep(estate(), A, hexOf(9), T + 239)).toThrow(ChainServiceError);
-    expect(deathClaimStep(estate(), A, hexOf(9), T + 240)).toBe("send");
+  it("disproved (the owner showed life after it): replaced at once, also while DeathPending; never once unlocked", () => {
+    expect(deathClaimStep(estate({ last_heartbeat: T + 1 }), A, hexOf(9), T + 2)).toBe("send");
+    expect(deathClaimStep(estate({ last_heartbeat: T + 1, status: { DeathPending: {} } }), B, hexOf(9), T + 2)).toBe("send");
+    expect(() => deathClaimStep(estate({ last_heartbeat: T + 1, status: { Unlocked: {} } }), B, hexOf(9), T + 2)).toThrow(/^BadStatus/);
+    expect(() => deathClaimStep(estate({ last_heartbeat: T, status: { DeathPending: {} } }), B, hexOf(9), T + 2)).toThrow(/^BadStatus/);
+  });
+
+  it("reviewed: the person who made it waits one grace longer", () => {
+    const e = estate({ death_verdict: { Approved: {} } });
+    expect(deathClaimStep(e, B, hexOf(9), T + 240)).toBe("send");
+    expect(() => deathClaimStep(e, A, hexOf(9), T + 359)).toThrow(ChainServiceError);
+    expect(deathClaimStep(e, A, hexOf(9), T + 360)).toBe("send");
   });
 
   it("reviewed without a quorum: two waits", () => {
@@ -36,11 +45,11 @@ describe("the owner's death claim", () => {
   it("reviewed, with nobody left in a seat: it stands as the fallback's proof", () => {
     const e = estate({ death_verdict: { Approved: {} }, verifiers: [NOBODY, NOBODY, NOBODY] });
     expect(() => deathClaimStep(e, B, hexOf(9), T + 999_999)).toThrow(/^BadStatus/);
-    expect(deathClaimStep(estate({ verifiers: [NOBODY, NOBODY, NOBODY] }), B, hexOf(9), T + 120)).toBe("send");
+    expect(() => deathClaimStep(estate({ verifiers: [NOBODY, NOBODY, NOBODY] }), B, hexOf(9), T + 999_999)).toThrow(/^BadStatus/); // unreviewed: never
   });
 
-  it("from before times were stored: stale at once", () => {
-    expect(deathClaimStep(estate({ death_pending_since: 0 }), B, hexOf(9), T)).toBe("send");
+  it("from before times were stored: disproved by any sign of life, so replaced at once", () => {
+    expect(deathClaimStep(estate({ death_pending_since: 0, last_heartbeat: 5 }), B, hexOf(9), T)).toBe("send");
   });
 
   it("your own unreviewed report of the same file only asks for the review again", () => {

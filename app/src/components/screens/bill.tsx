@@ -13,7 +13,7 @@ import {
 import type { ScreensCopy } from "@/content/screens";
 import { useLocalized } from "@/lib/i18n/client";
 import { formatUsdt, formatUsdtExact, shortAddress, toBase } from "@/lib/format";
-import { amountText, parseAmount } from "@/lib/amount";
+import { amountHint, amountText, parseAmount } from "@/lib/amount";
 import { checkEvidence, EVIDENCE_ACCEPT } from "@/lib/evidence";
 import { useEstate } from "@/lib/hooks/estate";
 import { BILL_KINDS, type BillDetails, type BillKind, type BillPayee, type PaidBill } from "@/lib/bills/types";
@@ -104,6 +104,8 @@ function Bill({ copy }: { copy: Copy }) {
   const n = parseAmount(amount) ?? Number.NaN;
   const valid = Number.isFinite(n) && n > 0;
   const amountUsdt = !valid ? null : currency === "usdt" ? n : rate ? zarToUsdt(n, rate) : null;
+  // How to write it, the unclear-amount words, or what it converts to (N9).
+  const amountHelp = amountHint(amount, () => (valid && amountUsdt !== null ? `= ${currency === "zar" ? `R ${n.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : formatUsdtExact(toBase(n))} · ${fmt(copy.converted, { other: currency === "zar" ? formatUsdtExact(toBase(amountUsdt)) : rate ? `R${(n * rate).toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : "" })}` : undefined), { unclear: common.amountUnclear, format: common.amountFormat });
   const comparison: InvoiceComparison | null = invoice?.result && amountUsdt !== null
     ? compareInvoice(invoice.result.reading, { payee: payeeName, amountUsdt, amountZar: currency === "zar" ? n : null, reference: reference.trim() || null }, rate)
     : invoice?.result && !invoice.result.reading.isInvoice ? compareInvoice(invoice.result.reading, { payee: payeeName, amountUsdt: 0, amountZar: null, reference: null }, rate) : null;
@@ -262,10 +264,10 @@ function Bill({ copy }: { copy: Copy }) {
               ))}
             </div>
           </fieldset>
-          <Field label={copy.amount} htmlFor="bill-amount" error={errors.amount} hint={valid && amountUsdt !== null ? `= ${currency === "zar" ? `R ${n.toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : formatUsdtExact(toBase(n))} · ${fmt(copy.converted, { other: currency === "zar" ? formatUsdtExact(toBase(amountUsdt)) : rate ? `R${(n * rate).toLocaleString("en-ZA", { maximumFractionDigits: 2 })}` : "" })}` : undefined}>
+          <Field label={copy.amount} htmlFor="bill-amount" error={errors.amount} hint={amountHelp}>
             <div className="relative">
               <span className="pointer-events-none absolute inset-y-0 left-3.5 grid place-items-center font-semibold text-ink-2" aria-hidden="true">{currency === "zar" ? "R" : "₮"}</span>
-              <input id="bill-amount" value={amount} onChange={(e) => { setAmount(e.target.value); setErrors({}); reset(); }} inputMode="decimal" autoComplete="off" placeholder="0" aria-invalid={!!errors.amount} aria-describedby={errors.amount ? "bill-amount-error" : valid ? "bill-amount-hint" : undefined} className={`${inputClass} pl-9 font-display text-h3 tabular-nums`} />
+              <input id="bill-amount" value={amount} onChange={(e) => { setAmount(e.target.value); setErrors({}); reset(); }} inputMode="decimal" autoComplete="off" placeholder="0" aria-invalid={!!errors.amount} aria-describedby={errors.amount ? "bill-amount-error" : amountHelp ? "bill-amount-hint" : undefined} className={`${inputClass} pl-9 font-display text-h3 tabular-nums`} />
             </div>
           </Field>
           <Field label={copy.reference} htmlFor="bill-ref" hint={copy.referenceHint}>

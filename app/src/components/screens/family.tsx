@@ -21,7 +21,8 @@ import { LetterMoment } from "@/components/letters/lazy";
 import { PausedNotice } from "@/components/guardians/parts";
 import { guardiansOf, isMonitor, mayRaise } from "@/components/guardians/derive";
 import { ReplaceWhen, useWho, VoteTally } from "@/components/guardians/decision";
-import { canSubmitDeath, deathOpen, deathReplace, deathTally, hasLivingSeat, isFamily } from "@/lib/guardians/decisions";
+import { canSubmitDeath, deathDisproved, deathOpen, deathReplace, deathTally, hasLivingSeat, reporterKind } from "@/lib/guardians/decisions";
+import { MIN_WAIT_SECS, unlockWaitSecs } from "@/lib/death-rules";
 import { RaiseObjection } from "@/components/guardians/objections";
 import { SuccessionTimeline } from "@/components/guardians/section";
 import { DisputePanel } from "@/components/disputes/disputes";
@@ -61,13 +62,20 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
   const reported = !!d.certHash || e.status === "DeathPending" || e.status === "Unlocked";
   const confirmed = e.status === "DeathPending" || e.status === "Unlocked";
   const unlocked = e.status === "Unlocked";
-  const remaining = e.status === "DeathPending" && d.pendingSince !== null && now !== null ? d.pendingSince + e.waitingPeriodSecs - now : null;
+  // Decided alone (the only trusted person left reported it and confirmed it): the unlock waits twice as long.
+  const wait = unlockWaitSecs(e);
+  const disproved = deathDisproved(e);
+  const remaining = e.status === "DeathPending" && d.pendingSince !== null && now !== null ? d.pendingSince + wait - now : null;
   const waitOver = remaining !== null && remaining <= 0;
-  const period = e.waitingPeriodSecs >= 86400 ? fmt(copy.periodDays, { days: Math.round(e.waitingPeriodSecs / 86400) }) : fmt(copy.periodDemo, { secs: e.waitingPeriodSecs });
-  const family = isFamily(snap, session?.address);
+  // The plan's own pause; when it was decided alone the sentence below says it is twice that, and the countdown counts it.
+  const base = Math.max(e.waitingPeriodSecs, MIN_WAIT_SECS);
+  const period = base >= 86400 ? fmt(copy.periodDays, { days: Math.round(base / 86400) }) : fmt(copy.periodDemo, { secs: base });
+  const family = reporterKind(snap, session?.address) === "family";
+  const reports = reporterKind(snap, session?.address) !== null;
   const reporter = d.submittedBy ? snap.beneficiaries.find((b) => b.wallet === d.submittedBy)?.label ?? who(d.submittedBy) : "";
-  const open = e.status === "Active" && !!d.certHash;
-  const replaceable = open ? deathReplace(e) : null;
+  // A disproved claim (the owner showed life after it) can be replaced at once, also while DeathPending.
+  const open = (e.status === "Active" && !!d.certHash) || disproved;
+  const replaceable = open && !disproved ? deathReplace(e) : null;
   const canReplace = open && canSubmitDeath(snap, session?.address, now);
   const s = copy.steps;
   const reportRef = useRef<HTMLDivElement>(null);
@@ -89,7 +97,8 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
         : fmt(open && d.verdict === "Pending" ? rules.death.pending : open && d.verdict === "Referred" ? rules.death.referred : s.reported.done, { name: reporter || e.ownerName }),
       extra: reported && d.certHash ? (
         <>
-          {open && (replaceable
+          {disproved && <p className="mt-2 text-small font-semibold">{rules.errors.DeathDisproved}</p>}
+          {open && !disproved && (replaceable
             ? <ReplaceWhen times={replaceable} who="death" />
             : d.verdict !== "Pending" && !hasLivingSeat(e) && <p className="mt-2 text-small font-semibold">{rules.replace.kept}</p>)}
           <p className="mt-1 text-[0.75rem] text-ink-2">{copy.certificate}: <span className="font-mono">{shortAddress(d.certHash, 6)}</span></p>
@@ -109,10 +118,11 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
     {
       key: "waiting", title: s.waiting.title, state: state(unlocked, e.status === "DeathPending"),
       text: unlocked ? s.waiting.done : fmt(s.waiting.todo, { period }),
-      extra: e.status === "DeathPending" ? (
+      extra: e.status === "DeathPending" && !disproved ? (
         <div className="mt-3">
+          {d.decidedAlone && <p className="mb-3 text-small font-semibold">{rules.death.alone}</p>}
           <div className="flex items-center gap-4">
-            <CountdownRing fraction={remaining === null ? 0 : 1 - Math.max(0, remaining) / e.waitingPeriodSecs} />
+            <CountdownRing fraction={remaining === null ? 0 : 1 - Math.max(0, remaining) / wait} />
             <div>
               <p className="font-display text-h2 tabular-nums" role="timer" aria-live="off">{remaining === null ? "" : waitOver ? s.waiting.ready : fmt(s.waiting.running, { time: clock(remaining) })}</p>
               <p className="text-small text-ink-2">{copy.unlock.hint}</p>
@@ -192,9 +202,12 @@ function Timeline({ copy, snap, role }: { copy: Copy; snap: EstateSnapshot; role
 
       {accepted && d.certHash ? (
         <div className="mt-6"><ReportAccepted copy={copy} report={accepted.report} tx={accepted.tx} /></div>
-      ) : e.status === "Active" && (!d.certHash || canReplace) && (
+      ) : ((e.status === "Active" && !d.certHash) || canReplace) && (
         <div ref={reportRef} className="mt-6 scroll-mt-32">
-          {family ? <ReportForm key={d.certHash ?? "first"} copy={copy} replacing={open} onAccepted={setAccepted} /> : role !== "owner" ? <p className="text-small text-ink-2">{copy.report.onlyFamily}</p> : null}
+          {/* Family, trusted people and living listed fallback recipients may report it; never the agent or a stranger. */}
+          {canReplace || reports
+            ? <ReportForm key={d.certHash ?? "first"} copy={copy} replacing={open} onAccepted={setAccepted} />
+            : role !== "owner" && session?.address !== e.agent ? <p className="text-small text-ink-2">{rules.death.whoMay}</p> : null}
         </div>
       )}
       <SuccessionTimeline snap={snap} />

@@ -6,7 +6,7 @@
 import { PublicKey, type Connection } from "@solana/web3.js";
 import type { AgentReport, Base58, Claim, Estate } from "../types";
 import type { AssetKind, FallbackDeathReport, FallbackRecipient, GuardiansSnapshot, Objection, ObjectionStatus, Seat, SeatApprovalItem, TargetKind } from "../guardians/types";
-import { eligibleSeats, quorum, refuteWait, unlockWaitSecs } from "../death-rules";
+import { eligibleSeats, MIN_WAIT_SECS, quorum, refuteWait, unlockWaitSecs } from "../death-rules";
 import { openToPeople } from "../verdict";
 import { formatUsdt, shortAddress } from "../format";
 import { accountName, getCoder, getIdl } from "./idl";
@@ -127,7 +127,8 @@ export function assembleGuardians(
   const { estate, claims, events, extras } = ctx;
   const g = raw.guard.raw;
   const window = guardWait(g, "objection_window_secs");
-  const successionWait = guardWait(g, "succession_wait_secs");
+  // Guard::succession_wait: at least 60 s, so a living holder always has time to say "I'm still here" (a stored 0 waits 60 s).
+  const successionWait = Math.max(MIN_WAIT_SECS, guardWait(g, "succession_wait_secs"));
   const fallbackWait = guardWait(g, "fallback_wait_secs");
   const name = (w: Base58) => extras.names[w] ?? shortAddress(w);
   const named = (w: Base58) => ({ wallet: w, name: name(w) });
@@ -199,7 +200,8 @@ export function assembleGuardians(
         ? claim ? `Approved ${formatUsdt(claim.amount)} to ${name(claim.payee)} for ${name(claim.beneficiary)}` : "Approved a claim"
         : kind === "Unlock" ? `Confirmed ${estate.ownerName}'s passing`
           : kind === "Hardship" ? "Approved a request to sell below the minimum price" : "Approved";
-      const deadline = kind === "Claim" ? (stampAt > 0 ? stampAt + window : null)
+      // Decided alone by the claimant: monitors get twice the window, as claimPayableAt above.
+      const deadline = kind === "Claim" ? (stampAt > 0 ? stampAt + window * (claim?.decidedAlone ? 2 : 1) : null)
         : kind === "Unlock" && estate.status === "DeathPending" && estate.death.pendingSince ? estate.death.pendingSince + unlockWaitSecs(estate) : null;
       return {
         seatIndex: num(e.data, "seat_index"), approver, approverName: name(approver), kind, target, summary,

@@ -431,6 +431,7 @@ export const st: Bundle = {
     consent: { before: "Ke dumela hore Heirloom e sebetse tlhahisoleseding ena kamoo ho hlalositsweng kateng ho", link: "leano la lekunutu", after: "." },
     consentRequired: "Ka kopo tshwaya lebokose ho tswela pele.",
     amountUnclear: "Palo eo e ka balwa ka mekgwa e mmedi. E ngole jwalo ka 1 234,50 kapa 1234.50.",
+    amountFormat: "“1,000” e bolela sekete se le seng. Bakeng sa disente, kenya dinomoro tse le nngwe kapa tse pedi kamora khoma: 9,50.",
     file: {
       choose: "Kgetha foto kapa PDF", change: "Tobetsa ho kgetha faele e nngwe", samplesLabel: "Ha o na dipampiri haufi? Sebedisa mohlala:", chosen: "Faele e kgethilweng:",
       rules: "PDF, JPG kapa PNG, ho fihlela ho 4 MB.",
@@ -1083,7 +1084,7 @@ export const st: Bundle = {
         reported: {
           title: "Lefu le a tlalehwa",
           done: "Le tlalehilwe ke {name}. Agent e badile setifikeiti.",
-          todo: "Setho sa lelapa se kenya lengolo la lefu. Agent e le bala pele.",
+          todo: "Lelapa, motho ya tshepahalang kapa motho ya lenaneng la ho qetela o kenya lengolo la lefu. Agent e le bala pele.",
         },
         confirmed: {
           title: "Batho ba tshepahalang ba a netefatsa",
@@ -1127,7 +1128,6 @@ export const st: Bundle = {
         acceptedBody: "Batho ba tshepahalang ba kopilwe ho netefatsa.",
         receipt: "Rasiti",
         receiptSr: "E bula Solana Explorer tabong e ntjha",
-        onlyFamily: "Ke setho sa lelapa se ngotsweng lengolong la thato feela se ka tlalehang lefu.",
       },
       veto: { title: "Na ena ke phoso?", body: "Lefu le tlalehilwe bakeng sa lefa la hao. Haeba o bala sena, le hlakole. Polokelo e dula e notletswe mme ha ho letho le lefuwang.", cta: "Ke sa ntse ke le teng", done: "Le hlakotswe. Polokelo e dula e notletswe" },
       unlock: { cta: "Bula lefa", done: "Lefa le bulehile", hint: "Mang kapa mang a ka phethela mohato ona hang ha nako ya ho emela e fedile." },
@@ -1939,7 +1939,7 @@ export const st: Bundle = {
     errors: {
       NotMonitor: "Ke motho feela eo mong wa lefa a mo kgethileng ho hlokomela motho enwa ya tshepahalang ya ka hanyetsang.",
       ObjectionOpen: "Ho na le kganyetso e bulehileng, kahoo sena se emisitswe ho fihlela batho ba tshepahalang ba etsa qeto.",
-      ObjectionWindowOpen: "Nako ya ho hlahloba e sa ntse e bulehile. Tefo e ka tswela pele ha e se e kwalwa.",
+      ObjectionWindowOpen: "Bahlokomedi ba sa ntse ba ka hanyetsa, kahoo sena se ke ke sa tswela pele hajwale. Se ka tswela pele ha nako ya bona e kwalwa.",
       SuccessionPending: "Lefu la motho enwa ya tshepahalang le se le tlalehilwe.",
       NoSuccessionPending: "Ha ho lefu le tlalehilweng la motho enwa ya tshepahalang.",
       SeatVacant: "Sebaka sena se se na motho: motho ya tshepahalang le bathusi ba hae kaofela ba hlokahetse.",

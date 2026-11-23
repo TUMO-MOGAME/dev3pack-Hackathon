@@ -73,6 +73,16 @@ describe("assembleGuardians", () => {
     expect(g.claimPayableAt).toEqual({ [claim.toBase58()]: 460 });
     expect(g.feed[0]).toMatchObject({ seatIndex: 2, kind: "Claim", objectionDeadline: 460, txSignature: "sig" });
     expect(g.feed[0].summary).toContain("Lerato");
+    // Decided alone: twice the window, both for paying and for the monitors' countdown.
+    const lone = assembleGuardians(raw, { estate, claims: [{ ...c, decidedAlone: true }], events, extras: { names: {}, reasons: {}, fallbackKinds: {}, reports: {} } });
+    expect([lone.claimPayableAt?.[claim.toBase58()], lone.feed[0].objectionDeadline]).toEqual([520, 520]);
+    // A succession wait stored as 0 reads as 60 s (Guard::succession_wait), as the program waits.
+    const zero = await roundTrip("Guard", {
+      estate: estateKey, objection_window_secs: new BN(60), succession_wait_secs: new BN(0), fallback_wait_secs: new BN(120),
+      open_objections: 1, fallback: [lerato, sipho, D, D], fallback_dead: 1, fallback_started_at: new BN(0), fallback_done: false, bump: 1,
+    });
+    const z = assembleGuardians({ ...raw, guard: { address: "G", raw: zero } }, { estate, claims: [c], events, extras: { names: {}, reasons: {}, fallbackKinds: {}, reports: {} } });
+    expect([z.successionWaitSecs, z.seats[2].succession?.readyAt]).toEqual([60, 960]);
     expect(g.fallback.recipients).toEqual([
       { wallet: lerato.toBase58(), name: "Lerato", kind: "family", dead: true, report: null },
       expect.objectContaining({ wallet: sipho.toBase58(), dead: false }),
