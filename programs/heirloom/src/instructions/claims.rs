@@ -157,6 +157,7 @@ pub fn review_claim_handler(ctx: Context<ReviewClaim>, outcome: ReviewOutcome, r
         claim.status == ClaimStatus::Open && claim.agent_verdict == Verdict::Pending,
         HeirloomError::BadStatus
     );
+    require!(claim.beneficiary != ctx.accounts.agent.key(), HeirloomError::OwnApproval);
 
     claim.agent_report_hash = report_hash;
     let ts = now()?;
@@ -244,6 +245,8 @@ pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
 
     let was_met = approvals_stand(estate, claim);
     let first_time = claim.approvals & bit == 0;
+    // Votes of seats that no longer decide are dropped, so whoever is left can restore a lost quorum (L8).
+    claim.approvals &= eligible | DECIDED_ALONE;
     claim.approvals |= bit;
     if verifier == claimant {
         claim.approvals |= DECIDED_ALONE;
@@ -256,8 +259,6 @@ pub fn approve_claim_handler(ctx: Context<ApproveClaim>) -> Result<()> {
     let ts = now()?;
     let count = count_bits(claim.approvals & eligible);
     if starts {
-        // Votes of seats that no longer decide are dropped, so a later vacancy is measured from here.
-        claim.approvals &= eligible | DECIDED_ALONE;
         stamp.seat_index = idx as u8;
         stamp.approver = verifier;
         stamp.approved_at = ts;
