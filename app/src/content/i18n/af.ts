@@ -867,7 +867,7 @@ export const af: Bundle = {
         openOwn: "Maak my eie plan oop",
         view: "Sien {name} se boedel",
       },
-      locked: { title: "Jou plan is geteken en gesluit", body: "Dit is die reëls wat jou plan volg, nou en nadat jy weg is. Om dit uit te brei terwyl die boedel aktief is, praat met die agent.", fingerprint: "Plan se vingerafdruk", estate: "Maak my boedel oop", ask: "Vra die agent oor my reëls" },
+      locked: { title: "Jou plan is geteken en gesluit", body: "Dit is die reëls wat jou plan volg, nou en nadat jy weg is. Terwyl die boedel aktief is, kan jy daarby voeg: voeg hieronder 'n rekening by, of begunstigdes en mense onder Mense.", fingerprint: "Plan se vingerafdruk", estate: "Maak my boedel oop", ask: "Vra die agent oor my reëls" },
     },
     vault: {
       eyebrow: "Kluis",

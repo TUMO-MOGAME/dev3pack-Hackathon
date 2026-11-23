@@ -875,7 +875,7 @@ export const st: Bundle = {
         openOwn: "Bula moralo wa ka",
         view: "Bona lefa la {name}",
       },
-      locked: { title: "Moralo wa hao o saennwe mme o notletswe", body: "Ena ke melao eo moralo wa hao o e latelang, jwale le ha o se o le siile. Ho o atolosa ha lefa le ntse le sebetsa, bua le agent.", fingerprint: "Monwana wa moralo", estate: "Bula lefa la ka", ask: "Botsa agent ka melao ya ka" },
+      locked: { title: "Moralo wa hao o saennwe mme o notletswe", body: "Ena ke melao eo moralo wa hao o e latelang, jwale le ha o se o le siile. Ha lefa le ntse le sebetsa o ka eketsa ho lona: kenya bili ka tlase, kapa ba lefuwang le batho tlasa Batho.", fingerprint: "Monwana wa moralo", estate: "Bula lefa la ka", ask: "Botsa agent ka melao ya ka" },
     },
     vault: {
       eyebrow: "Polokelo",

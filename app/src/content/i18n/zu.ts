@@ -879,7 +879,7 @@ export const zu: Bundle = {
       },
       locked: {
         title: "Uhlelo lwakho lusayiniwe futhi luvaliwe",
-        body: "Le yimithetho uhlelo lwakho oluyilandelayo, manje nangemva kokuthi ungasekho. Ukuze uyelule ngenkathi ifa lisasebenza, khuluma ne-agent.",
+        body: "Le yimithetho uhlelo lwakho oluyilandelayo, manje nangemva kokuthi ungasekho. Ngenkathi ifa lisasebenza ungalwengeza: engeza isikweletu ngezansi, noma abakhokhelwayo nabantu ngaphansi kwe-Abantu.",
         fingerprint: "Izigxivizo zohlelo",
         estate: "Vula ifa lami",
         ask: "Buza i-agent ngemithetho yami",

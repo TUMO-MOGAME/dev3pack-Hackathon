@@ -310,7 +310,7 @@ export const screens = {
     },
     locked: {
       title: "Your plan is signed and locked",
-      body: "These are the rules your plan follows, now and after you're gone. To extend it while the estate is active, speak to the agent.",
+      body: "These are the rules your plan follows, now and after you're gone. While the estate is active you can add to it: add a bill below, or payees and people under People.",
       fingerprint: "Plan fingerprint",
       estate: "Open my estate",
       ask: "Ask the agent about my rules",
