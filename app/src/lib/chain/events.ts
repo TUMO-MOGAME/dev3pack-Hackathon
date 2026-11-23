@@ -82,6 +82,7 @@ const TEXT: Record<string, (d: Raw, amt?: bigint) => string> = {
   AssetReleased: () => "The owner took an asset's title back out of the plan",
   MemberRemoved: (d) => `The owner removed ${who(d, "wallet")} ${pick(d, "payee") ? "from the approved payees" : "from the family in the plan"}`,
   RuleReused: () => "The owner set a new rule in an ended rule's place: the old rule's requests can't be paid",
+  AgentReviewCleared: () => "A new agent took over: a report the old agent reviewed waits for the new agent to review it again",
   FallbackStarted: () => "All trusted people are gone: the fallback plan's waiting period has started",
   FallbackExecuted: (d, a) => `Fallback plan: the whole vault (${a !== undefined ? formatUsdt(a) : "USD₮"}) went to ${who(d, "recipient")}`,
   AssetMediaSet: () => "Asset photos updated (their hash is recorded on-chain)",

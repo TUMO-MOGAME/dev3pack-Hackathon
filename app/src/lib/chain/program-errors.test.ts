@@ -18,6 +18,7 @@ describe("program errors", () => {
   it.each([
     [6053, "NotParticipant"], [6054, "OwnApproval"], [6055, "CoSignerRequired"], [6056, "ListingStillOpen"], [6057, "InvalidWallet"],
     [6058, "ReportChanged"], [6059, "DeathReportOpen"], [6060, "ClaimFromEndedRule"], [6061, "OfferChanged"],
+    [6062, "DeathDisproved"], [6063, "OfferTooOld"],
   ] as const)("%i %s: plain words from its log, its hex code and a transaction status", (code, name) => {
     const plain = `${name}: ${PLAIN[name]}`;
     expect(PLAIN[name].length).toBeGreaterThan(20);

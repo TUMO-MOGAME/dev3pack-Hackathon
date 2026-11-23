@@ -3,14 +3,14 @@
  * times, claims of replaced rules, approvals from before a death, reports that can be replaced, agent votes, events.
  */
 import { describe, expect, it } from "vitest";
-import { BN } from "@anchor-lang/core";
+import { BN, EventParser } from "@anchor-lang/core";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { getCoder, getIdl } from "./idl";
 import { decodeAgentVotes, decodeClaim, decodeEstate, decodeRule, withClaimState, type Raw } from "./decoders";
 import { assembleGuardians, fallbackSlot, nextFallback, type RawGuardians } from "./guardians";
 import { decodeDispute } from "./disputes";
 import { describeEvent } from "./events";
-import { deathReviewHash, standingReviewHash, type ChainEvent } from "./reads";
+import { activityFrom, deathReviewHash, standingReviewHash, type ChainEvent } from "./reads";
 import { assembleSnapshot } from "./snapshot";
 import type { Claim, Estate } from "../types";
 
@@ -267,6 +267,18 @@ describe("challenges", () => {
 describe("events", () => {
   it("every event of the IDL has a line of its own", () => {
     for (const e of getIdl().events!) expect(describeEvent(e.name, {}).text, e.name).not.toBe(e.name);
+  });
+
+  it("AgentReviewCleared decodes from the program's log and reads as plain words", () => {
+    const def = getIdl().events!.find((e) => e.name === "AgentReviewCleared")!;
+    const target = k();
+    const log = `Program data: ${Buffer.concat([Buffer.from(def.discriminator), getCoder().types.encode("AgentReviewCleared", { estate: estateKey, target, ts: bn(7) })]).toString("base64")}`;
+    const program = getIdl().address;
+    const [ev] = [...new EventParser(new PublicKey(program), getCoder()).parseLogs([`Program ${program} invoke [1]`, log, `Program ${program} success`])];
+    expect(ev.name).toBe("AgentReviewCleared");
+    expect((ev.data as Raw).target).toEqual(target);
+    const [line] = activityFrom([{ name: ev.name, data: ev.data as Raw, ts: 7, signature: "s" }]);
+    expect(line).toMatchObject({ kind: "AgentReviewCleared", text: expect.stringMatching(/new agent/) });
   });
 
   it("a report's review never speaks for the report that replaced it", () => {
