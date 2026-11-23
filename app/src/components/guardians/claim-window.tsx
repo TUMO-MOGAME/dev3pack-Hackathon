@@ -23,17 +23,23 @@ export function ClaimWindow({ claim, payee, payeeName, amount, successText }: { 
   if (pausedBy(g, claim, now)) return null; // the PausedNotice above says why
   if (snap && openDisputeOn(snap.disputes, claim, now ?? 0)) return null; // the dispute card above says why
   // The owner's own approval waits for no window.
-  const deadline = snap?.claims.find((c) => c.address === claim)?.ownerApproved ? null : g?.claimPayableAt?.[claim] ?? null;
+  const found = snap?.claims.find((c) => c.address === claim);
+  const deadline = found?.ownerApproved ? null : g?.claimPayableAt?.[claim] ?? null;
   const left = secondsLeft(deadline, now);
   const waiting = deadline !== null && (left === null || left > 0);
+  // Approved alone by the claimant, the only trusted person left: the window is twice as long (DECIDED_ALONE).
+  const alone = !!found?.decidedAlone;
 
   if (g && waiting) {
     return (
-      <div className="mt-4 flex items-center gap-3 rounded-md border-[1.5px] border-dashed border-ink p-3">
-        <CountdownRing fraction={waitFraction(deadline, g.objectionWindowSecs, now)} />
-        <p className="flex items-center gap-2 font-semibold tabular-nums" role="timer" aria-live="off">
-          <Hourglass className="size-4 shrink-0" aria-hidden="true" />{fmt(c.window.payableIn, { time: left === null ? "" : clock(left) })}
-        </p>
+      <div className="mt-4 rounded-md border-[1.5px] border-dashed border-ink p-3">
+        <div className="flex items-center gap-3">
+          <CountdownRing fraction={waitFraction(deadline, g.objectionWindowSecs * (alone ? 2 : 1), now)} />
+          <p className="flex items-center gap-2 font-semibold tabular-nums" role="timer" aria-live="off">
+            <Hourglass className="size-4 shrink-0" aria-hidden="true" />{fmt(c.window.payableIn, { time: left === null ? "" : clock(left) })}
+          </p>
+        </div>
+        {alone && <p className="mt-2 text-small">{c.rules.vote.aloneClaimDone}</p>}
       </div>
     );
   }

@@ -5,7 +5,8 @@ import clsx from "clsx";
 import { ArrowRight, CarFront, FileText, Gavel, HandHeart, Loader2, Lock, Pencil, ShieldCheck, Store } from "@/components/ui/icons";
 import type { ScreensCopy } from "@/content/screens";
 import type { AssetsCopy } from "@/content/assets";
-import { useLocalized } from "@/lib/i18n/client";
+import { useLocale, useLocalized } from "@/lib/i18n/client";
+import { clockTime, nextReadyAt, offerWait } from "@/lib/assets/sale-wait";
 import type { EstateSnapshot } from "@/lib/service";
 import type { Asset, OfferRanking, Role, WalletSession } from "@/lib/types";
 import { formatUsdt, formatUsdtExact, formatZar, fromBase, shortAddress, toBase } from "@/lib/format";
@@ -92,6 +93,7 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
   // A buyer's name: the one the offer carries, else whatever this estate or device knows about that wallet.
   const buyerName = (o: { buyer: string; buyerName?: string }) => o.buyerName ?? book.get(o.buyer)?.name;
   const now = useNow();
+  const locale = useLocale();
   const rate = fx?.usdtZar ?? null;
   const e = snap.estate;
   const offers = snap.offers.filter((o) => o.asset === car.address).sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0));
@@ -125,24 +127,49 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
     setRanking(null);
   }
 
+  // What the program checks against the clock (lib/assets/sale-wait.ts): an offer, or the hardship approval, waits out
+  // the objection window; one from before an upheld objection to the sale is never accepted. When the next window
+  // closes, or the objections or offer times change (the demo can end a window), the ranking is read again.
+  const g = snap.guardians;
+  const waitCtx = { asset: car, objections: g?.objections, windowSecs: g?.enabled ? g.objectionWindowSecs : null };
+  const due = nextReadyAt(ranking);
+  const windowClosed = due !== null && now !== null && now >= due;
+  const timingKey = offers.map((o) => o.createdAt).join("|") + (g?.objections ?? []).filter((o) => o.target === car.address || o.kind === "Hardship").map((o) => `${o.address}:${o.status}`).join("|");
+  const waitOf = (o: { address: string; createdAt: number }) => (car.status === "Listed" ? offerWait(ranking, o, waitCtx) : null);
+  const timeAt = (at: number) => (now === null ? "" : clockTime(at, now, locale));
+
   useEffect(() => {
     let alive = true;
     if (!service || offers.length === 0) return;
     service.rankOffers(car.address).then((r) => { if (alive) setRanking(r); }).catch(() => { if (alive) setRanking(null); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [service, offersKey, car.address]);
+  }, [service, offersKey, car.address, windowClosed, timingKey]);
 
-  const statusOf = (addr: string, amount: bigint) => {
+  const statusOf = (o: { address: string; amount: bigint; createdAt: number }) => {
+    const { address: addr, amount } = o;
     if (car.status === "Sold") return { tone: "neutral" as const, text: copy.offers.notChosen };
     if (ranking?.bestOffer === addr) return { tone: "ok" as const, text: copy.offers.leading };
     const el = ranking?.eligible.find((x) => x.offer === addr);
     if (el) return { tone: "accent" as const, text: copy.offers.canWin };
+    const wait = waitOf(o);
+    if (wait?.kind === "window") return { tone: "warn" as const, text: fmt(guardians.rules.sale.readyFrom, { time: timeAt(wait.readyAt) }) };
+    if (wait?.kind === "tooOld") return { tone: "danger" as const, text: guardians.rules.sale.tooOldBadge };
     if (amount < car.hardshipFloor) return { tone: "danger" as const, text: copy.offers.blockedHard };
     if (amount < (car.hardshipBeneficiary ? car.hardshipFloor : car.floorPrice)) return { tone: "danger" as const, text: copy.offers.blocked };
     return { tone: "accent" as const, text: copy.offers.canWin };
   };
-  const reasonOf = (addr: string) => car.status === "Sold" ? undefined : ranking?.eligible.find((x) => x.offer === addr)?.reason ?? ranking?.ineligible.find((x) => x.offer === addr)?.reason;
+  const reasonOf = (o: { address: string; createdAt: number }) => {
+    if (car.status === "Sold") return undefined;
+    const wait = waitOf(o);
+    const sale = guardians.rules.sale;
+    if (wait?.kind === "window") {
+      const left = now === null ? "" : `${fmt(sale.left, { time: clock(Math.max(0, wait.readyAt - now)) })} · `;
+      return `${left}${wait.why === "hardship" ? sale.whyHardship : sale.whyOffer}`;
+    }
+    if (wait?.kind === "tooOld") return guardians.rules.errors.OfferTooOld;
+    return ranking?.eligible.find((x) => x.offer === o.address)?.reason ?? ranking?.ineligible.find((x) => x.offer === o.address)?.reason;
+  };
   const remaining = car.status === "Listed" && car.listingEnds && now !== null ? car.listingEnds - now : null;
 
   return (
@@ -271,8 +298,8 @@ function Listing({ copy, a, snap, car, media, session, role, canEdit, headingLev
             {offers.length === 0 ? <p className="mt-2 text-ink-2">{copy.offers.empty}</p> : (
               <ul className="mt-2">
                 {offers.map((o) => {
-                  const st = statusOf(o.address, o.amount);
-                  const reason = reasonOf(o.address);
+                  const st = statusOf(o);
+                  const reason = reasonOf(o);
                   return (
                     <li key={o.address} className="enter border-b border-line/70 py-3 last:border-0 [--from-y:6px]">
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">

@@ -6,7 +6,7 @@
 import { TriangleAlert } from "@/components/ui/icons";
 import type { EstateSnapshot } from "@/lib/service";
 import type { Base58, Claim } from "@/lib/types";
-import { claimBlock, deathOpen, type ReplaceTimes, type Tally, type Vote } from "@/lib/guardians/decisions";
+import { canSign, claimBlock, deathOpen, type ReplaceTimes, type Tally, type Vote } from "@/lib/guardians/decisions";
 import { useEstate } from "@/lib/hooks/estate";
 import { useNow } from "@/lib/hooks/use-now";
 import { useNameBook } from "@/components/shell/activity-text";
@@ -28,11 +28,21 @@ export function VoteTally({ tally, names, kind = "approved" }: { tally: Tally; n
   return <Quorum approvals={tally.votes} needed={tally.needed} names={names} label={label} />;
 }
 
-/** Why this person is asked again, or can't act. */
-export function VoteNote({ vote, death = false, className = "mt-3" }: { vote: Vote | null; death?: boolean; className?: string }) {
+/**
+ * Why this person is asked again, or can't act. `alone`: they are the only trusted person left and gain from it, so
+ * their yes decides alone and doubles the wait (a death) or the objection window (a claim).
+ */
+export function VoteNote({ vote, death = false, alone = false, className = "mt-3" }: { vote: Vote | null; death?: boolean; alone?: boolean; className?: string }) {
   const t = useCopy().guardians.rules.vote;
   const text = vote === "own" ? (death ? t.ownDeath : t.own) : vote === "complete" ? t.complete : vote === "again" ? t.again : null;
-  return text ? <p className={`text-small font-semibold ${className}`}>{text}</p> : null;
+  const lone = alone && canSign(vote) ? (death ? t.aloneDeath : t.aloneClaim) : null;
+  if (!text && !lone) return null;
+  return (
+    <div className={`grid gap-1 text-small font-semibold ${className}`}>
+      {lone && <p>{lone}</p>}
+      {text && <p>{text}</p>}
+    </div>
+  );
 }
 
 /** An open claim that can't be paid, or whose approvals have to be given again. */

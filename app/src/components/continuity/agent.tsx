@@ -3,7 +3,8 @@
 import { useId, useState, type FormEvent } from "react";
 import { Check, Repeat } from "@/components/ui/icons";
 import type { EstateSnapshot } from "@/lib/service";
-import { agentVoteFor, agentVotesNeeded, deathOpen, hasLivingSeat, isHeld } from "@/lib/guardians/decisions";
+import { agentVoteFor, agentVoteRule, deathOpen, hasLivingSeat, isHeld } from "@/lib/guardians/decisions";
+import { useNow } from "@/lib/hooks/use-now";
 import { eligibleSeats } from "@/lib/death-rules";
 import { useEstate } from "@/lib/hooks/estate";
 import { shortAddress } from "@/lib/format";
@@ -29,8 +30,17 @@ export function AgentControl({ snap }: { snap: EstateSnapshot }) {
   const owner = me === e.owner && e.status === "Active";
   const voter = isHeld(me) && e.verifiers.includes(me);
   const open = snap.agentVotes ?? [];
-  // While Active one person alone can never reach the two votes it takes.
-  const alone = voter && agentVotesNeeded(e) > eligibleSeats(e.verifiers).length;
+  // The program's number now (lib/guardians/decisions, as the services count it): every held seat before the unlock,
+  // two or the only one left after it, or once a reported passing has stood unanswered.
+  const now = useNow(15000) ?? undefined;
+  const rule = agentVoteRule(e, now);
+  // Before the unlock one person alone can never reach the two votes it takes.
+  const alone = voter && rule.needed > eligibleSeats(e.verifiers).length;
+  const needLine = (
+    <p className="mt-2 text-small font-semibold tabular-nums">
+      {fmt(t.needNow, { need: rule.needed })}{rule.why === "recovery" && <span className="block font-normal text-ink-2">{t.needRecovery}</span>}
+    </p>
+  );
 
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();
@@ -64,7 +74,7 @@ export function AgentControl({ snap }: { snap: EstateSnapshot }) {
           <h3 id={`${id}-votes`} className="font-sans text-body font-semibold">{t.votes}</h3>
           <ul className="mt-2 grid gap-2 *:min-w-0">
             {open.map(({ candidate }) => {
-              const v = agentVoteFor(snap, candidate);
+              const v = agentVoteFor(snap, candidate, now);
               const voted = !!me && v.voters.includes(me);
               const finish = voted && v.got >= v.needed;
               return (
@@ -91,12 +101,16 @@ export function AgentControl({ snap }: { snap: EstateSnapshot }) {
 
       {(owner || (voter && hasLivingSeat(e))) && (
         alone ? <p className="mt-3 text-small text-ink-2">{t.alone}</p> : !asking ? (
-          <Button variant="secondary" small className="mt-3" onClick={() => setAsking(true)}>
-            <Repeat className="size-4" aria-hidden="true" />{t.replace}
-          </Button>
+          <>
+            {voter && !owner && needLine}
+            <Button variant="secondary" small className="mt-3" onClick={() => setAsking(true)}>
+              <Repeat className="size-4" aria-hidden="true" />{t.replace}
+            </Button>
+          </>
         ) : (
           <form onSubmit={submit} noValidate className="mt-3 flex flex-col gap-3 rounded-md border border-line bg-surface-2/50 p-3">
             <p className="text-small">{owner ? t.ownerBody : t.votersBody}</p>
+            {!owner && needLine}
             <Notice tone="warn"><p>{t.warn}</p></Notice>
             {owner && deathOpen(e) && <p className="text-small font-semibold">{rules.here.warning}</p>}
             <Field label={t.wallet} htmlFor={`${id}-agent`} error={walletError}>

@@ -10,6 +10,10 @@ import type { EstateSnapshot } from "@/lib/service";
 import type { SeenOffer } from "@/lib/service/types";
 import type { Asset, Offer, OfferRanking } from "@/lib/types";
 import { hasLivingSeat, isHeld } from "@/lib/guardians/decisions";
+import { bestWaiting, clockTime, offerWait } from "@/lib/assets/sale-wait";
+import { useLocale } from "@/lib/i18n/client";
+import { useNow } from "@/lib/hooks/use-now";
+import { clock } from "@/components/guardians/derive";
 import { useEstate } from "@/lib/hooks/estate";
 import { formatUsdtExact } from "@/lib/format";
 import { Button } from "@/components/ui/primitives";
@@ -46,6 +50,13 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
   const staffed = hasLivingSeat(e);
   const holder = isHeld(me) && e.verifiers.includes(me);
   const ownOffer = holder && !!best && best.buyer === me;
+  const now = useNow();
+  const locale = useLocale();
+  // Nothing acceptable yet, but an offer only waits out its objection window: say from when, and wait for it.
+  const pending = !best && asset.status === "Listed" ? bestWaiting(ranking) : null;
+  const pendingOffer = pending ? mine.find((o) => o.address === pending.offer) : undefined;
+  const g = snap.guardians;
+  const pendingWhy = pendingOffer ? offerWait(ranking, pendingOffer, { asset, objections: g?.objections, windowSecs: g?.enabled ? g.objectionWindowSecs : null }) : null;
 
   const to = asset.hardshipBeneficiary ?? asset.proceedsTo;
   if (seen && (seen.offer !== best?.address || seen.amount !== best.amount || seen.recipient !== to)) {
@@ -104,8 +115,17 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
           </div>
         </div>
       ) : (
+        <>
+        {pending && (
+          <div className="mt-3 rounded-md border-[1.5px] border-dashed border-ink p-3 text-small">
+            <p className="font-semibold tabular-nums" role="timer" aria-live="off">
+              {now === null ? "" : fmt(t.notYet, { time: clockTime(pending.readyAt, now, locale), left: clock(Math.max(0, pending.readyAt - now)) })}
+            </p>
+            <p className="mt-1 text-ink-2">{pendingWhy?.kind === "window" && pendingWhy.why === "hardship" ? t.whyHardship : t.whyOffer}</p>
+          </div>
+        )}
         <Button
-          className="mt-3" loading={busy === "settle" || (mine.length > 0 && !ranking)} disabled={!!busy || mine.length === 0}
+          className="mt-3" loading={busy === "settle" || (mine.length > 0 && !ranking)} disabled={!!busy || mine.length === 0 || !!pending}
           // With no offer that can win there is nothing to read: asking shows the contract's refusal and why.
           onClick={() => {
             setMoved(false);
@@ -114,6 +134,7 @@ export function CoSign({ snap, asset, ranking, body, cta, working, done, refusal
         >
           <Gavel className="size-5" aria-hidden="true" />{busy === "settle" ? working : best ? t.review : cta}
         </Button>
+        </>
       )}
       {blocked && <div className="mt-4"><Blocked code={blocked.code} message={blocked.message}>{refusalExtra}</Blocked></div>}
     </>

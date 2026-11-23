@@ -35,7 +35,11 @@ function guardShortcuts(snap: EstateSnapshot): GuardShortcut[] {
   // While Thabo is alive only he approves claims: then Bongani can only confirm a reported passing.
   if (bongani && !bongani.vacant && (snap.estate.status === "Unlocked" || canSign(deathVote(snap.estate, bongani.holder)))) out.push("simulateSeatApproval");
   if (bongani && !bongani.vacant && !bongani.succession) out.push("simulateSeatPassing");
-  if (g.feed.some((f) => f.objectionDeadline !== null)) out.push("endObjectionWindow");
+  // Also an offer, or a hardship approval, still in its window: the sale waits for it (the guided story's last step).
+  const now = Math.floor(Date.now() / 1000);
+  const saleWaits = snap.offers.some((o) => now < o.createdAt + g.objectionWindowSecs)
+    || g.feed.some((f) => f.kind === "Hardship" && now < f.ts + g.objectionWindowSecs);
+  if (g.feed.some((f) => f.objectionDeadline !== null) || saleWaits) out.push("endObjectionWindow");
   if (g.seats.some((s) => s.succession?.confirmedBy)) out.push("endSuccessionWait");
   if ((g.fallback.startedAt !== null || g.fallback.recipients.some((r) => r.report)) && !g.fallback.done) out.push("endFallbackWait");
   if (!allVacant(g)) out.push("simulateAllSeatsVacant");
