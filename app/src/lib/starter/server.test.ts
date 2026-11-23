@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   sendFails: false,
 }));
 
+// The version gate (plan §18.9 C1) has its own tests: lib/chain/release.test.ts.
+vi.mock("@/lib/server/program", () => ({ assertProgram: async () => undefined, programProblem: async () => null }));
 vi.mock("../chain/config", async (original: () => Promise<{ chainConfig: object }>) => {
   const m = await original();
   return { ...m, chainConfig: { ...m.chainConfig, dataMode: "chain", cluster: "devnet", usdtMint: h.mint } };

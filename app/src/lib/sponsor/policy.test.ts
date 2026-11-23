@@ -343,6 +343,13 @@ describe("second security review (22 Nov 2026)", () => {
   });
 });
 
+describe("instruction names the IDL may change (plan §18.10 C1)", () => {
+  it("whatever add_rule is called in the IDL is built and sponsored", () => {
+    expect(names).toContain(ix.addRuleIx());
+    expect(Object.keys(policy().heirloomDiscriminators)).toContain(ix.addRuleIx());
+  });
+});
+
 describe("disputes and yearly caps (15 Nov 2026)", () => {
   const USER = ["raise_dispute", "resolve_dispute", "set_yearly_cap"];
   it("are sponsored family / trusted-person / owner instructions, never signed by the agent", () => {

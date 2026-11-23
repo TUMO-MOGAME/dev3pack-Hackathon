@@ -28,6 +28,7 @@ import { explorerTx } from "../format";
 import { withDeadline } from "../server/deadline";
 import { DAY_SECS, HOUR_SECS, agentLedger, grantMemo, grantsIn, walletTag, type Grant } from "../server/agent-ledger";
 import { claimSharedOnce, takeShared } from "../server/shared-store";
+import { assertProgram } from "../server/program";
 
 export const STARTER = {
   /** Rent for an estate, its people, rules, guard, seats, one asset and six practice wallets (cost.test.ts). */
@@ -126,6 +127,8 @@ export async function grantStarter(wallet: string, conn: Connection = getConnect
   if (!PublicKey.isOnCurve(to.toBytes())) throw new HttpError(400, "Starter funds go only to a person's wallet.", "bad_wallet");
   const from = new PublicKey((await agentAddress())!);
   if (from.equals(to)) throw new HttpError(400, "Starter funds go only to a person's wallet.", "bad_wallet");
+  // Money for a plan this app would write wrongly is money wasted.
+  await assertProgram();
   return inLine(async () => {
     try {
       return await grant(conn, from, to);

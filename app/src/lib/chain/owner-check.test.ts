@@ -17,6 +17,8 @@ const h = vi.hoisted(() => ({
   agent: "261pQudaK5J4v1WCtcGjWidWU9ww3KyYC4TiU8jDsjNg",
 }));
 
+// The version gate (plan §18.9 C1) has its own tests: lib/chain/release.test.ts.
+vi.mock("@/lib/server/program", () => ({ assertProgram: async () => undefined, programProblem: async () => null }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/api/http", async (original: () => Promise<object>) => ({ ...(await original()), isChainMode: () => true, rateLimit: () => undefined, rateLimitShared: async () => undefined }));
 vi.mock("@/lib/chain/config", async (original: () => Promise<{ chainConfig: object }>) => {

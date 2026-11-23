@@ -26,6 +26,7 @@ import type { Rule } from "../types";
 import { chainConfig } from "../chain/config";
 import { DeadlineError, withDeadline } from "./deadline";
 import { scheduleOrder, type Random } from "./schedule-order";
+import { assertProgram } from "./program";
 
 export interface TickResult { rule: string; estate: string; ok: boolean; signature?: string; explorerUrl?: string; error?: string }
 
@@ -128,6 +129,7 @@ export async function runDueSchedules(
   const left = () => started + TICK.endMs - clock();
   const agentKey = await agentAddress();
   if (!agentKey) return [];
+  await assertProgram();
   const agent = new PublicKey(agentKey);
   const ctx = chainCtx();
   const programId = new PublicKey(getIdl().address);

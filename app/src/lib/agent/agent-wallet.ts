@@ -14,6 +14,7 @@ import { prepareTx } from "../chain/client";
 import { base64ToBytes, bytesToBase64, confirmOrThrow, getConnection } from "../chain/tx";
 import { explainSendError, openAccount, wdkPartialSign, wdkSignAndSend, type WdkAccount } from "../wallet/wdk";
 import { explorerTx } from "../format";
+import { assertProgram } from "../server/program";
 
 export const AGENT_ALLOWED = [
   "review_death", "review_claim", "review_hardship", "list_asset", "accept_offer", "execute_scheduled",
@@ -65,6 +66,7 @@ async function assertReserve(address: string): Promise<void> {
 
 export async function agentSignAndSend(ixs: TransactionInstruction[]): Promise<{ signature: string; explorerUrl: string }> {
   assertAllowed(ixs);
+  await assertProgram();
   const acc = await agentAccount();
   await assertReserve(acc.address);
   const b64 = await prepareTx(acc.address, ixs);
@@ -89,6 +91,7 @@ export function assertOneSale(tx: Pick<Transaction, "instructions" | "feePayer">
 export async function agentCoSignSale(tx: Transaction): Promise<{ signature: string; explorerUrl: string }> {
   const acc = await agentAccount();
   assertOneSale(tx, acc.address);
+  await assertProgram();
   await assertReserve(acc.address);
   const partly = bytesToBase64(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
   const { wireBase64, signature } = await wdkPartialSign(acc.account, partly);
@@ -106,6 +109,7 @@ export async function agentCoSignSale(tx: Transaction): Promise<{ signature: str
  * Only ever called by /api/sponsor AFTER lib/sponsor/policy.ts validated the exact bytes.
  */
 export async function agentCoSign(wireBase64: string): Promise<{ wireBase64: string; signature: string }> {
+  await assertProgram();
   const acc = await agentAccount();
   return wdkPartialSign(acc.account, wireBase64);
 }

@@ -9,6 +9,7 @@ import { invalidateProgramAccounts } from "@/lib/chain/reads";
 import { assertServedEstate, verifyAction } from "@/lib/access/server";
 import { actionBody } from "@/lib/access/messages";
 import { loadPublicSnapshot } from "@/lib/server/estate";
+import { assertProgram } from "@/lib/server/program";
 
 export const maxDuration = 60;
 
@@ -24,6 +25,7 @@ export const POST = handler(async (req) => {
   if (!isChainMode()) throw new HttpError(409, "On-chain listing runs in chain mode only.");
   const wallet = await verifyAction(req, "list-asset", b.estate, actionBody.listAsset(b));
   if (!hasAgentWallet()) throw new HttpError(503, "The agent wallet is not configured (AGENT_SEED_PHRASE).");
+  await assertProgram();
   invalidateProgramAccounts(); // a seat filled or a member removed a second ago must count
   const snap = await loadPublicSnapshot(b.estate);
   const asset = snap.assets.find((a) => a.address === b.asset);

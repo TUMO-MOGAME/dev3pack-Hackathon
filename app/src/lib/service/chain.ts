@@ -62,6 +62,7 @@ import { actionHeaders, ensureReadPass, readHeaders, readerKey } from "../access
 import { actionBody, type AgentAction } from "../access/messages";
 import { clampWaiting } from "../continuity/logic";
 import { pack } from "../chain/pack";
+import { requireCurrentApp } from "../chain/write-guard";
 import { publicBeneficiaryLabel, publicPayeeName, withPrivateNames } from "../chain/public-names";
 
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
@@ -139,6 +140,8 @@ type Ixs = TransactionInstruction[] | ((feePayer: PublicKey) => TransactionInstr
  * when sponsored, then the server co-signs), the signature is persisted, then broadcast; returns the receipt.
  */
 async function pay(id: string, ixs: Ixs, meta: Pick<StoredPayment, "kind" | "to" | "toLabel" | "amount" | "from" | "bill">, selfPay = false) {
+  // Before anything is signed: this tab's build is the server's, and the program on-chain is this build's (C1).
+  await requireCurrentApp();
   const signer = getActiveSigner();
   return runPayment(receipts, chainOps(), id, () => signSponsoredOrSelf({
     user: signer.address,

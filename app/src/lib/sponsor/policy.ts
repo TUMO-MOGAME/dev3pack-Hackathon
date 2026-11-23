@@ -38,7 +38,7 @@ export const SPONSOR_RENT_PAYER_ACCOUNTS: Record<string, string> = { approve_cla
 
 /** User-initiated Heirloom instructions the sponsor will pay fees for. Agent-only ones (review_*, list_asset, accept_offer) are excluded. */
 export const SPONSORED_HEIRLOOM_IXS = [
-  "create_estate", "set_will", "add_beneficiary", "add_payee", "add_rule", "deposit", "withdraw", "heartbeat", "veto_death",
+  "create_estate", "set_will", "add_beneficiary", "add_payee", "add_rule", "add_rule_v2", "deposit", "withdraw", "heartbeat", "veto_death",
   "register_asset", "owner_approve_claim", "submit_death_claim", "submit_claim", "submit_hardship", "attest_death",
   "approve_claim", "approve_hardship", "finalize_unlock", "execute_claim", "execute_scheduled", "place_offer", "withdraw_offer",
   // Guardians (docs/guardians-spec.md §2.2). The agent's review_seat_death / review_fallback_death are not sponsored.

@@ -19,6 +19,8 @@ import { base64ToBytes, getConnection } from "../chain/tx";
 import { programFailure } from "../chain/program-errors";
 import { chainBackstop } from "../agent/budget";
 import { takeShared } from "../server/shared-store";
+import { assertProgram, programProblem } from "../server/program";
+import { RELEASE_WORDS } from "../chain/release";
 import { DEFAULT_LIMITS, SPONSOR_RENT_PAYER_ACCOUNTS, SPONSORED_HEIRLOOM_IXS, SponsorRejection, validateSponsoredTx, type SponsorPolicy } from "./policy";
 import { DEFAULT_SPONSOR_LIMITS, SponsorLimiter, sharedTakes, type SponsorLimits } from "./limits";
 
@@ -99,6 +101,8 @@ export async function sponsorInfo(conn: Connection = getConnection()): Promise<S
   const off = (reason: string, feePayer: string | null = null, balanceLamports: number | null = null) =>
     ({ available: false, feePayer, maxFeeLamports: 0, paysRent: false, reason, balanceLamports });
   if (!sponsorEnabled()) return off("Fee sponsorship is not configured.");
+  const problem = await programProblem();
+  if (problem) return off(`Not sponsoring: ${RELEASE_WORDS[problem]}.`);
   try {
     const policy = await sponsorPolicy();
     const bal = await conn.getBalance(policy.sponsor, "confirmed");
@@ -118,6 +122,7 @@ export interface SponsorResult { signature: string; wireBase64: string; feeLampo
  */
 export async function sponsorTransaction(wireBase64: string, opts: { submit: boolean }, conn: Connection = getConnection()): Promise<SponsorResult> {
   if (!sponsorEnabled()) throw new SponsorUnavailable("Fee sponsorship is not configured.");
+  await assertProgram();
   const policy = await sponsorPolicy();
   let wire: Uint8Array;
   try { wire = base64ToBytes(wireBase64); } catch { throw new SponsorRejection("malformed", "Transaction must be base64."); }

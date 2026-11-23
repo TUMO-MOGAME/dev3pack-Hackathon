@@ -25,6 +25,8 @@ const h = vi.hoisted(() => ({
   ixs: [] as { keys: { pubkey: { toBase58(): string } }[] }[],
 }));
 
+// The version gate (plan §18.9 C1) has its own tests: lib/chain/release.test.ts.
+vi.mock("@/lib/server/program", () => ({ assertProgram: async () => undefined, programProblem: async () => null }));
 vi.mock("../chain/config", async (original: () => Promise<{ chainConfig: object }>) => {
   const m = await original();
   return { ...m, chainConfig: { ...m.chainConfig, usdtMint: h.mint } };

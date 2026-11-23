@@ -13,6 +13,7 @@ import { assertServedEstate, verifyAction } from "@/lib/access/server";
 import { actionBody } from "@/lib/access/messages";
 import { outcomeOf, type ReviewOutcome } from "@/lib/verdict";
 import { DeadlineError, withDeadline } from "@/lib/server/deadline";
+import { assertProgram } from "@/lib/server/program";
 
 export const maxDuration = 90;
 /** The model has until this long after the request arrived (its retries included), the recording until SEND_BY_MS. */
@@ -60,6 +61,7 @@ export const POST = handler(async (req) => {
   const { purpose, estate, subject, index } = fields;
   const wallet = await verifyAction(req, "review", estate, actionBody.review({ purpose, subject, index, sha256 }));
   if (!hasAgentWallet()) throw new HttpError(503, "The agent wallet is not configured.", "unavailable");
+  await assertProgram(); // before the model is paid for a review that could not be recorded
   const agent = await agentAddress();
   const target = await loadReviewTarget({ purpose, estate, subject, index, sha256 });
   if (target.submitter !== wallet) throw new HttpError(403, "Only the person who submitted this can ask for its review.", "forbidden");
