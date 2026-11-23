@@ -148,6 +148,7 @@ describe("payouts pass the accounts they re-check (R16)", () => {
   it("executeClaim: the claim's beneficiary and payee", async () => {
     const claim = key();
     h.accounts.set(claim, { rule: rulePda(programId, estate, 0), beneficiary: kid, payee: res, amount: 5 });
+    vi.stubGlobal("fetch", async () => new Response("[]", { status: 200 })); // the request notes: no "no"
     await createChainService().executeClaim(estate, claim);
     expect([passes(beneficiaryPda(programId, estate, kid)), passes(payeePda(programId, estate, res))]).toEqual([true, true]);
   });
@@ -254,6 +255,21 @@ describe("H9: the owner's no stands after the death", () => {
     stub([]);
     await createChainService().approveClaim(estate, claim);
     expect(names()).toEqual(["approve_claim"]);
+  });
+
+  it("N8: executeClaim pays nothing for a declined request, nor when the notes can't be read", async () => {
+    const claim = key();
+    h.accounts.set(claim, { rule: rulePda(programId, estate, 0), beneficiary: kid, payee: res, amount: 5, owner_approved: false });
+    h.me = v1;
+    const stub = (body: unknown, status = 200) => vi.stubGlobal("fetch", async () => new Response(JSON.stringify(body), { status }));
+    stub([{ claim, purpose: "trip", currency: "USDT", typed: 5, createdAt: 1, attachment: false, declinedAt: 9 }]);
+    await expect(createChainService().executeClaim(estate, claim)).rejects.toMatchObject({ code: "Declined" });
+    stub({ error: "down" }, 503);
+    await expect(createChainService().executeClaim(estate, claim)).rejects.toMatchObject({ code: "DeclineUnknown" });
+    expect(h.signed).toEqual([]);
+    stub([]);
+    await createChainService().executeClaim(estate, claim);
+    expect(names()).toEqual(["execute_claim"]);
   });
 });
 

@@ -855,8 +855,10 @@ export function createChainService(): HeirloomService {
 
     async executeClaim(estate, claim) {
       const raw = await mustFetch("Claim", claim);
+      // The owner's "no" is kept by Heirloom, not by the contract: read strictly, so nothing pays when it can't be read (N8).
       if (raw.owner_approved !== true) {
-        must(!(await asks.loadAsks(estate))[claim]?.declinedAt, "Declined", "The owner said no to this request while alive.");
+        await ensureReadPass(getActiveSigner());
+        must(!(await asks.loadAsks(estate, { strict: true }))[claim]?.declinedAt, "Declined", "The owner said no to this request while alive.");
       }
       return send([ix.executeClaim(chainCtx(), {
         estate: pk(estate), payer: pk(getActiveSigner().address), rule: pk(key(raw, "rule")), claim: pk(claim),
