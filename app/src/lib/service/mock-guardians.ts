@@ -16,7 +16,7 @@ import { fail, need } from "./mock-errors";
 import { shortName } from "../names";
 import { cleanSpec, foreignSpecKeys, isPhotoLabel, type AssetSpec } from "../assets/spec";
 import { objectionLapsesAt } from "../disputes/types";
-import { eligibleSeats, fallbackGrace, refuteWait, replaceableAt, seatReviewedHold } from "../death-rules";
+import { eligibleSeats, fallbackGrace, MIN_WAIT_SECS, refuteWait, replaceableAt, seatReviewedHold } from "../death-rules";
 import { openToPeople } from "../verdict";
 import { confirmRoute, deathSince, interestedIn, NO_WALLET, successionOutcome } from "../guardians/decisions";
 import { clearDeath, COLLECTING, proofOfLife, votesCount, type MockStamp } from "./mock-rules";
@@ -128,6 +128,8 @@ export interface GuardDeps {
 
 export function createMockGuardians(d: GuardDeps) {
   const g = () => d.guard();
+  /** Guard::succession_wait: at least 60 s (a stored 0 waits 60 s), so a living holder always has time to answer. */
+  const successionWait = () => Math.max(MIN_WAIT_SECS, g().successionWaitSecs);
   const est = () => d.snap().estate;
   const name = (a: Base58) => d.names()[a] ?? "Someone";
   const first = (a: Base58) => shortName(name(a)); // the short form used in sentences (lib/names)
@@ -524,7 +526,7 @@ export function createMockGuardians(d: GuardDeps) {
     const sc = s.succession ?? fail("NoSuccessionPending", "No passing has been reported for this seat.");
     need(sc.verdict === "Approved", "AgentNotApproved", "The agent has not cleared the certificate.");
     need(!!sc.confirmedBy, "NotConfirmer", "Another trusted person must confirm the passing first.");
-    need(nowSecs() >= sc.pendingSince + g().successionWaitSecs, "WaitingPeriodNotOver", "The waiting period has not ended yet.");
+    need(nowSecs() >= sc.pendingSince + successionWait(), "WaitingPeriodNotOver", "The waiting period has not ended yet.");
     need(!openObjection(s.address), "ObjectionOpen", "A monitor objected. This waits until the objection is decided.");
     const gone = s.holder!;
     const e = est();
@@ -925,7 +927,7 @@ export function createMockGuardians(d: GuardDeps) {
     }
     return {
       enabled: true, address: gs.address,
-      objectionWindowSecs: gs.objectionWindowSecs, successionWaitSecs: gs.successionWaitSecs, fallbackWaitSecs: gs.fallbackWaitSecs,
+      objectionWindowSecs: gs.objectionWindowSecs, successionWaitSecs: successionWait(), fallbackWaitSecs: gs.fallbackWaitSecs,
       seats: gs.seats.map((s) => ({
         address: s.address, index: s.index, holder: s.holder, holderName: s.holder ? name(s.holder) : "",
         backups: s.backups.map(named), monitors: s.monitors.map(named), generation: s.generation, vacant: s.vacant,
@@ -933,7 +935,7 @@ export function createMockGuardians(d: GuardDeps) {
           certHash: s.succession.certHash, reportedBy: s.succession.reportedBy, verdict: s.succession.verdict,
           report: s.succession.report ? structuredClone(s.succession.report) : undefined,
           confirmedBy: s.succession.confirmedBy, reportedAt: s.succession.reportedAt ?? 0, pendingSince: s.succession.pendingSince,
-          readyAt: s.succession.pendingSince ? s.succession.pendingSince + gs.successionWaitSecs : 0,
+          readyAt: s.succession.pendingSince ? s.succession.pendingSince + successionWait() : 0,
           nextHolder: promotedNext(s),
         } : null,
       })),
@@ -985,7 +987,7 @@ export function createMockGuardians(d: GuardDeps) {
     for (const s of g().seats) {
       if (!s.succession?.pendingSince) continue;
       s.succession.confirmedAt ??= s.succession.pendingSince;
-      s.succession.pendingSince -= g().successionWaitSecs;
+      s.succession.pendingSince -= successionWait();
     }
   }
   function endFallbackWait() {

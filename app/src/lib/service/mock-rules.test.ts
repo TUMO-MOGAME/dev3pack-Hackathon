@@ -1489,3 +1489,18 @@ describe("a disproved passing, as the program (DeathDisproved)", () => {
     expect([e.status, e.death.submittedBy, e.death.attestations]).toEqual(["Active", who("nomsa"), [false, false, false]]);
   });
 });
+
+describe("a succession wait stored as 0 (Guard::succession_wait)", () => {
+  it("reads and waits as 60 s", async () => {
+    const saved = storage();
+    await start("funded", { guarded: true });
+    saved.edit((s) => { s.guard.successionWaitSecs = 0; });
+    const t = await open(createMockService({ instant: true }));
+    expect((await t.snap()).guardians!.successionWaitSecs).toBe(60);
+    t.svc.simulateSeatPassing(2);
+    advance(30);
+    await expect(t.svc.finalizeSuccession(t.estate, 2)).rejects.toThrow(/^WaitingPeriodNotOver/);
+    advance(31);
+    await t.svc.finalizeSuccession(t.estate, 2);
+  });
+});
