@@ -844,7 +844,14 @@ export const af: Bundle = {
         summaryEvery: { minute: "minuut", week: "week", month: "maand", term: "kwartaal", year: "jaar" },
         summaryAsset: "{title} word verkoop vir minstens {floor}, of minstens {hardship} as 'n kind werklike nood bewys.",
       },
-      done: { title: "Jou plan is vasgelê", body: "Die reëls is met jou wallet geteken. Befonds die kluis en dié gemerk \"Nou\" kan betaal wanneer hulle verskuldig is.", fund: "Vul die kluis", car: "Voeg die motor by", estate: "Sien my boedel", receipts: "Kwitansies", receipt: "Kwitansie {n}", receiptSr: "Maak Solana Explorer in 'n nuwe oortjie oop" },
+      finish: {
+        title: "Voltooi die ondertekening van jou plan",
+        body: "Die ondertekening is onderbreek, so 'n deel van jou plan is nog nie op Solana nie. Voltooiing voeg by wat ontbreek en slaan oor wat reeds daar is. Jou wallet teken weer.",
+        cta: "Voltooi die ondertekening",
+        again: "Begin 'n ander plan",
+        summary: "Die plan wat jy onderteken het",
+      },
+      done: { topUp: "Die oefen-SOL vir die mense in jou plan het nie deurgegaan nie. Jou plan is geteken; hulle kan self vir aanvangsfondse vra.", title: "Jou plan is vasgelê", body: "Die reëls is met jou wallet geteken. Befonds die kluis en dié gemerk \"Nou\" kan betaal wanneer hulle verskuldig is.", fund: "Vul die kluis", car: "Voeg die motor by", estate: "Sien my boedel", receipts: "Kwitansies", receipt: "Kwitansie {n}", receiptSr: "Maak Solana Explorer in 'n nuwe oortjie oop" },
       notYours: {
         title: "Dit is {name} se plan",
         body: "Jy is deel van {name} se plan, en dit bly presies soos dit is. Jou eie plan staan apart: die agent help jou om dit te bou, en dit word 'n nuwe boedel in jou eie beursie.",

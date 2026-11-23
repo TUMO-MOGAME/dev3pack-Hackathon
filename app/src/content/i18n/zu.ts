@@ -844,7 +844,15 @@ export const zu: Bundle = {
         summaryEvery: { minute: "mzuzu", week: "sonto", month: "nyanga", term: "themu", year: "nyaka" },
         summaryAsset: "{title} izothengiswa okungenani nge-{floor}, noma okungenani nge-{hardship} uma ingane ifakazela ubunzima bangempela.",
       },
+      finish: {
+        title: "Qedela ukusayina uhlelo lwakho",
+        body: "Ukusayina kuphazamisekile, ngakho ingxenye yohlelo lwakho ayikabi ku-Solana. Ukuqedela kwengeza okushodayo futhi kweqe osekukhona. I-wallet yakho iyasayina futhi.",
+        cta: "Qedela ukusayina",
+        again: "Qala olunye uhlelo",
+        summary: "Uhlelo obulusayina",
+      },
       done: {
+        topUp: "I-SOL yokuzijwayeza yabantu abasohlelweni lwakho ayifikanga. Uhlelo lwakho lusayiniwe; bangazicelela izimali zokuqala.",
         title: "Uhlelo lwakho seluqinisiwe",
         body: "Imithetho isayinwe nge-wallet yakho. Faka imali esisefweni bese leyo emakwe ngokuthi \"Manje\" ingakhokha uma isikhathi sayo sifika.",
         fund: "Faka imali esisefweni",

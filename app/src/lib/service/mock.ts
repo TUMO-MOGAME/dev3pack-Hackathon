@@ -153,6 +153,10 @@ interface State {
   agentVotes?: MockAgentVotes;
   /** Assets taken back, title -> the address a fresh registration gets again (second review; created on first use). */
   released?: Record<Base58, Base58>;
+  /** A plan being signed (H6): set before, cleared after. */
+  signing?: { draft: WillDraft; options: import("../continuity/types").CreateEstateOptions };
+  /** The assets the signed plan describes (M4). */
+  planned?: WillDraft["assets"];
 }
 
 const SLOT_CLAIMS = 65_536;
@@ -1488,6 +1492,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
         names: { ...s.names },
         guardians: G.snapshot(),
         asks: structuredClone(s.asks ?? {}),
+        ...(s.planned?.length ? { plannedAssets: structuredClone(s.planned) } : {}),
       };
     },
     async listEstatesFor(wallet) {
@@ -1532,8 +1537,18 @@ export function createMockService(opts: MockOptions = {}): MockService {
     },
 
     async createEstateFromWill(draft, opts) {
+      // Kept before the wait (H6): a reload while "signing" offers to finish it, as on-chain.
+      s.signing = { draft: structuredClone(draft), options: { ...opts } };
+      save();
       const txs = await mutate(1500, () => createEstate(draft, opts?.residualLabel, opts?.practice));
+      s.planned = draft.assets.length ? structuredClone(draft.assets) : undefined;
+      delete s.signing;
+      save();
       return { estate: est().address, txs };
+    },
+    async unfinishedSigning() {
+      await wait(60);
+      return s.signing && !s.created ? structuredClone(s.signing) : null;
     },
     deposit: (_e, amountUsdt) => mutate(900, () => deposit(amountUsdt)),
     withdraw: (_e, amountUsdt) => mutate(900, () => withdraw(amountUsdt)),

@@ -6,6 +6,7 @@ import type { ScreensCopy } from "@/content/screens";
 import { useLocale, useLocalized } from "@/lib/i18n/client";
 import type { EstateSnapshot, TxResult } from "@/lib/service";
 import type { WalletSession, WillChatMessage, WillDraft } from "@/lib/types";
+import type { CreateEstateOptions } from "@/lib/continuity/types";
 import { formatUsdt, fromBase, shortAddress, toBase } from "@/lib/format";
 import { useEstate } from "@/lib/hooks/estate";
 import { Badge, Button, ButtonLink, Card, Consent, Eyebrow, ExplorerLink, Notice, PageHeader } from "@/components/ui/primitives";
@@ -69,13 +70,28 @@ export function WillScreen({ copy: english, bills: billsEnglish }: { copy: Copy;
 function WillFlow({ copy, bills, snap, session, firstVisit }: { copy: Copy; bills: BillsCopy; snap: EstateSnapshot | null; session: WalletSession; firstVisit?: boolean }) {
   // Kept here so the "locked in" moment survives the estate appearing underneath it.
   const [txs, setTxs] = useState<TxResult[] | null>(null);
+  const [topUpFailed, setTopUpFailed] = useState(false);
+  // A plan this wallet started signing that isn't all on-chain yet (H6). Looked up again when the estate changes.
+  const { service } = useEstate();
+  const [unfinished, setUnfinished] = useState<{ draft: WillDraft; options: CreateEstateOptions } | null>(null);
+  const [fresh, setFresh] = useState(false);
+  const snapKey = snap ? `${snap.estate.address}:${snap.estate.willHash}:${snap.rules.length}:${snap.beneficiaries.length}` : "none";
+  useEffect(() => {
+    if (!service || firstVisit) return;
+    let live = true;
+    service.unfinishedSigning().then((u) => { if (live) setUnfinished(u); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [service, session.address, snapKey, firstVisit]);
   // A family member or trusted person who plans for her own family sees the estate she belongs to here; this page
   // is about her own plan, so she is offered the plan builder (on chain it creates an estate owned by her wallet).
   const [ownPlan, setOwnPlan] = useState(false);
   const { chooseEstate, estates } = useEstate();
-  const signed = (r: { estate: string; txs: TxResult[] }) => { setTxs(r.txs); chooseEstate(r.estate); };
+  const signed = (r: { estate: string; txs: TxResult[]; topUpFailed?: boolean }) => { setTxs(r.txs); setTopUpFailed(!!r.topUpFailed); setUnfinished(null); chooseEstate(r.estate); };
   const view = willView(snap?.estate.owner ?? null, session.address, estates, snap?.estate.address ?? null);
-  if (txs) return <Done copy={copy} txs={txs} />;
+  if (txs) return <Done copy={copy} txs={txs} topUpFailed={topUpFailed} />;
+  if (unfinished && !fresh && (!snap || view.kind === "locked")) {
+    return <FinishSigning copy={copy} plan={unfinished} onSigned={signed} onFresh={snap ? undefined : () => setFresh(true)} />;
+  }
   if (snap && view.kind === "locked") return <Locked copy={copy} bills={bills} snap={snap} />;
   if (snap && view.kind !== "builder" && !(view.kind === "startOwn" && ownPlan)) {
     return <NotYourPlan copy={copy} snap={snap} session={session} own={view.kind === "openOwn" ? view.estate : null} onStart={() => setOwnPlan(true)} />;
@@ -101,7 +117,32 @@ function NotYourPlan({ copy, snap, session, own, onStart }: { copy: Copy; snap: 
   );
 }
 
-function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
+/** "Finish signing": the same plan again, which adds only what the chain is missing (H6). */
+function FinishSigning({ copy, plan, onSigned, onFresh }: {
+  copy: Copy; plan: { draft: WillDraft; options: CreateEstateOptions }; onSigned: (r: { estate: string; txs: TxResult[]; topUpFailed?: boolean }) => void; onFresh?: () => void;
+}) {
+  const { run, busy } = useEstate();
+  const f = copy.finish;
+  const finish = async () => {
+    const res = await run("sign", (s) => s.createEstateFromWill(plan.draft, plan.options));
+    if (res.ok) onSigned(res.value);
+  };
+  return (
+    <div className="mx-auto max-w-xl">
+      <PageHeader eyebrow={copy.eyebrow} title={f.title} body={f.body} />
+      <Card>
+        <h2 className="text-h3">{f.summary}</h2>
+        <p className="mt-2 whitespace-pre-line">{plan.draft.plainLanguageSummary}</p>
+      </Card>
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <Button onClick={() => void finish()} loading={busy === "sign"} disabled={!!busy}><Lock className="size-5" aria-hidden="true" />{f.cta}</Button>
+        {onFresh && <Button variant="secondary" onClick={onFresh} disabled={!!busy}>{f.again}</Button>}
+      </div>
+    </div>
+  );
+}
+
+function Done({ copy, txs, topUpFailed = false }: { copy: Copy; txs: TxResult[]; topUpFailed?: boolean }) {
   return (
     <div className="enter mx-auto max-w-xl text-center [--enter-dur:0.35s] [--from-s:0.97] [--from-y:0]">
       <span className="spring-pop mx-auto grid size-20 place-items-center rounded-full bg-accent text-accent-ink [--enter-delay:0.1s] [--from-s:0]">
@@ -109,6 +150,7 @@ function Done({ copy, txs }: { copy: Copy; txs: TxResult[] }) {
       </span>
       <h1 className="mt-5 text-h1" role="status">{copy.done.title}</h1>
       <p className="mt-3 text-lead text-ink-2">{copy.done.body}</p>
+      {topUpFailed && <Notice tone="warn" className="mt-4 text-left"><p role="status">{copy.done.topUp}</p></Notice>}
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
         <ButtonLink href="/vault">{copy.done.fund}<ArrowRight className="size-5" aria-hidden="true" /></ButtonLink>
         <ButtonLink href="/car" variant="secondary">{copy.done.car}</ButtonLink>

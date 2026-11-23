@@ -63,6 +63,7 @@ import { actionBody, type AgentAction } from "../access/messages";
 import { clampWaiting } from "../continuity/logic";
 import { pack } from "../chain/pack";
 import { requireEvidence } from "../evidence";
+import { createSigningStore, withChosenEvery } from "./signing-store";
 import { publicBeneficiaryLabel, publicPayeeName, withPrivateNames } from "../chain/public-names";
 
 // ---------- legacy voice: requests signed by the acting WDK wallet; the server checks the on-chain role ----------
@@ -230,6 +231,9 @@ async function signedPost<T>(path: string, action: AgentAction, estate: Base58, 
 const PRACTICE_SOL_LAMPORTS = 6_000_000;
 
 /** The owner's device copy of the names, put back quietly when the server lost them (lib/estate-meta/keeper.ts). */
+/** The plan being signed, on the owner's device before the first transaction (H6). */
+const signing = createSigningStore();
+
 const namesKeeper = createNamesKeeper({
   signer: peekActiveSigner,
   owns: (estate, wallet) => estatePda(chainCtx().programId, wallet).toBase58() === estate,
@@ -480,7 +484,10 @@ export function createChainService(): HeirloomService {
         estate: out.estate, names, labels: Object.fromEntries(loadWallets().map((w) => [w.address, w.label])),
         people: [out.beneficiaries, out.payees, out.offers, guardians, residual],
       }).then((saved) => { if (saved) forget(`meta:${estate}`); }).catch(() => undefined);
-      return { ...withPrivateNames(out, names), activity: withBills, rules: extra.rules, disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names, asks: askNotes, residual };
+      const me = peekActiveSigner()?.address;
+      const signed = me ? signing.get(estate, me) : null;
+      return { ...withPrivateNames(out, names), activity: withBills, rules: withChosenEvery(extra.rules, signed?.draft),
+        ...(signed?.draft.assets.length ? { plannedAssets: signed.draft.assets } : {}), disputes: extra.disputes, estate: { ...out.estate, verifierNames }, guardians, names, asks: askNotes, residual };
     },
 
     listEstatesFor(wallet) {
@@ -561,9 +568,28 @@ export function createChainService(): HeirloomService {
 
       const heir = draft.beneficiaries.find((b) => b.label === opts.residualLabel) ?? draft.beneficiaries[0];
       if (heir?.wallet && heir.wallet !== owner.toBase58()) setup.push(ix.setResidual(ctx, owner, pk(heir.wallet)));
-      // Before sending: if signing is interrupted, the next try must know the practice payees by name.
+      // Before sending (H6): the plan and the names stay on this device, so an interrupted signing is finished from
+      // them ("Finish signing") and the names are never lost. The server gets the names as soon as the estate exists.
       rememberOnDevice(privateNames);
-      for (const group of pack(setup)) txs.push(await send(group));
+      const meta: EstateMeta = {
+        estate: estate.toBase58(), ownerWallet: owner.toBase58(), ownerName: draft.ownerName,
+        verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string],
+        assetTitles: savedMeta?.assetTitles ?? {}, buyerNames: { ...savedMeta?.buyerNames, ...privateNames },
+        updatedAt: savedMeta?.updatedAt,
+      };
+      namesKeeper.remember(meta);
+      signing.put(estate.toBase58(), { owner: owner.toBase58(), draft, options: opts, done: false });
+      let named = false;
+      for (const group of pack(setup)) {
+        txs.push(await send(group));
+        if (!named) named = await saveMeta(meta, draft).then(() => true, () => false); // names are cosmetic; retried below
+      }
+      signing.done(estate.toBase58());
+      if (!named) await saveMeta(meta, draft).catch(() => undefined);
+
+      // Practice SOL for the people in the plan: a failure here loses nothing (the plan is signed); they can ask for
+      // starter funds themselves.
+      let topUpFailed = false;
 
       if (opts.practice) {
         const people = [...new Set([...draft.beneficiaries, ...draft.verifiers].map((p) => p.wallet!))].filter((w) => w !== owner.toBase58());
@@ -571,20 +597,39 @@ export function createChainService(): HeirloomService {
         const held = await Promise.all(people.map((w) => conn.getBalance(pk(w), "confirmed")));
         const top = people.filter((_, i) => held[i] < PRACTICE_SOL_LAMPORTS);
         // Never leave the owner without rent for their own next steps; the sponsor still covers everyone's fees.
-        if (top.length && (await conn.getBalance(owner, "confirmed")) > PRACTICE_SOL_LAMPORTS * (top.length + 1)) {
-          for (const group of chunk(top, 6)) {
-            txs.push(await send(group.map((w) => SystemProgram.transfer({ fromPubkey: owner, toPubkey: pk(w), lamports: PRACTICE_SOL_LAMPORTS })), { kind: "program" }, { selfPay: true }));
+        try {
+          if (top.length && (await conn.getBalance(owner, "confirmed")) > PRACTICE_SOL_LAMPORTS * (top.length + 1)) {
+            for (const group of chunk(top, 6)) {
+              txs.push(await send(group.map((w) => SystemProgram.transfer({ fromPubkey: owner, toPubkey: pk(w), lamports: PRACTICE_SOL_LAMPORTS })), { kind: "program" }, { selfPay: true }));
+            }
           }
+        } catch (e) {
+          topUpFailed = true;
+          console.warn(`The practice top-up didn't go through: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
+      return { estate: estate.toBase58(), txs, ...(topUpFailed ? { topUpFailed } : {}) };
+    },
 
-      await saveMeta({
-        estate: estate.toBase58(), ownerWallet: owner.toBase58(), ownerName: draft.ownerName,
-        verifierNames: draft.verifiers.map((v) => v.name) as [string, string, string],
-        assetTitles: savedMeta?.assetTitles ?? {}, buyerNames: { ...savedMeta?.buyerNames, ...privateNames },
-        updatedAt: savedMeta?.updatedAt,
-      }, draft).catch(() => undefined); // names are cosmetic; the estate itself is already on-chain
-      return { estate: estate.toBase58(), txs };
+    async unfinishedSigning() {
+      const me = peekActiveSigner()?.address;
+      if (!me) return null;
+      const estate = estatePda(chainCtx().programId, me).toBase58();
+      const rec = signing.get(estate, me);
+      if (!rec || rec.done) return null;
+      const raw = await fetchAccountRaw("Estate", estate).catch(() => undefined);
+      if (raw === undefined) return null; // can't tell now: ask again on the next read
+      if (!raw) return { draft: rec.draft, options: rec.options };
+      // What the plan on-chain still lacks of the signed draft: the will, family members, rules, the named heir.
+      const { intervalSecs } = await import("../agent/schemas");
+      const before = withPrivateNames(await freshEstate(estate), guardianExtras(namesKeeper.view(estate, await getMeta(estate)), {}).names);
+      const willHash = await hashJson(rec.draft);
+      const plan = planSetup({
+        draft: rec.draft, before, ruleCount: before.ruleCount, practice: !!rec.options.practice, now: Math.floor(Date.now() / 1000), intervalSecs, newWallet: () => me,
+      });
+      const lacks = before.estate.willHash !== willHash || plan.beneficiaries.length > 0 || plan.rules.length > 0;
+      if (!lacks) { signing.done(estate); return null; }
+      return { draft: rec.draft, options: rec.options };
     },
 
     async deposit(estate, amountUsdt) { const o = requireOwnerOf(estate); return send([ix.deposit(chainCtx(), o, toBase(amountUsdt))], { kind: "vault-deposit", to: estate, toLabel: "Estate vault", amount: toBase(amountUsdt).toString() }); },

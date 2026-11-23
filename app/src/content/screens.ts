@@ -279,7 +279,16 @@ export const screens = {
       signing: "Signing with your wallet",
       signNote: "Signing records a fingerprint of these rules on Solana. Your words stay private.",
     },
+    /** A plan whose signing was interrupted (H6): what is on-chain stays, and the rest is added. */
+    finish: {
+      title: "Finish signing your plan",
+      body: "Signing was interrupted, so part of your plan isn't on Solana yet. Finishing adds what is missing and skips what is already there. Your wallet signs again.",
+      cta: "Finish signing",
+      again: "Start a different plan",
+      summary: "The plan you were signing",
+    },
     done: {
+      topUp: "The practice SOL for the people in your plan didn't go through. Your plan is signed; they can ask for starter funds themselves.",
       title: "Your plan is locked in",
       body: "The rules are signed with your wallet. Fund the vault and the ones marked \"Now\" can pay when they are due.",
       fund: "Fund the vault",

@@ -260,6 +260,27 @@ describe("H7: a review that didn't finish", () => {
   });
 });
 
+describe("H6: an interrupted signing is finished, and nothing is lost", () => {
+  it("interrupt, reload, resume", async () => {
+    const mem = new Map<string, string>();
+    vi.stubGlobal("localStorage", { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) });
+    const rules = Array.from({ length: 5 }, (_, i) => ({ ...draft.rules[0], recurring: undefined, category: "Books" as const, allowedPayeeKind: "School" as const, maxPerClaimUsdt: 10 + i, lifetimeCapUsdt: 100 }));
+    const plan = { ...draft, rules };
+    let sends = 0;
+    Object.defineProperty(h, "status", { configurable: true, get: () => (++sends === 2 ? "failed" : "confirmed"), set: () => undefined });
+    await expect(createChainService().createEstateFromWill(plan, { practice: true })).rejects.toThrow();
+    // The names went to the server as soon as the estate existed, not at the end.
+    expect(h.posts).toContain("/api/estate-meta");
+    // A reload: a new service on the same device offers to finish the same plan.
+    const after = createChainService();
+    const left = await after.unfinishedSigning();
+    expect([left?.draft.rules.length, left?.draft.ownerName, left?.options.practice]).toEqual([5, "Owner", true]);
+    await after.createEstateFromWill(plan, { practice: true });
+    expect(await createChainService().unfinishedSigning()).toBeNull();
+    Object.defineProperty(h, "status", { configurable: true, writable: true, value: "confirmed" });
+  });
+});
+
 describe("approveHardship (R21)", () => {
   it("not while someone else's approved hardship stands", async () => {
     const [hardship, asset] = [key(), key()];

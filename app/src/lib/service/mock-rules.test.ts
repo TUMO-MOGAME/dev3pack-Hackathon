@@ -1271,3 +1271,22 @@ describe("H7: a review that didn't finish is asked for again, with the same file
     expect((await t.snap()).hardships[0].agentVerdict).toBe("Approved");
   });
 });
+
+describe("H6: a plan whose signing was interrupted is finished", () => {
+  it("interrupt (a reload while signing), reload, resume", async () => {
+    storage();
+    const first = createMockService();
+    first.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const { draft } = await first.willChat([{ role: "user", text: "a" }, { role: "user", text: "b" }, { role: "user", text: "c" }]);
+    // The page closes while the plan is being signed: the signing never finishes.
+    void first.createEstateFromWill(draft!);
+    await Promise.resolve();
+    const reloaded = createMockService({ instant: true });
+    reloaded.setActor({ address: who("thabo"), role: "owner", label: P("thabo").label });
+    const left = await reloaded.unfinishedSigning();
+    expect(left?.draft.ownerName).toBe(draft!.ownerName);
+    await reloaded.createEstateFromWill(left!.draft, left!.options);
+    expect(await reloaded.unfinishedSigning()).toBeNull();
+    expect((await reloaded.listEstatesFor(who("thabo")))).toHaveLength(1);
+  });
+});

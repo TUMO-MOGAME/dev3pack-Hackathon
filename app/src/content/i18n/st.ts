@@ -852,7 +852,14 @@ export const st: Bundle = {
         summaryEvery: { minute: "motsotso", week: "beke", month: "kgwedi", term: "kotara", year: "selemo" },
         summaryAsset: "{title} e rekiswa bonyane ka {floor}, kapa bonyane ka {hardship} haeba ngwana a paka mathata a sebele.",
       },
-      done: { title: "Moralo wa hao o notletswe", body: "Melao e saennwe ka wallet ya hao. Kenya tjhelete polokelong mme e tshwailweng \"Jwale\" e ka lefa ha nako ya yona e fihla.", receipts: "Diresiti", receipt: "Rasiti {n}", receiptSr: "E bula Solana Explorer tabong e ntjha", fund: "Kenya chelete polokelong", car: "Kenya koloi", estate: "Bona lefa la ka" },
+      finish: {
+        title: "Phethela ho saena moralo wa hao",
+        body: "Ho saena ho ile ha kgaotswa, kahoo karolo ya moralo wa hao ha e eso be ho Solana. Ho phethela ho kenya se haellang mme ho tlola se seng se le teng. Wallet ya hao e saena hape.",
+        cta: "Phethela ho saena",
+        again: "Qala moralo o mong",
+        summary: "Moralo oo o neng o o saena",
+      },
+      done: { topUp: "SOL ya boikwetliso bakeng sa batho ba moralong wa hao ha e a ka ya fihla. Moralo wa hao o saennwe; ba ka ikopela ditjhelete tsa ho qala.", title: "Moralo wa hao o notletswe", body: "Melao e saennwe ka wallet ya hao. Kenya tjhelete polokelong mme e tshwailweng \"Jwale\" e ka lefa ha nako ya yona e fihla.", receipts: "Diresiti", receipt: "Rasiti {n}", receiptSr: "E bula Solana Explorer tabong e ntjha", fund: "Kenya chelete polokelong", car: "Kenya koloi", estate: "Bona lefa la ka" },
       notYours: {
         title: "Ona ke moralo wa {name}",
         body: "O karolo ya moralo wa {name}, mme o tla dula o le kamoo o leng kateng. Moralo wa hao o arohile: agent e o thusa ho o haha, mme o fetoha lefa le letjha sepacheng sa hao.",

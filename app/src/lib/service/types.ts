@@ -56,6 +56,8 @@ export interface EstateSnapshot {
   residual?: Base58 | null;
   /** Open votes to replace the agent. Absent on older snapshots. */
   agentVotes?: AgentVoteInfo[];
+  /** The owner's device (or the demo): the assets the signed plan describes, which signing doesn't register (M4). */
+  plannedAssets?: WillDraft["assets"];
 }
 
 export interface HeirloomService extends GuardiansService, DisputesService, AskService, TreeService, LettersService, ContinuityService {
@@ -75,7 +77,13 @@ export interface HeirloomService extends GuardiansService, DisputesService, AskS
   rankOffers(asset: Base58): Promise<OfferRanking>;
 
   // Owner
-  createEstateFromWill(draft: WillDraft, opts?: CreateEstateOptions): Promise<{ estate: Base58; txs: TxResult[] }>;
+  /** `topUpFailed`: the plan is signed, but the practice SOL for its people didn't go through (they can ask for starter funds). */
+  createEstateFromWill(draft: WillDraft, opts?: CreateEstateOptions): Promise<{ estate: Base58; txs: TxResult[]; topUpFailed?: boolean }>;
+  /**
+   * The plan this wallet started signing and the chain doesn't have all of yet (H6), to finish with createEstateFromWill
+   * (which skips what is there). Null when there is none.
+   */
+  unfinishedSigning(): Promise<{ draft: WillDraft; options: CreateEstateOptions } | null>;
   deposit(estate: Base58, amountUsdt: number): Promise<TxResult>;
   withdraw(estate: Base58, amountUsdt: number): Promise<TxResult>;
   heartbeat(estate: Base58): Promise<TxResult>;
