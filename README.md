@@ -262,6 +262,36 @@ Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`doc
 test for every finding of two independent security reviews (22–23 November): each attack that worked on the earlier
 version is now refused. The deployed binary (sha256 `c5294fe4…`) was rebuilt independently from the source and matches.
 
+## ElevenLabs in Heirloom (side track: Best Solana app built with ElevenLabs)
+
+Heirloom is a voice-first estate planner: many of the people it serves would rather speak than type, and many speak
+more than one language. ElevenLabs does real work at five points, each tied to what the Solana program does.
+
+| ElevenLabs product | Where | What it does | Code |
+|---|---|---|---|
+| **Agents Platform** (voice agent) | The Call tab on every screen | Talk to Heirloom about the plan, a document, a claim or the car sale. A server tool calls our orchestrator, which reads the estate **from the chain** before it answers; client tools open screens and forms. The agent never signs: the person signs with their own wallet | [`useHeirloomVoice.ts`](app/src/lib/voice/useHeirloomVoice.ts), [`api/agent/orchestrate`](app/src/app/api/agent/orchestrate/route.ts), agent as code: [`scripts/elevenlabs-agent.ts`](scripts/elevenlabs-agent.ts) |
+| **Speech to Text** (Scribe v3) | A microphone in the chat, the plan builder and the agent sheet | Say your plan in your own language; the words land in the box to edit before anything is sent. Nothing is signed by voice | [`api/voice/transcribe`](app/src/app/api/voice/transcribe/route.ts), [`useDictation.ts`](app/src/lib/voice/useDictation.ts) |
+| **Text to Speech** (Multilingual v2, Eleven v4) | "Hear it" on every payout | **Spoken receipts for on-chain payments**: "1,500 USD₮ was paid to the university for Lerato's fees". The words come only from the Solana transaction itself (a successful Heirloom payout event, read from devnet), never from text a browser sends | [`api/voice/receipt`](app/src/app/api/voice/receipt/route.ts), [`receipt.ts`](app/src/lib/voice/server/receipt.ts) |
+| **Voice cloning** (Instant Voice Cloning) + TTS | Legacy Voice | A living owner, with recorded consent, clones their voice; after death a child hears the owner's own messages in it. Now also **in the child's language**: the owner approves each translation while alive, so the voice still only says the owner's own words | [`lib/legacy`](app/src/lib/legacy/), [`translations.tsx`](app/src/components/legacy/translations.tsx) |
+| **Sound effects** | Before each spoken receipt | A short chime that marks a confirmed payment, generated once and shipped as a static file | [`scripts/make-chime.ts`](scripts/make-chime.ts) |
+
+**Languages.** One spoken-language setting serves every voice feature ([`languages.ts`](app/src/lib/voice/languages.ts)),
+checked against ElevenLabs' documentation on 24 Nov 2026:
+
+| | English, French, Portuguese, Spanish, Arabic, Hindi, Mandarin | Afrikaans, Swahili | isiZulu | Sesotho |
+|---|---|---|---|---|
+| Voice call | yes | yes (Eleven v4 Turbo) | not yet in the Agents Platform | no |
+| Spoken receipts, Legacy Voice | yes | yes (Eleven v4) | yes (Eleven v4) | no (shown as text) |
+| Voice typing (Scribe) | yes | yes | yes | no |
+
+The screens stay in English, isiZulu, Sesotho or Afrikaans; the spoken language can differ, so a family in Lagos,
+Luanda or Paris can use the same estate. Translations other than English are machine translations, marked as such,
+awaiting native readers.
+
+**Safety.** Keys stay on the server; every voice route is rate-limited and capped per day; audio is sent to
+ElevenLabs only after a tap and Heirloom keeps no recording; without a key the app shows the words instead (never the
+browser's own voice). The privacy policy names ElevenLabs for each use.
+
 ## What's real and what's simulated
 
 | Part | Status |
