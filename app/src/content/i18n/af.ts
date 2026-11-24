@@ -13,6 +13,7 @@ import { treeAf } from "./tree";
 import { lettersAf } from "./letters";
 import { listenAf } from "./listen";
 import { voiceAf } from "./voice";
+import { receiptsAf } from "./receipts";
 
 export const af: Bundle = {
   ask: askAf,
@@ -20,6 +21,7 @@ export const af: Bundle = {
   letters: lettersAf,
   listen: listenAf,
   voice: voiceAf,
+  receipts: receiptsAf,
   legalNote: "Hierdie bladsy is net in Engels beskikbaar. Dit is 'n sjabloon wat 'n regsadviseur moet nagaan.",
 
   site: {

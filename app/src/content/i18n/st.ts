@@ -13,6 +13,7 @@ import { treeSt } from "./tree";
 import { lettersSt } from "./letters";
 import { listenSt } from "./listen";
 import { voiceSt } from "./voice";
+import { receiptsSt } from "./receipts";
 
 export const st: Bundle = {
   ask: askSt,
@@ -20,6 +21,7 @@ export const st: Bundle = {
   letters: lettersSt,
   listen: listenSt,
   voice: voiceSt,
+  receipts: receiptsSt,
   legalNote: "Leqephe lena le fumaneha ka Senyesemane feela. Ke mohlala o tlamehang ho hlahlojwa ke moeletsi wa molao.",
 
   site: {

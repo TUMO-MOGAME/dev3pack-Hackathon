@@ -12,6 +12,7 @@ import type { TreeCopy } from "../tree";
 import type { LettersCopy } from "../letters";
 import type { ListenCopy } from "../listen";
 import type { VoiceCopy } from "../voice";
+import type { ReceiptsCopy } from "../receipts";
 import type { DeepPartial, Widen } from "@/lib/i18n/merge";
 
 /**
@@ -34,6 +35,8 @@ export interface Bundle {
   listen: Widen<ListenCopy>;
   /** The spoken-language choice on a call (content/i18n/voice.ts). */
   voice: Widen<VoiceCopy>;
+  /** Spoken receipts (content/i18n/receipts.ts). */
+  receipts: Widen<ReceiptsCopy>;
   landing: Widen<LandingCopy>;
   common: Widen<CommonCopy>;
   pay: Widen<PayCopy>;
