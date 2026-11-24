@@ -24,7 +24,7 @@ export const RECEIPT_TEMPLATE_VERSION = "r1";
  * The confirmation chime (ElevenLabs Sound Effects, made once by scripts/make-chime.ts --send and shipped as a static
  * file). Null until that file is committed: the button then plays the receipt without a chime (no 404 in the console).
  */
-export const PAYMENT_CHIME_SRC: string | null = null;
+export const PAYMENT_CHIME_SRC: string | null = "/audio/payment-chime.mp3";
 
 export type ReceiptKind = "claim" | "scheduled" | "fallback" | "sweep" | "sale";
 
