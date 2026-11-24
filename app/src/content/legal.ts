@@ -11,7 +11,7 @@ export const privacy = {
   title: "*Privacy* policy",
   templateNotice:
     "Template for legal review. This policy was drafted for a hackathon prototype and must be reviewed by the responsible party's legal adviser before Heirloom is offered to the public.",
-  updated: "Last updated: 22 November 2026",
+  updated: "Last updated: 24 November 2026",
   intro:
     "Heirloom helps a person record estate instructions and helps their family act on them. That involves sensitive personal information, so we collect as little as we can, keep documents off the public ledger and explain every use below. This policy follows the Protection of Personal Information Act 4 of 2013 (POPIA).",
   sections: [
@@ -34,6 +34,7 @@ export const privacy = {
         "Wallet addresses: to identify who may sign which instruction. Wallet recovery phrases and PINs stay on your device and are never sent to us.",
         "Documents you upload (death certificate, fee statements, enrolment letters, leases, affidavits, vehicle registration papers): so the AI agent and your trusted people can check a request before money moves.",
         "What you type or say to the Heirloom agent, including voice call audio and transcripts when you choose a voice call: to draft your rules and answer your questions.",
+        "Voice typing: when you tap the microphone in a chat box, a recording of up to a minute is sent, after you tap it again, to turn your words into text in that box. You read and edit the words before anything is sent; nothing is sent or signed by voice. Neither the recording nor the text is stored or logged by Heirloom.",
         "Vehicle details (make, model, year, mileage): to suggest a fair asking price.",
         "The written reason for a dispute or an objection: so the people who decide it can read why. Only its SHA-256 fingerprint goes on-chain; the words are kept off-chain for the estate's members, and on the writer's device.",
         "Letters for later that an estate owner writes to their family (the text, occasion, who it is for and when it opens): to deliver the owner's own words at the moment they chose (section 15).",
@@ -65,6 +66,7 @@ export const privacy = {
       list: [
         "Uploaded documents and agent reports: where database storage is switched on (section 7), they are kept there until deleted on request. Where it is not, the document itself is not kept after the agent reads it, and reports stay only in the server's temporary memory.",
         "Agent conversations and voice transcripts: kept only where database storage is switched on, until deleted on request.",
+        "Voice typing recordings: not kept. The recording is passed straight to the speech-to-text operator (section 7) and dropped when the text comes back; the text only goes where you send it.",
         "Dispute and objection reasons: with the estate's other records, as above.",
         "Letters for later: while the estate's records are kept. The owner can delete any letter while alive and its text is erased at once; see section 15.",
         "IP addresses used for spam checks: in the server's temporary memory for the length of each limit (up to a day), or in the shared limit store for that time where it is switched on.",
@@ -80,6 +82,7 @@ export const privacy = {
         "Database and document storage, only where it is switched on for the site you are using: Supabase Inc., with data stored in Ireland (encrypted at rest; the app limits access to the people named on an estate), including letters for later. Where it is not switched on, Supabase receives nothing: the server keeps this information in temporary memory and some of it also stays on your device.",
         "AI document review and drafting: Google LLC (Gemini API). Documents are sent for analysis and are not used by us to train models. A letter for later is sent only when its owner taps \"Check my letter\" or \"Help me write it\".",
         "Voice calls with the agent: ElevenLabs Inc. (speech recognition and speech synthesis for calls you start).",
+        "Voice typing: ElevenLabs Inc. (Speech to Text) turns a recording you make with the microphone in a chat box into text. Heirloom does not store the recording; ElevenLabs processes it under its own retention terms, in the United States and the European Union (section 8).",
         "Exchange rate: a South African exchange's public price feed. No personal information is sent.",
         "Solana public ledger: stores hashes, addresses and amounts only, as described in section 5.",
       ],
