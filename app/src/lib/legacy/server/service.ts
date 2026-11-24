@@ -281,11 +281,13 @@ export async function speak(v: Viewer, req: SpeakRequest): Promise<{ text: strin
   const cloned = voice === "parent" ? ctx.voice?.voiceId ?? null : null;
   if (cloned && ctx.voice?.requiresVerification) throw new HttpError(409, "This voice still needs verification in the ElevenLabs dashboard.", "needs_verification");
   const voiceId = voice === "heirloom" ? heirloomVoice() : cloned ?? standinVoice(ctx.book.pronoun);
-  const sha = await sha256Hex(`${voiceId}\n${text}`);
+  // The model is part of the cache key: the same words in another model are another recording.
+  const model = el.ttsModelFor(lang);
+  const sha = await sha256Hex(`${voiceId}\n${model}\n${text}`);
   const hit = await store.cachedMessage(v.estate, sha);
   if (hit) return { text, audio: hit, voice, lang };
   await countSpeak(v.estate);
-  const audio = await el.textToSpeech(voiceId, text).catch((e: unknown) => {
+  const audio = await el.textToSpeech(voiceId, text, model).catch((e: unknown) => {
     // Log ElevenLabs' detail on the server; the family sees a plain message (the app then shows the words).
     console.error("[legacy] speak failed:", e instanceof Error ? e.message : e);
     throw new HttpError(503, "The voice is not available right now.", "unavailable");

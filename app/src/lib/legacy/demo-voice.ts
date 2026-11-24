@@ -9,7 +9,8 @@ import { legacyVoiceSample } from "@/content/legacy";
 import { DEMO_TRANSLATIONS, demoLegacyBook } from "./demo-book";
 import { disclosureLine } from "./rules";
 
-export type DemoVoiceLine = { text: string; voice: "parent" | "heirloom" };
+/** `lang`: the language of an approved version (picks the text-to-speech model); absent for the original words. */
+export type DemoVoiceLine = { text: string; voice: "parent" | "heirloom"; lang?: string };
 
 /** Bump when a demo line's words change, so browsers and the CDN fetch the new audio (2: no more "phone your gogo"). */
 export const DEMO_VOICE_VERSION = 2;
@@ -22,7 +23,7 @@ export function demoVoiceText(line: string): DemoVoiceLine | null {
   const at = line.indexOf("@");
   if (at > 0) {
     const t = DEMO_TRANSLATIONS.find((x) => `${x.milestoneId}@${x.lang}` === line);
-    return t ? { text: t.text, voice: "parent" } : null;
+    return t ? { text: t.text, voice: "parent", lang: t.lang } : null;
   }
   const m = book.milestones.find((x) => x.id === line);
   return m ? { text: m.text, voice: "parent" } : null;

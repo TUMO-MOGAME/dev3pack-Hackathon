@@ -11,11 +11,13 @@ import { safeguardsAf } from "./safeguards";
 import { askAf } from "./ask";
 import { treeAf } from "./tree";
 import { lettersAf } from "./letters";
+import { legacyAf } from "./legacy";
 
 export const af: Bundle = {
   ask: askAf,
   tree: treeAf,
   letters: lettersAf,
+  legacy: legacyAf,
   legalNote: "Hierdie bladsy is net in Engels beskikbaar. Dit is 'n sjabloon wat 'n regsadviseur moet nagaan.",
 
   site: {

@@ -11,11 +11,13 @@ import { safeguardsSt } from "./safeguards";
 import { askSt } from "./ask";
 import { treeSt } from "./tree";
 import { lettersSt } from "./letters";
+import { legacySt } from "./legacy";
 
 export const st: Bundle = {
   ask: askSt,
   tree: treeSt,
   letters: lettersSt,
+  legacy: legacySt,
   legalNote: "Leqephe lena le fumaneha ka Senyesemane feela. Ke mohlala o tlamehang ho hlahlojwa ke moeletsi wa molao.",
 
   site: {

@@ -26,7 +26,7 @@ export const POST = handler(async (req) => {
   await rateLimitShared(req, "legacy-speak", 20);
   const { body: b, viewer } = await authJson(req, "speak", body);
   const out = await speak(viewer, b);
-  if (!out.audio) return json({ simulated: true, text: out.text, lang: out.lang });
+  if (!out.audio) return json({ simulated: true, text: out.text, ...(out.lang ? { lang: out.lang } : {}) });
   return new Response(out.audio as BodyInit, {
     headers: { "content-type": "audio/mpeg", "cache-control": "private, no-store", "x-legacy-voice": out.voice, "x-legacy-lang": out.lang ?? "original" },
   });
