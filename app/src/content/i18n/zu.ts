@@ -12,12 +12,14 @@ import { askZu } from "./ask";
 import { treeZu } from "./tree";
 import { lettersZu } from "./letters";
 import { listenZu } from "./listen";
+import { voiceZu } from "./voice";
 
 export const zu: Bundle = {
   ask: askZu,
   tree: treeZu,
   letters: lettersZu,
   listen: listenZu,
+  voice: voiceZu,
   legalNote: "Leli khasi litholakala ngesiNgisi kuphela. Liyisifanekiso okumele sihlolwe ngumeluleki wezomthetho.",
 
   site: {

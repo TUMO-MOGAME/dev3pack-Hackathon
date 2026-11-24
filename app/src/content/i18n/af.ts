@@ -12,12 +12,14 @@ import { askAf } from "./ask";
 import { treeAf } from "./tree";
 import { lettersAf } from "./letters";
 import { listenAf } from "./listen";
+import { voiceAf } from "./voice";
 
 export const af: Bundle = {
   ask: askAf,
   tree: treeAf,
   letters: lettersAf,
   listen: listenAf,
+  voice: voiceAf,
   legalNote: "Hierdie bladsy is net in Engels beskikbaar. Dit is 'n sjabloon wat 'n regsadviseur moet nagaan.",
 
   site: {

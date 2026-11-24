@@ -11,6 +11,7 @@ import type { SiteCopy } from "../site";
 import type { TreeCopy } from "../tree";
 import type { LettersCopy } from "../letters";
 import type { ListenCopy } from "../listen";
+import type { VoiceCopy } from "../voice";
 import type { DeepPartial, Widen } from "@/lib/i18n/merge";
 
 /**
@@ -31,6 +32,8 @@ export interface Bundle {
   letters: Widen<LettersCopy>;
   /** Voice typing (content/i18n/listen.ts). */
   listen: Widen<ListenCopy>;
+  /** The spoken-language choice on a call (content/i18n/voice.ts). */
+  voice: Widen<VoiceCopy>;
   landing: Widen<LandingCopy>;
   common: Widen<CommonCopy>;
   pay: Widen<PayCopy>;

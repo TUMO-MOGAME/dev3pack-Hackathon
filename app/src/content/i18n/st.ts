@@ -12,12 +12,14 @@ import { askSt } from "./ask";
 import { treeSt } from "./tree";
 import { lettersSt } from "./letters";
 import { listenSt } from "./listen";
+import { voiceSt } from "./voice";
 
 export const st: Bundle = {
   ask: askSt,
   tree: treeSt,
   letters: lettersSt,
   listen: listenSt,
+  voice: voiceSt,
   legalNote: "Leqephe lena le fumaneha ka Senyesemane feela. Ke mohlala o tlamehang ho hlahlojwa ke moeletsi wa molao.",
 
   site: {
