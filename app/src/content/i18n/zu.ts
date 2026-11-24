@@ -11,11 +11,13 @@ import { safeguardsZu } from "./safeguards";
 import { askZu } from "./ask";
 import { treeZu } from "./tree";
 import { lettersZu } from "./letters";
+import { receiptsZu } from "./receipts";
 
 export const zu: Bundle = {
   ask: askZu,
   tree: treeZu,
   letters: lettersZu,
+  receipts: receiptsZu,
   legalNote: "Leli khasi litholakala ngesiNgisi kuphela. Liyisifanekiso okumele sihlolwe ngumeluleki wezomthetho.",
 
   site: {
