@@ -100,6 +100,8 @@ export const DAILY_CAPS = {
   voice: { all: 300, perIp: 40 },
   /** Demo voice lines rendered by ElevenLabs (repeats are cached). */
   tts: { all: 300, perIp: 100 },
+  /** Voice typing: speech to text (ElevenLabs Scribe), one clip of up to a minute each. */
+  stt: { all: 600, perIp: 120 },
 } as const;
 export type DailyCap = keyof typeof DAILY_CAPS;
 
