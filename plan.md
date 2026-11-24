@@ -988,7 +988,9 @@ no live call in a parent's voice after death. This answers §16.13 "Legacy Voice
   guidance; never voiced), help lines one tap away (SADAG, a trusted adult), switch off. No input box.
 - **Copy:** "Hear {called}'s messages in {possessive} own words, in {possessive} voice." Consent line now reads "...a copy
   of my voice to read my own messages to my family after I'm gone." Privacy policy §13 states the rule; ElevenLabs
-  stays the operator for the voice copy; Gemini is no longer used for Legacy Voice.
+  stays the operator for the voice copy; Gemini is no longer used for Legacy Voice, except (plan §20, 24 Nov) to *suggest*
+  a faithful translation of one of the owner's own messages when the owner taps "Suggest a translation": nothing is
+  stored until the living owner reads, edits and approves it, so the voice still only says the owner's approved words.
 - **Not changed:** the future rule in §16.16 also says "the voice copy is deleted at death"; today the copy is kept so
   the messages can play. Tumo to decide whether to pre-render the messages while the owner is alive and delete the
   copy at death instead.
