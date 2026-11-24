@@ -131,3 +131,11 @@ describe("the spoken-language picker", () => {
     expect(voicePickerOptions("listen").map((o) => o.value)).not.toContain("st");
   });
 });
+
+describe("the speech model", () => {
+  it("is Eleven v4 for af, sw and zu, Multilingual v2 otherwise", async () => {
+    const { speechModelFor } = await import("./languages");
+    expect(["af", "sw", "zu"].map((l) => speechModelFor(l as "af"))).toEqual(["eleven_v4", "eleven_v4", "eleven_v4"]);
+    expect(speechModelFor("fr")).toBe("eleven_multilingual_v2");
+  });
+});

@@ -10,13 +10,15 @@
  *
  * Checked by el/agent on 24 Nov 2026 against ElevenLabs' docs and SDK:
  *  - agent: the Agents Platform's conversation language list, as the API spec ships it in @elevenlabs/types 0.29.0
- *    (`ConversationConfigOverrideAgentLanguage`: has en fr pt es ar hi zh af sw, NOT zu or st), with agent TTS
+ *    (`ConversationConfigOverrideAgentLanguage`: has en fr pt es ar hi zh af sw, NOT zu or st; the Agents Platform
+ *    language page returned 403 to us, so the API's own enum decides: zu stays false although eleven_v4_turbo can
+ *    say it, because the API would reject `language: "zu"`. Re-check when the SDK adds it), with agent TTS
  *    `eleven_v4_turbo` (the default for new agents; https://elevenlabs.io/docs/models recommends it for agents).
  *    af and sw need eleven_v4_turbo: Flash v2.5 / Multilingual v2 do not speak them. scripts/elevenlabs-agent.ts sets it.
  *  - speech: https://elevenlabs.io/docs/models language lists. Multilingual v2 (29) and Flash/Turbo v2.5 (32) have
  *    en fr pt es ar hi zh. eleven_v3 (70+) adds af and sw, not zu. eleven_v4 / eleven_v4_turbo (90+) add af, sw AND zu.
  *    No model lists Sesotho (Southern Sotho). Use `speechModelFor()` to pick a model that can say the language.
- *  - listen: Scribe v2 list at https://elevenlabs.io/docs/capabilities/speech-to-text: en fr pt es (excellent, <=5% WER),
+ *  - listen: Scribe (scribe_v3 current; tiers from the v2 table) at https://elevenlabs.io/docs/capabilities/speech-to-text: en fr pt es (excellent, <=5% WER),
  *    hi sw zh (high, 5-10%), af ar (good, 10-20%), zu (moderate, 25-50% WER: show the words for editing). Sesotho is not
  *    listed; only Northern Sotho (nso) is, a different language, so st stays false.
  */
@@ -58,8 +60,10 @@ export const VOICE_LANGUAGES: Record<VoiceLanguage, VoiceLanguageInfo> = {
 const MULTILINGUAL_V2: readonly VoiceLanguage[] = ["en", "fr", "pt", "es", "ar", "hi", "zh"];
 
 /**
- * A text-to-speech model that can say `lang` (docs checked 24 Nov 2026): Multilingual v2 where it can (the model the
- * app already uses), else Eleven v4 (af, sw, zu). Only meaningful when `support.speech` is true.
+ * The text-to-speech model to use for `lang` (docs checked 24 Nov 2026). speech=true for af, sw and zu REQUIRES
+ * eleven_v4, so receipts and Legacy Voice must call this rather than hard-code eleven_multilingual_v2. Returns
+ * Multilingual v2 where it can (the model the app already uses), else Eleven v4 (af, sw, zu). Only meaningful when
+ * `support.speech` is true.
  */
 export function speechModelFor(lang: VoiceLanguage): "eleven_multilingual_v2" | "eleven_v4" {
   return MULTILINGUAL_V2.includes(lang) ? "eleven_multilingual_v2" : "eleven_v4";

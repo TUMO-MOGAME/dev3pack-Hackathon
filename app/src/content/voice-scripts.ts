@@ -10,7 +10,7 @@
  * the call screen says so. Names, "Heirloom" and amounts stay as they are. Review by a first-language speaker.
  */
 import { assistant } from "./assistant";
-import type { VoiceLanguage } from "@/lib/voice/languages";
+import type { VoiceLanguage } from "../lib/voice/languages";
 
 export interface PreviewLine { role: "user" | "agent"; specialist?: string; text: string }
 
