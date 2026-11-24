@@ -100,6 +100,8 @@ export const DAILY_CAPS = {
   voice: { all: 300, perIp: 40 },
   /** Demo voice lines rendered by ElevenLabs (repeats are cached). */
   tts: { all: 300, perIp: 100 },
+  /** Spoken payment receipts rendered by ElevenLabs (repeats are cached; plan §20.1 item 3). */
+  receipt: { all: 400, perIp: 60 },
 } as const;
 export type DailyCap = keyof typeof DAILY_CAPS;
 
