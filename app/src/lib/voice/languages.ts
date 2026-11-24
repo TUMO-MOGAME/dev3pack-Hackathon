@@ -6,8 +6,19 @@
  * `support` says which ElevenLabs product can handle the language:
  *  - agent: the voice call (Agents Platform)        - speech: text to speech (receipts, Legacy Voice)
  *  - listen: speech to text (Scribe)
- * The flags are the lead's starting point; the el/agent branch checks them against ElevenLabs' current docs and
- * corrects them here (one place). Never offer a capability for a language whose flag is false.
+ * Never offer a capability for a language whose flag is false.
+ *
+ * Checked by el/agent on 24 Nov 2026 against ElevenLabs' docs and SDK:
+ *  - agent: the Agents Platform's conversation language list, as the API spec ships it in @elevenlabs/types 0.29.0
+ *    (`ConversationConfigOverrideAgentLanguage`: has en fr pt es ar hi zh af sw, NOT zu or st), with agent TTS
+ *    `eleven_v4_turbo` (the default for new agents; https://elevenlabs.io/docs/models recommends it for agents).
+ *    af and sw need eleven_v4_turbo: Flash v2.5 / Multilingual v2 do not speak them. scripts/elevenlabs-agent.ts sets it.
+ *  - speech: https://elevenlabs.io/docs/models language lists. Multilingual v2 (29) and Flash/Turbo v2.5 (32) have
+ *    en fr pt es ar hi zh. eleven_v3 (70+) adds af and sw, not zu. eleven_v4 / eleven_v4_turbo (90+) add af, sw AND zu.
+ *    No model lists Sesotho (Southern Sotho). Use `speechModelFor()` to pick a model that can say the language.
+ *  - listen: Scribe v2 list at https://elevenlabs.io/docs/capabilities/speech-to-text: en fr pt es (excellent, <=5% WER),
+ *    hi sw zh (high, 5-10%), af ar (good, 10-20%), zu (moderate, 25-50% WER: show the words for editing). Sesotho is not
+ *    listed; only Northern Sotho (nso) is, a different language, so st stays false.
  */
 import type { Locale } from "../i18n/locales";
 
@@ -31,17 +42,28 @@ export interface VoiceLanguageInfo {
 
 export const VOICE_LANGUAGES: Record<VoiceLanguage, VoiceLanguageInfo> = {
   en: { name: "English", english: "English", tag: "en-ZA", elevenlabs: "en", support: { agent: true, speech: true, listen: true } },
-  zu: { name: "isiZulu", english: "isiZulu", tag: "zu-ZA", elevenlabs: "zu", support: { agent: false, speech: false, listen: true } },
+  zu: { name: "isiZulu", english: "isiZulu", tag: "zu-ZA", elevenlabs: "zu", support: { agent: false, speech: true, listen: true } },
   st: { name: "Sesotho", english: "Sesotho", tag: "st-ZA", elevenlabs: "st", support: { agent: false, speech: false, listen: false } },
-  af: { name: "Afrikaans", english: "Afrikaans", tag: "af-ZA", elevenlabs: "af", support: { agent: false, speech: false, listen: true } },
+  af: { name: "Afrikaans", english: "Afrikaans", tag: "af-ZA", elevenlabs: "af", support: { agent: true, speech: true, listen: true } },
   fr: { name: "Français", english: "French", tag: "fr", elevenlabs: "fr", support: { agent: true, speech: true, listen: true } },
   pt: { name: "Português", english: "Portuguese", tag: "pt", elevenlabs: "pt", support: { agent: true, speech: true, listen: true } },
   es: { name: "Español", english: "Spanish", tag: "es", elevenlabs: "es", support: { agent: true, speech: true, listen: true } },
   ar: { name: "العربية", english: "Arabic", tag: "ar", elevenlabs: "ar", rtl: true, support: { agent: true, speech: true, listen: true } },
-  sw: { name: "Kiswahili", english: "Swahili", tag: "sw", elevenlabs: "sw", support: { agent: false, speech: false, listen: true } },
+  sw: { name: "Kiswahili", english: "Swahili", tag: "sw", elevenlabs: "sw", support: { agent: true, speech: true, listen: true } },
   hi: { name: "हिन्दी", english: "Hindi", tag: "hi", elevenlabs: "hi", support: { agent: true, speech: true, listen: true } },
   zh: { name: "中文", english: "Mandarin Chinese", tag: "zh", elevenlabs: "zh", support: { agent: true, speech: true, listen: true } },
 };
+
+/** Text-to-speech models with a short language list; any language outside it needs the v4 family (90+). */
+const MULTILINGUAL_V2: readonly VoiceLanguage[] = ["en", "fr", "pt", "es", "ar", "hi", "zh"];
+
+/**
+ * A text-to-speech model that can say `lang` (docs checked 24 Nov 2026): Multilingual v2 where it can (the model the
+ * app already uses), else Eleven v4 (af, sw, zu). Only meaningful when `support.speech` is true.
+ */
+export function speechModelFor(lang: VoiceLanguage): "eleven_multilingual_v2" | "eleven_v4" {
+  return MULTILINGUAL_V2.includes(lang) ? "eleven_multilingual_v2" : "eleven_v4";
+}
 
 export const VOICE_LANGUAGE_CODES = Object.keys(VOICE_LANGUAGES) as VoiceLanguage[];
 
