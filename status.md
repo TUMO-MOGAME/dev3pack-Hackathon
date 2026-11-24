@@ -26,7 +26,7 @@
 - README, architecture, Dev3pack submission and spec: 57 instructions, 336 + 2,224 tests, the version gate, the
   documented trade-offs.
 ### Next up
-- Tumo decides on plan §20 (ElevenLabs side track); build on "build".
+- 24 Nov (Tumo: "build"): plan §20 ElevenLabs side track IN PROGRESS. Foundation 21aff81 (lib/voice/languages.ts: what Heirloom can speak and hear; the spoken-language choice). Four agents, one worktree each, from 21aff81: el/agent (r2-chain: the call follows the language, picker, agent as code, verified language table, simulated call in every language), el/listen (r2-server: Scribe dictation in chat and the plan builder), el/receipts (r2-product: spoken receipts for on-chain payouts + SFX chime), el/legacy (speed: owner-approved translations of Legacy Voice messages, Legacy Voice i18n). Lead merges, gates, deploys both sites.
 - Toggle Wars (Flagsmith) is PARKED (Tumo, 23 Nov): Dev3pack only.
 ### Blockers
 - Legal details (both sites still show [Legal name], [Phone number], [Email address]); "mint it" for the starter wallet.
