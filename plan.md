@@ -1283,3 +1283,30 @@ English-only; the agent is configured by hand in the dashboard.
 ### 20.4 Done when
 The voice call, voice input and receipts work in English plus at least four international languages on devnet; the
 README shows each ElevenLabs product used, where, and why; the demo video has a 30-second ElevenLabs beat.
+
+## 21. Chip in: any Solana wallet adds USD₮ to a family's vault (built 25 Nov 2026, branch agent/chipin)
+For the "Meaningful use of Solana" criterion. A relative abroad adds USD₮ to the vault from Phantom, Solflare or any
+Solana Pay wallet, by scanning a QR code or opening a link, with no Heirloom account. The program is not changed.
+
+### 21.1 How
+- The vault is ATA(estate's USD₮ mint, estate PDA) and `deposit` is only transfer_checked (no deposit total), so a plain
+  SPL transfer_checked into the vault is the same as a deposit.
+- **Solana Pay transaction request**, not a transfer request: the estate PDA is off-curve and wallets derive the ATA with
+  allowOwnerOffCurve=false. `solana:<https://site/api/chipin/<estate>?amount=..&reference=..>` (URL-encoded because it
+  has a query). GET → `{ label: "Heirloom vault", icon }`; POST `{ account }` → `{ transaction, message }`: an unsigned
+  legacy transaction, fee payer = account, one transfer_checked payer ATA → vault ATA, with two read-only non-signer
+  keys: the estate's tag (sha256("heirloom:chip-in:v1" ‖ estate), the same for every chip-in to that vault) and a
+  fresh per-request reference.
+- **Solana Action (blink)** on the same endpoint: the GET also carries type/title/description/links.actions (25, 50, 100
+  and a custom `{amount}`), OPTIONS and every response carry the Actions CORS headers (on these routes and
+  /actions.json only), X-Action-Version and X-Blockchain-Ids. /actions.json maps the public page /chip-in/* to
+  /api/chipin/*.
+- Checks before anything is built (as the send path): a Heirloom Estate owned by the program, Active, configured with
+  the app's USD₮ mint, which exists with 6 decimals; the vault exists, holds that mint, belongs to the estate, not frozen;
+  amount by the strict parser, above 0, at most 10 000 USD₮; account a 32-byte address, not the estate or the vault;
+  the payer's USD₮ account holds enough and the wallet has SOL for the fee. Rate limits: GET 60/min, POST 20/min per IP.
+- The fee sponsor is **not** used: a stranger's wallet pays its own small fee (the sponsor policy is for Heirloom users).
+- Found by the owner's app with getSignaturesForAddress(tag); each one counts only if it succeeded and the vault's
+  balance of the mint rose, by that rise (read from the network's token balances).
+- No personal data: the label, message and errors never name anyone; nothing is written on-chain besides the transfer.
+- Demo: the endpoint answers disabled (GET) and 403 (POST); the owner's card has "Simulate a chip-in", marked Simulated.

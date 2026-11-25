@@ -15,6 +15,7 @@ import { listenZu } from "./listen";
 import { voiceZu } from "./voice";
 import { receiptsZu } from "./receipts";
 import { legacyZu } from "./legacy";
+import { chipinZu } from "./chipin";
 
 export const zu: Bundle = {
   ask: askZu,
@@ -24,6 +25,7 @@ export const zu: Bundle = {
   voice: voiceZu,
   receipts: receiptsZu,
   legacy: legacyZu,
+  chipin: chipinZu,
   legalNote: "Leli khasi litholakala ngesiNgisi kuphela. Liyisifanekiso okumele sihlolwe ngumeluleki wezomthetho.",
 
   site: {

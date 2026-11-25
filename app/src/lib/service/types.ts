@@ -21,6 +21,7 @@ import type { AskNote, AskService } from "../ask/types";
 import type { TreeService } from "../tree/types";
 import type { LettersService } from "../letters/types";
 import type { AgentVoteInfo, ContinuityService, CreateEstateOptions } from "../continuity/types";
+import type { ChipInService } from "../chipin/types";
 
 export interface TxResult { signature: string; explorerUrl: string }
 
@@ -60,7 +61,7 @@ export interface EstateSnapshot {
   plannedAssets?: WillDraft["assets"];
 }
 
-export interface HeirloomService extends GuardiansService, DisputesService, AskService, TreeService, LettersService, ContinuityService {
+export interface HeirloomService extends GuardiansService, DisputesService, AskService, TreeService, LettersService, ContinuityService, ChipInService {
   mode: "mock" | "chain";
 
   // Reads

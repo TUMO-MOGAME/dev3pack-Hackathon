@@ -3,8 +3,36 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-25 (judge-score push: audit, verifiable build, Squads authority, research; Chip in in progress)
+**Last updated:** 2026-11-25 (judge-score push: audit, verifiable build, Squads authority, research; Chip in merged)
 **Phase:** preparing for Dev3pack Global (27-29 Nov 2026; prework allowed and disclosed). Submitted to W3Node 13 Nov. Both sites deploy from `main`. The repo goes public on 27 Nov (Tumo).
+
+## CHIP IN (25 Nov 2026): plan §21, merged into main with the audit pack
+### Done
+- Any Solana wallet adds USD₮ to a family's vault by QR code or link, no account: a Solana Pay transaction request
+  and a Solana Action (blink) on one endpoint, /api/chipin/<estate>; /actions.json maps /chip-in/* to it. The program
+  is unchanged (a plain transfer_checked into the vault ATA is a deposit). Specs read 25 Nov from the Solana Pay
+  SPEC.md and the Actions spec (solana-developers/solana-actions, v2.3).
+- Both services: chain finds chip-ins by the estate's tag (checked against the vault's token balances); the demo
+  simulates them ("Simulate a chip-in", marked Simulated) and its endpoint answers disabled / 403. Owner's Vault
+  screen: amount picker, QR code, Open in a wallet, copy link, share, recent chip-ins. Public page /chip-in/<estate>.
+  Copy in en, af, st, zu (af/st/zu machine-assisted). New tokens --qr-ink / --qr-paper (dark on light in both themes).
+- qrcode 1.5.4 is now a direct dependency (it was already installed through @solana-mobile/wallet-standard-mobile).
+- Devnet proof (lead's chain build on localhost, the seeded demo estate J6WCQ..., persona lerato, 5 test USD₮):
+  https://explorer.solana.com/tx/2fzoFmGwotpg44LnKipLsVtns6edP3GSnxGyoqw1xTU7ZGwpsXRgK8vJpPRcz7DEgxrAK4wA9Nm9UFEFWM5EPNn?cluster=devnet
+  (simulated ok first, 192 CU; found again by the estate's tag). Script: scripts/chipin-devnet.ts.
+- Gate on the branch: vitest 2350/2350 (28 new), tsc app and scripts, eslint, audit 0, mock and chain builds.
+### Next up
+- Lead: review, merge, deploy both sites; then on the live devnet site scan the code with Phantom (devnet) and
+  Solflare, and paste the /chip-in link into dial.to to check the blink. Not yet tried with a real phone wallet.
+- Wallet-facing words (label, message, errors) are English only: the endpoint doesn't know the reader's language.
+### Decisions log
+- 25 Nov: transaction request, not transfer request (the vault owner is an off-curve PDA). No fee sponsor: the
+  sender's wallet pays its own fee. One per-estate tag plus a per-request reference on the transfer, so the owner's
+  app lists every chip-in and one code can be found alone. Limit 10 000 USD₮ a chip-in; GET 60/min, POST 20/min per IP.
+  No program version gate on this route: it builds no program instruction.
+### Blockers
+- None for the branch. Spam that names the tag can push real chip-ins out of the 20 signatures read (they are still
+  in the vault; only the list is affected).
 
 ## JUDGE-SCORE PUSH (25 Nov 2026): branch feat/audit-solana-pay
 Goal (Tumo): Technical 23, Solana 19, Impact 13, Completeness 10 on the Best App Overall rubric. Legal details parked.
@@ -26,8 +54,7 @@ Goal (Tumo): Technical 23, Solana 19, Impact 13, Completeness 10 on the Best App
   pitch.md, landing-facts.md; the 70-75% figure is working adults, not deaths.
 - README and submission link the audit and research; README "Why Solana" names the multisig.
 ### Next up
-- Chip in (Solana Pay transaction request + Blink into the vault ATA), agent building in ../heirloom-agents/chipin
-  (branch agent/chipin): merge, gates, push, check both sites.
+- Chip in merged (section above). After deploy: try Phantom/Solflare on devnet and dial.to; 360 px check.
 - 27 Nov after the repo is public: `solana-verify export-pda-tx` (Squads path) -> `squads.mjs propose-tx` ->
   approve x2 -> execute -> `solana-verify remote submit-job --program-id b3PB... --uploader A66NhjuJ...` (devnet).
 - Tumo: video; interviews to fill research.md §7 (Impact 13 needs real results); git remote set-url to dev3pack-Hackathon.

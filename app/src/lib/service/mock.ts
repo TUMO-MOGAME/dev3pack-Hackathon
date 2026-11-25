@@ -24,6 +24,9 @@ import type { MockTreeState } from "./mock-tree";
 import type { TreeService } from "../tree/types";
 import type { MockLettersState } from "./mock-letters";
 import type { LettersService } from "../letters/types";
+import type { ChipIn } from "../chipin/types";
+import { checkChipInAmount, newReference } from "../chipin/link";
+import { CHIP_IN_ERRORS } from "../chipin/errors";
 import type { AskNote } from "../ask/types";
 import { sha256Hex } from "../agent/hash";
 import { cleanSpec, mediaRootHex } from "../assets/spec";
@@ -70,6 +73,11 @@ export interface MockService extends HeirloomService {
   simulateAllSeatsVacant(): void;
   /** Check-in demo: move Thabo's last check-in back so `daysLeft` plan days remain (negative = overdue). Moves the clock only. */
   setCheckInDaysLeft(daysLeft: number): void;
+  /**
+   * Chip in demo (plan §21): a relative's wallet scans the QR code and pays `amountUsdt` into the vault. The same
+   * checks as /api/chipin (strict amount, the limit, an Active estate); the entry is marked simulated.
+   */
+  simulateChipIn(amountUsdt: string | number): Promise<ChipIn>;
 }
 
 export { isMockService } from "./is-mock";
@@ -157,6 +165,8 @@ interface State {
   signing?: { draft: WillDraft; options: import("../continuity/types").CreateEstateOptions };
   /** The assets the signed plan describes (M4). */
   planned?: WillDraft["assets"];
+  /** Chip-ins from relatives' wallets, newest first (plan §21; simulated; created on first use). */
+  chipIns?: ChipIn[];
 }
 
 const SLOT_CLAIMS = 65_536;
@@ -1487,6 +1497,23 @@ export function createMockService(opts: MockOptions = {}): MockService {
       save();
     },
     balanceOf(address) { return s.balances[address] ?? null; },
+
+    async listChipIns() {
+      await wait(150);
+      return s.created ? structuredClone((s.chipIns ?? []).slice(0, 10)) : [];
+    },
+    simulateChipIn: (amountUsdt) => mutate(700, () => {
+      needCreated();
+      need(est().status === "Active", "BadStatus", CHIP_IN_ERRORS.not_active);
+      const amount = checkChipInAmount(String(amountUsdt));
+      if (!amount.ok) return fail("InvalidAmount", CHIP_IN_ERRORS[amount.code]);
+      est().vaultBalance += amount.base;
+      const t = tx();
+      // A relative abroad: a wallet the demo has never seen (no name, as on the chain).
+      const entry: ChipIn = { signature: t.signature, explorerUrl: t.explorerUrl, ts: nowSecs(), amount: amount.base, from: newReference(), simulated: true };
+      s.chipIns = [entry, ...(s.chipIns ?? [])].slice(0, 50);
+      return structuredClone(entry);
+    }),
 
     setupDemoGuardians() {
       needCreated();

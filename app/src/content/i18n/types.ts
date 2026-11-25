@@ -14,6 +14,7 @@ import type { ListenCopy } from "../listen";
 import type { VoiceCopy } from "../voice";
 import type { ReceiptsCopy } from "../receipts";
 import type { LegacyBundleCopy } from "../legacy";
+import type { ChipInCopy } from "../chipin";
 import type { DeepPartial, Widen } from "@/lib/i18n/merge";
 
 /**
@@ -40,6 +41,8 @@ export interface Bundle {
   receipts: Widen<ReceiptsCopy>;
   /** Legacy Voice (content/i18n/legacy.ts). */
   legacy: Widen<LegacyBundleCopy>;
+  /** Chip in (content/i18n/chipin.ts). */
+  chipin: Widen<ChipInCopy>;
   landing: Widen<LandingCopy>;
   common: Widen<CommonCopy>;
   pay: Widen<PayCopy>;
