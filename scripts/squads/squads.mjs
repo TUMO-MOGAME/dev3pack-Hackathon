@@ -4,6 +4,9 @@
 //
 //   node squads.mjs create  --creator <keypair> --members <k1>,<k2>,<k3>   make the multisig, print its vault
 //   node squads.mjs propose --member <keypair> --buffer <address>          propose "upgrade the program from this buffer"
+//        [--dry-run] simulate the vault's upgrade message and stop (nothing is sent; the vault needs a little SOL)
+//   Grow the program first if the new binary is bigger: `solana program extend <program> <bytes>` (on devnet
+//   ExtendProgramChecked is not active yet, so the plain extend needs no authority; checked 25 Nov 2026).
 //   node squads.mjs approve --member <keypair> --index <n>                 approve proposal n
 //   node squads.mjs execute --member <keypair> --index <n>                 run proposal n after the time lock
 //   node squads.mjs propose-tx --member <keypair> --tx <base64|base58> [--memo text]  wrap a vault-signed transaction
@@ -109,6 +112,15 @@ if (cmd === "create") {
   });
   const { blockhash } = await connection.getLatestBlockhash();
   const transactionMessage = new TransactionMessage({ payerKey: vault, recentBlockhash: blockhash, instructions: [upgrade] });
+  if (process.argv.includes("--dry-run")) {
+    // Simulate the vault's own message without checking signatures, and stop: nothing is sent. The vault pays the
+    // simulated fee, so it needs a little SOL.
+    const { VersionedTransaction } = await import("@solana/web3.js");
+    const sim = await connection.simulateTransaction(new VersionedTransaction(transactionMessage.compileToV0Message()),
+      { sigVerify: false, replaceRecentBlockhash: true });
+    console.log(JSON.stringify({ err: sim.value.err, units: sim.value.unitsConsumed, logs: sim.value.logs?.slice(-6) }, null, 2));
+    process.exit(sim.value.err ? 1 : 0);
+  }
   console.log(`== propose upgrade #${transactionIndex} from buffer ${buffer.toBase58()}`);
   await confirm(await multisig.rpc.vaultTransactionCreate({
     connection, feePayer: member, multisigPda, transactionIndex, creator: member.publicKey, vaultIndex: 0,
