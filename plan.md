@@ -1311,7 +1311,7 @@ Solana Pay wallet, by scanning a QR code or opening a link, with no Heirloom acc
 - No personal data: the label, message and errors never name anyone; nothing is written on-chain besides the transfer.
 - Demo: the endpoint answers disabled (GET) and 403 (POST); the owner's card has "Simulate a chip-in", marked Simulated.
 
-## 22. Finalist push (planned 25 Nov 2026): from 68 to 85 on the Best App Overall rubric
+## 22. Finalist push (planned and shipped 25 Nov 2026, see status.md): from 68 to 85 on the Best App Overall rubric
 Head-judge review of 25 Nov (repo public, current video assumed): Technical 20, Solana 15, Innovation 13, Impact 8,
 UX 6, Presentation 8 = 70, 68 after the generosity check. The goal is 85. Work in three lanes; the program changes keep
 every account layout (append-only errors and enums) and ship with a Squads upgrade on Tumo's explicit "upgrade it".
