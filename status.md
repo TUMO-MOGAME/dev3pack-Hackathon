@@ -3,10 +3,41 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-25 (r5/program: plan §22.1 P1-P6 on its branch; before that the judge-score push and Chip in)
+**Last updated:** 2026-11-25 (finalist push, plan §22: hardened program live on devnet via Squads, guided run live on both sites)
 **Phase:** preparing for Dev3pack Global (27-29 Nov 2026; prework allowed and disclosed). Submitted to W3Node 13 Nov. Both sites deploy from `main`. The repo goes public on 27 Nov (Tumo).
 
-## PROGRAM HARDENING (25 Nov 2026): plan §22.1 P1-P6, branch r5/program (not merged, not deployed)
+## FINALIST PUSH (25 Nov 2026): plan §22, LIVE on main b45b2a0+ (both sites checked)
+### Done
+- Head-judge review (Best App Overall, assuming public repo + current video): 68/100. Plan §22 targets 85.
+- Program P1-P5 live on devnet: Squads proposal 1 (2 of 3 approvals, 600 s time lock), upgrade tx
+  2xP4eycn8qL388fCi4gAtmgQS9V33Q9HSxo1ha8X4RF5tbx4BYs5JvgtB7YQYq399tpexNM8UyuiKfVxLwHbbuAx, slot 526117721.
+  Verifiable Docker build (solana-verifiable-build:3.1.10, built in /build): 1,128,608 bytes, sha256 03c1d583...,
+  solana-verify program hash 9d706ac2... = live program; 348/348 LiteSVM on those exact bytes. The program data was
+  grown by 20,480 bytes first with plain `solana program extend` (ExtendProgramChecked is not active on devnet:
+  InvalidInstructionData, so no authority is needed). Buffer 9Uquw6kS... consumed. Vault A66NhjuJ... funded 0.2 SOL
+  (for simulated fees; `squads.mjs propose --dry-run` now simulates the vault's upgrade first). release.json pinned.
+- Guided run (/start/guided) live on both sites. Devnet, fresh browser at 360 px, on the hardened program: 11/11 in
+  1:38, 8 transactions (README proof). Demo: ~22 s at 360 and 1280, axe clean, no sideways scroll, 0 errors.
+  Fixed on the way: the over-cap step read the sponsor's "simulation_failed" code before the program's
+  ExceedsPerClaimCap, so it showed Stopped (40b23b0, with a test).
+- Docs: README opens with "In 30 seconds" and the guided run; Best Agentic App entry docs/dev3pack-agentic.md (its
+  claims checked against the review route and program); submission names both tracks; numbers now 58 instructions,
+  348 program tests, 2,405 app tests; security-audit §1/§2/§4c record the third read and the new build.
+- Gate on b45b2a0: vitest 2405/2405, tsc app and scripts, eslint, mock and chain next build; npm audit --omit=dev 0.
+### Next up (Tumo)
+- 27 Nov: make the repo public; then the OtterSec verification (`solana-verify remote submit-job`, program hash
+  9d706ac2...) through the Squads path in the JUDGE-SCORE PUSH section below.
+- Record the video around the guided run (it shows every step's transaction in 1.5 minutes).
+- Enter Best Agentic App on the dashboard with docs/dev3pack-agentic.md.
+- Try the chip-in QR with Phantom on a real phone (devnet) and add the tx to the README.
+### Decisions log
+- 25 Nov (Tumo): "Upgrade it" for the P1-P5 program through Squads.
+- 25 Nov: one proposal for the upgrade only; the extend went outside Squads because devnet's loader still takes the
+  unchecked ExtendProgram (no authority). Re-check when ExtendProgramChecked activates: then extend goes through Squads.
+### Blockers
+- npm audit (all deps): 1 moderate in minimatch under typescript-eslint (dev only).
+
+## PROGRAM HARDENING (25 Nov 2026): plan §22.1 P1-P6 (merged and live, see above)
 ### Done
 - P1 `create_estate` refuses death_threshold < 2 (DeathQuorumTooLow 6064) and a death wait < 300 s (DeathWaitTooShort
   6065; new MIN_DEATH_WAITING_SECS, the 60 s MIN_WAITING_SECS floors unchanged). Existing estates keep stored values.
@@ -32,7 +63,8 @@
   is decided must be placed again (no field holds the old time).
 ### Blockers
 - None for the branch. Rehearsals with new estates now wait 300 s per death wait (slower runs).
-## GUIDED RUN (25 Nov 2026): plan §22.2, branch r5/guided (not merged, not deployed)
+
+## GUIDED RUN (25 Nov 2026): plan §22.2 (merged and live, see above)
 ### Done
 - /start has a first card "Run the whole story in one tab" -> /start/guided. Eleven steps: wallet, test money, a
   ready-made editable plan (Lerato, university only, 50 a claim / 200 in total, 3 trusted people, 30-day wait; the chain

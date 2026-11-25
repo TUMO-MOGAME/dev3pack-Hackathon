@@ -1,7 +1,7 @@
 # Heirloom: security audit report
 
 **Program:** `b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY` (Solana devnet) · **Framework:** Anchor 1.2.2 ·
-**Size:** 57 instructions, about 6,900 lines of Rust · **Report date:** 25 November 2026
+**Size:** 58 instructions, about 6,900 lines of Rust · **Report date:** 25 November 2026
 
 > **What this is, and what it is not.** This is a structured internal audit: an adversarial review of the program and
 > the app, the regression tests that prove each finding fixed, static analysis, a dependency audit, a verifiable
@@ -14,15 +14,16 @@
 | | |
 |---|---|
 | Findings in the program (R1–R22, H1–H7, M1–M10, L1–L16, N1–N6, C1) | **62**, all fixed or documented as limits |
+| Third independent read (25 Nov, P1–P6, plan §22.1) | **6**: 1 medium (a faked unlock by the agent and one person), 5 low; P1–P5 fixed with tests that failed on the old binary first, P6 documented ([§5](#5-accepted-limits-disclosed-not-fixed)) |
 | Critical / high findings open | **0** |
-| Program tests (LiteSVM, run against the compiled program) | **336 pass** |
+| Program tests (LiteSVM, run against the compiled program) | **348 pass** |
 | Tests named after the finding they prove fixed | **214** |
 | Attack probes re-run by the reviewer | **62**: 47 showed a defect (now fixed), 14 attacks held, 1 trade-off |
 | End-to-end attack run on devnet | **20 attacks refused**, 92 steps ok, 14 scenarios (`scripts/rehearse-second-review.ts --send`) |
 | Static analysis (clippy, incl. `arithmetic_side_effects`) | 0 errors; 10 warnings in the program, all triaged as not exploitable ([§4a](#4a-static-analysis-triage)) |
 | Dependency audit (`cargo audit`, RustSec, 412 crates) | 0 advisories in the deployed program; 2 in the off-chain test harness only ([§4b](#4b-dependency-audit)) |
 | App dependencies (`npm audit`, production) | 0 vulnerabilities (gate of 23 Nov) |
-| Verifiable build | Devnet runs the Docker build from `solanafoundation/solana-verifiable-build:3.1.10`; on-chain hash `fce51b51…04fc7b` matches a clean rebuild ([§4c](#4c-verifiable-build)) |
+| Verifiable build | Devnet runs the Docker build from `solanafoundation/solana-verifiable-build:3.1.10`; on-chain hash `9d706ac2…269526` matches a clean rebuild ([§4c](#4c-verifiable-build)) |
 | Upgrade authority | A **2-of-3 Squads v4 multisig** with a 10-minute time lock, not one key ([§4d](#4d-upgrade-authority-squads-multisig)) |
 
 ## 2. Scope and method
@@ -42,6 +43,9 @@ the agent's signing allow-list (`app/src/lib/agent/agent-wallet.ts`) and the ser
 6. **Reproducible release.** The lead rebuilt the program from a clean archive with a throwaway home directory and
    compared hashes before upgrading devnet; all 148 accounts on devnet were decoded with the new IDL first.
 7. **Live attack run.** The same attacks were sent to the real devnet program from fresh wallets.
+8. **Third read (25 Nov).** A reviewer not shown this report read the program cold and found P1–P6. The fixes shipped
+   in the verifiable build above through the multisig (Squads proposal 1). New estates need 2 trusted people and a
+   5-minute wait to unlock, a withdrawal counts as proof of life, and orphaned rules no longer lock the surplus.
 
 ## 3. Threat model
 
@@ -115,10 +119,10 @@ Anyone can rebuild the program from this repository and get the bytes that run o
 |---|---|
 | Builder image | `solanafoundation/solana-verifiable-build:3.1.10` (digest `sha256:f71be5ca7620b7e40933b7f1294fa44e01d08c1fc5ba1f375a2478f5a01580d3`), Rust 1.86.0 |
 | Command (as `solana-verify build` runs it) | in `programs/heirloom`: `cargo build-sbf -- --config registries.crates-io.protocol="sparse" --locked` |
-| Binary | 1,112,672 bytes; file sha256 `a77f6069c9d013e9a573ab2b9838b50b137b64cf14239e28a6734e4de83d14ba` |
-| Program hash (solana-verify method: trailing zeros stripped) | `fce51b518dabd1a867f7113f15a0f63e972790d553f8fcc7cbda95d31d04fc7b`, equal to `solana-verify get-program-hash` (v0.5.2) of the live program, checked 25 Nov 2026 |
-| Deployed | 25 Nov 2026, slot 525979508, [upgrade transaction](https://explorer.solana.com/tx/4A25C3d3pAUTyP2xCiipRK1Q8RsDnSaZjPxeXTdQrYxx4GKsBkpwYMSbJGRR4FfsNKx9i3TfgCtTcFX8kFGQvTFN?cluster=devnet) |
-| Tests on that exact binary | 336 / 336 (the LiteSVM suite loads the built `.so`) |
+| Binary | 1,128,608 bytes; file sha256 `03c1d5835f2c0ea2e34e2932a438a4221bf3aaaf732698fc53b6a5ee758b478e` |
+| Program hash (solana-verify method: trailing zeros stripped) | `9d706ac23580ad190b77f9735ce30b805054ef5069e27c41e46571c0cb269526`, equal to `solana-verify get-program-hash` (v0.5.2) of the live program, checked 25 Nov 2026 |
+| Deployed | 25 Nov 2026, slot 526117721, through Squads proposal 1 (2 of 3 approvals, then the 600 s time lock): [upgrade transaction](https://explorer.solana.com/tx/2xP4eycn8qL388fCi4gAtmgQS9V33Q9HSxo1ha8X4RF5tbx4BYs5JvgtB7YQYq399tpexNM8UyuiKfVxLwHbbuAx?cluster=devnet). The program data was first grown by 20,480 bytes (`solana program extend`) |
+| Tests on that exact binary | 348 / 348 (the LiteSVM suite loads the built `.so`) |
 | Public verification (OtterSec) | Submitted once the repository is public (27 Nov 2026); until then, rebuild it yourself with the command above |
 
 ## 4d. Upgrade authority: Squads multisig
@@ -154,11 +158,11 @@ Heirloom's rules.
 
 ```bash
 # Linux / WSL, Anchor 1.2.2
-anchor build && cargo test -p heirloom          # 336 tests
+anchor build && cargo test -p heirloom          # 348 tests
 cargo clippy -p heirloom --all-targets
 cargo audit
 solana-verify build --base-image solanafoundation/solana-verifiable-build:3.1.10 --library-name heirloom
-solana-verify get-program-hash -u devnet b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY   # expect fce51b51…
+solana-verify get-program-hash -u devnet b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY   # expect 9d706ac2…
 ```
 
 ## Before mainnet

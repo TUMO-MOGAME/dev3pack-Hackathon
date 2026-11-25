@@ -44,16 +44,16 @@ To see the whole story, death and asset sale included, without waiting, use the 
 
 ## Proof: one newcomer, start to payout
 
-**Guided run, 25 November 2026:** a fresh browser at 360 px on the live devnet site did all 11 steps in **1 min 32 s**,
-with 3 taps after the name and PIN:
-[test money](https://explorer.solana.com/tx/3PEJBSEtpC4oYKn8DnVwB53yGReKEj2Sa55ToJyuTWmLe9RVUdtwihF19wMpJnj36AJZzvSDMMgmf65ypGmAhPZV?cluster=devnet) ·
-[plan signed (1 of 2)](https://explorer.solana.com/tx/3oxcTRbBs31CAocUhymBw23zN2uJPqcfQPFrSTErZJwcHWDHfzwN4a5yM4TqCa7FvB2c5kpX31h2h5PuEogSHbkR?cluster=devnet) ·
-[(2 of 2)](https://explorer.solana.com/tx/4eTNCzLFXz4BAYSigCvnDnq87pHfUXVSyv7x71p3pzJHfYrVYwGJoLPik638QtLrqsGV57ghvX4YkrZHwCJD7UAi?cluster=devnet) ·
-[vault funded](https://explorer.solana.com/tx/4xBMYKr75a2sLHZ6sqAdVPq5zMNUoELwzusRotRooQUtP7J6M8bvR31LzgnXnLMeUqT3LpZHhddEabfX4PuckNWa?cluster=devnet) ·
-[child's claim](https://explorer.solana.com/tx/3PY5cGn4gK6Pn3LGLs3xVPATYVkW7oDqep9re4GLH6LxnQfhfP8AW6YvSwHDdmxpX7ePyfprNpAzyFh6vVucRYjs?cluster=devnet) ·
-[agent's review](https://explorer.solana.com/tx/5qEUb1vp9uiHSRCXS7HMXc4wZjMoW31hDjitFBkx4hm1VnJPE1XhxagDLETzaTyqkN6KxNptw6jXff6cvJq2q2eo?cluster=devnet) ·
-[owner approves](https://explorer.solana.com/tx/5aSPDRsxDX6WSsmpRuS6f5DS1cVaXyRH2Ehh3moDhM7ZRdAx1j4aRoGS5wryjpausdqjX53xw5TpTWVnCAuKDqJt?cluster=devnet) ·
-[program pays the university](https://explorer.solana.com/tx/5KfquKSHjfFBNqU5CraEaJr9zraqEKcJyVjeVrqzzSk5JZsvQGH7Yfcy8CwwEXsiqMWBLrUr2qN6LXMwnStrxPCi?cluster=devnet).
+**Guided run, 25 November 2026, on the hardened program (slot 526117721):** a fresh browser at 360 px on the live
+devnet site did all 11 steps in **1 min 38 s**, with 3 taps after the name and PIN:
+[test money](https://explorer.solana.com/tx/5m7SpwL8DqqAWjG8QYoNz1SsDFGCtrbS67YATFg89HoipZYCd4ys65a1UMkLXHf3SXnEttN2m9wK397BGozFvHzJ?cluster=devnet) ·
+[plan signed (1 of 2)](https://explorer.solana.com/tx/AtnJ8cJ1rjYWmnBimJDJmeXT3auV6vy9A3uuGyRNGDcb5KYTDT4WVK6zUgnkuUgoy1GTdzoDcE7tC5tqKKQndb7?cluster=devnet) ·
+[(2 of 2)](https://explorer.solana.com/tx/39Qx8LZZSWjnFK6kqXc7fMvDH86a6EWQpHf73JjqyyttfWyXyhw12TNVLm6RTsUtfjdviKvaJArBFZMivTPw7jvL?cluster=devnet) ·
+[vault funded](https://explorer.solana.com/tx/2V2Yzoj55qD13vX5mJMxjMusQ8Sp9Ba7qkEfsrUXahGVSXxCqukpQ19PLnhyxp5iMM536hHVshtE6Ud2YCGErv7W?cluster=devnet) ·
+[child's claim](https://explorer.solana.com/tx/4umsqHjD699fuUok8171YnN6ZHuVDPVwJmUXtpLQfTsAsQPu7XiqtYi4BgHDfZNPLgrQeGmxTtAHfGzfXc3KsFEh?cluster=devnet) ·
+[agent's review](https://explorer.solana.com/tx/jGsiaNyHPmTHtiXyB8UoSHcoWngFrfWzK7fPREUctcHHpX1KDNFVsxMDD5VNrnD5ucyFUA2GuyuHv3gfqjW4reu?cluster=devnet) ·
+[owner approves](https://explorer.solana.com/tx/5R34AbGSqpQ2M1B1eziNhRkVnm63bN13Qu7BHtvLSJM1jYJkSNdSJEZZsum74HGEZ8dpSydwMbsCCKJJUNFcUfpT?cluster=devnet) ·
+[program pays the university](https://explorer.solana.com/tx/pHRa6cxophThfx8NxHztbvp6cK3h4XAqpFMHmaXwaUGGMqZQYqqJELZRGTTc4HtyJLExWKdjMHWHohSWiCCWrKr?cluster=devnet).
 The claim over the cap was refused by the program in simulation (`ExceedsPerClaimCap`), so it has no transaction.
 
 **By hand, 22 November 2026:**
@@ -73,8 +73,8 @@ Done through the live app on 22 November 2026 by a fresh wallet, with no scripts
 |---|---|
 | **App on devnet** | https://heirloom.tumoolo.tech (also https://heirloom-devnet.vercel.app) |
 | **Simulated demo** | https://heirloom-one-iota.vercel.app |
-| **Program** | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet): 57 instructions, a [verifiable build](docs/security-audit.md#4c-verifiable-build) (anyone can rebuild the exact bytes), deployed 25 Nov 2026 |
-| **Tests** | 336 program tests (LiteSVM) · 2,350 app tests (Vitest) |
+| **Program** | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet): 58 instructions, a [verifiable build](docs/security-audit.md#4c-verifiable-build) (anyone can rebuild the exact bytes), deployed 25 Nov 2026 |
+| **Tests** | 348 program tests (LiteSVM) · 2,405 app tests (Vitest) |
 | **Security** | [Audit report](docs/security-audit.md): threat model, 62 findings fixed with regression tests, clippy and `cargo audit` triaged. Internal, not a firm's audit |
 | **Research** | [Problem evidence, law, competitors, our weaknesses, user-testing plan](docs/research.md), every number sourced |
 | **Why Solana** | The rules and the money must outlive the owner and the company. They live in program-owned accounts anyone can audit, and no single key can change the program: upgrades need 2 of 3 members of a [Squads multisig](docs/security-audit.md#4d-upgrade-authority-squads-multisig) and wait out a time lock |
@@ -263,7 +263,7 @@ Deeper diagrams (sequence diagrams for every money path) are in [`docs/architect
 
 Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`docs/program-spec.md`](docs/program-spec.md)
 
-**57 instructions:**
+**58 instructions:**
 
 | Group | Instructions |
 |---|---|
@@ -274,7 +274,7 @@ Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`doc
 | Guardians | `init_guard`, `init_seat`, `set_seat_backups`, `set_seat_monitors`, `owner_replace_seat`, `report_seat_death`, `review_seat_death`, `confirm_seat_death`, `veto_seat_death`, `finalize_succession` |
 | Fallback | `set_fallback`, `report_fallback_death`, `review_fallback_death`, `resolve_fallback_death`, `start_fallback`, `execute_fallback` |
 | Challenges | `raise_objection`, `vote_objection`, `lapse_objection`, `raise_dispute`, `resolve_dispute` |
-| Continuity | `end_rule`, `set_residual`, `sweep_residual`, `set_agent`, `vote_agent`, `remove_member` |
+| Continuity | `end_rule`, `end_orphan_rule`, `set_residual`, `sweep_residual`, `set_agent`, `vote_agent`, `remove_member` |
 
 **What the program enforces:**
 - Only the estate's USD₮ mint is accepted.
@@ -291,7 +291,7 @@ Anchor 1.2.2 · [`programs/heirloom/`](programs/heirloom/) · full spec in [`doc
   be listed again.
 - A lost agent key can be replaced by the owner, or by the trusted people.
 
-**Tests:** 336 LiteSVM tests in [`programs/heirloom/tests/`](programs/heirloom/tests/). They include a regression
+**Tests:** 348 LiteSVM tests in [`programs/heirloom/tests/`](programs/heirloom/tests/). They include a regression
 test for every finding of two independent security reviews (22–23 November): each attack that worked on the earlier
 version is now refused. The deployed binary (sha256 `c5294fe4…`) was rebuilt independently from the source and matches.
 
@@ -329,7 +329,7 @@ browser's own voice). The privacy policy names ElevenLabs for each use.
 
 | Part | Status |
 |---|---|
-| Heirloom Solana program (57 instructions) | **Real**, deployed to devnet as a verifiable build, 336 tests, [internal audit](docs/security-audit.md). **No third-party audit yet.** |
+| Heirloom Solana program (58 instructions) | **Real**, deployed to devnet as a verifiable build, 348 tests, [internal audit](docs/security-audit.md). **No third-party audit yet.** |
 | USD₮ transfers signed by Tether WDK wallets (owner, family, verifiers, buyers, agent) | **Real** on devnet (chain mode) |
 | USD₮ token | **Test mint** on devnet (6 decimals, same as USD₮); mainnet mint is a config change |
 | Pay-once payment pipeline, reconnect re-check | **Real** (unit-tested in `payments.test.ts`) |
@@ -408,10 +408,10 @@ All names are in [`app/.env.example`](app/.env.example). Only `NEXT_PUBLIC_*` re
 ## Tests
 
 ```bash
-cd app && npm test                 # 2,350 Vitest tests: payments (pay-once), WDK errors, PDAs, IDL ↔ client, agent schemas,
+cd app && npm test                 # 2,405 Vitest tests: payments (pay-once), WDK errors, PDAs, IDL ↔ client, agent schemas,
                                    # offers, scheduler, hashing, fee-sponsor policy, QVAC intent parser, chat, legacy voice, i18n, icons
 cd app && npx next typegen && npx tsc --noEmit   # type check (typegen first on a clean clone)
-anchor build && cargo test -p heirloom   # 336 LiteSVM program tests (Linux / WSL, Anchor 1.2.2)
+anchor build && cargo test -p heirloom   # 348 LiteSVM program tests (Linux / WSL, Anchor 1.2.2)
 ```
 `bash scripts/build-program.sh test` does the same inside WSL: it copies the program to the Linux disk for a faster build, then runs the tests.
 
