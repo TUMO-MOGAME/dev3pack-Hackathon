@@ -34,7 +34,7 @@ monthly book allowance practical, and fee sponsorship lets a family use it with 
 | Simulated demo, every role in one browser | https://heirloom-one-iota.vercel.app |
 | Program | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet) |
 | A full newcomer run on devnet | [README: proof](../README.md#proof-one-newcomer-start-to-payout) |
-| Code | https://github.com/TUMO-MOGAME/W3Node-Hackathon |
+| Code | https://github.com/TUMO-MOGAME/dev3pack-Hackathon |
 
 ## Work done before the event
 Heirloom was started on 11 November 2026 and first submitted to the W3Node hackathon on 13 November 2026. It was

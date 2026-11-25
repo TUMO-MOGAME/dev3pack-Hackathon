@@ -319,8 +319,8 @@ browser's own voice). The privacy policy names ElevenLabs for each use.
 Needs Node.js 20.9+.
 
 ```bash
-git clone https://github.com/TUMO-MOGAME/W3Node-Hackathon.git
-cd W3Node-Hackathon/app && npm install
+git clone https://github.com/TUMO-MOGAME/dev3pack-Hackathon.git
+cd dev3pack-Hackathon/app && npm install
 npm run dev
 ```
 Open <http://localhost:3000> → **Try the demo** → **Start as Thabo**. You land on the chat home; the demo guide bar
