@@ -35,6 +35,8 @@ monthly book allowance practical, and fee sponsorship lets a family use it with 
 | Program | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet) |
 | A full newcomer run on devnet | [README: proof](../README.md#proof-one-newcomer-start-to-payout) |
 | Code | https://github.com/TUMO-MOGAME/dev3pack-Hackathon |
+| Security audit | [docs/security-audit.md](security-audit.md) |
+| Research and limits | [docs/research.md](research.md) |
 
 ## Work done before the event
 Heirloom was started on 11 November 2026 and first submitted to the W3Node hackathon on 13 November 2026. It was
@@ -42,7 +44,7 @@ developed further from 14 to 22 November. The Dev3pack organisers allow prework.
 what existed before 27 November and what was added during the event.
 
 ## Limits
-- Devnet and a test USD₮ mint only. Not audited.
+- Devnet and a test USD₮ mint only. Internally audited ([report](security-audit.md)); no third-party audit yet.
 - Rand settlement to institutions is simulated and labelled.
 - Institutions in the demos are wallets we control.
 - No user interviews have been run yet, so we claim no user validation.

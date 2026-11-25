@@ -3,8 +3,34 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-25 (spoken French call works on the demo; ElevenLabs side track done)
+**Last updated:** 2026-11-25 (judge-score push: audit, verifiable build, Squads authority, research; Chip in in progress)
 **Phase:** preparing for Dev3pack Global (27-29 Nov 2026; prework allowed and disclosed). Submitted to W3Node 13 Nov. Both sites deploy from `main`. The repo goes public on 27 Nov (Tumo).
+
+## JUDGE-SCORE PUSH (25 Nov 2026): branch feat/audit-solana-pay
+Goal (Tumo): Technical 23, Solana 19, Impact 13, Completeness 10 on the Best App Overall rubric. Legal details parked.
+### Done
+- **Verifiable build live on devnet.** Built in `solanafoundation/solana-verifiable-build:3.1.10` (digest f71be5ca...) with
+  solana-verify's exact command; 1,112,672 bytes, file sha256 a77f6069..., program hash (zeros stripped) fce51b51...;
+  336/336 tests on that exact binary; upgraded slot 525979508 with CLI 4.3.2 (tx 4A25C3d3...); live dump matches.
+  Backup of the previous binary in WSL ~/heirloom-backups/. Cost: deployer 10.17 -> 9.56 SOL, then 9.46 after funding members.
+- **Hotfix pushed to main (136bc17, Tumo approved):** release.json re-pinned (the upgrade had put devnet writes in
+  fail-closed mode for about 15 min). All three sites /api/health ok, programCurrent true, sponsor on for devnet.
+- **Upgrade authority = Squads v4 2-of-3 multisig**, time lock 600 s, no config authority. Multisig SqjbTV4C...,
+  vault A66NhjuJ... (the authority). Members: deployer FHRjTDqQ..., member2 3sbgnaE3..., member3 X9ogSeUv... (keys in
+  WSL ~/.config/heirloom-squads/, 0.05 SOL each). Tooling: scripts/squads/ (own package.json, npm audit 0).
+  `build-program.sh deploy` now refuses by design; upgrades go through squads.mjs (propose, approve x2, execute).
+- **docs/security-audit.md** (threat model, 62 findings, clippy and cargo audit triage, verifiable build, Squads);
+  clippy: 0 errors, 10 program warnings all benign; cargo audit: 2 advisories, both only via litesvm (tests).
+- **docs/research.md** (problem evidence re-verified, law, competitors, uniqueness, weaknesses, testing plan, roadmap).
+  Fixed stats it caught: 150,000 estates a year (Master, NW4249) replaces the unverifiable 170,000 in business.md,
+  pitch.md, landing-facts.md; the 70-75% figure is working adults, not deaths.
+- README and submission link the audit and research; README "Why Solana" names the multisig.
+### Next up
+- Chip in (Solana Pay transaction request + Blink into the vault ATA), agent building in ../heirloom-agents/chipin
+  (branch agent/chipin): merge, gates, push, check both sites.
+- 27 Nov after the repo is public: `solana-verify export-pda-tx` (Squads path) -> `squads.mjs propose-tx` ->
+  approve x2 -> execute -> `solana-verify remote submit-job --program-id b3PB... --uploader A66NhjuJ...` (devnet).
+- Tumo: video; interviews to fill research.md §7 (Impact 13 needs real results); git remote set-url to dev3pack-Hackathon.
 
 
 ## RELEASE (23 Nov 2026): plan §18 is live

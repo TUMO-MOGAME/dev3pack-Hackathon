@@ -44,9 +44,11 @@ Done through the live app on 22 November 2026 by a fresh wallet, with no scripts
 |---|---|
 | **App on devnet** | https://heirloom.tumoolo.tech (also https://heirloom-devnet.vercel.app) |
 | **Simulated demo** | https://heirloom-one-iota.vercel.app |
-| **Program** | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet): 57 instructions, upgraded 23 Nov 2026 after two independent security reviews |
+| **Program** | [`b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY`](https://explorer.solana.com/address/b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY?cluster=devnet): 57 instructions, a [verifiable build](docs/security-audit.md#4c-verifiable-build) (anyone can rebuild the exact bytes), deployed 25 Nov 2026 |
 | **Tests** | 336 program tests (LiteSVM) · 2,224 app tests (Vitest) |
-| **Why Solana** | The rules and the money must outlive the owner and the company. They live in program-owned accounts anyone can audit |
+| **Security** | [Audit report](docs/security-audit.md): threat model, 62 findings fixed with regression tests, clippy and `cargo audit` triaged. Internal, not a firm's audit |
+| **Research** | [Problem evidence, law, competitors, our weaknesses, user-testing plan](docs/research.md), every number sourced |
+| **Why Solana** | The rules and the money must outlive the owner and the company. They live in program-owned accounts anyone can audit, and no single key can change the program: upgrades need 2 of 3 members of a [Squads multisig](docs/security-audit.md#4d-upgrade-authority-squads-multisig) and wait out a time lock |
 | **Android** | A Solana Mobile WebView shell with Mobile Wallet Adapter ([build notes](docs/android-build.md)). Not yet verified with a wallet app on a physical phone |
 | **Video** | [W3Node video, 13 Nov](https://youtu.be/N67LrkpVAmw) (2:58). It predates the 22 Nov changes |
 
@@ -296,7 +298,7 @@ browser's own voice). The privacy policy names ElevenLabs for each use.
 
 | Part | Status |
 |---|---|
-| Heirloom Solana program (57 instructions) | **Real**, deployed to devnet, 336 tests, two independent reviews. **Not audited.** |
+| Heirloom Solana program (57 instructions) | **Real**, deployed to devnet as a verifiable build, 336 tests, [internal audit](docs/security-audit.md). **No third-party audit yet.** |
 | USD₮ transfers signed by Tether WDK wallets (owner, family, verifiers, buyers, agent) | **Real** on devnet (chain mode) |
 | USD₮ token | **Test mint** on devnet (6 decimals, same as USD₮); mainnet mint is a config change |
 | Pay-once payment pipeline, reconnect re-check | **Real** (unit-tested in `payments.test.ts`) |
