@@ -7,6 +7,16 @@ you're gone, under rules a program enforces.**
 >
 > Built before the event and first submitted to W3Node on 13 November 2026. See [work done before the event](#work-done-before-the-event).
 
+### In 30 seconds
+- **What:** a parent puts USD₮ in a Solana vault. Rules pay the child's school or university, never cash, up to a cap,
+  from today. The same rules keep paying after the parent dies.
+- **The new part: an unlock nobody can fake.** An AI agent reads the death notice and signs its verdict on-chain. When
+  it isn't sure, it refers to people. Two of three trusted people must confirm, and the living owner can stop it during
+  the wait. The program enforces every step, so neither the AI, one trusted person nor Heirloom can open the vault alone.
+- **See it:** [the guided run](https://heirloom.tumoolo.tech/start/guided) does the whole story in one tab on devnet:
+  wallet, plan, fund, the child's claim, the AI review, approval, the program paying the university, and the program
+  refusing a claim over the cap. Every step links to its transaction.
+
 **The problem.** 66% of South Africans have no will ([Sanlam Legacy Wills Survey 2025, via TimesLIVE](https://www.timeslive.co.za/news/south-africa/2025-09-19-66-of-south-africans-risk-family-feuds-by-dying-without-wills-sanlam-survey/)).
 When a parent dies, the estate freezes: a simple estate used to take 6–9 months to wind up and now takes about
 twice as long ([Moneyweb / The Citizen, Dec 2024](https://www.citizen.co.za/business/winding-up-of-estates-in-sa-in-shambles)).
@@ -14,6 +24,11 @@ The money for next term's fees exists. It just can't reach the school, and when 
 nothing makes sure it is spent on the children.
 
 ## Try it in three minutes (real devnet, no faucet, no scripts)
+
+**Fastest:** open **https://heirloom.tumoolo.tech/start/guided**, enter a first name and a PIN, tick the box, then tap
+**Start the run** and **Use this plan**. The eleven steps run in one tab with no persona switching.
+
+**By hand**, to see each screen:
 
 1. Open **https://heirloom.tumoolo.tech/start**, create a wallet and tap **Get test money** (500 test USD₮ and SOL for rent).
 2. Open **Plan** and describe a family in your own words, for example: *"Pay my daughter Zanele's university fees from
@@ -28,6 +43,20 @@ To see the whole story, death and asset sale included, without waiting, use the 
 **https://heirloom-one-iota.vercel.app**. Its money movements are labelled "Simulated".
 
 ## Proof: one newcomer, start to payout
+
+**Guided run, 25 November 2026:** a fresh browser at 360 px on the live devnet site did all 11 steps in **1 min 32 s**,
+with 3 taps after the name and PIN:
+[test money](https://explorer.solana.com/tx/3PEJBSEtpC4oYKn8DnVwB53yGReKEj2Sa55ToJyuTWmLe9RVUdtwihF19wMpJnj36AJZzvSDMMgmf65ypGmAhPZV?cluster=devnet) ·
+[plan signed (1 of 2)](https://explorer.solana.com/tx/3oxcTRbBs31CAocUhymBw23zN2uJPqcfQPFrSTErZJwcHWDHfzwN4a5yM4TqCa7FvB2c5kpX31h2h5PuEogSHbkR?cluster=devnet) ·
+[(2 of 2)](https://explorer.solana.com/tx/4eTNCzLFXz4BAYSigCvnDnq87pHfUXVSyv7x71p3pzJHfYrVYwGJoLPik638QtLrqsGV57ghvX4YkrZHwCJD7UAi?cluster=devnet) ·
+[vault funded](https://explorer.solana.com/tx/4xBMYKr75a2sLHZ6sqAdVPq5zMNUoELwzusRotRooQUtP7J6M8bvR31LzgnXnLMeUqT3LpZHhddEabfX4PuckNWa?cluster=devnet) ·
+[child's claim](https://explorer.solana.com/tx/3PY5cGn4gK6Pn3LGLs3xVPATYVkW7oDqep9re4GLH6LxnQfhfP8AW6YvSwHDdmxpX7ePyfprNpAzyFh6vVucRYjs?cluster=devnet) ·
+[agent's review](https://explorer.solana.com/tx/5qEUb1vp9uiHSRCXS7HMXc4wZjMoW31hDjitFBkx4hm1VnJPE1XhxagDLETzaTyqkN6KxNptw6jXff6cvJq2q2eo?cluster=devnet) ·
+[owner approves](https://explorer.solana.com/tx/5aSPDRsxDX6WSsmpRuS6f5DS1cVaXyRH2Ehh3moDhM7ZRdAx1j4aRoGS5wryjpausdqjX53xw5TpTWVnCAuKDqJt?cluster=devnet) ·
+[program pays the university](https://explorer.solana.com/tx/5KfquKSHjfFBNqU5CraEaJr9zraqEKcJyVjeVrqzzSk5JZsvQGH7Yfcy8CwwEXsiqMWBLrUr2qN6LXMwnStrxPCi?cluster=devnet).
+The claim over the cap was refused by the program in simulation (`ExceedsPerClaimCap`), so it has no transaction.
+
+**By hand, 22 November 2026:**
 
 Done through the live app on 22 November 2026 by a fresh wallet, with no scripts.
 
