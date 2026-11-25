@@ -6,6 +6,34 @@
 **Last updated:** 2026-11-25 (spoken French call works on the demo; ElevenLabs side track done)
 **Phase:** preparing for Dev3pack Global (27-29 Nov 2026; prework allowed and disclosed). Submitted to W3Node 13 Nov. Both sites deploy from `main`. The repo goes public on 27 Nov (Tumo).
 
+## CHIP IN (25 Nov 2026): plan §21, branch agent/chipin (NOT merged, NOT deployed)
+### Done
+- Any Solana wallet adds USD₮ to a family's vault by QR code or link, no account: a Solana Pay transaction request
+  and a Solana Action (blink) on one endpoint, /api/chipin/<estate>; /actions.json maps /chip-in/* to it. The program
+  is unchanged (a plain transfer_checked into the vault ATA is a deposit). Specs read 25 Nov from the Solana Pay
+  SPEC.md and the Actions spec (solana-developers/solana-actions, v2.3).
+- Both services: chain finds chip-ins by the estate's tag (checked against the vault's token balances); the demo
+  simulates them ("Simulate a chip-in", marked Simulated) and its endpoint answers disabled / 403. Owner's Vault
+  screen: amount picker, QR code, Open in a wallet, copy link, share, recent chip-ins. Public page /chip-in/<estate>.
+  Copy in en, af, st, zu (af/st/zu machine-assisted). New tokens --qr-ink / --qr-paper (dark on light in both themes).
+- qrcode 1.5.4 is now a direct dependency (it was already installed through @solana-mobile/wallet-standard-mobile).
+- Devnet proof (lead's chain build on localhost, the seeded demo estate J6WCQ..., persona lerato, 5 test USD₮):
+  https://explorer.solana.com/tx/2fzoFmGwotpg44LnKipLsVtns6edP3GSnxGyoqw1xTU7ZGwpsXRgK8vJpPRcz7DEgxrAK4wA9Nm9UFEFWM5EPNn?cluster=devnet
+  (simulated ok first, 192 CU; found again by the estate's tag). Script: scripts/chipin-devnet.ts.
+- Gate on the branch: vitest 2350/2350 (28 new), tsc app and scripts, eslint, audit 0, mock and chain builds.
+### Next up
+- Lead: review, merge, deploy both sites; then on the live devnet site scan the code with Phantom (devnet) and
+  Solflare, and paste the /chip-in link into dial.to to check the blink. Not yet tried with a real phone wallet.
+- Wallet-facing words (label, message, errors) are English only: the endpoint doesn't know the reader's language.
+### Decisions log
+- 25 Nov: transaction request, not transfer request (the vault owner is an off-curve PDA). No fee sponsor: the
+  sender's wallet pays its own fee. One per-estate tag plus a per-request reference on the transfer, so the owner's
+  app lists every chip-in and one code can be found alone. Limit 10 000 USD₮ a chip-in; GET 60/min, POST 20/min per IP.
+  No program version gate on this route: it builds no program instruction.
+### Blockers
+- None for the branch. Spam that names the tag can push real chip-ins out of the 20 signatures read (they are still
+  in the vault; only the list is affected).
+
 
 ## RELEASE (23 Nov 2026): plan §18 is live
 ### Done

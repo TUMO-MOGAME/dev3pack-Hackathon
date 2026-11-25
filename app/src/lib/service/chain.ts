@@ -461,6 +461,8 @@ export function createChainService(): HeirloomService {
   const service: HeirloomService = {
     mode: "chain",
     ...continuity,
+    // Chip in (plan §21): found by the estate's tag, each checked against the vault's own token balances.
+    listChipIns: (estate) => cached(`chipins:${estate}`, 15_000, async () => (await import("../chipin/find")).findChipIns(getConnection(), estate, chainCtx().usdtMint.toBase58())),
     listLetters: async (estate, opts) => (await letters()).listLetters(estate, opts),
     saveLetter: async (estate, input, version) => (await letters()).saveLetter(estate, input, version),
     deleteLetter: async (estate, id, version) => (await letters()).deleteLetter(estate, id, version),
