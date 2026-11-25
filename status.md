@@ -3,8 +3,37 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-25 (judge-score push: audit, verifiable build, Squads authority, research; Chip in merged)
+**Last updated:** 2026-11-25 (guided run on r5/guided; judge-score push: audit, verifiable build, Squads authority, research; Chip in merged)
 **Phase:** preparing for Dev3pack Global (27-29 Nov 2026; prework allowed and disclosed). Submitted to W3Node 13 Nov. Both sites deploy from `main`. The repo goes public on 27 Nov (Tumo).
+
+## GUIDED RUN (25 Nov 2026): plan §22.2, branch r5/guided (not merged, not deployed)
+### Done
+- /start has a first card "Run the whole story in one tab" -> /start/guided. Eleven steps: wallet, test money, a
+  ready-made editable plan (Lerato, university only, 50 a claim / 200 in total, 3 trusted people, 30-day wait; the chain
+  service signs a death quorum of 2), practice wallets, sign and lock, fund (120), Lerato's claim of 40 with the demo
+  fee statement (signed in the background by her practice wallet), the agent's review, owner approves, the program
+  pays the university, then a claim of 60 refused by the program (ExceedsPerClaimCap). Step list with progress, time,
+  per-step time and each transaction (Explorer on devnet, "(simulated)" on the demo). Steps after the plan run on
+  their own with a 1.2 s pause; Pause/Continue, Start over, Try again with plain words (429, starter refusals,
+  interrupted step), resume after reload (each step checks what already went through: never a second deposit/pay).
+- Background signing without switching persona: lib/wallet/signer.ts `withActiveSigner` + WalletApi `actAs` (a wallet
+  stored on this device signs with its own keys); mock service `withActor` (the app's refresh can't overwrite it).
+  submitClaim now also returns the agent's `reviewTx` (both services). The PIN typed in the run is kept in memory only
+  until the practice wallets are made.
+- Code: lib/guided/machine.ts (pure state machine), lib/guided/run.ts (steps), components/guided/guided-run.tsx,
+  app/(app)/start/guided/page.tsx (own route chunk; /start only links). Copy content/guided.ts + i18n/guided.ts (af/st/zu
+  machine-assisted). Screenshots: docs/screenshots/guided-run/.
+- Checks: vitest 2380/2380 (30 new: machine, run on the mock service and a chain-shaped service, copy slices); tsc app
+  and scripts; eslint; mock and chain next build. Playwright on the mock production build at 360 and 1280: 3 taps from
+  /start, 21 s run, axe clean (4 screens each), no sideways scroll, 0 console errors. Chain build smoke (no wallet made,
+  nothing sent): form, validation, axe, 360/1280 clean.
+### Next up
+- Lead: review, merge, deploy both sites, then one real devnet run on the live site (needs the server's agent key and
+  starter, which a local build here doesn't have) and record its links and time.
+- After r5/program merges: nothing to change (quorum 2, wait 30 days on chain).
+### Blockers
+- npm audit (all deps): 1 moderate advisory in minimatch under typescript-eslint (dev only, new advisory, lockfile
+  unchanged by this branch); `npm audit --omit=dev` is 0.
 
 ## CHIP IN (25 Nov 2026): plan §21, merged into main with the audit pack
 ### Done
