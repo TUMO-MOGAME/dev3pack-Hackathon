@@ -49,6 +49,11 @@ export type DemoStage = (typeof DEMO_STAGES)[number];
 export interface MockService extends HeirloomService {
   mode: "mock";
   setActor(actor: MockActor | null): void;
+  /**
+   * The guided run (plan §22.2): `work` runs as `actor` (the demo child signing her claim in the background), then
+   * whoever the app has signed in acts again. setActor calls meanwhile (the app's refresh) wait until it is done.
+   */
+  withActor<T>(actor: MockActor, work: () => Promise<T>): Promise<T>;
   resetDemo(stage: DemoStage): void;
   balanceOf(address: Base58): bigint | null;
   /** Demo shortcuts (mock only): play the "passing reported and confirmed" steps, end the wait, or bring schedules due. */
@@ -288,6 +293,9 @@ export interface MockOptions {
 export function createMockService(opts: MockOptions = {}): MockService {
   let s: State = blank();
   let actor: MockActor | null = null;
+  /** withActor: the background actor, and who the app has signed in meanwhile. */
+  let pinnedActor: MockActor | null = null;
+  let chosenActor: MockActor | null = null;
   const wait = (ms: number) => (opts.instant ? Promise.resolve() : sleep(ms));
 
   if (typeof window !== "undefined") {
@@ -304,6 +312,13 @@ export function createMockService(opts: MockOptions = {}): MockService {
     try { window.localStorage.setItem(KEY, serialise(s)); } catch { /* ignore */ }
   };
 
+  /** A wallet the user created themselves: give it a name and demo funds. */
+  const register = (a: MockActor) => {
+    if (a.address in s.names) return;
+    s.names[a.address] = a.label;
+    if (!(a.address in s.balances)) s.balances[a.address] = a.role === "owner" ? toBase(25000) : a.role === "buyer" ? toBase(16000) : 0n;
+    save();
+  };
   const est = () => s.snap.estate;
   const name = (a: Base58) => s.names[a] ?? "Someone";
   const first = (a: Base58) => shortName(name(a)); // "Adv. Ndlovu", "Uncle Bongani", "Lerato"
@@ -792,7 +807,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     return t;
   }
 
-  function submitClaim(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport | null, reviewed?: string): { t: TxResult; claim: Claim } {
+  function submitClaim(input: { rule: Base58; payee: Base58; amountUsdt: number }, evidenceHash: string, report: AgentReport | null, reviewed?: string): { t: TxResult; claim: Claim; reviewTx: TxResult | null } {
     needCreated(); needBeneficiary();
     const rule = s.snap.rules.find((r) => r.address === input.rule) ?? fail("BadStatus", "That rule does not exist.");
     need(est().status === "Unlocked" || (rule.startsNow && est().status === "Active"), "BadStatus", rule.startsNow ? "Claims are paused while a passing is being confirmed." : "This rule only starts after the estate is unlocked.");
@@ -816,18 +831,20 @@ export function createMockService(opts: MockOptions = {}): MockService {
     const t = tx();
     log("ClaimSubmitted", `${first(me())} asked for ${usd(amt)} to be paid to ${payee.name}`, t, amt);
     // No report: the agent's review didn't finish, and the claim waits for it (H7).
-    if (report) reviewClaim(claim, report, reviewed);
-    return { t, claim };
+    const reviewTx = report ? reviewClaim(claim, report, reviewed) : null;
+    return { t, claim, reviewTx };
   }
 
   /** review_claim: as on-chain (/api/review), only "reject" blocks; an unsure agent refers, it never approves. */
-  function reviewClaim(claim: Claim, report: AgentReport, reviewed?: string) {
+  function reviewClaim(claim: Claim, report: AgentReport, reviewed?: string): TxResult {
     const rule = s.snap.rules.find((r) => r.address === claim.rule);
     const outcome = outcomeOf(report.verdict);
     claim.agentVerdict = outcome === "Approve" ? "Approved" : outcome === "Refer" ? "Referred" : "Rejected";
     claim.agentReport = report;
     if (outcome === "Reject") claim.status = "Rejected";
-    log("ClaimReviewed", reviewed ?? (outcome === "Refer" ? "The agent was not sure, so it referred the claim to people" : outcome !== "Reject" ? `The agent checked the ${rule?.category.toLowerCase() ?? "claim's"} statement: it matches the claim` : "The agent could not accept the document. The claim was declined"), tx());
+    const t = tx();
+    log("ClaimReviewed", reviewed ?? (outcome === "Refer" ? "The agent was not sure, so it referred the claim to people" : outcome !== "Reject" ? `The agent checked the ${rule?.category.toLowerCase() ?? "claim's"} statement: it matches the claim` : "The agent could not accept the document. The claim was declined"), t);
+    return t;
   }
 
   function approveClaim(address: Base58): TxResult {
@@ -1380,13 +1397,21 @@ export function createMockService(opts: MockOptions = {}): MockService {
     ...legacyMethods,
 
     setActor(a) {
+      chosenActor = a;
+      if (pinnedActor) return;
       actor = a;
-      if (!a) return;
-      if (!(a.address in s.names)) {
-        // A wallet the user created themselves: give it a name and demo funds.
-        s.names[a.address] = a.label;
-        if (!(a.address in s.balances)) s.balances[a.address] = a.role === "owner" ? toBase(25000) : a.role === "buyer" ? toBase(16000) : 0n;
-        save();
+      if (a) register(a);
+    },
+    async withActor(a, work) {
+      if (pinnedActor) fail("BadStatus", "Someone else is already acting in the background.");
+      pinnedActor = a;
+      actor = a;
+      register(a);
+      try {
+        return await work();
+      } finally {
+        pinnedActor = null;
+        actor = chosenActor;
       }
     },
     resetDemo(stage) { seed(stage); save(); resetLegacy(); },
@@ -1720,10 +1745,10 @@ export function createMockService(opts: MockOptions = {}): MockService {
       await wait(1900);
       const payee = s.snap.payees.find((p) => p.wallet === input.payee);
       const r = report("claim", input.evidence, { amountUsdt: input.amountUsdt, payee: payee?.name });
-      const { t, claim } = submitClaim(input, hash, unreviewed() ? null : r);
+      const { t, claim, reviewTx } = submitClaim(input, hash, unreviewed() ? null : r);
       save();
       if (unreviewed()) fail("ReviewPending", "It was sent, but the agent's review didn't finish. Ask for the review again from the request, with the same file.");
-      return { tx: t, claim: claim.address, report: r };
+      return { tx: t, claim: claim.address, report: r, reviewTx };
     },
     async submitHardship(_e, chosen) {
       const input = { ...chosen, evidence: await requireEvidence(chosen.evidence) };

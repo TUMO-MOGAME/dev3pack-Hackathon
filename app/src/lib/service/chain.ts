@@ -799,7 +799,7 @@ export function createChainService(): HeirloomService {
       // Sent: a review that doesn't finish leaves the claim waiting for it, to be asked for again (H7).
       const r = await review(input.evidence, "claim", estate, `Claim for ${input.amountUsdt} USD₮ under rule #${ruleId}, payee wallet ${input.payee}.`, claim)
         .catch((e: unknown) => { throw reviewPending(e); });
-      return { tx, claim, report: r.report };
+      return { tx, claim, report: r.report, reviewTx: r.tx };
     },
 
     async submitHardship(estate, chosen) {
