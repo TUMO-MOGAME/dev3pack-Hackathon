@@ -1310,3 +1310,34 @@ Solana Pay wallet, by scanning a QR code or opening a link, with no Heirloom acc
   balance of the mint rose, by that rise (read from the network's token balances).
 - No personal data: the label, message and errors never name anyone; nothing is written on-chain besides the transfer.
 - Demo: the endpoint answers disabled (GET) and 403 (POST); the owner's card has "Simulate a chip-in", marked Simulated.
+
+## 22. Finalist push (planned 25 Nov 2026): from 68 to 85 on the Best App Overall rubric
+Head-judge review of 25 Nov (repo public, current video assumed): Technical 20, Solana 15, Innovation 13, Impact 8,
+UX 6, Presentation 8 = 70, 68 after the generosity check. The goal is 85. Work in three lanes; the program changes keep
+every account layout (append-only errors and enums) and ship with a Squads upgrade on Tumo's explicit "upgrade it".
+
+### 22.1 Program hardening (Technical, Innovation): branch r5/program
+Findings of the independent program read of 25 Nov:
+- P1 (medium) An unlock can't be faked by one person: `death_threshold` at least 2 (create and every later change), and
+  the waiting period for a death claim at least 300 s (a new constant; the other 60 s floors stay). Existing estates
+  keep their stored values; the stricter rule applies to new estates and to any change.
+- P2 Withdraw is proof of life (records the check-in like heartbeat, cancels a pending death claim the same way).
+- P3 After unlock a rule whose beneficiary was removed or died can be ended by anyone, so its reserve is released to
+  `sweep_residual` (no money moves in the ending itself).
+- P4 A sale co-signer may not be the hardship beneficiary of that sale (nor the buyer, nor the agent).
+- P5 Re-raising a Sale objection must not reset the `OfferTooOld` cut-off of an earlier upheld objection.
+- P6 Best offer: if the program can prove no higher open offer exists without a layout change, enforce it; otherwise
+  keep it a documented limit (README, audit §5).
+- Each with a failing test first (LiteSVM), then the fix. Mock service and chain service follow the same rules and
+  error copy (en, af, st, zu).
+
+### 22.2 Guided run (UX, Presentation): branch r5/guided
+One tap on /start runs the whole core story in one tab with no persona switching: wallet → test money → a ready-made
+plan (editable) → practice wallets → sign and lock → fund → the child's claim (signed by the practice wallet in the
+background) → agent review → owner approves → the program pays the institution. A step list shows progress, elapsed
+time and each transaction's Explorer link; a cap-refusal step shows the program saying no. Both services: chain on
+devnet, simulated (labelled) on the demo.
+
+### 22.3 Story and tracks (Presentation, Innovation, Solana): lead
+README opens with 30 seconds: what it is, the unfakeable unlock (AI refers, people decide, the program enforces), the
+guided run link. Best Agentic App entry text. Docs, numbers and status updated after the merges.
