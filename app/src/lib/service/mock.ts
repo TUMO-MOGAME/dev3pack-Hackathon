@@ -32,7 +32,7 @@ import { sha256Hex } from "../agent/hash";
 import { cleanSpec, mediaRootHex } from "../assets/spec";
 import { DEMO_ASSETS } from "./demo-asset-photos";
 import { fullName, shortName } from "../names";
-import { waitingSecsFor } from "../will-summary";
+import { DEMO_SECONDS_PER_DAY, waitingSecsFor } from "../will-summary";
 import { DEMO_FX, estimateValuation } from "./mock-valuation";
 import { checkInPlan, heartbeatFor } from "../checkin";
 import type { BillDetails, BillPayee } from "../bills/types";
@@ -82,9 +82,9 @@ export interface MockService extends HeirloomService {
 
 export { isMockService } from "./is-mock";
 import { MOCK_STORE_KEY } from "./is-mock";
-import { MAX_RULES, MIN_LISTING_SECS, listingEnded, nextDueAfter, ruleEnded, surplusOf } from "../continuity/logic";
+import { MAX_RULES, MIN_DEATH_THRESHOLD, MIN_LISTING_SECS, clampDeathWaiting, listingEnded, nextDueAfter, orphanRules, ruleEnded, surplusOf } from "../continuity/logic";
 import { openToPeople, outcomeOf } from "../verdict";
-import { MIN_WAIT_SECS, decidesAlone, isCurrentClaim, replaceableAt, reviewedHold, unlockWaitSecs } from "../death-rules";
+import { MIN_WAIT_SECS, decidesAlone, eligibleSeats, isCurrentClaim, replaceableAt, reviewedHold, unlockWaitSecs } from "../death-rules";
 import { claimTally, deathDisproved, deathTally, hardshipTally, hasLivingSeat, isHeld, mayList } from "../guardians/decisions";
 import { clearDeath, proofOfLife } from "./mock-rules";
 import { createMockContinuity, type MockAgentVotes } from "./mock-continuity";
@@ -388,7 +388,8 @@ export function createMockService(opts: MockOptions = {}): MockService {
 
   /* ----- synchronous "instructions" (shared by the async API and the stage seeder) ----- */
 
-  function createEstate(draft: WillDraft, residualLabel?: string, practice?: boolean): TxResult[] {
+  /** `seeded`: the demo story's estate, which stands for one signed before plan §22.1 P1 and keeps its demo-clock wait. */
+  function createEstate(draft: WillDraft, residualLabel?: string, practice?: boolean, seeded = false): TxResult[] {
     need(!s.created, "BadStatus", "This estate already has a signed will.");
     const owner = me();
     const txs: TxResult[] = [];
@@ -416,7 +417,13 @@ export function createMockService(opts: MockOptions = {}): MockService {
     e.verifiers = verifiers as [Base58, Base58, Base58];
     e.verifierNames = [0, 1, 2].map((i) => draft.verifiers[i]?.name ?? name(e.verifiers[i])) as [string, string, string];
     e.verifiers.forEach((v, i) => { s.names[v] = e.verifierNames[i]; });
-    e.waitingPeriodSecs = Math.max(MIN_WAIT_SECS, waitingSecsFor(draft.waitingPeriodDays, "mock")); // the program reads at least 60 s
+    // A plan signed now: at least two trusted people and 5 minutes to confirm a death (P1), on the demo clock too. The
+    // demo story's estate keeps the stored values of one signed before (as the program keeps existing estates'),
+    // so its stages stay quick: its demo-clock days, never under the program's 60 s.
+    e.deathThreshold = Math.max(MIN_DEATH_THRESHOLD, e.deathThreshold);
+    e.waitingPeriodSecs = seeded
+      ? Math.max(MIN_WAIT_SECS, Math.round(draft.waitingPeriodDays * DEMO_SECONDS_PER_DAY))
+      : clampDeathWaiting(waitingSecsFor(draft.waitingPeriodDays, "mock"));
     e.status = "Active";
     e.lastHeartbeat = nowSecs();
     e.willHash = fakeHash();
@@ -564,9 +571,10 @@ export function createMockService(opts: MockOptions = {}): MockService {
     return t;
   }
 
+  /** Owner, Active or DeathPending. Only the living owner can sign it, so like a check-in it is proof of life (P2). */
   function withdraw(amountUsdt: number): TxResult {
     needCreated(); needOwner();
-    need(est().status === "Active", "BadStatus", "The vault is locked to its rules once a passing is being confirmed.");
+    need(est().status === "Active" || est().status === "DeathPending", "BadStatus", "The estate has already unlocked.");
     const amt = toBase(amountUsdt);
     need(amt > 0n, "InvalidAmount", "Enter an amount above zero.");
     need(est().vaultBalance >= amt, "InsufficientFunds", "The vault does not hold that much.");
@@ -574,6 +582,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     credit(me(), amt);
     const t = tx();
     log("Withdraw", `${first(me())} withdrew ${usd(amt)} from the vault`, t, amt);
+    proofOfLife(est(), nowSecs(), log, tx);
     return t;
   }
 
@@ -646,6 +655,11 @@ export function createMockService(opts: MockOptions = {}): MockService {
     const e = est();
     need(e.status === "Unlocked", "BadStatus", "Only after the estate has unlocked.");
     const to = s.snap.residual ?? G.sweepRecipient() ?? fail("NoResidualRecipient", "Nobody was named to receive what is left.");
+    // A removed beneficiary's live rule is ended first (end_orphan_rule, P3): nothing under it can pay.
+    for (const r of orphanRules(s.snap.rules, s.snap.beneficiaries, nowSecs())) {
+      r.validUntil = nowSecs() - 1;
+      log("RuleEnded", `A ${r.category.toLowerCase()} rule for someone no longer in the plan was ended, so what it kept back can be paid`, tx());
+    }
     const amount = surplusOf(e.vaultBalance, s.snap.rules, nowSecs());
     need(amount > 0n, "NothingToSweep", "The rules still need everything in the vault.");
     e.vaultBalance -= amount;
@@ -1029,9 +1043,11 @@ export function createMockService(opts: MockOptions = {}): MockService {
     const o = s.snap.offers.find((x) => x.address === ranking.bestOffer);
     need(o?.buyer !== e.agent, "BadAgent", "The agent cannot be the buyer.");
     const signer = me();
-    if (hasLivingSeat(e)) {
-      need(isHeld(signer) && signer !== o?.buyer && signer !== e.agent && e.verifiers.includes(signer), "CoSignerRequired",
-        "A trusted person who is not the buyer must co-sign this sale.");
+    // Nor the hardship beneficiary the sale pays (P4); with nobody else holding a seat it waits for the listing to end.
+    const gainer = a.hardshipBeneficiary;
+    if (eligibleSeats(e.verifiers, gainer).length) {
+      need(isHeld(signer) && signer !== o?.buyer && signer !== e.agent && signer !== gainer && e.verifiers.includes(signer), "CoSignerRequired",
+        signer === gainer ? "You can't co-sign a sale that pays you. Ask another trusted person." : "A trusted person who is not the buyer must co-sign this sale.");
     } else {
       need(a.listingEnds !== null && nowSecs() >= a.listingEnds, "ListingStillOpen", "With no trusted people left, the sale waits until the listing ends.");
     }
@@ -1292,7 +1308,7 @@ export function createMockService(opts: MockOptions = {}): MockService {
     const { draft } = draftFor([{ role: "user", text: "a" }, { role: "user", text: "b" }, { role: "user", text: "c" }]);
     draft.ownerName = "Thabo Mokoena";
     as("thabo", () => {
-      createEstate(draft);
+      createEstate(draft, undefined, undefined, true);
       addOwnWallets(draft);
       deposit(24000);
       // Naledi's school fees: at most 3,000 USD₮ a year (yearly cap), on top of 1,500 per claim and 9,000 in total.

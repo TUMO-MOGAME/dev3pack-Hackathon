@@ -3,8 +3,35 @@
 > Read this first in any new session. The design is in [plan.md](plan.md); the on-chain contract is in [docs/program-spec.md](docs/program-spec.md).
 > Update this file at the end of every work session.
 
-**Last updated:** 2026-11-25 (judge-score push: audit, verifiable build, Squads authority, research; Chip in merged)
+**Last updated:** 2026-11-25 (r5/program: plan §22.1 P1-P6 on its branch; before that the judge-score push and Chip in)
 **Phase:** preparing for Dev3pack Global (27-29 Nov 2026; prework allowed and disclosed). Submitted to W3Node 13 Nov. Both sites deploy from `main`. The repo goes public on 27 Nov (Tumo).
+
+## PROGRAM HARDENING (25 Nov 2026): plan §22.1 P1-P6, branch r5/program (not merged, not deployed)
+### Done
+- P1 `create_estate` refuses death_threshold < 2 (DeathQuorumTooLow 6064) and a death wait < 300 s (DeathWaitTooShort
+  6065; new MIN_DEATH_WAITING_SECS, the 60 s MIN_WAITING_SECS floors unchanged). Existing estates keep stored values.
+- P2 `withdraw` is proof of life (record_proof_of_life, as heartbeat), Active or DeathPending; its estate is writable.
+- P3 new `end_orphan_rule` (anyone, Unlocked, the rule's beneficiary inactive; BeneficiaryStillActive 6066): no money
+  moves, sweep_residual stops reserving it. Both services end such rules before a sweep; Vault shows the sweepable sum.
+- P4 the hardship beneficiary never co-signs their sale; alone in the seats, the sale waits for the listing to end.
+- P5 a re-raised Sale objection keeps the upheld cut-off (SALE_CUTOFF_KEPT, bit 7 of votes_uphold; never a vote).
+- P6 not enforceable without a layout change or a trusted list: documented (spec, security-audit §5, `r5_p6_*`).
+- Program: 348/348 LiteSVM (12 new r5_p*; the 7 that test a fix failed first on the old binary). Local anchor build
+  911,568 bytes, sha256 b01cfdf3...; clippy 0 errors, 10 program warnings as triaged. IDL: + end_orphan_rule, withdraw
+  estate writable, 3 errors appended, CoSignerRequired text. App IDL updated; release.json NOT re-pinned.
+- App: vitest 2374/2374 (24 new), tsc app and scripts, eslint, mock and chain builds. Copy en/af/st/zu (af/st/zu
+  machine-assisted). Scripts create new estates with 300 s waits.
+### Next up
+- Lead: review and merge; verifiable (docker) build; the devnet ProgramData holds 1,112,672 bytes and the docker build
+  of the old code was 213 KB larger than the local one, so expect an `extend` before the Squads upgrade; then pin.
+- Until the pin, devnet writes fail closed on this branch (bundled IDL differs from release.json).
+### Decisions log
+- 25 Nov: the demo story's seeded mock estate keeps its 60 s demo-clock wait (it stands for an estate signed before
+  P1, as devnet's seeded estates do); a plan signed in the mock now gets at least 300 s.
+- 25 Nov: P5 keeps a cut-off at least as late as the upheld one: offers made on a relisting before a later objection
+  is decided must be placed again (no field holds the old time).
+### Blockers
+- None for the branch. Rehearsals with new estates now wait 300 s per death wait (slower runs).
 
 ## CHIP IN (25 Nov 2026): plan §21, merged into main with the audit pack
 ### Done

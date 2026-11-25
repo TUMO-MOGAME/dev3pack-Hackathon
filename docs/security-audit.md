@@ -141,6 +141,12 @@ Heirloom's rules.
 - Some objection and agent votes can't be revoked; they are bounded by a lapse.
 - Funds need at least one working path (trusted people or a fallback plan) to be recoverable.
 - L4: an agent's old votes can revive if the same agent is reinstated (fixing it needs an account layout change).
+- P6 (plan §22.1): the program doesn't prove an accepted offer is the highest open one. Offers are separate accounts
+  with no count on the asset, so it would need a layout change or a client-supplied list it can't trust. It enforces
+  the floor, the agreed amount, the objection windows and the co-signature; the agent and the co-signing trusted
+  person choose the best offer (`r5_p6_*`).
+- A beneficiary who dies (rather than being removed) keeps their rule's reserve until it expires: the program has no
+  record of a beneficiary's death. A removed beneficiary's rule is ended by anyone after the unlock (P3).
 - Off-chain: names and documents live in Supabase, never on-chain (only SHA-256 hashes); the server is trusted not to
   hide a claim from the UI, but it can't move money.
 
