@@ -3,7 +3,7 @@
   "cluster": "devnet",
   "programId": "b3PBVwkLnyx7eyLPNtc5J3Ds3os3cenqCVRHaCJM7FY",
   "idlSha256": "8869f5638e55236f6bf7def637f0c371165ee11dae9f79ebbd2483daafbe7142",
-  "deploySlot": 525556644,
-  "binarySha256": "c5294fe48eeb92757aa6e884e6e20f59c13cef87792c074d8a444a134f3cdd6d",
-  "binaryBytes": 899296
+  "deploySlot": 525979508,
+  "binarySha256": "a77f6069c9d013e9a573ab2b9838b50b137b64cf14239e28a6734e4de83d14ba",
+  "binaryBytes": 1112672
 }
