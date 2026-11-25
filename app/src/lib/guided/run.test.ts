@@ -42,6 +42,11 @@ describe("stepError", () => {
     expect(stepError(Object.assign(new Error("x"), { code: "NotOwner" })).code).toBe("NotOwner");
     expect(stepError("odd").code).toBe("generic");
   });
+
+  it("reads the program's refusal through the sponsor's failed simulation (seen on devnet, 25 Nov)", () => {
+    const e = Object.assign(new Error("Simulation failed: custom program error: ExceedsPerClaimCap"), { code: "simulation_failed" });
+    expect(stepError(e).code).toBe("ExceedsPerClaimCap");
+  });
 });
 
 /* ---------- the demo's service ---------- */

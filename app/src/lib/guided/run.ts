@@ -79,8 +79,10 @@ export function stepError(e: unknown): StepError {
   }
   if (/\b429\b|too many requests|rate.?limit/i.test(message)) return { code: "rateLimited", message };
   const named = PROGRAM_ERRORS.find((n) => new RegExp(`\\b${n}\\b`).test(message));
-  if (typeof given === "string" && given && given !== "generic") return { code: given, message };
+  // The program's own refusal wins over a transport code: the sponsor answers a failed simulation with
+  // "simulation_failed" and the program's error name in the message (the over-cap step on devnet).
   if (named) return { code: named, message };
+  if (typeof given === "string" && given && given !== "generic") return { code: given, message };
   const lead = /^([A-Za-z_]{3,40}):/.exec(message)?.[1];
   return { code: lead ?? "generic", message };
 }
